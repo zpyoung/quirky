@@ -7,14 +7,14 @@ import type { RequireContext } from 'expo-router/build/types'
  */
 const routeContext: RequireContext = Object.assign(
   (id: string): never => {
-    throw new Error(`[orca-mobile-web-app] route manifest was not generated: ${id}`)
+    throw new Error(`[quirky-mobile-web-app] route manifest was not generated: ${id}`)
   },
   {
     keys: (): string[] => [],
     resolve: (id: string): string => {
-      throw new Error(`[orca-mobile-web-app] route manifest was not generated: ${id}`)
+      throw new Error(`[quirky-mobile-web-app] route manifest was not generated: ${id}`)
     },
-    id: 'orca-mobile-web-app-routes'
+    id: 'quirky-mobile-web-app-routes'
   }
 )
 

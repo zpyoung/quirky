@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   disconnectConnection: vi.fn(async () => undefined),
   census: vi.fn()
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-runtime-context', () => ({
-  requireManagedOrcadInfrastructure: () => ({
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-runtime-context', () => ({
+  requireManagedQuirkydInfrastructure: () => ({
     connectionManager: {
       connect: mocks.connect,
       getConnection: mocks.getConnection,

@@ -18,7 +18,7 @@ describe('Pi hook normalization', () => {
         hook_event_name: 'before_agent_start',
         prompt: 'status for omp',
         model: 'deepseek/deepseek-v4-pro',
-        model_switch_command: 'orca-model'
+        model_switch_command: 'quirky-model'
       }),
       'production'
     )
@@ -26,7 +26,7 @@ describe('Pi hook normalization', () => {
       state: 'working',
       agentType: 'omp',
       model: 'deepseek/deepseek-v4-pro',
-      modelSwitchCommand: 'orca-model'
+      modelSwitchCommand: 'quirky-model'
     })
 
     // Pi posts carry no model, and none is invented for them.
@@ -427,7 +427,7 @@ describe('a Pi cancel beside a live child row', () => {
     })
   })
 
-  // Why: without a main-agent state from the extension, Orca cannot tell a cancelled turn from
+  // Why: without a main-agent state from the extension, Quirky cannot tell a cancelled turn from
   // Ctrl+C at the idle prompt of a lead that children alone hold open — where it cancels nothing.
   // It keeps the live row rather than claiming a cancellation the children contradict.
   it('leaves the working row alone while a child still runs', async () => {

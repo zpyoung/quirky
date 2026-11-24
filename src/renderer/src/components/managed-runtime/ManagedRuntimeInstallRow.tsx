@@ -19,7 +19,7 @@ import { ManagedRuntimeLinkButton } from './ManagedRuntimeLinkButton'
 // Parts are joined by ' · ', so a sentence followed by another part drops its full stop.
 const said = (text: string, last: boolean): string => (last ? text : text.replace(/[.。]$/u, ''))
 
-/** Settings' one-line install state for the runtime Orca provides an agent, on the host it runs
+/** Settings' one-line install state for the runtime Quirky provides an agent, on the host it runs
  *  on, with Cancel and retries as links. A first Install button, and the ⋯ menu with Update,
  *  Reinstall and Remove, are what the caller places at its row's end. A chat's install card shows
  *  the same host answer, so either one's action moves both. */

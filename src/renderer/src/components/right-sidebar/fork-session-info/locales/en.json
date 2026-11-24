@@ -58,7 +58,7 @@
       "statusLine": "Statusline",
       "statusLineAvailable": "Custom statusline detected",
       "statusLineChained": "Chained",
-      "statusLineConsent": "Orca will preserve and run your existing statusline command.",
+      "statusLineConsent": "Quirky will preserve and run your existing statusline command.",
       "statusLineDisabled": "Not enabled",
       "statusLineDrifted": "Custom statusline changed",
       "statusLineError": "Needs attention",

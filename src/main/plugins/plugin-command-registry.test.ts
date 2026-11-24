@@ -14,10 +14,10 @@ function commandPlugin(
   const manifest = pluginManifestSchema.parse({
     manifestVersion: 1,
     id,
-    publisher: 'orca-samples',
+    publisher: 'quirky-samples',
     name: id,
     version: '1.0.0',
-    engines: { orca: '>=1.0.0' },
+    engines: { quirky: '>=1.0.0' },
     pluginApi: 1,
     ...(contributes.commands.some((command) => command.action === undefined)
       ? { main: 'worker.js' }
@@ -26,7 +26,7 @@ function commandPlugin(
     capabilities: []
   })
   return {
-    pluginKey: `orca-samples.${id}`,
+    pluginKey: `quirky-samples.${id}`,
     rootDir: `/plugins/${id}`,
     manifest,
     consentFingerprint: fingerprintPluginConsent(manifest, `content-${id}`),
@@ -111,8 +111,8 @@ describe('PluginCommandRegistry', () => {
       [plugin],
       () => true,
       {
-        'plugin:orca-samples.repeat/one': ['Mod+Alt+T', 'Mod+Alt+Y'],
-        'plugin:orca-samples.repeat/two': ['Ctrl+Alt+T', 'Ctrl+Alt+Y']
+        'plugin:quirky-samples.repeat/one': ['Mod+Alt+T', 'Mod+Alt+Y'],
+        'plugin:quirky-samples.repeat/two': ['Ctrl+Alt+T', 'Ctrl+Alt+Y']
       },
       'linux'
     )
@@ -196,7 +196,7 @@ describe('PluginCommandRegistry', () => {
     registry.reconcile(
       [first, second],
       () => true,
-      { 'plugin:orca-samples.first/tasks': ['Mod+Shift+T'] },
+      { 'plugin:quirky-samples.first/tasks': ['Mod+Shift+T'] },
       'linux'
     )
 
@@ -218,8 +218,8 @@ describe('PluginCommandRegistry', () => {
       [plugin],
       () => true,
       {
-        'plugin:orca-samples.aliases/tasks': ['Mod+Alt+T'],
-        'plugin:orca-samples.aliases/sidebar': ['Mod+Alt+T']
+        'plugin:quirky-samples.aliases/tasks': ['Mod+Alt+T'],
+        'plugin:quirky-samples.aliases/sidebar': ['Mod+Alt+T']
       },
       'linux'
     )

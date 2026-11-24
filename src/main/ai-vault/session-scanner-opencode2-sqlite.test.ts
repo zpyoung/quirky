@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 function createTempDb(name = 'opencode-next.db'): { db: Database.Database; path: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-opencode2-sqlite-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-opencode2-sqlite-'))
   tempDirs.push(dir)
   const path = join(dir, name)
   return { db: new Database(path), path }

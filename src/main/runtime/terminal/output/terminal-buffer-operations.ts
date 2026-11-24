@@ -3,8 +3,8 @@ import type {
   HeadlessSeedMetadata,
   RuntimeHeadlessTerminal
 } from '../../runtime-terminal-state-records'
-import type { OrcaRuntimeWithSerializeTerminalBufferFromAvailableState } from './terminal-buffer-selection'
-import { OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged } from '../layout/terminal-view-presence'
+import type { QuirkyRuntimeWithSerializeTerminalBufferFromAvailableState } from './terminal-buffer-selection'
+import { QuirkyRuntimeWithNotifyRemoteTerminalViewPresenceChanged } from '../layout/terminal-view-presence'
 import type { TerminalOscLinkRange } from '../../../../shared/terminal-osc-link-ranges'
 import {
   applyRestoredTerminalTailSeed,
@@ -12,12 +12,12 @@ import {
   restoredTerminalTailSeedAllowed
 } from '../../terminal-tail-restore-seed'
 
-export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRuntimeWithNotifyRemoteTerminalViewPresenceChanged {
+export abstract class QuirkyRuntimeWithSerializeMainTerminalBuffer extends QuirkyRuntimeWithNotifyRemoteTerminalViewPresenceChanged {
   protected abstract serializePreferredRestoredTerminalBuffer(
     ptyId: string,
     opts?: { scrollbackRows?: number }
   ): ReturnType<
-    OrcaRuntimeWithSerializeTerminalBufferFromAvailableState['serializePreferredRestoredTerminalBuffer']
+    QuirkyRuntimeWithSerializeTerminalBufferFromAvailableState['serializePreferredRestoredTerminalBuffer']
   >
   protected abstract serializeHeadlessTerminalBuffer(
     ptyId: string,
@@ -172,7 +172,7 @@ export abstract class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRun
     )
   }
 
-  // Why: daemon-backed PTYs that the runtime adopted after an Orca relaunch
+  // Why: daemon-backed PTYs that the runtime adopted after an Quirky relaunch
   // start with a fresh headless emulator that has zero scrollback, even though
   // the daemon's on-disk checkpoint and the desktop xterm both contain the
   // full prior history. Without this hydration, mobile subscribers see only

@@ -3,7 +3,7 @@
 // conversation: only the first child to prove its start creates the record's handle chain.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
 import { waitForStructuredAgentSessionRecovery } from './structured-agent-session-runtime'
 import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
 
@@ -41,7 +41,7 @@ describe('a Claude chat whose first start died before initialize', () => {
     await vi.waitFor(() =>
       expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.phase).toBe('ready')
     )
-    const providerSessionId = claudeSessionIdForOrcaSession(SESSION)
+    const providerSessionId = claudeSessionIdForQuirkySession(SESSION)
     // No transcript exists to `--resume`, so the id is started fresh...
     expect(claude.child(SESSION).launch.options).toMatchObject({ sessionId: providerSessionId })
     expect(claude.child(SESSION).launch.options.resume).toBeUndefined()

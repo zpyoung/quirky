@@ -14,12 +14,12 @@ function git(cwd: string, ...args: string[]): void {
   execFileSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@t.invalid', ...args])
 }
 
-// What `git clone url` leaves at <root>/orca. `finished: false` is a clone killed before checkout;
+// What `git clone url` leaves at <root>/quirky. `finished: false` is a clone killed before checkout;
 // `commits: false` is a finished clone of an empty repository, whose HEAD stays unborn.
 function checkout(originUrl: string, { finished = true, commits = true } = {}): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-saved-clone-target-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-saved-clone-target-'))
   roots.push(root)
-  const path = join(root, 'orca')
+  const path = join(root, 'quirky')
   if (finished && !commits) {
     const source = join(root, 'empty-source')
     execFileSync('git', ['init', '-q', source])
@@ -41,7 +41,7 @@ function saved(path: string, extra: Partial<Repo> = {}): Repo {
   return {
     id: 'saved',
     path,
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#fff',
     addedAt: 1,
     kind: 'git',
@@ -78,7 +78,7 @@ describe('reuseSavedCloneTarget', () => {
   it('refuses an unborn clone without tracking metadata, as Git 2.25 leaves during fetch', async () => {
     const path = checkout(url, { finished: false })
     git(path, 'symbolic-ref', 'HEAD', 'refs/heads/master')
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
   })
 
   it('matches the exact unborn branch when its name contains regex metacharacters', async () => {
@@ -90,19 +90,19 @@ describe('reuseSavedCloneTarget', () => {
     await expect(decide(saved(path))).resolves.toMatchObject({ path })
     git(path, 'config', '--unset', `branch.${branch}.remote`)
     git(path, 'config', 'branch.release/v1x222probe.remote', 'origin')
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
   })
 
   it('refuses an empty clone with duplicate origin URLs or incomplete tracking metadata', async () => {
     const path = checkout(url, { commits: false })
     git(path, 'remote', 'set-url', '--add', 'origin', url)
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
     git(path, 'config', '--replace-all', 'remote.origin.url', url)
     const head = execFileSync('git', ['-C', path, 'symbolic-ref', '--short', 'HEAD'], {
       encoding: 'utf8'
     }).trim()
     git(path, 'config', '--unset', `branch.${head}.merge`)
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
   })
 
   it('reuses a finished clone left on a detached HEAD', async () => {
@@ -113,23 +113,23 @@ describe('reuseSavedCloneTarget', () => {
   })
 
   it('does not reuse a folder nested inside a clone of an empty repository', async () => {
-    const nested = join(checkout(url, { commits: false }), 'orca')
+    const nested = join(checkout(url, { commits: false }), 'quirky')
     mkdirSync(nested)
-    await expect(decide(saved(nested))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(nested))).rejects.toThrow('already an Quirky project')
   })
 
   it('refuses a finished clone of a different URL with the same folder name', async () => {
-    const project = saved(checkout('https://github.com/me/orca.git'))
-    await expect(decide(project)).rejects.toThrow('"orca" is already an Orca project')
+    const project = saved(checkout('https://github.com/me/quirky.git'))
+    await expect(decide(project)).rejects.toThrow('"quirky" is already an Quirky project')
   })
 
   // The two reasons a clone can be refused need different things from the user, so say which it is.
   it('says the recorded repository differs without disclosing its credential-bearing URL', async () => {
-    const project = saved(join(tmpdir(), 'orca-saved-clone-target-absent'), {
+    const project = saved(join(tmpdir(), 'quirky-saved-clone-target-absent'), {
       gitRemoteIdentity: {
-        canonicalKey: 'github.com/someone/orca',
+        canonicalKey: 'github.com/someone/quirky',
         remoteName: 'origin',
-        remoteUrl: 'https://synthetic-user:synthetic-secret@github.com/someone/orca.git'
+        remoteUrl: 'https://synthetic-user:synthetic-secret@github.com/someone/quirky.git'
       }
     })
     const result = decide(project)
@@ -139,13 +139,13 @@ describe('reuseSavedCloneTarget', () => {
   })
 
   it('says it has no record of the repository when the project never stored an origin', async () => {
-    const project = saved(join(tmpdir(), 'orca-saved-clone-target-absent'))
+    const project = saved(join(tmpdir(), 'quirky-saved-clone-target-absent'))
     await expect(decide(project)).rejects.toThrow('no record of which repository')
   })
 
   it('refuses a finished clone of a different local path, which does not normalize', async () => {
-    const project = saved(checkout('/srv/other/orca'))
-    await expect(decide(project, '/srv/mine/orca')).rejects.toThrow('already an Orca project')
+    const project = saved(checkout('/srv/other/quirky'))
+    await expect(decide(project, '/srv/mine/quirky')).rejects.toThrow('already an Quirky project')
   })
 
   it('does not reuse a clone that was killed before it finished', async () => {
@@ -155,32 +155,32 @@ describe('reuseSavedCloneTarget', () => {
       remoteUrl: url
     }
     const path = checkout(url, { finished: false })
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
     // Same repo by its saved identity: let git clone, which refuses the non-empty folder.
     await expect(decide(saved(path, { gitRemoteIdentity: identity }))).resolves.toBeNull()
   })
 
   it('does not reuse a clone whose origin also lists another URL', async () => {
-    const path = checkout('https://github.com/me/orca.git')
+    const path = checkout('https://github.com/me/quirky.git')
     git(path, 'remote', 'set-url', '--add', 'origin', url)
-    await expect(decide(saved(path))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(path))).rejects.toThrow('already an Quirky project')
   })
 
   it('refuses to re-clone into a fork project whose stored identity is its upstream', async () => {
-    const path = join(tmpdir(), 'orca-saved-clone-target-deleted-fork')
+    const path = join(tmpdir(), 'quirky-saved-clone-target-deleted-fork')
     const upstream = {
       canonicalKey: 'github.com/stablyai/orca',
       remoteName: 'upstream',
       remoteUrl: url
     }
     await expect(decide(saved(path, { gitRemoteIdentity: upstream }))).rejects.toThrow(
-      'already an Orca project'
+      'already an Quirky project'
     )
   })
 
   it('does not reuse a folder that only sits inside a clone of the URL', async () => {
-    const nested = join(checkout(url), 'orca')
+    const nested = join(checkout(url), 'quirky')
     mkdirSync(nested)
-    await expect(decide(saved(nested))).rejects.toThrow('already an Orca project')
+    await expect(decide(saved(nested))).rejects.toThrow('already an Quirky project')
   })
 })

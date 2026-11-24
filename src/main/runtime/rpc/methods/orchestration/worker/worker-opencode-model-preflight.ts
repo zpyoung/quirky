@@ -3,10 +3,10 @@ import {
   resolveWorkerConfiguredAgentParams
 } from './worker-configured-agent-preflight'
 import type { prepareFederationAttachmentWorkerStart } from './worker-start-validation'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 
 export async function probeWorkerOpenCodeModelLaunchSupport(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: { agent?: string; model?: string },
   target: { worktree?: string }
 ): Promise<boolean> {

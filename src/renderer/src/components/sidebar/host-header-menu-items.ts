@@ -34,7 +34,7 @@ export type HostHeaderMenuInput = {
   sshConnected?: boolean
   compatibility?: RuntimeCompatVerdict
   blockedReason?: RuntimeHostBlockedReason
-  /** False for a server Orca pairs itself (over SSH), whose repair is Connect, not an access link. */
+  /** False for a server Quirky pairs itself (over SSH), whose repair is Connect, not an access link. */
   repairableWithAccessLink?: boolean
 }
 

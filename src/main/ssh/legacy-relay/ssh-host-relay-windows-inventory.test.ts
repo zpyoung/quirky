@@ -17,7 +17,7 @@ import { getRemoteHostPlatform, joinRemotePath } from '../ssh-remote-platform'
 const host = getRemoteHostPlatform('win32-x64')
 const HOME = 'C:\\Users\\dev'
 const VERSION = 'relay-0.1.0+aaaaaaaaaaaa'
-const DIR = joinRemotePath(host, HOME, '.orca-remote', VERSION)
+const DIR = joinRemotePath(host, HOME, '.quirky-remote', VERSION)
 
 describe('the Windows relay inventory', () => {
   let base: string | null = null
@@ -29,7 +29,7 @@ describe('the Windows relay inventory', () => {
   })
 
   it("reads every version directory's credentials and pipe markers", () => {
-    base = mkdtempSync(join(tmpdir(), 'orca-win-inventory-'))
+    base = mkdtempSync(join(tmpdir(), 'quirky-win-inventory-'))
     mkdirSync(join(base, VERSION))
     writeFileSync(join(base, VERSION, 'relay-abc.sock.credential'), 'secret')
     writeFileSync(join(base, VERSION, '.windows-active-pipe-relay-abc.sock'), '\\\\.\\pipe\\x\n')

@@ -8,7 +8,7 @@ import { getAgentLaunchExecutableName } from '../../../../shared/agent-command-l
 import {
   AGENT_HOOK_RUNTIME_ENV_KEYS,
   CLAUDE_CHILD_SESSION_STAMP_ENV_KEYS,
-  ORCA_AGENT_SESSION_CALLER_ENV_KEYS
+  QUIRKY_AGENT_SESSION_CALLER_ENV_KEYS
 } from './spawn-env-keys'
 
 export function readEnvWithProcessFallback(
@@ -37,13 +37,14 @@ export function resolvePiAgentSourceDir(
     )
   }
 
-  const overlayKey = kind === 'omp' ? 'ORCA_OMP_CODING_AGENT_DIR' : 'ORCA_PI_CODING_AGENT_DIR'
-  const otherOverlayKey = kind === 'omp' ? 'ORCA_PI_CODING_AGENT_DIR' : 'ORCA_OMP_CODING_AGENT_DIR'
+  const overlayKey = kind === 'omp' ? 'QUIRKY_OMP_CODING_AGENT_DIR' : 'QUIRKY_PI_CODING_AGENT_DIR'
+  const otherOverlayKey =
+    kind === 'omp' ? 'QUIRKY_PI_CODING_AGENT_DIR' : 'QUIRKY_OMP_CODING_AGENT_DIR'
 
   const publicDir = readEnvWithProcessFallback(baseEnv, primaryKey)
   const ownOverlayDir = readEnvWithProcessFallback(baseEnv, overlayKey)
   const otherOverlayDir = readEnvWithProcessFallback(baseEnv, otherOverlayKey)
-  // Why: if PI_CODING_AGENT_DIR is a restored Orca overlay with no source shadow, remirroring leaks another agent's overlay tree; fall through to defaults.
+  // Why: if PI_CODING_AGENT_DIR is a restored Quirky overlay with no source shadow, remirroring leaks another agent's overlay tree; fall through to defaults.
   if (publicDir && publicDir !== ownOverlayDir && publicDir !== otherOverlayDir) {
     return publicDir
   }
@@ -60,18 +61,18 @@ export function resolveScopedPiAgentSourceDir(
 
 export function clearPiAgentShadowEnv(baseEnv: Record<string, string>, kind: PiAgentKind): void {
   if (kind === 'omp') {
-    delete baseEnv.ORCA_OMP_CODING_AGENT_DIR
-    delete baseEnv.ORCA_OMP_SOURCE_AGENT_DIR
-    delete baseEnv.ORCA_OMP_STATUS_EXTENSION
+    delete baseEnv.QUIRKY_OMP_CODING_AGENT_DIR
+    delete baseEnv.QUIRKY_OMP_SOURCE_AGENT_DIR
+    delete baseEnv.QUIRKY_OMP_STATUS_EXTENSION
     return
   }
   if (kind === 'prime-agent') {
-    delete baseEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR
-    delete baseEnv.ORCA_PRIME_AGENT_STATUS_EXTENSION
+    delete baseEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR
+    delete baseEnv.QUIRKY_PRIME_AGENT_STATUS_EXTENSION
     return
   }
-  delete baseEnv.ORCA_PI_CODING_AGENT_DIR
-  delete baseEnv.ORCA_PI_SOURCE_AGENT_DIR
+  delete baseEnv.QUIRKY_PI_CODING_AGENT_DIR
+  delete baseEnv.QUIRKY_PI_SOURCE_AGENT_DIR
 }
 
 export function exposePiManagedExtensionEnv(
@@ -80,32 +81,32 @@ export function exposePiManagedExtensionEnv(
   managedEnv: Record<string, string>
 ): void {
   if (kind === 'omp') {
-    delete baseEnv.ORCA_OMP_CODING_AGENT_DIR
-    if (managedEnv.ORCA_OMP_SOURCE_AGENT_DIR) {
-      baseEnv.ORCA_OMP_SOURCE_AGENT_DIR = managedEnv.ORCA_OMP_SOURCE_AGENT_DIR
+    delete baseEnv.QUIRKY_OMP_CODING_AGENT_DIR
+    if (managedEnv.QUIRKY_OMP_SOURCE_AGENT_DIR) {
+      baseEnv.QUIRKY_OMP_SOURCE_AGENT_DIR = managedEnv.QUIRKY_OMP_SOURCE_AGENT_DIR
     } else {
-      delete baseEnv.ORCA_OMP_SOURCE_AGENT_DIR
+      delete baseEnv.QUIRKY_OMP_SOURCE_AGENT_DIR
     }
-    if (managedEnv.ORCA_OMP_STATUS_EXTENSION) {
-      baseEnv.ORCA_OMP_STATUS_EXTENSION = managedEnv.ORCA_OMP_STATUS_EXTENSION
+    if (managedEnv.QUIRKY_OMP_STATUS_EXTENSION) {
+      baseEnv.QUIRKY_OMP_STATUS_EXTENSION = managedEnv.QUIRKY_OMP_STATUS_EXTENSION
     } else {
-      delete baseEnv.ORCA_OMP_STATUS_EXTENSION
+      delete baseEnv.QUIRKY_OMP_STATUS_EXTENSION
     }
     return
   }
   if (kind === 'prime-agent') {
-    if (managedEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR) {
-      baseEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR = managedEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR
+    if (managedEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR) {
+      baseEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR = managedEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR
     } else {
-      delete baseEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR
+      delete baseEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR
     }
     return
   }
-  delete baseEnv.ORCA_PI_CODING_AGENT_DIR
-  if (managedEnv.ORCA_PI_SOURCE_AGENT_DIR) {
-    baseEnv.ORCA_PI_SOURCE_AGENT_DIR = managedEnv.ORCA_PI_SOURCE_AGENT_DIR
+  delete baseEnv.QUIRKY_PI_CODING_AGENT_DIR
+  if (managedEnv.QUIRKY_PI_SOURCE_AGENT_DIR) {
+    baseEnv.QUIRKY_PI_SOURCE_AGENT_DIR = managedEnv.QUIRKY_PI_SOURCE_AGENT_DIR
   } else {
-    delete baseEnv.ORCA_PI_SOURCE_AGENT_DIR
+    delete baseEnv.QUIRKY_PI_SOURCE_AGENT_DIR
   }
 }
 
@@ -122,7 +123,7 @@ export function mergePtyEnvDeletions(
 
 export function removeCodexHomeDeletionRequests(keys: string[] | undefined): string[] | undefined {
   // Why: resume provenance is launch-authoritative; late deletions must not fall back to the current account.
-  const filtered = keys?.filter((key) => key !== 'CODEX_HOME' && key !== 'ORCA_CODEX_HOME')
+  const filtered = keys?.filter((key) => key !== 'CODEX_HOME' && key !== 'QUIRKY_CODEX_HOME')
   return filtered?.length ? filtered : undefined
 }
 
@@ -133,9 +134,9 @@ export function getInheritedAgentHookEnvKeysToDelete(
   // Why: providers merge process.env after cleanup; delete stale hook keys without dropping fresh coordinates buildPtyHostEnv set.
   return [
     ...AGENT_HOOK_RUNTIME_ENV_KEYS,
-    'ORCA_OPENCODE_AGENT',
-    'ORCA_OPENCODE_CONFIG_DIR',
-    'ORCA_OPENCODE_SOURCE_CONFIG_DIR'
+    'QUIRKY_OPENCODE_AGENT',
+    'QUIRKY_OPENCODE_CONFIG_DIR',
+    'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR'
   ].filter((key) => env[key] === undefined)
 }
 
@@ -147,7 +148,7 @@ export function getInheritedAgentSessionStampEnvKeysToDelete(
   // terminal is a structured session, so the session caller keys always go.
   return [
     ...CLAUDE_CHILD_SESSION_STAMP_ENV_KEYS.filter((key) => env[key] === undefined),
-    ...ORCA_AGENT_SESSION_CALLER_ENV_KEYS
+    ...QUIRKY_AGENT_SESSION_CALLER_ENV_KEYS
   ]
 }
 
@@ -156,13 +157,13 @@ export function isMimoLaunchCommand(launchCommand: string | undefined): boolean 
 }
 
 export function resolveMimocodeSourceHome(baseEnv: Record<string, string>): string | undefined {
-  const sourceHome = baseEnv.ORCA_MIMOCODE_SOURCE_HOME ?? process.env.ORCA_MIMOCODE_SOURCE_HOME
+  const sourceHome = baseEnv.QUIRKY_MIMOCODE_SOURCE_HOME ?? process.env.QUIRKY_MIMOCODE_SOURCE_HOME
   if (sourceHome) {
     return sourceHome
   }
   const configHome = baseEnv.MIMOCODE_HOME ?? process.env.MIMOCODE_HOME
-  const orcaHome = baseEnv.ORCA_MIMOCODE_HOME ?? process.env.ORCA_MIMOCODE_HOME
-  if (configHome && orcaHome && configHome === orcaHome) {
+  const quirkyHome = baseEnv.QUIRKY_MIMOCODE_HOME ?? process.env.QUIRKY_MIMOCODE_HOME
+  if (configHome && quirkyHome && configHome === quirkyHome) {
     return undefined
   }
   return configHome
@@ -173,18 +174,19 @@ export function resolveOpenCodeSourceConfigDir(
   inheritedEnv: NodeJS.ProcessEnv = process.env
 ): string | undefined {
   const configDir = baseEnv.OPENCODE_CONFIG_DIR ?? inheritedEnv.OPENCODE_CONFIG_DIR
-  const orcaConfigDir = baseEnv.ORCA_OPENCODE_CONFIG_DIR ?? inheritedEnv.ORCA_OPENCODE_CONFIG_DIR
-  if (configDir && orcaConfigDir && configDir !== orcaConfigDir) {
+  const quirkyConfigDir =
+    baseEnv.QUIRKY_OPENCODE_CONFIG_DIR ?? inheritedEnv.QUIRKY_OPENCODE_CONFIG_DIR
+  if (configDir && quirkyConfigDir && configDir !== quirkyConfigDir) {
     return configDir
   }
   const sourceDir =
-    baseEnv.ORCA_OPENCODE_SOURCE_CONFIG_DIR ?? inheritedEnv.ORCA_OPENCODE_SOURCE_CONFIG_DIR
+    baseEnv.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR ?? inheritedEnv.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR
   if (sourceDir) {
     return sourceDir
   }
 
-  // Why: with no recorded source dir, an inherited OPENCODE_CONFIG_DIR is Orca-owned, not user config; treating it as user config makes child Orcas mirror the hook dir.
-  if (configDir && orcaConfigDir && configDir === orcaConfigDir) {
+  // Why: with no recorded source dir, an inherited OPENCODE_CONFIG_DIR is Quirky-owned, not user config; treating it as user config makes child Quirkys mirror the hook dir.
+  if (configDir && quirkyConfigDir && configDir === quirkyConfigDir) {
     return undefined
   }
 

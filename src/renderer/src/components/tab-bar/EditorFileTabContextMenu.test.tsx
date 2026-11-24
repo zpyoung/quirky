@@ -305,7 +305,7 @@ describe('EditorFileTabContextMenu close-all shortcut', () => {
         throw new Error('Missing Copy Tab ID action')
       }
       onSelect()
-      expect(writeClipboardText).toHaveBeenCalledExactlyOnceWith(`orcaTabId: ${unifiedTabId}`)
+      expect(writeClipboardText).toHaveBeenCalledExactlyOnceWith(`quirkyTabId: ${unifiedTabId}`)
       expect(onActivate).not.toHaveBeenCalled()
     }
   )

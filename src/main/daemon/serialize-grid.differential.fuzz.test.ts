@@ -22,9 +22,9 @@ import {
 //      row follows its last text row (the old build trimmed those) ⇒ new bytes === old bytes
 //   I2 replaying the new bytes reproduces the source grid, cursor, buffer and modes
 //   I3 every checkpoint the old build replayed faithfully, the new one does too
-// I1/I3 need a baseline build: ORCA_OLD_SERIALIZE_ADDON=$(node
+// I1/I3 need a baseline build: QUIRKY_OLD_SERIALIZE_ADDON=$(node
 // config/scripts/build-serialize-addon-at-ref.mjs --ref origin/main --out-dir <dir>).
-// ORCA_NEW_SERIALIZE_ADDON likewise replaces the installed build under test.
+// QUIRKY_NEW_SERIALIZE_ADDON likewise replaces the installed build under test.
 //
 //   SERIALIZE_FUZZ_ITERATIONS=7000  cases per category (default 40)
 //   SERIALIZE_FUZZ_SEED=1234        re-run exactly one seed (all categories)
@@ -38,7 +38,7 @@ const CATEGORIES = ALL_CATEGORIES.filter(
 )
 const FIXED_SEED = readPositiveIntEnv('SERIALIZE_FUZZ_SEED')
 const ITERATIONS = FIXED_SEED !== null ? 1 : (readPositiveIntEnv('SERIALIZE_FUZZ_ITERATIONS') ?? 40)
-const OLD_ADDON_PATH = process.env.ORCA_OLD_SERIALIZE_ADDON
+const OLD_ADDON_PATH = process.env.QUIRKY_OLD_SERIALIZE_ADDON
 const REPORT = process.env.SERIALIZE_FUZZ_REPORT === '1'
 
 function readPositiveIntEnv(name: string): number | null {
@@ -209,7 +209,7 @@ async function describeFailures(
 }
 
 // Seeds 1-25 whose NEW replay already diverges and whose OLD replay diverges
-// the same way (verified with ORCA_OLD_SERIALIZE_ADDON): upstream limitations
+// the same way (verified with QUIRKY_OLD_SERIALIZE_ADDON): upstream limitations
 // such as orphan combining marks in column 0 and wide glyphs reflowed into the
 // last column. Shrink this list when one is fixed.
 const CI_SEEDS = 25
@@ -246,8 +246,8 @@ describe('serialize grid round-trip fuzz', () => {
     expect(regressed).toEqual([])
   })
 
-  // The pin describes the installed build; an ORCA_NEW_SERIALIZE_ADDON override is judged by I3 instead.
-  it.skipIf(Boolean(process.env.ORCA_NEW_SERIALIZE_ADDON))(
+  // The pin describes the installed build; an QUIRKY_NEW_SERIALIZE_ADDON override is judged by I3 instead.
+  it.skipIf(Boolean(process.env.QUIRKY_NEW_SERIALIZE_ADDON))(
     'I2 on a fixed seed range: only the pinned pre-existing divergences remain',
     async () => {
       const failing: Record<SerializeFuzzCategory, number[]> = { normal: [], alt: [], conpty: [] }

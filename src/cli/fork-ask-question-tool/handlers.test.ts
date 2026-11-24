@@ -88,7 +88,7 @@ describe('ask flag and spec validation (client.call never invoked on bad input)'
   })
 })
 
-describe('orca ask: register -> registered line -> one wait chunk -> envelope', () => {
+describe('quirky ask: register -> registered line -> one wait chunk -> envelope', () => {
   let logSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -131,13 +131,17 @@ describe('orca ask: register -> registered line -> one wait chunk -> envelope', 
 
   it('prints a pending envelope carrying the wait instruction when the chunk elapses unanswered', async () => {
     callMock.mockResolvedValueOnce({ result: { askId: 'ask_2' } }).mockResolvedValueOnce({
-      result: { status: 'pending', askId: 'ask_2', instruction: 'orca ask wait --id ask_2' }
+      result: { status: 'pending', askId: 'ask_2', instruction: 'quirky ask wait --id ask_2' }
     })
 
     await ASK_HANDLERS.ask(ctx([['spec', VALID_SPEC_JSON]]))
 
     expect(logSpy.mock.calls[1][0]).toBe(
-      JSON.stringify({ status: 'pending', askId: 'ask_2', instruction: 'orca ask wait --id ask_2' })
+      JSON.stringify({
+        status: 'pending',
+        askId: 'ask_2',
+        instruction: 'quirky ask wait --id ask_2'
+      })
     )
   })
 
@@ -226,7 +230,7 @@ describe('orca ask: register -> registered line -> one wait chunk -> envelope', 
           JSON.stringify({
             status: 'pending',
             askId: 'ask_wait_exhausted',
-            instruction: 'orca ask wait --id ask_wait_exhausted'
+            instruction: 'quirky ask wait --id ask_wait_exhausted'
           })
         ]
       ])
@@ -275,7 +279,7 @@ describe('orca ask: register -> registered line -> one wait chunk -> envelope', 
         JSON.stringify({
           status: 'pending',
           askId: 'ask_busy',
-          instruction: 'orca ask wait --id ask_busy'
+          instruction: 'quirky ask wait --id ask_busy'
         })
       ]
     ])
@@ -343,10 +347,10 @@ describe('orca ask: register -> registered line -> one wait chunk -> envelope', 
   })
 
   it('passes pane/worktree origin env vars verbatim and drops absent ones', async () => {
-    delete process.env.ORCA_TERMINAL_HANDLE
-    delete process.env.ORCA_WORKSPACE_ID
-    process.env.ORCA_PANE_KEY = 'pane_9'
-    process.env.ORCA_WORKTREE_ID = 'wt_9'
+    delete process.env.QUIRKY_TERMINAL_HANDLE
+    delete process.env.QUIRKY_WORKSPACE_ID
+    process.env.QUIRKY_PANE_KEY = 'pane_9'
+    process.env.QUIRKY_WORKTREE_ID = 'wt_9'
     try {
       callMock.mockResolvedValueOnce({ result: { askId: 'ask_6' } }).mockResolvedValueOnce({
         result: { status: 'declined', askId: 'ask_6', answers: {}, skipped: [], summary: '' }
@@ -359,13 +363,13 @@ describe('orca ask: register -> registered line -> one wait chunk -> envelope', 
       expect(params.terminalHandle).toBeUndefined()
       expect(params.workspaceId).toBeUndefined()
     } finally {
-      delete process.env.ORCA_PANE_KEY
-      delete process.env.ORCA_WORKTREE_ID
+      delete process.env.QUIRKY_PANE_KEY
+      delete process.env.QUIRKY_WORKTREE_ID
     }
   })
 })
 
-describe('orca ask wait', () => {
+describe('quirky ask wait', () => {
   beforeEach(() => {
     callMock.mockReset()
     vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -378,7 +382,7 @@ describe('orca ask wait', () => {
 
   it('issues a single chunk with no registered line', async () => {
     callMock.mockResolvedValueOnce({
-      result: { status: 'pending', askId: 'ask_1', instruction: 'orca ask wait --id ask_1' }
+      result: { status: 'pending', askId: 'ask_1', instruction: 'quirky ask wait --id ask_1' }
     })
 
     await ASK_HANDLERS['ask wait'](ctx([['id', 'ask_1']]))
@@ -390,7 +394,11 @@ describe('orca ask wait', () => {
       expect.any(Object)
     )
     expect(console.log).toHaveBeenCalledWith(
-      JSON.stringify({ status: 'pending', askId: 'ask_1', instruction: 'orca ask wait --id ask_1' })
+      JSON.stringify({
+        status: 'pending',
+        askId: 'ask_1',
+        instruction: 'quirky ask wait --id ask_1'
+      })
     )
   })
 
@@ -434,7 +442,7 @@ describe('orca ask wait', () => {
         JSON.stringify({
           status: 'pending',
           askId: 'ask_wait_exhausted',
-          instruction: 'orca ask wait --id ask_wait_exhausted'
+          instruction: 'quirky ask wait --id ask_wait_exhausted'
         })
       )
     } finally {
@@ -477,7 +485,7 @@ describe('orca ask wait', () => {
       JSON.stringify({
         status: 'pending',
         askId: 'ask_busy',
-        instruction: 'orca ask wait --id ask_busy'
+        instruction: 'quirky ask wait --id ask_busy'
       })
     )
   })
@@ -502,7 +510,7 @@ describe('orca ask wait', () => {
   )
 })
 
-describe('orca ask cancel', () => {
+describe('quirky ask cancel', () => {
   beforeEach(() => {
     callMock.mockReset()
     vi.spyOn(console, 'log').mockImplementation(() => {})

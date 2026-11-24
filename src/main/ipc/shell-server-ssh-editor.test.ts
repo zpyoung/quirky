@@ -22,7 +22,7 @@ import { fingerprintRuntimeSshTarget } from '../ssh/runtime-ssh-target-fingerpri
 import type { ListRuntimeEnvironments } from './shell-editor-ssh-host'
 
 const link = { sshTargetId: 'ssh-1', sshTargetGeneration: 1, localPort: 41000, remotePort: 6768 }
-const managedServer = { id: 'env-1', orcadDeployment: link }
+const managedServer = { id: 'env-1', quirkydDeployment: link }
 
 function sshTarget(id: string, configHost: string, overrides: Partial<SshTarget> = {}): SshTarget {
   return {
@@ -34,7 +34,7 @@ function sshTarget(id: string, configHost: string, overrides: Partial<SshTarget>
     source: 'ssh-config',
     configHost,
     generation: 1,
-    orcadFence: { environmentId: 'env-1' },
+    quirkydFence: { environmentId: 'env-1' },
     ...overrides
   }
 }
@@ -53,7 +53,7 @@ function spawnedChild(): { once: unknown; off: unknown; unref: unknown } {
   return child
 }
 
-describe('Open in VS Code for a workspace on a server Orca reaches through an SSH host', () => {
+describe('Open in VS Code for a workspace on a server Quirky reaches through an SSH host', () => {
   const sshAccessServer = {
     id: 'env-1',
     sshAccess: {
@@ -113,7 +113,7 @@ describe('Open in VS Code for a workspace on a server Orca reaches through an SS
 
   it.each([
     ['was re-created since the server linked it', { generation: 2 }],
-    ['is fenced to another managed server', { orcadFence: { environmentId: 'env-2' } }]
+    ['is fenced to another managed server', { quirkydFence: { environmentId: 'env-2' } }]
   ])('refuses a host whose SSH registration %s', async (_label, overrides) => {
     targets.set('ssh-1', sshTarget('ssh-1', 'builder', overrides))
     await expect(

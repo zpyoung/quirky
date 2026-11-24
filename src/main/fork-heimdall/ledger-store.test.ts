@@ -103,7 +103,7 @@ function enrollment(watcherId = 'watcher-1'): WatcherEnrollment {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-heimdall-ledger-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-heimdall-ledger-'))
   database = new HeimdallDatabase(root)
   ledger = new HeimdallLedgerStore(database)
 })

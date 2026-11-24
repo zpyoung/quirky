@@ -65,7 +65,7 @@ async function isRegistered(path: string): Promise<boolean> {
 
 beforeEach(async () => {
   // realpath: macOS hands out /var/... temp paths while Git reports /private/var/....
-  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-interrupted-removal-')))
+  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-interrupted-removal-')))
   recordsDir = join(scratchDir, 'profile')
   repoPath = join(scratchDir, 'repo')
   worktreePath = join(scratchDir, 'workspaces', 'feature')
@@ -389,7 +389,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
 
   it('returns the row live when the finish fails, instead of retrying unseen', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // Another Git client locked it while Orca was not running.
+    // Another Git client locked it while Quirky was not running.
     await git(['worktree', 'lock', worktreePath])
 
     const { outcome, purged, records } = await finishAfterRestart({ force: true })
@@ -402,7 +402,7 @@ describe('finishing an interrupted worktree removal after a restart', () => {
     expect(await listedRows()).toEqual([{ path: worktreePath }])
   })
 
-  it('drops a record whose repo Orca no longer has', async () => {
+  it('drops a record whose repo Quirky no longer has', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { outcome, purged, records } = await finishAfterRestart({ repoGone: true })

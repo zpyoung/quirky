@@ -45,7 +45,7 @@ for (const [name, input] of [
   ['unclosed-8000', `prefix ${'<!--x'.repeat(8000)} <b>tail</b>`],
   ['mixed-8000', `prefix <!--complete-->${'<!--x'.repeat(8000)} <b>tail</b>`],
   ['protected', '\\<!--x `<!--x`\n```html\n<!--x\n```\n'],
-  ['transport', `before [[ORCA_RICH_MD:${key}:inline-html:%3Cb%3E]] and [[README.md]]`]
+  ['transport', `before [[QUIRKY_RICH_MD:${key}:inline-html:%3Cb%3E]] and [[README.md]]`]
 ]) {
   for (const htmlSuperscriptLinks of [false, true]) {
     const options = { htmlSuperscriptLinks }

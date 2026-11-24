@@ -10,7 +10,7 @@ afterEach(async () => {
 })
 
 it('delivers stdin to buffered Git reads', async () => {
-  const repository = await mkdtemp(join(tmpdir(), 'orca-git-buffer-stdin-'))
+  const repository = await mkdtemp(join(tmpdir(), 'quirky-git-buffer-stdin-'))
   roots.push(repository)
   await gitExecFileAsync(['init', '--quiet'], { cwd: repository })
 

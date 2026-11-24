@@ -20,7 +20,7 @@ import {
 
 let root: string
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-learned-default-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-learned-default-'))
 })
 afterEach(() => {
   rmSync(root, { recursive: true, force: true })

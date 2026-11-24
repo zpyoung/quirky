@@ -9,7 +9,7 @@ const mock = vi.hoisted(() => ({
   state: {
     activeView: 'terminal',
     keybindings: { 'tab.openQuickCommandsMenu': ['Mod+Shift+Q'] },
-    settings: { terminalShortcutPolicy: 'orca-first' }
+    settings: { terminalShortcutPolicy: 'quirky-first' }
   }
 }))
 

@@ -1,13 +1,13 @@
-import type { OrcaRuntimeWithMarkPtyLivenessUnverifiable as MarkPtyLivenessUnverifiable } from '../terminal/layout/terminal-input-floor'
-import type { OrcaRuntimeWithStopTerminalsForWorktree as StopTerminalsForWorktree } from '../terminal/stop/worktree-terminal-stop'
-import type { OrcaRuntimeWithStopTerminalsForProject as StopTerminalsForProject } from '../terminal/stop/project-terminal-stop'
-import type { OrcaRuntimeWithGetRuntimeId as GetRuntimeId } from '../workspaces/session-hosts/get-runtime-id'
-import type { OrcaRuntimeWithHasExactPersistedTerminalSurfaceIdentity as HasExactPersistedTerminalSurfaceIdentity } from '../workspaces/persisted-surfaces/has-exact-persisted-terminal-surface-identity'
-import type { OrcaRuntimeWithAutomationOperations as AutomationOperations } from '../workspaces/persisted-surfaces/automation-operations'
-import type { OrcaRuntimeWithOnPtyExit as OnPtyExit } from '../terminal/lifecycle/pty-exit-lifecycle'
-import type { OrcaRuntimeWithResolveWorktreeRemovalTarget as ResolveWorktreeRemovalTarget } from '../workspaces/workspace-removal-target'
-import type { OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs as ReconcileHeadlessMobileSessionBrowserTabs } from '../session-lifecycle/projection/reconcile-headless-mobile-session-browser-tabs'
-import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
+import type { QuirkyRuntimeWithMarkPtyLivenessUnverifiable as MarkPtyLivenessUnverifiable } from '../terminal/layout/terminal-input-floor'
+import type { QuirkyRuntimeWithStopTerminalsForWorktree as StopTerminalsForWorktree } from '../terminal/stop/worktree-terminal-stop'
+import type { QuirkyRuntimeWithStopTerminalsForProject as StopTerminalsForProject } from '../terminal/stop/project-terminal-stop'
+import type { QuirkyRuntimeWithGetRuntimeId as GetRuntimeId } from '../workspaces/session-hosts/get-runtime-id'
+import type { QuirkyRuntimeWithHasExactPersistedTerminalSurfaceIdentity as HasExactPersistedTerminalSurfaceIdentity } from '../workspaces/persisted-surfaces/has-exact-persisted-terminal-surface-identity'
+import type { QuirkyRuntimeWithAutomationOperations as AutomationOperations } from '../workspaces/persisted-surfaces/automation-operations'
+import type { QuirkyRuntimeWithOnPtyExit as OnPtyExit } from '../terminal/lifecycle/pty-exit-lifecycle'
+import type { QuirkyRuntimeWithResolveWorktreeRemovalTarget as ResolveWorktreeRemovalTarget } from '../workspaces/workspace-removal-target'
+import type { QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs as ReconcileHeadlessMobileSessionBrowserTabs } from '../session-lifecycle/projection/reconcile-headless-mobile-session-browser-tabs'
+import type { QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 
 export type GetPtyLivenessVerdictArgs = Parameters<
   MarkPtyLivenessUnverifiable['getPtyLivenessVerdict']

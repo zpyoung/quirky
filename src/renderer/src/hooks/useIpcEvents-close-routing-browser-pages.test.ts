@@ -198,7 +198,7 @@ describe('useIpcEvents browser tab close routing', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}
@@ -427,7 +427,7 @@ describe('useIpcEvents browser tab close routing', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}
@@ -651,7 +651,7 @@ describe('useIpcEvents browser tab close routing', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}

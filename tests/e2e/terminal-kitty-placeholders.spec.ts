@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { PNG } from 'pngjs'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import {
   execInTerminal,
@@ -13,16 +13,16 @@ import { enableInlineImages } from './helpers/terminal-inline-image-proof'
 import { nodeTerminalCommand } from './terminal-node-command'
 
 test.use({
-  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' },
-  orcaAppExtraArgs: ['--force-color-profile=srgb']
+  launchEnv: { QUIRKY_BACKGROUND_LAUNCH: '1' },
+  quirkyAppExtraArgs: ['--force-color-profile=srgb']
 })
 
-test.afterEach(async ({ orcaPage }, testInfo) => {
+test.afterEach(async ({ quirkyPage }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) {
     return
   }
   // Read back only after failure so diagnostics cannot supply the missing repaint.
-  const canvas = await orcaPage
+  const canvas = await quirkyPage
     .locator('.pane:visible .xterm-image-layer-top')
     .first()
     .evaluate(
@@ -68,18 +68,18 @@ function imagePayload(kind: ImageKind): string {
 for (const acceleration of ['off', 'on'] as const) {
   for (const kind of ['cursor', 'placeholder', 'named', 'letterbox', 'transparent'] as const) {
     test(`@headful ${acceleration}: Kitty ${kind} image paints at its intended cells`, async ({
-      orcaPage
+      quirkyPage
     }, testInfo) => {
-      await waitForSessionReady(orcaPage)
-      await ensureTerminalVisible(orcaPage)
-      await orcaPage.evaluate(async (policy) => {
+      await waitForSessionReady(quirkyPage)
+      await ensureTerminalVisible(quirkyPage)
+      await quirkyPage.evaluate(async (policy) => {
         await window.__store!.getState().updateSettings({ terminalGpuAcceleration: policy })
       }, acceleration)
-      await waitForActiveTerminalManager(orcaPage, 30_000)
-      await enableInlineImages(orcaPage)
+      await waitForActiveTerminalManager(quirkyPage, 30_000)
+      await enableInlineImages(quirkyPage)
       await expect
         .poll(() =>
-          orcaPage.evaluate(() => {
+          quirkyPage.evaluate(() => {
             const tabId = window.__store!.getState().activeTabId
             const manager = tabId && window.__paneManagers?.get(tabId)
             const pane = manager && manager.getActivePane()
@@ -87,7 +87,7 @@ for (const acceleration of ['off', 'on'] as const) {
           })
         )
         .toBe(acceleration === 'on')
-      const ptyId = await waitForActivePanePtyId(orcaPage)
+      const ptyId = await waitForActivePanePtyId(quirkyPage)
       const producer = testInfo.outputPath('kitty-placeholder-producer.cjs')
       writeFileSync(
         producer,
@@ -100,11 +100,11 @@ process.stdin.on('data', (data) => {
 });
 process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('base64')}', 'base64'));`
       )
-      await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([producer]))
-      await waitForTerminalOutput(orcaPage, 'INLINE_RENDER_DONE', 30_000)
-      const screen = orcaPage.locator('.pane:visible .xterm-screen').first()
+      await execInTerminal(quirkyPage, ptyId, nodeTerminalCommand([producer]))
+      await waitForTerminalOutput(quirkyPage, 'INLINE_RENDER_DONE', 30_000)
+      const screen = quirkyPage.locator('.pane:visible .xterm-screen').first()
       await expect(screen).toBeVisible()
-      const dimensions = await orcaPage.evaluate(() => {
+      const dimensions = await quirkyPage.evaluate(() => {
         const tabId = window.__store!.getState().activeTabId
         const pane = tabId && window.__paneManagers?.get(tabId)?.getActivePane()
         if (!pane) {
@@ -159,7 +159,7 @@ process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('ba
       if (kind === 'placeholder' || kind === 'named') {
         for (const action of ['delete', 'restore'] as const) {
           // Only the image command changes: shell echo must not supply the missing repaint.
-          await sendToTerminal(orcaPage, ptyId, action === 'delete' ? 'd' : 'r')
+          await sendToTerminal(quirkyPage, ptyId, action === 'delete' ? 'd' : 'r')
           await expect
             .poll(
               async () => {
@@ -194,7 +194,7 @@ process.stdout.write(Buffer.from('${Buffer.from(imagePayload(kind)).toString('ba
             .toBe(action === 'restore')
         }
       }
-      await sendToTerminal(orcaPage, ptyId, 'q')
+      await sendToTerminal(quirkyPage, ptyId, 'q')
     })
   }
 }

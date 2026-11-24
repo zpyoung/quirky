@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
-import { OrcaRuntimeWithSplitPaneInMain } from './terminal-split-in-main'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout } from '../../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
+import { QuirkyRuntimeWithSplitPaneInMain } from './terminal-split-in-main'
 import { resolveTerminalSessionWorktreeId } from '../../runtime-worktree-path-identity'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { terminalLayoutContainsLeaf } from '../../../../shared/workspace-session-pane-ownership'
@@ -15,12 +15,12 @@ import { applyClaudeEnvPatch } from '../../../claude-accounts/environment'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 import { SPLIT_PANE_WAIT_TIMEOUT_MESSAGE } from './terminal-split-wait-timeout'
 
-export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends OrcaRuntimeWithSplitPaneInMain {
+export abstract class QuirkyRuntimeWithResolveTerminalSplitSourceAuthority extends QuirkyRuntimeWithSplitPaneInMain {
   abstract getTerminalHandleForPaneKey(
     ...args: Parameters<
-      OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getTerminalHandleForPaneKey']
+      QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['getTerminalHandleForPaneKey']
     >
-  ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['getTerminalHandleForPaneKey']>
+  ): ReturnType<QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['getTerminalHandleForPaneKey']>
 
   protected resolveTerminalSplitSourceAuthority(
     worktreeId: string,
@@ -129,7 +129,7 @@ export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends
   }): Promise<{ env: Record<string, string> }> {
     const handle = this.getTerminalHandleForPaneKey(args.paneKey)
     if (!handle) {
-      throw new Error('claude_agent_teams_requires_orca_terminal')
+      throw new Error('claude_agent_teams_requires_quirky_terminal')
     }
     return await this.prepareClaudeAgentTeamsLeaderForHandle({
       handle,

@@ -12,7 +12,7 @@ let root: string
 const opened: ObjectiveDatabase[] = []
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-objective-database-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-objective-database-'))
 })
 
 afterEach(() => {

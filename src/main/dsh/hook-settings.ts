@@ -39,8 +39,8 @@ export function getDshHome(): string {
  *
  * Why here and not in a profile: DSH composes every profile as bundle patches, then the
  * profile's own `cordis.patch.yml`, then this file. Installing one layer above every
- * profile means a pane the user started themselves — any profile, including one Orca
- * never launched — still reports status, and Orca never edits a profile the user owns.
+ * profile means a pane the user started themselves — any profile, including one Quirky
+ * never launched — still reports status, and Quirky never edits a profile the user owns.
  */
 export function getDshConfigPath(): string {
   return join(getDshHome(), 'cordis.patch.yml')
@@ -66,7 +66,7 @@ export function getDshManagedHooksPath(): string {
 export function getDshRemoteManagedHooksPath(remoteHome: string): string {
   return pathPosix.join(
     remoteHome.replace(/\/$/, ''),
-    '.orca',
+    '.quirky',
     'agent-hooks',
     DSH_MANAGED_HOOKS_FILE_NAME
   )
@@ -88,7 +88,7 @@ export function getDshManagedCommandMatcher(): (command: string | undefined) => 
 }
 
 /**
- * The managed hooks file is Orca's outright: DSH has no user-owned `hooks.json`
+ * The managed hooks file is Quirky's outright: DSH has no user-owned `hooks.json`
  * convention of its own, and the bridge reads whatever single path it is pointed at. So
  * generate it wholesale rather than merging into someone's file.
  */

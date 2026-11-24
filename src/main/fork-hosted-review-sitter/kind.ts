@@ -16,7 +16,7 @@ import {
   type HostedReviewWorld
 } from '../../shared/fork-hosted-review-sitter'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { readHostedReviewPreparedCommit } from './agent-execution'
 import {
   inspectHostedReviewSitterContention,
@@ -67,7 +67,7 @@ function ownedWorkerForAction(
     : undefined
 }
 export function createHostedReviewKind(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   storageAuthority: 'desktop' | 'runtime' = 'desktop'
 ): HostedReviewKind {
@@ -154,7 +154,7 @@ export function createHostedReviewKind(
 
 export function registerHostedReviewKind(
   kernel: HostedReviewKernelRegistration,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   storageAuthority: 'desktop' | 'runtime' = 'desktop'
 ): void {

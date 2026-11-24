@@ -1,10 +1,10 @@
 import { isWatcherProcessFailure } from '../../../ipc/parcel-watcher-process-failure'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { createFileWatchEventBatcher } from './file-watch-event-batcher'
 import type { FileWatchBatchCadence } from '../../../../shared/rpc-contract/files-target-params'
 
 export async function runFileWatchStream(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   worktree: string
   batchCadence?: FileWatchBatchCadence
   connectionId?: string

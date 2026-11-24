@@ -46,9 +46,11 @@ afterEach(async () => {
 
 it.each([false, true])('isolates imported aliases and live listeners (load failure=%s)', (fail) => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-  const directory = mkdtempSync(join(tmpdir(), 'orca-import-lifetime-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-import-lifetime-'))
   directories.push(directory)
-  const live = createSqliteTestStore(Store, { dataFile: join(directory, 'live', 'orca-data.json') })
+  const live = createSqliteTestStore(Store, {
+    dataFile: join(directory, 'live', 'quirky-data.json')
+  })
   stores.push(live)
   const source = buildProfileStateCutoverFixture(directory)
   for (const session of [
@@ -82,7 +84,7 @@ it.each([false, true])('isolates imported aliases and live listeners (load failu
   const pendingTimers = vi.getTimerCount()
   const createImport = () =>
     new Store({
-      dataFile: join(directory, 'imported', 'orca-data.json'),
+      dataFile: join(directory, 'imported', 'quirky-data.json'),
       serializedState: JSON.stringify(source)
     })
   if (fail) {

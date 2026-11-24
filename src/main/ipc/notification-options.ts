@@ -27,8 +27,8 @@ export function buildNotificationOptions(
 
   if (args.source === 'test') {
     return {
-      title: 'Orca notifications are on',
-      body: 'This is a test notification from Orca.'
+      title: 'Quirky notifications are on',
+      body: 'This is a test notification from Quirky.'
     }
   }
 
@@ -79,7 +79,7 @@ function formatAgentNotificationStatusText(
     case 'failure':
     case 'interruption':
       return translate('notifications.agentStatus.failed', 'failed')
-    // Why: a Stop the user asked for, a turn a newer request replaced, or an end Orca cannot
+    // Why: a Stop the user asked for, a turn a newer request replaced, or an end Quirky cannot
     // prove, still never reads finished.
     case 'cancellation':
     case 'superseded':

@@ -9,7 +9,7 @@
 // app.json stays the source for everything else: Expo reads it first and hands it to
 // this function, so the fastlane version/buildNumber rewrite still flows through.
 const APS_ENVIRONMENT =
-  process.env.ORCA_IOS_APS_ENVIRONMENT === 'production' ? 'production' : 'development'
+  process.env.QUIRKY_IOS_APS_ENVIRONMENT === 'production' ? 'production' : 'development'
 
 module.exports = ({ config }) => ({
   ...config,

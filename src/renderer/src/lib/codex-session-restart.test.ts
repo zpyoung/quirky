@@ -73,7 +73,7 @@ describe('markLiveCodexSessionsForRestart', () => {
             id: 'tab-1',
             ptyId: 'pty-1',
             worktreeId: 'wt1',
-            title: 'orca-1',
+            title: 'quirky-1',
             customTitle: null,
             color: null,
             sortOrder: 0,
@@ -151,7 +151,7 @@ describe('markLiveCodexSessionsForRestart', () => {
             id: 'tab-1',
             ptyId: 'pty-1',
             worktreeId: 'wt1',
-            title: 'orca-1',
+            title: 'quirky-1',
             customTitle: null,
             color: null,
             sortOrder: 0,
@@ -161,7 +161,7 @@ describe('markLiveCodexSessionsForRestart', () => {
             id: 'tab-2',
             ptyId: 'pty-3',
             worktreeId: 'wt1',
-            title: 'orca-2',
+            title: 'quirky-2',
             customTitle: null,
             color: null,
             sortOrder: 1,
@@ -397,7 +397,7 @@ describe('markLiveCodexSessionsForRestart', () => {
             id: 'tab-1',
             ptyId: 'remote:env-1@@term-1',
             worktreeId: 'wt1',
-            title: 'orca-1',
+            title: 'quirky-1',
             customTitle: null,
             color: null,
             sortOrder: 0,
@@ -461,7 +461,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
       settings: { activeRuntimeEnvironmentId: null } as never,
       worktreesByRepo: {
         repo1: [
-          { id: 'wt1', path: worktreePaths.wt1 ?? '/Users/dev/code/orca' },
+          { id: 'wt1', path: worktreePaths.wt1 ?? '/Users/dev/code/quirky' },
           ...(worktreePaths.wt2 ? [{ id: 'wt2', path: worktreePaths.wt2 }] : [])
         ]
       } as never,
@@ -470,7 +470,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
           id: `tab-${index}`,
           ptyId: pane.ptyId,
           worktreeId: pane.worktreeId ?? 'wt1',
-          title: `orca-${index}`,
+          title: `quirky-${index}`,
           customTitle: null,
           color: null,
           sortOrder: index,
@@ -615,7 +615,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
   // only because its foreground read as `wsl.exe` and failed the Codex test. Pin
   // the lane instead — a WSL pane whose foreground IS codex must escape too.
   it('leaves a WSL Codex pane alone on a host switch even when its foreground is codex', async () => {
-    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\orca' })
+    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\quirky' })
 
     await markForFocusedHost({
       previousAccountLabel: ACCOUNT_A,
@@ -628,7 +628,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
   })
 
   it('marks that same WSL pane when its own distro is the lane that changed', async () => {
-    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\orca' })
+    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\quirky' })
 
     await markForFocusedHost({
       previousAccountLabel: ACCOUNT_A,
@@ -642,7 +642,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
   })
 
   it('keeps one distro switch off another distro pane', async () => {
-    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\orca' })
+    seedPanes([{ ptyId: 'pty-wsl' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\quirky' })
 
     await markForFocusedHost({
       previousAccountLabel: ACCOUNT_A,
@@ -702,7 +702,7 @@ describe('markLiveCodexSessionsForRestart lane scoping', () => {
     it('cards a pane the record puts in the switched lane against the derivation', async () => {
       // The mirror: the user changed a runtime preference after this WSL-looking
       // pane spawned on the host, and re-derivation would now miss its notice.
-      seedPanes([{ ptyId: 'pty-1' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\orca' })
+      seedPanes([{ ptyId: 'pty-1' }], { wt1: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\quirky' })
       vi.mocked(window.api.codexAccounts.listRecordedPaneLanes).mockResolvedValue({
         'pty-1': 'host'
       })
@@ -858,7 +858,7 @@ describe('markRestoredStaleCodexSessionsForRestart', () => {
             id: 'tab-1',
             ptyId: 'pty-1',
             worktreeId: 'wt1',
-            title: 'orca-1',
+            title: 'quirky-1',
             customTitle: null,
             color: null,
             sortOrder: 0,

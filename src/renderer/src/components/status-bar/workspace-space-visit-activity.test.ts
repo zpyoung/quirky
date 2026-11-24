@@ -4,7 +4,7 @@ import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qu
 import { withWorkspaceSpaceVisitActivity } from './workspace-space-visit-activity'
 import { sortWorkspaceSpaceRows } from './workspace-space-presentation'
 
-vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 function row(name: string, lastActivityAt: number): WorkspaceSpaceWorktree {
   return {

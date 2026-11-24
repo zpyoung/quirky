@@ -7,8 +7,8 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -26,7 +26,7 @@ for (const [path, expected] of Object.entries(expectedHashes)) {
   sourceHashes[path] = actual
 }
 
-const scratch = await mkdtemp(join(tmpdir(), 'orca-crashpad-read-limit-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-crashpad-read-limit-'))
 const require = createRequire(import.meta.url)
 let runnerModuleId
 try {

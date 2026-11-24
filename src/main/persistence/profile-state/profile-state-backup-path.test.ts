@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 function location(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-backup-path-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-backup-path-'))
   directories.push(directory)
   return join(directory, 'profile-state.db')
 }

@@ -64,7 +64,7 @@ describe('Codex session discovery on a transcript lookup miss', () => {
     configureHostReadableTranscriptPathSources({
       getAdditionalCodexHomePaths: () => service.getHostCodexHomePathsForSessionDiscovery()
     })
-    // A user who never ran Codex through Orca: neither the mirror nor any account home exists.
+    // A user who never ran Codex through Quirky: neither the mirror nor any account home exists.
     rmSync(join(testState.userDataDir, 'codex-runtime-home'), { recursive: true, force: true })
     rmSync(join(testState.userDataDir, 'codex-accounts'), { recursive: true, force: true })
     const before = readdirSync(testState.userDataDir).sort()

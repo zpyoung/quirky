@@ -34,12 +34,12 @@ import { splitUsageCacheFileViaWorker } from '../usage/usage-scan-worker-spawn'
 let _openCodeUsageFile: string | null = null
 
 export function initOpenCodeUsagePath(): void {
-  _openCodeUsageFile = join(app.getPath('userData'), 'orca-opencode-usage.json')
+  _openCodeUsageFile = join(app.getPath('userData'), 'quirky-opencode-usage.json')
 }
 
 function getOpenCodeUsageFile(): string {
   if (!_openCodeUsageFile) {
-    _openCodeUsageFile = join(app.getPath('userData'), 'orca-opencode-usage.json')
+    _openCodeUsageFile = join(app.getPath('userData'), 'quirky-opencode-usage.json')
   }
   return _openCodeUsageFile
 }

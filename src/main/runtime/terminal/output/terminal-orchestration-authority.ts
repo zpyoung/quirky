@@ -1,6 +1,6 @@
 import type { AgentStatusOrchestrationContext } from '../../../../shared/agent-status-types'
 import type { OrchestrationDb } from '../../orchestration/db/orchestration-db'
-import { OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller } from '../../orchestration/terminal-authority/verify-orchestration-compatibility-caller'
+import { QuirkyRuntimeWithVerifyOrchestrationCompatibilityCaller } from '../../orchestration/terminal-authority/verify-orchestration-compatibility-caller'
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import { createHash } from 'node:crypto'
 import {
@@ -31,10 +31,10 @@ import {
 import { readOrchestrationFleetAgentStatusSnapshot } from '../../orchestration-fleet-agent-status-snapshot'
 import { resolveStructuredWorkerAuthority } from '../../structured-worker-authority'
 import { isStructuredWorkerHandle } from '../../../../shared/structured-worker-handle'
-import { parseOrcaSessionAddress } from '../../../../shared/orca-session-address'
+import { parseQuirkySessionAddress } from '../../../../shared/quirky-session-address'
 import { matchesProcessIncarnation } from '../../orchestration/worker-terminal-process-liveness'
 
-export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller {
+export abstract class QuirkyRuntimeWithGetOrchestrationDispatchAuthority extends QuirkyRuntimeWithVerifyOrchestrationCompatibilityCaller {
   protected abstract getExistingTerminalHandlesForPtyId(ptyId: string): string[]
   protected abstract getOrchestrationDbIfAvailable(): OrchestrationDb | null
   abstract getTerminalProcessIncarnation(handle: string): string | null
@@ -304,7 +304,7 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
 
   getTerminalOrchestrationCliCommand(handle: string) {
     // A structured session runs in this process: it is told what the structured mail lane types.
-    if (isStructuredWorkerHandle(handle) || parseOrcaSessionAddress(handle)) {
+    if (isStructuredWorkerHandle(handle) || parseQuirkySessionAddress(handle)) {
       return localOrchestrationCliCommand()
     }
     let pty: RuntimePtyWorktreeRecord | null = null
@@ -312,10 +312,10 @@ export abstract class OrcaRuntimeWithGetOrchestrationDispatchAuthority extends O
       const ptyId = this.resolveLeafForHandle(handle)?.ptyId
       pty = ptyId ? (this.ptysById.get(ptyId) ?? null) : null
     } catch {
-      return 'orca'
+      return 'quirky'
     }
     if (!pty) {
-      return 'orca'
+      return 'quirky'
     }
     return resolveTerminalOrchestrationCliCommand({
       connectionId: pty.connectionId,

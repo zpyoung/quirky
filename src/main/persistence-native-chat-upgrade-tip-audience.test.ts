@@ -14,7 +14,7 @@ import type {
   NativeChatUpgradeTipAudience,
   NativeChatUpgradeTipVariant
 } from '../shared/native-chat-upgrade-tip-audience'
-import { normalizeProfileProjectState } from './orca-profiles/profile-project-state-file'
+import { normalizeProfileProjectState } from './quirky-profiles/profile-project-state-file'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -22,7 +22,7 @@ vi.mock('electron', () => ({
 }))
 
 beforeEach(() => {
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-chat-upgrade-tip-audience-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-chat-upgrade-tip-audience-'))
 })
 afterEach(async () => {
   await closeTestStores()

@@ -32,7 +32,7 @@ let store: AgentSessionRecordStore
 const journals = createTrackedJournalOpener()
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-status-feed-workspace-path-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-status-feed-workspace-path-'))
   store = await openTestAgentSessionRecordStore(root)
 })
 

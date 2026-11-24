@@ -1,4 +1,4 @@
-// Copies observations written under ORCA_LAYOUT_COMPAT_REPORT_DIR (<scenario>.<platform>.json)
+// Copies observations written under QUIRKY_LAYOUT_COMPAT_REPORT_DIR (<scenario>.<platform>.json)
 // into tests/e2e/layout-compat-baselines.json. Usage: node <this> <report dir>
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'

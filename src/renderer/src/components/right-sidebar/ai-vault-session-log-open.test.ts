@@ -19,7 +19,7 @@ vi.mock('@/i18n/i18n', () => ({
   translate: (_key: string, fallback: string) => fallback
 }))
 
-import { openAiVaultSessionLogInOrca } from './ai-vault-session-log-open'
+import { openAiVaultSessionLogInQuirky } from './ai-vault-session-log-open'
 
 const LOG_PATH = '/home/user/.claude/sessions/log.jsonl'
 
@@ -53,12 +53,12 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('openAiVaultSessionLogInOrca', () => {
+describe('openAiVaultSessionLogInQuirky', () => {
   it('opens the exact path as a permanent read-only local tab', async () => {
     const state = makeState()
     getStateMock.mockReturnValue(state)
 
-    await openAiVaultSessionLogInOrca({ filePath: LOG_PATH, executionHostId: 'local' })
+    await openAiVaultSessionLogInQuirky({ filePath: LOG_PATH, executionHostId: 'local' })
 
     expect(state.openFile).toHaveBeenCalledTimes(1)
     const [file, options] = state.openFile.mock.calls[0]
@@ -85,9 +85,9 @@ describe('openAiVaultSessionLogInOrca', () => {
     const state = makeState()
     getStateMock.mockReturnValue(state)
 
-    await openAiVaultSessionLogInOrca({ filePath: '   ', executionHostId: 'local' })
-    await openAiVaultSessionLogInOrca({ filePath: LOG_PATH, executionHostId: 'ssh:dev-box' })
-    await openAiVaultSessionLogInOrca({
+    await openAiVaultSessionLogInQuirky({ filePath: '   ', executionHostId: 'local' })
+    await openAiVaultSessionLogInQuirky({ filePath: LOG_PATH, executionHostId: 'ssh:dev-box' })
+    await openAiVaultSessionLogInQuirky({
       filePath: '/home/user/.opencode/db.sqlite#sess_1',
       executionHostId: 'local'
     })
@@ -99,7 +99,7 @@ describe('openAiVaultSessionLogInOrca', () => {
     const state = makeState({ worktreesByRepo: {}, folderWorkspaces: [] })
     getStateMock.mockReturnValue(state)
 
-    await openAiVaultSessionLogInOrca({ filePath: LOG_PATH, executionHostId: 'local' })
+    await openAiVaultSessionLogInQuirky({ filePath: LOG_PATH, executionHostId: 'local' })
 
     expect(state.openFile).not.toHaveBeenCalled()
     expect(toastErrorMock).toHaveBeenCalledWith(
@@ -121,7 +121,7 @@ describe('openAiVaultSessionLogInOrca', () => {
     })
     getStateMock.mockReturnValue(state)
 
-    await openAiVaultSessionLogInOrca({ filePath: LOG_PATH, executionHostId: 'local' })
+    await openAiVaultSessionLogInQuirky({ filePath: LOG_PATH, executionHostId: 'local' })
 
     expect(state.openFile).toHaveBeenCalledTimes(1)
     expect(toastMock).toHaveBeenCalledWith('Log is already open for editing.')

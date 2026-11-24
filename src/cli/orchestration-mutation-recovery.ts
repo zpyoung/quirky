@@ -4,7 +4,7 @@ import {
   recoverableOrchestrationArgs,
   resolveOrchestrationCliExecutable
 } from './runtime/orchestration-recovery-command'
-import { quoteWindowsCmdArgument } from '@orca/process-host/windows-command-line'
+import { quoteWindowsCmdArgument } from '@quirky/process-host/windows-command-line'
 import { quotePowerShellNativeArgument } from '../shared/powershell-native-argument'
 import { resolveWindowsShellStartupFamily } from '../shared/windows-terminal-shell'
 import type { AgentStartupShell } from '../shared/tui-agent-startup-shell'
@@ -45,8 +45,8 @@ export function orchestrationMutationRecoveryError(error: unknown): unknown {
   }
   const retryStep = retryCommand
     ? dispatchId
-      ? `After inspecting the Dispatch, if keyed recovery is still needed, run ${renderCommand(retryCommand)} from this same terminal. --retry-request reuses the same operation identity so Orca can replay, join, or safely recover it without starting a separate duplicate.`
-      : `If request-show reports completed or pending, run ${renderCommand(retryCommand)} from this same terminal. --retry-request reuses the same operation identity so Orca can replay, join, or safely recover it without starting a separate duplicate. If request-show reports absent, inspect the affected state before deciding whether to retry; absence does not prove a retry is safe.`
+      ? `After inspecting the Dispatch, if keyed recovery is still needed, run ${renderCommand(retryCommand)} from this same terminal. --retry-request reuses the same operation identity so Quirky can replay, join, or safely recover it without starting a separate duplicate.`
+      : `If request-show reports completed or pending, run ${renderCommand(retryCommand)} from this same terminal. --retry-request reuses the same operation identity so Quirky can replay, join, or safely recover it without starting a separate duplicate. If request-show reports absent, inspect the affected state before deciding whether to retry; absence does not prove a retry is safe.`
     : 'Recovery is blocked until the exact original command is available; no retry command was emitted.'
   const nextSteps = [`Run ${renderCommand(queryCommand)} before retrying.`, retryStep]
   const message = [
@@ -175,7 +175,7 @@ export function renderResolvedOrchestrationCommand(
   env: NodeJS.ProcessEnv = process.env
 ): string {
   const parts = parseCommandLine(command)
-  if (parts?.[0] !== 'orca') {
+  if (parts?.[0] !== 'quirky') {
     return command
   }
   return renderCommand([executable, ...parts.slice(1)], platform, env)
@@ -189,7 +189,7 @@ function resolveRecoveryShell(
     return 'posix'
   }
   return resolveWindowsShellStartupFamily(
-    env.ORCA_TERMINAL_WINDOWS_SHELL ?? env.ORCA_WINDOWS_SHELL ?? env.ComSpec ?? env.COMSPEC
+    env.QUIRKY_TERMINAL_WINDOWS_SHELL ?? env.QUIRKY_WINDOWS_SHELL ?? env.ComSpec ?? env.COMSPEC
   )
 }
 
@@ -214,7 +214,7 @@ function shellQuote(value: string): string {
 
 function stripUnsafeRetryAdvice(message: string, requestId: string): string {
   return message
-    .replace(' Restart Orca and try again.', '')
+    .replace(' Restart Quirky and try again.', '')
     .replace(' Retry the command.', '')
     .replace(` Orchestration mutation request ID: ${requestId}.`, '')
 }

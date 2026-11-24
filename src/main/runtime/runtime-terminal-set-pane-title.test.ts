@@ -1,8 +1,8 @@
-import './orca-runtime-test-lifecycle.spec'
+import './quirky-runtime-test-lifecycle.spec'
 import { describe, expect, it, vi } from 'vitest'
-import { createRuntime, syncSinglePty, TEST_WORKTREE_ID } from './orca-runtime-test-fixtures.spec'
-import { electronMocks } from './orca-runtime-test-mocks.spec'
-import { createMobileCreateTestNotifier } from './orca-runtime-test-scenario-builders.spec'
+import { createRuntime, syncSinglePty, TEST_WORKTREE_ID } from './quirky-runtime-test-fixtures.spec'
+import { electronMocks } from './quirky-runtime-test-mocks.spec'
+import { createMobileCreateTestNotifier } from './quirky-runtime-test-scenario-builders.spec'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { TERMINAL_QUERY_METHODS } from './rpc/methods/terminal/terminal-query-methods'
 
@@ -72,7 +72,7 @@ describe('pane-scoped terminal title', () => {
     const { setPaneTitle: _unused, ...legacyNotifier } = notifier
     runtime.setNotifier(legacyNotifier)
     await expect(runtime.setPaneTitle(handle, 'REVIEWER')).rejects.toThrow(
-      'require a running Orca desktop'
+      'require a running Quirky desktop'
     )
   })
 

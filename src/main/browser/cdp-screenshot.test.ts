@@ -395,7 +395,7 @@ describe('an SSH host’s capture', () => {
   const asHost = <T>(run: () => Promise<T>): Promise<T> =>
     runInRemoteCliBrowserScope('wt-1', run, undefined, () => url.startsWith('https:'))
   const REFUSED =
-    "This page is not browsing through the SSH host, so the host's orca CLI cannot use it."
+    "This page is not browsing through the SSH host, so the host's quirky CLI cannot use it."
 
   afterEach(() => {
     url = 'https://example.com/'

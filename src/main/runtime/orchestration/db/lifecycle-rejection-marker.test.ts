@@ -12,7 +12,7 @@ describe('lifecycle-rejection-marker', () => {
     })
     expect(JSON.parse(marked)).toMatchObject({
       keep: true,
-      _orcaLifecycleRejection: {
+      _quirkyLifecycleRejection: {
         code: 'rejected',
         reason: 'not current',
         originalReason: 'report file is invalid',
@@ -25,7 +25,7 @@ describe('lifecycle-rejection-marker', () => {
   it('treats missing, non-object, and incomplete markers as absent', () => {
     expect(hasLifecycleRejectionMarker(null)).toBe(false)
     expect(hasLifecycleRejectionMarker('[]')).toBe(false)
-    expect(hasLifecycleRejectionMarker('{"_orcaLifecycleRejection":{"code":1}}')).toBe(false)
+    expect(hasLifecycleRejectionMarker('{"_quirkyLifecycleRejection":{"code":1}}')).toBe(false)
     expect(hasLifecycleRejectionMarker('not-json')).toBe(false)
   })
 })

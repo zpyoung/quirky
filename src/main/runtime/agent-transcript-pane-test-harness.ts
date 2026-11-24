@@ -1,6 +1,6 @@
 // One pane builder for every suite that replays a captured agent transcript through the runtime.
 import { vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 
@@ -38,9 +38,9 @@ export type TranscriptPaneOptions = {
 
 export async function createTranscriptPane(
   options: TranscriptPaneOptions,
-  runtimeDeps?: ConstructorParameters<typeof OrcaRuntimeService>[2]
-): Promise<{ runtime: OrcaRuntimeService; handle: string }> {
-  const runtime = new OrcaRuntimeService(null, undefined, runtimeDeps)
+  runtimeDeps?: ConstructorParameters<typeof QuirkyRuntimeService>[2]
+): Promise<{ runtime: QuirkyRuntimeService; handle: string }> {
+  const runtime = new QuirkyRuntimeService(null, undefined, runtimeDeps)
   // The runtime reads a remote pane's host OS from its worktree path.
   const worktreeId = options.remoteWindowsHost
     ? 'repo-1::C:\\repo\\app'

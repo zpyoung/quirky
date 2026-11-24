@@ -52,7 +52,7 @@ async function fixture(acceptsImages = true, source: 'menu' | 'event' = 'menu') 
     height: number
   } | null>()
   const owner: NativeChatAttachmentOwner = { kind: 'local' }
-  const path = '/local/native-chat-pastes/orca-paste-1-image.png'
+  const path = '/local/native-chat-pastes/quirky-paste-1-image.png'
   const saveCall = vi.fn(() => save.promise)
   Object.defineProperty(window, 'api', {
     configurable: true,

@@ -21,7 +21,7 @@ export function registerJournalRowSchemaVersionTests(): void {
     const opener = createTrackedJournalOpener()
 
     beforeEach(async () => {
-      root = await mkdtemp(join(tmpdir(), 'orca-journal-row-version-'))
+      root = await mkdtemp(join(tmpdir(), 'quirky-journal-row-version-'))
     })
     afterEach(async () => {
       await opener.closeAll()
@@ -40,7 +40,7 @@ export function registerJournalRowSchemaVersionTests(): void {
         now: () => 1_000,
         stateDirectory: join(root, 'session-1')
       })
-      const identity = { provider: 'orca' as const, clientMessageId: 'm1' }
+      const identity = { provider: 'quirky' as const, clientMessageId: 'm1' }
       await journal.appendItem(
         identity,
         { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hi' }] },

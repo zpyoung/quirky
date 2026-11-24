@@ -1,7 +1,7 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -55,7 +55,7 @@ describe('terminal.subscribe reconnect rebind (STA-4510)', () => {
       registerSubscriptionCleanup: vi.fn(registry.registerSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
-      // Mirrors bindTerminalWaiterAbort (orca-runtime.ts:34183): abort rejects.
+      // Mirrors bindTerminalWaiterAbort (quirky-runtime.ts:34183): abort rejects.
       waitForTerminal: vi.fn(
         (_handle: string, options?: { signal?: AbortSignal }) =>
           new Promise<RuntimeTerminalWait>((_resolve, reject) => {
@@ -64,7 +64,7 @@ describe('terminal.subscribe reconnect rebind (STA-4510)', () => {
             })
           })
       )
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     // --- connection A: the original mobile socket -------------------------

@@ -9,7 +9,7 @@ let root: string
 const opened: HeimdallDatabase[] = []
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-heimdall-database-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-heimdall-database-'))
 })
 
 afterEach(() => {

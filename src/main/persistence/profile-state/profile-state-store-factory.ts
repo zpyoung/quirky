@@ -28,7 +28,7 @@ export type ProfileStateStoreFactoryResult = {
   migrated: boolean
 }
 
-/** Centralize authority selection for desktop, orcad and offline callers. */
+/** Centralize authority selection for desktop, quirkyd and offline callers. */
 export function createProfileStateStore(
   options: ProfileStateStoreFactoryOptions
 ): ProfileStateStoreFactoryResult {
@@ -65,7 +65,7 @@ export function prepareProfileStateStore(
   const authority = bootstrap.authority
   if (authority === undefined) {
     throw new ProfileStateStoreFactoryError(
-      'Writable profiles require SQLite database and backup support. Use Orca or its pinned Node runtime.'
+      'Writable profiles require SQLite database and backup support. Use Quirky or its pinned Node runtime.'
     )
   }
 

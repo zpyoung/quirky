@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveKnownWorkspaceFileTarget } from '../../workspaces/known-workspace-file-target'
+import { QuirkyRuntimeWithResolveKnownWorkspaceFileTarget } from '../../workspaces/known-workspace-file-target'
 import type { PtyIncarnationId } from '../../../../shared/pty-incarnation'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'
 import {
@@ -7,7 +7,7 @@ import {
 } from '../../../../shared/execution-host'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
 
-export abstract class OrcaRuntimeWithInvalidateAllHandlesForPty extends OrcaRuntimeWithResolveKnownWorkspaceFileTarget {
+export abstract class QuirkyRuntimeWithInvalidateAllHandlesForPty extends QuirkyRuntimeWithResolveKnownWorkspaceFileTarget {
   protected abstract getOrCreatePtyWorktreeRecord(ptyId: string): RuntimePtyWorktreeRecord | null
 
   protected abstract rejectWaitersForHandle(handle: string, code: string): void

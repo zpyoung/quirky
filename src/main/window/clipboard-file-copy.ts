@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
-import { windowsPowerShellPath } from '@orca/process-host/windows-system-binary'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
+import { windowsPowerShellPath } from '@quirky/process-host/windows-system-binary'
 
 export type ClipboardFileResult = { ok: boolean; reason?: string }
 
@@ -19,7 +19,7 @@ export type ClipboardFileDeps = {
   runProcess: (spec: ProcessSpec) => Promise<ProcessResult>
 }
 
-const WINDOWS_CLIPBOARD_FILE_ENV = 'ORCA_CLIPBOARD_FILE'
+const WINDOWS_CLIPBOARD_FILE_ENV = 'QUIRKY_CLIPBOARD_FILE'
 
 // Put a real OS-level file reference on the clipboard so pasting in Finder /
 // Explorer / a file manager drops the actual file (not its path as text). Only

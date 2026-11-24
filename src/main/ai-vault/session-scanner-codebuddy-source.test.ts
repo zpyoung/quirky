@@ -14,7 +14,7 @@ afterEach(async () => {
 
 describe('scanAiVaultSessions — CodeBuddy transcripts', () => {
   it('discovers ~/.codebuddy/projects transcripts and attributes them to codebuddy', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-codebuddy-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-codebuddy-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await mkdir(join(roots.codebuddyProjectsDir, 'project'), { recursive: true })

@@ -34,7 +34,7 @@ import { useSidebarWorktreeSelection } from './worktree-list/navigation/use-sele
 import { useWindowSidebarListModel } from './worktree-list/listing/use-window-list-model'
 import { useMainSidebarListModel } from './worktree-list/listing/use-main-list-model'
 import { isPairedWebClientWindow } from '@/lib/desktop-window-chrome'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { useWorktreeStatusMutations } from './worktree-list/drag/use-status-mutations'
 import { shouldFiltersHideAllRows } from './sidebar-empty-state-gate'
 import { WorkspaceActivityHiddenCountRow } from './fork-workspace-activity-window/WorkspaceActivityHiddenCountRow'
@@ -52,7 +52,7 @@ type WorktreeListProps = {
 
 // Switch point: this host's window lists main's inputs; a paired web client builds its own view.
 const useSidebarListModel =
-  ORCA_SIDEBAR_INPUTS_IS_MAIN && !isPairedWebClientWindow()
+  QUIRKY_SIDEBAR_INPUTS_IS_MAIN && !isPairedWebClientWindow()
     ? useMainSidebarListModel
     : useWindowSidebarListModel
 

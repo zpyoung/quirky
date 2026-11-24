@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { createServer } from 'vite'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createViteCacheRetentionPlugin } from '../build-plugins/vite-cache-retention'
@@ -40,7 +40,7 @@ async function age(cacheRoot, days = 31) {
 }
 
 async function fixture(days = 31) {
-  const root = await mkdtemp(join(tmpdir(), 'orca-vite-cache-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-vite-cache-'))
   roots.push(root)
   const worktree = join(root, 'worktree')
   const cacheRoot = join(worktree, '.cache', 'vite')
@@ -104,7 +104,7 @@ it.each([false, true])(
     const options = await fixture()
     const moduleUrl = pathToFileURL(resolve(import.meta.dirname, 'vite-cache-activity.mjs')).href
     const child = await runProcess({
-      program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
+      program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath,
       args: [
         '--input-type=module',
         '-e',

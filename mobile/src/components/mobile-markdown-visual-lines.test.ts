@@ -31,7 +31,7 @@ function blocksOf(content: string) {
 describe('native-chat visual lines in mobile markdown', () => {
   it('turns a directive line into its own block between prose', () => {
     const { directives, blocks } = blocksOf(
-      'Here is the chart.\n::orca-visual{file="usage-3f2a.html" title="Usage"}\nIt shows a dip.'
+      'Here is the chart.\n::quirky-visual{file="usage-3f2a.html" title="Usage"}\nIt shows a dip.'
     )
     expect(directives).toEqual([{ file: 'usage-3f2a.html', title: 'Usage' }])
     expect(blocks).toEqual([
@@ -42,39 +42,39 @@ describe('native-chat visual lines in mobile markdown', () => {
   })
 
   it('keeps the title exactly as written, before entity decoding and tag stripping', () => {
-    const { directives } = blocksOf('::orca-visual{file="a.html" title="<b>Q1</b> &amp; Q2"}')
+    const { directives } = blocksOf('::quirky-visual{file="a.html" title="<b>Q1</b> &amp; Q2"}')
     expect(directives).toEqual([{ file: 'a.html', title: '<b>Q1</b> &amp; Q2' }])
   })
 
   it('accepts CRLF line endings and up to three leading spaces', () => {
-    const { blocks } = blocksOf('intro\r\n   ::orca-visual{file="a.html"}\r\nend')
+    const { blocks } = blocksOf('intro\r\n   ::quirky-visual{file="a.html"}\r\nend')
     expect(blocks.map((block) => block.type)).toEqual(['paragraph', 'visual', 'paragraph'])
   })
 
   it('leaves directives inside fenced code, quotes, list items and inline code as text', () => {
-    const fenced = blocksOf('```md\n::orca-visual{file="a.html"}\n```')
+    const fenced = blocksOf('```md\n::quirky-visual{file="a.html"}\n```')
     expect(fenced.directives).toEqual([])
     expect(fenced.blocks).toEqual([
-      { type: 'code', text: '::orca-visual{file="a.html"}', language: 'md' }
+      { type: 'code', text: '::quirky-visual{file="a.html"}', language: 'md' }
     ])
-    expect(blocksOf('> ::orca-visual{file="a.html"}').directives).toEqual([])
-    expect(blocksOf('- ::orca-visual{file="a.html"}').directives).toEqual([])
-    expect(blocksOf('see `::orca-visual{file="a.html"}`').directives).toEqual([])
-    expect(blocksOf('    ::orca-visual{file="a.html"}').directives).toEqual([])
+    expect(blocksOf('> ::quirky-visual{file="a.html"}').directives).toEqual([])
+    expect(blocksOf('- ::quirky-visual{file="a.html"}').directives).toEqual([])
+    expect(blocksOf('see `::quirky-visual{file="a.html"}`').directives).toEqual([])
+    expect(blocksOf('    ::quirky-visual{file="a.html"}').directives).toEqual([])
   })
 
   it('resumes recognizing directives after a fence closes', () => {
-    const { directives } = blocksOf('```\ncode\n```\n::orca-visual{file="after.html"}')
+    const { directives } = blocksOf('```\ncode\n```\n::quirky-visual{file="after.html"}')
     expect(directives).toEqual([{ file: 'after.html', title: null }])
   })
 
   it('leaves malformed or path-like directives as literal text', () => {
     for (const line of [
-      '::orca-visual{file="../secret.html"}',
-      '::orca-visual{file="a.html" file="b.html"}',
-      '::orca-visual{file="a.htm"}',
-      '::orca-visual{file="a.html"',
-      '::orca-visual{file="a.html"} trailing words'
+      '::quirky-visual{file="../secret.html"}',
+      '::quirky-visual{file="a.html" file="b.html"}',
+      '::quirky-visual{file="a.htm"}',
+      '::quirky-visual{file="a.html"',
+      '::quirky-visual{file="a.html"} trailing words'
     ]) {
       const { directives, blocks } = blocksOf(line)
       expect(directives, line).toEqual([])
@@ -85,7 +85,7 @@ describe('native-chat visual lines in mobile markdown', () => {
   it('renders directives past the per-message cap as text', () => {
     const lines = Array.from(
       { length: NATIVE_CHAT_VISUAL_MAX_PER_MESSAGE + 1 },
-      (_, index) => `::orca-visual{file="v${index}.html"}`
+      (_, index) => `::quirky-visual{file="v${index}.html"}`
     )
     const { directives, blocks } = blocksOf(lines.join('\n'))
     expect(directives).toHaveLength(NATIVE_CHAT_VISUAL_MAX_PER_MESSAGE)
@@ -93,13 +93,13 @@ describe('native-chat visual lines in mobile markdown', () => {
   })
 
   it('renders no visuals for text that already spells a placeholder', () => {
-    const { directives } = blocksOf('\uE000ORCA_VISUAL_0\uE000\n::orca-visual{file="a.html"}')
+    const { directives } = blocksOf('\uE000QUIRKY_VISUAL_0\uE000\n::quirky-visual{file="a.html"}')
     expect(directives).toEqual([])
   })
 
   it('never treats a placeholder-looking line as a visual when none were protected', () => {
-    expect(topLevelBlocks('\uE000ORCA_VISUAL_0\uE000', 0)).toEqual([
-      { type: 'paragraph', text: '\uE000ORCA_VISUAL_0\uE000' }
+    expect(topLevelBlocks('\uE000QUIRKY_VISUAL_0\uE000', 0)).toEqual([
+      { type: 'paragraph', text: '\uE000QUIRKY_VISUAL_0\uE000' }
     ])
   })
 })

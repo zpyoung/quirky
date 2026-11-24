@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { ELECTRON_NO_SANDBOX_REQUEST_ENV } from '../../shared/electron-no-sandbox-request'
 
 const USER_NAMESPACE_PROBE_TIMEOUT_MS = 2_000

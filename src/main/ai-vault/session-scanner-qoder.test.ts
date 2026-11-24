@@ -41,9 +41,9 @@ it('decodes a real generated and resumed Qoder 1.1.64 session for preview and se
     sessionId: 'faa75b79-790e-4c44-8f3e-c7145d18eb7e'
   })
   expect(after?.resumeCommand).toContain("qodercli --resume 'faa75b79-790e-4c44-8f3e-c7145d18eb7e'")
-  expect(after?.previewMessages.at(-1)?.text).toBe('QODER_ORCA_PROOF_1002')
-  expect(before?.previewMessages.at(-1)?.text).toBe('QODER_ORCA_COMPLETE_1002')
-  expect(messages.some((m) => m.role === 'assistant' && m.text === 'QODER_ORCA_PROOF_1002')).toBe(
+  expect(after?.previewMessages.at(-1)?.text).toBe('QODER_QUIRKY_PROOF_1002')
+  expect(before?.previewMessages.at(-1)?.text).toBe('QODER_QUIRKY_COMPLETE_1002')
+  expect(messages.some((m) => m.role === 'assistant' && m.text === 'QODER_QUIRKY_PROOF_1002')).toBe(
     true
   )
   expect(messages.some((m) => m.text.includes("I'm creating the file now"))).toBe(false)

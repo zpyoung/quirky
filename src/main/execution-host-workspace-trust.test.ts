@@ -46,7 +46,7 @@ const EXACT_OR_SELF_LIMITING_PRESETS: readonly AgentTrustPreset[] = [
 let root: string
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-host-trust-')))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-host-trust-')))
   state.home = join(root, 'home', 'me')
   mkdirSync(state.home, { recursive: true })
   writeFileSync(join(state.home, '.claude.json'), '{}')

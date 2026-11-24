@@ -3,20 +3,20 @@
  * terminal. Such a worktree has no published tab graph on the host, yet the host is fully started.
  *
  * Run:
- *   ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test \
+ *   QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec playwright test \
  *     tests/e2e/paired-client-first-terminal-unopened-host-worktree.spec.ts \
  *     --config tests/playwright.config.ts --project electron-headless --workers=1
  */
 import { existsSync, readFileSync } from 'node:fs'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient,
   type PairedElectronClient
 } from './helpers/paired-electron-client'
-import { createRestartSession } from './helpers/orca-restart'
+import { createRestartSession } from './helpers/quirky-restart'
 
 function seededRepoPathOrSkip(): string {
   const repoPath = existsSync(TEST_REPO_PATH_FILE)

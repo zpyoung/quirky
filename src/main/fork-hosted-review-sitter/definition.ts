@@ -11,7 +11,7 @@ import { HostedReviewEnrollmentCandidateSchema } from '../../shared/fork-hosted-
 import type { Store } from '../persistence'
 import { getAutomationSchedulerOwner } from '../persistence/scheduling-automations/automation-context-migration'
 import { getLocalProjectWorktreeGitOptions } from '../project-runtime-git-options'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { getHostedReviewForBranch } from '../source-control/hosted-review'
 import { parseHostedReviewEnrollmentPayload } from './definition-store'
 
@@ -61,7 +61,7 @@ export class HostedReviewOwnerNotExecutableError extends Error {
  * Renderer values select a candidate only; none becomes persisted authority.
  */
 export async function authorizeHostedReviewSitterDefinition(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   input: EnrollInput,
   storageAuthority: 'desktop' | 'runtime' = 'desktop'

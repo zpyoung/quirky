@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { eraseRpcMethods, isStreamingMethod } from '../core'
 import { ACCOUNT_METHODS } from './accounts'
 
@@ -24,7 +24,7 @@ describe('account RPC methods', () => {
     }
   ])('allows local-socket $methodName calls', async (testCase) => {
     const add = vi.fn().mockResolvedValue({ accounts: [] })
-    const runtime = { [testCase.runtimeMethod]: add } as unknown as OrcaRuntimeService
+    const runtime = { [testCase.runtimeMethod]: add } as unknown as QuirkyRuntimeService
     const addMethod = method(testCase.methodName)
     if (isStreamingMethod(addMethod)) {
       throw new Error(`${testCase.methodName} must be a request method`)
@@ -42,8 +42,8 @@ describe('account RPC methods', () => {
       { provider: 'opencode', sourceDataHome: join(tmpdir(), 'login'), label: 'Work' },
       /only available/
     ],
-    ['accounts.beginClaudeSignIn', {}, /Sign in on the Orca execution host/],
-    ['accounts.finishClaudeSignIn', { accountId: 'a' }, /Sign in on the Orca execution host/]
+    ['accounts.beginClaudeSignIn', {}, /Sign in on the Quirky execution host/],
+    ['accounts.finishClaudeSignIn', { accountId: 'a' }, /Sign in on the Quirky execution host/]
   ] as const)('rejects paired-device calls to %s', async (methodName, params, refusal) => {
     const runtime = {
       addCodexAccountFromHome: vi.fn(),
@@ -52,7 +52,7 @@ describe('account RPC methods', () => {
       finishClaudeSignIn: vi.fn()
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: refused calls never reach the runtime; only these stubs are asserted.
-    const runtimeService = runtime as unknown as OrcaRuntimeService
+    const runtimeService = runtime as unknown as QuirkyRuntimeService
     const addMethod = method(methodName)
     if (isStreamingMethod(addMethod)) {
       throw new Error(`${methodName} must be a request method`)
@@ -74,7 +74,7 @@ describe('account RPC methods', () => {
     const runtime = {
       refreshAccountsForMobile: vi.fn().mockResolvedValue(undefined),
       getAccountsSnapshot: vi.fn(() => snapshot)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const list = method('accounts.list')
     if (isStreamingMethod(list)) {
       throw new Error('accounts.list must be a request method')
@@ -90,7 +90,7 @@ describe('account RPC methods', () => {
     const runtime = {
       refreshAccountsForMobile: vi.fn().mockResolvedValue(undefined),
       getAccountsSnapshot: vi.fn(() => snapshot)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const list = method('accounts.list')
     if (isStreamingMethod(list)) {
       throw new Error('accounts.list must be a request method')
@@ -116,7 +116,7 @@ describe('account RPC methods', () => {
       snapshot: { claude: null, codex: null }
     }
     const consumeCodexRateLimitResetCredit = vi.fn().mockResolvedValue(result)
-    const runtime = { consumeCodexRateLimitResetCredit } as unknown as OrcaRuntimeService
+    const runtime = { consumeCodexRateLimitResetCredit } as unknown as QuirkyRuntimeService
     const reset = method('accounts.consumeCodexResetCredit')
     if (isStreamingMethod(reset)) {
       throw new Error('accounts.consumeCodexResetCredit must be a request method')
@@ -156,7 +156,7 @@ describe('account RPC methods', () => {
     const selectCodexAccountForTarget = vi
       .fn()
       .mockResolvedValue({ accounts: [], activeAccountId: null })
-    const runtime = { selectCodexAccountForTarget } as unknown as OrcaRuntimeService
+    const runtime = { selectCodexAccountForTarget } as unknown as QuirkyRuntimeService
     const select = method('accounts.selectCodexForTarget')
     if (isStreamingMethod(select)) {
       throw new Error('accounts.selectCodexForTarget must be a request method')
@@ -203,7 +203,7 @@ describe('account RPC methods', () => {
       }),
       refreshAccountsForMobile: vi.fn().mockResolvedValue(undefined),
       refreshAccountsForMobileSubscriber: vi.fn().mockResolvedValue(undefined)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const subscribe = method('accounts.subscribe')
     if (!isStreamingMethod(subscribe)) {
       throw new Error('accounts.subscribe must be a streaming method')
@@ -229,7 +229,7 @@ it('rejects the retired Claude import even for a local socket, before touching i
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Rejection happens before the handler accesses its context.
   await expect(old.handler({ configDir: '/never-read' }, {} as never)).rejects.toThrow(
-    'Update the Orca CLI to add accounts'
+    'Update the Quirky CLI to add accounts'
   )
 })
 
@@ -238,7 +238,7 @@ it('takes a host launch env from the owning desktop and refuses a phone', async 
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler calls only this stub.
   const runtime = {
     setHostAccountLaunchEnv: set
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const setMethod = method('accounts.setHostLaunchEnv')
   if (isStreamingMethod(setMethod)) {
     throw new Error('accounts.setHostLaunchEnv must be a request method')
@@ -251,7 +251,7 @@ it('takes a host launch env from the owning desktop and refuses a phone', async 
   await setMethod.handler(params, { runtime, clientKind: 'runtime' })
   expect(set).toHaveBeenCalledWith(params)
   await expect(setMethod.handler(params, { runtime, clientKind: 'mobile' })).rejects.toThrow(
-    /Only the Orca desktop/
+    /Only the Quirky desktop/
   )
   expect(set).toHaveBeenCalledOnce()
 })

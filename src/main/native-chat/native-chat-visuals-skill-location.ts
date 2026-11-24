@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 
 const PLUGIN_DIR_NAME = 'native-chat-visuals'
-export const NATIVE_CHAT_VISUALS_SKILL_NAME = 'orca-chat-visuals'
+export const NATIVE_CHAT_VISUALS_SKILL_NAME = 'quirky-chat-visuals'
 
 export type NativeChatVisualsSkillLocation = {
   /** A Claude plugin folder: `.claude-plugin/plugin.json` plus `skills/<name>/SKILL.md`. */
@@ -22,7 +22,7 @@ function candidatePluginDirs(): string[] {
   }
   const packaged = hasAppEnvironment() && getAppEnvironment().isPackaged()
   if (packaged) {
-    // Why: plain-Node orcad has no resourcesPath; its build copies the folder into its own root.
+    // Why: plain-Node quirkyd has no resourcesPath; its build copies the folder into its own root.
     // Nothing else: an install must never load a skill from whatever checkout it was started in.
     candidates.push(join(getAppEnvironment().getAppPath(), PLUGIN_DIR_NAME))
     return candidates

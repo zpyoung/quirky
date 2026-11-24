@@ -3,17 +3,17 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { defineMethod } from './rpc/core'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 
 it.each(['linear.commentEdit', 'linear.commentDelete'] as const)(
   'forwards local disconnect to %s without long-poll keepalives',
   async (method) => {
     const userDataPath = mkdtempSync(join(tmpdir(), 'pr-30003-cancellation-'))
     const entered = vi.fn()
-    const server = new OrcaRuntimeRpcServer({
-      runtime: new OrcaRuntimeService(),
+    const server = new QuirkyRuntimeRpcServer({
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       methods: [
         defineMethod({

@@ -43,7 +43,7 @@ let store: AgentSessionRecordStore
 let claude: ReturnType<typeof fakeClaude>
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-stop-turn-end-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-stop-turn-end-'))
   resetHostTestOperationIds()
   claude = fakeClaude({ replayUuid: null })
   const lifecycle: Promise<void>[] = []

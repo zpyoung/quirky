@@ -67,12 +67,12 @@ setTerminalWebglDiagnosticRecorder((kind, detail) => {
 maybeStartTerminalRenderDesyncSentinel()
 
 // Sink for the patched @xterm/addon-webgl atlas font probe: the atlas cannot
-// import Orca code, so it reports failed ctx.font assignments (the stuck-
+// import Quirky code, so it reports failed ctx.font assignments (the stuck-
 // rasterizer arm of the bold-collapse family) through this global. Crumbs are
 // coalesced upstream, so a rasterization storm cannot flood the report.
 type AtlasFontProbeMismatch = { desired?: string; actual?: string }
-;(globalThis as { __orcaAtlasFontProbe?: (mismatch: AtlasFontProbeMismatch) => void })[
-  '__orcaAtlasFontProbe'
+;(globalThis as { __quirkyAtlasFontProbe?: (mismatch: AtlasFontProbeMismatch) => void })[
+  '__quirkyAtlasFontProbe'
 ] = (mismatch) => {
   recordTerminalWebglDiagnostic(ATLAS_FONT_PROBE_MISMATCH, {
     desired: mismatch?.desired ?? null,

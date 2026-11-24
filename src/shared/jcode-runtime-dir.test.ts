@@ -26,7 +26,7 @@ describe('shared jcode-runtime-dir', () => {
     const longTmp = '/var/folders/1g/mx9qj46x02qbqd7rh4xx_s8c0000gn/T'
     const paneKey = `${'a'.repeat(36)}:${'b'.repeat(36)}`
     const hash = basename(buildJcodeRuntimeDir(paneKey))
-    const socketPath = join(longTmp, 'orca-jcode', hash, 'jcode.sock')
+    const socketPath = join(longTmp, 'quirky-jcode', hash, 'jcode.sock')
     expect(socketPath.length).toBeLessThan(SUN_LEN_LIMIT)
   })
 

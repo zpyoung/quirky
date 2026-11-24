@@ -64,7 +64,7 @@ import {
 const REPO = String.raw`C:\repo`
 const LINKED = String.raw`C:\ws\linked`
 const MOVED = String.raw`C:\ws\moved`
-const PREPARED = String.raw`C:\ws\.orca-preparing\wt`
+const PREPARED = String.raw`C:\ws\.quirky-preparing\wt`
 
 function hasCachedHostRoute(path: string): boolean {
   return usesHostGitForWslLinkedWorktree(path, 'Ubuntu', 'win32')
@@ -137,7 +137,7 @@ describe('worktree mutations invalidate the WSL linked-worktree Git route', () =
   it('drops the target route after the prepared checkout is added', async () => {
     seedWslLinkedWorktreeGitRoutingForTests(PREPARED)
 
-    await prepareWorktreeCreateCheckout(REPO, PREPARED, 'origin/main', 'orca preparation')
+    await prepareWorktreeCreateCheckout(REPO, PREPARED, 'origin/main', 'quirky preparation')
 
     expect(hasCachedHostRoute(PREPARED)).toBe(false)
   })

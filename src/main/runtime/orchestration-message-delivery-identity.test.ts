@@ -6,12 +6,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../shared/protocol-version'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { OrchestrationDb } from './orchestration/db'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { ORCHESTRATION_METHODS } from './rpc/methods/orchestration'
 import { STATUS_METHODS } from './rpc/methods/status'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 
 vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => tmpdir()), isPackaged: false },
@@ -64,10 +64,10 @@ function createRuntime(
   db: OrchestrationDb,
   terminalHandle = TERMINAL_HANDLE
 ): {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   write: ReturnType<typeof vi.fn>
 } {
-  const runtime = new OrcaRuntimeService(null, undefined, {
+  const runtime = new QuirkyRuntimeService(null, undefined, {
     attestAgentHookCompatibilityAuthority: ({ paneKey }) =>
       paneKey === PANE_KEY ? { paneKey, source: 'current_hook' } : null
   })
@@ -110,7 +110,7 @@ function createRuntime(
   return { runtime, write }
 }
 
-async function driveToLiveIdle(runtime: OrcaRuntimeService): Promise<void> {
+async function driveToLiveIdle(runtime: QuirkyRuntimeService): Promise<void> {
   await runtime.listTerminals()
   runtime.onPtyData(PTY_ID, '\x1b]0;Codex working\x07', 1)
   runtime.onPtyData(PTY_ID, '\x1b]0;Codex done\x07', 2)
@@ -119,7 +119,7 @@ async function driveToLiveIdle(runtime: OrcaRuntimeService): Promise<void> {
 }
 
 async function check(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: Record<string, unknown> = {}
 ): Promise<CheckResult> {
   const terminal = typeof params.terminal === 'string' ? params.terminal : TERMINAL_HANDLE
@@ -155,10 +155,10 @@ async function runBuiltCli(
   const child = spawn(process.execPath, [CLI_PATH, ...args], {
     env: {
       ...process.env,
-      ORCA_USER_DATA_PATH: userDataPath,
-      ORCA_TERMINAL_HANDLE: TERMINAL_HANDLE,
-      ORCA_PANE_KEY: PANE_KEY,
-      ORCA_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
+      QUIRKY_USER_DATA_PATH: userDataPath,
+      QUIRKY_TERMINAL_HANDLE: TERMINAL_HANDLE,
+      QUIRKY_PANE_KEY: PANE_KEY,
+      QUIRKY_AGENT_LAUNCH_TOKEN: LAUNCH_TOKEN
     },
     stdio: ['ignore', 'pipe', 'pipe']
   })
@@ -185,7 +185,7 @@ describe('STA-4325 message and delivery identity', () => {
 
   it('keeps pointer counts, filters, message IDs, and one fixed Delivery aligned through ack', async () => {
     vi.useFakeTimers()
-    const { db } = createDatabase('orca-sta-4325-identity-')
+    const { db } = createDatabase('quirky-sta-4325-identity-')
     const { runtime, write } = createRuntime(db)
     const run = db.createRun({
       objective: 'STA-4325 identity',
@@ -273,7 +273,7 @@ describe('STA-4325 message and delivery identity', () => {
 
   it('replays one outstanding Delivery across restart and wakes a filtered waiter once', async () => {
     vi.useFakeTimers()
-    const fixture = createDatabase('orca-sta-4325-restart-')
+    const fixture = createDatabase('quirky-sta-4325-restart-')
     const firstRuntime = createRuntime(fixture.db)
     const run = fixture.db.createRun({
       objective: 'STA-4325 restart',
@@ -345,7 +345,7 @@ describe('STA-4325 message and delivery identity', () => {
   })
 
   it('routes the complete direct backlog before rebinding forgets its old handle', () => {
-    const fixture = createDatabase('orca-sta-4325-rebind-backlog-')
+    const fixture = createDatabase('quirky-sta-4325-rebind-backlog-')
     const first = fixture.db.createRun({
       objective: 'Old coordinator',
       coordinatorHandle: TERMINAL_HANDLE,
@@ -395,7 +395,7 @@ describe('STA-4325 message and delivery identity', () => {
   })
 
   it('repairs committed mail sent to a forgotten handle after restart', async () => {
-    const fixture = createDatabase('orca-sta-4325-late-old-handle-')
+    const fixture = createDatabase('quirky-sta-4325-late-old-handle-')
     const run = fixture.db.createRun({
       objective: 'Late old-handle arrival',
       coordinatorHandle: TERMINAL_HANDLE,
@@ -442,7 +442,7 @@ describe('STA-4325 message and delivery identity', () => {
   itIfCliBuilt(
     'keeps the built CLI count and Delivery output aligned with isolated SQLite state',
     async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-sta-4325-cli-'))
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-sta-4325-cli-'))
       temporaryDirectories.push(userDataPath)
       const db = new OrchestrationDb(join(userDataPath, 'orchestration.db'))
       const { runtime } = createRuntime(db)
@@ -468,7 +468,7 @@ describe('STA-4325 message and delivery identity', () => {
         runId: run.id,
         deliveryContract: 'current_delivery'
       })
-      const server = new OrcaRuntimeRpcServer({
+      const server = new QuirkyRuntimeRpcServer({
         runtime,
         userDataPath,
         methods: [...STATUS_METHODS, ...ORCHESTRATION_METHODS]

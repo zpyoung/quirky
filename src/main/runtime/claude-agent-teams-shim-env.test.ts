@@ -20,8 +20,8 @@ afterEach(async () => {
 })
 
 describe('claude agent teams shim env', () => {
-  it('writes a private tmux shim that calls the Orca shim command', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-shim-'))
+  it('writes a private tmux shim that calls the Quirky shim command', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-shim-'))
     roots.push(root)
 
     await ensureClaudeAgentTeamsShimDir(root)
@@ -30,12 +30,12 @@ describe('claude agent teams shim env', () => {
   })
 
   it('builds native shim env only for direct Claude commands', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-cli-'))
     roots.push(root)
-    // Why: the plan writes its tmux shim under ~/.orca.
+    // Why: the plan writes its tmux shim under ~/.quirky.
     vi.stubEnv('HOME', root)
     vi.stubEnv('USERPROFILE', root)
-    const cliName = process.platform === 'win32' ? 'orca-dev.cmd' : 'orca-dev'
+    const cliName = process.platform === 'win32' ? 'quirky-dev.cmd' : 'quirky-dev'
     const cliPath = join(root, cliName)
     await writeFile(cliPath, '#!/usr/bin/env sh\n', 'utf8')
     if (process.platform !== 'win32') {
@@ -51,7 +51,7 @@ describe('claude agent teams shim env', () => {
         capturedShimBin = shimBin
         return {
           PATH: `${shimDir}:/usr/bin`,
-          TMUX: '/tmp/orca/fake,0,0',
+          TMUX: '/tmp/quirky/fake,0,0',
           TMUX_PANE: '%1'
         }
       }
@@ -84,9 +84,9 @@ describe('claude agent teams shim env', () => {
   })
 
   it('resolves the dev CLI wrapper for the tmux callback binary', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-cli-'))
     roots.push(root)
-    const cliName = process.platform === 'win32' ? 'orca-dev.cmd' : 'orca-dev'
+    const cliName = process.platform === 'win32' ? 'quirky-dev.cmd' : 'quirky-dev'
     const cliPath = join(root, cliName)
     await writeFile(cliPath, '#!/usr/bin/env sh\n', 'utf8')
     if (process.platform !== 'win32') {
@@ -97,9 +97,9 @@ describe('claude agent teams shim env', () => {
   })
 
   it('refuses to resolve a CLI through relative PATH entries or a bare override', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-cli-'))
     roots.push(root)
-    for (const name of ['orca', 'orca-ide', 'orca.cmd']) {
+    for (const name of ['quirky', 'quirky-ide', 'quirky.cmd']) {
       const path = join(root, name)
       await writeFile(path, '#!/usr/bin/env sh\n', 'utf8')
       if (process.platform !== 'win32') {
@@ -110,20 +110,20 @@ describe('claude agent teams shim env', () => {
     expect(resolveClaudeAgentTeamsShimBin({ PATH: '.' })).toBeNull()
     expect(resolveClaudeAgentTeamsShimBin({ PATH: '' })).toBeNull()
     expect(
-      resolveClaudeAgentTeamsShimBin({ PATH: '.', ORCA_AGENT_TEAMS_SHIM_BIN: 'orca' })
+      resolveClaudeAgentTeamsShimBin({ PATH: '.', QUIRKY_AGENT_TEAMS_SHIM_BIN: 'quirky' })
     ).toBeNull()
     // Why: a bare override is still honored when it maps to a real absolute PATH entry.
-    expect(resolveClaudeAgentTeamsShimBin({ PATH: root, ORCA_AGENT_TEAMS_SHIM_BIN: 'orca' })).toBe(
-      join(root, 'orca')
-    )
+    expect(
+      resolveClaudeAgentTeamsShimBin({ PATH: root, QUIRKY_AGENT_TEAMS_SHIM_BIN: 'quirky' })
+    ).toBe(join(root, 'quirky'))
   })
 
   it.skipIf(process.platform !== 'win32')(
     'resolves through the Windows `Path` env spelling',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cli-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-cli-'))
       roots.push(root)
-      const cliPath = join(root, 'orca.cmd')
+      const cliPath = join(root, 'quirky.cmd')
       await writeFile(cliPath, '@echo off\r\n', 'utf8')
 
       expect(resolveClaudeAgentTeamsShimBin({ Path: root })).toBe(cliPath)
@@ -149,15 +149,15 @@ describe('claude agent teams shim env', () => {
   })
 
   it.skipIf(process.platform === 'win32')(
-    'never runs a cwd-resolved orca when the shim bin is unqualified',
+    'never runs a cwd-resolved quirky when the shim bin is unqualified',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-agent-teams-shim-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-shim-'))
       roots.push(root)
       await ensureClaudeAgentTeamsShimDir(root)
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-agent-teams-cwd-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-agent-teams-cwd-'))
       roots.push(cwd)
       const marker = join(cwd, 'hijacked')
-      for (const name of ['orca', 'orca-ide']) {
+      for (const name of ['quirky', 'quirky-ide']) {
         const decoy = join(cwd, name)
         await writeFile(decoy, `#!/usr/bin/env sh\ntouch ${JSON.stringify(marker)}\n`, 'utf8')
         await chmod(decoy, 0o755)
@@ -173,12 +173,12 @@ describe('claude agent teams shim env', () => {
       expect(hijack.stderr).toContain('absolute path')
       expect(existsSync(marker)).toBe(false)
 
-      const cli = join(cwd, 'fake-orca')
+      const cli = join(cwd, 'fake-quirky')
       await writeFile(cli, '#!/usr/bin/env sh\necho "ran $*"\n', 'utf8')
       await chmod(cli, 0o755)
       const qualified = spawnSync(join(root, 'tmux'), ['list-panes'], {
         cwd,
-        env: { PATH: `.:${process.env.PATH ?? ''}`, ORCA_AGENT_TEAMS_SHIM_BIN: cli },
+        env: { PATH: `.:${process.env.PATH ?? ''}`, QUIRKY_AGENT_TEAMS_SHIM_BIN: cli },
         encoding: 'utf8'
       })
 
@@ -190,10 +190,10 @@ describe('claude agent teams shim env', () => {
   it('writes a Windows shim that rejects an unqualified shim bin', () => {
     const script = windowsClaudeAgentTeamsShimScript()
 
-    expect(script).not.toMatch(/^set "ORCA_AGENT_TEAMS_SHIM_BIN=orca/m)
-    expect(script).toContain('if "%ORCA_SHIM_BIN:~1,1%"==":" goto :run')
+    expect(script).not.toMatch(/^set "QUIRKY_AGENT_TEAMS_SHIM_BIN=quirky/m)
+    expect(script).toContain('if "%QUIRKY_SHIM_BIN:~1,1%"==":" goto :run')
     // Why: `call` would re-expand `%2`-style tmux pane args as batch parameters.
-    expect(script).toContain('\r\n"%ORCA_SHIM_BIN%" agent-teams-tmux %*\r\n')
+    expect(script).toContain('\r\n"%QUIRKY_SHIM_BIN%" agent-teams-tmux %*\r\n')
     expect(script).toContain('exit /b 127')
   })
 })

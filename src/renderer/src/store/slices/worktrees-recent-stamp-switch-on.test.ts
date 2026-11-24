@@ -8,7 +8,7 @@ import {
   resetWorktreeSliceModuleMemory
 } from './worktrees-slice-test-harness'
 
-vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 
 vi.mock('sonner', () => ({
   toast: {

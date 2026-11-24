@@ -1,7 +1,7 @@
-import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from '../projection/apply-mobile-session-tab-navigation'
+import { QuirkyRuntimeWithApplyMobileSessionTabNavigation } from '../projection/apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTabCloseResult } from '../../../../shared/runtime-types'
 
-export abstract class OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose extends OrcaRuntimeWithApplyMobileSessionTabNavigation {
+export abstract class QuirkyRuntimeWithRefuseUnattributedMobileSessionTabClose extends QuirkyRuntimeWithApplyMobileSessionTabNavigation {
   async refuseUnattributedMobileSessionTabClose(
     worktreeSelector: string,
     tabId: string

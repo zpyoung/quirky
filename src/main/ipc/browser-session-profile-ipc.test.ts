@@ -128,7 +128,7 @@ describe('browser session profile IPC', () => {
         selectedProfile: 'Default'
       }
     ] as never)
-    routeIdentityMock.mockReturnValue({ orcaProfileId: 'profile-a' })
+    routeIdentityMock.mockReturnValue({ quirkyProfileId: 'profile-a' })
 
     const handler = clientHostDetectHandler()
 
@@ -156,7 +156,7 @@ describe('browser session profile IPC', () => {
     const profile = {
       id: 'profile-google',
       scope: 'isolated',
-      partition: 'persist:orca-browser-session-profile-google',
+      partition: 'persist:quirky-browser-session-profile-google',
       label: 'Google',
       source: null
     }

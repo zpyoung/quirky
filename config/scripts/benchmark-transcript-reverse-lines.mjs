@@ -99,7 +99,7 @@ const cases = [
     10000
   ]
 ]
-const directory = mkdtempSync(join(tmpdir(), 'orca-transcript-benchmark-'))
+const directory = mkdtempSync(join(tmpdir(), 'quirky-transcript-benchmark-'))
 try {
   for (const [name, text, iterations] of cases) {
     const file = join(directory, 'transcript.jsonl')

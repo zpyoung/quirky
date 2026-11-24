@@ -32,10 +32,10 @@ import {
 import { LoopCreateInputSchema } from '../fork-loops/loop-types'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import { MobileWebBundleChunkParamsSchema } from '../mobile-web-bundle/bundle-rpc-contract'
-import { OrcadMigrationBlobChunkRequestSchema } from '../orcad-migration/orcad-migration-blob-transfer'
-import { OrcadMigrationSnapshotChunkRequestSchema } from '../orcad-migration/orcad-migration-scrollback'
-import { OrcadTerminalCensusParamsSchema } from '../orcad-terminal-census'
 import { pluginConsentRequestSchema } from '../plugins/plugin-consent-request'
+import { QuirkydMigrationBlobChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-blob-transfer'
+import { QuirkydMigrationSnapshotChunkRequestSchema } from '../quirkyd-migration/quirkyd-migration-scrollback'
+import { QuirkydTerminalCensusParamsSchema } from '../quirkyd-terminal-census'
 import {
   AccountsUnsubscribeParams,
   AddClaudeFromConfigDirParams,
@@ -403,11 +403,6 @@ import {
   NotificationsSubscribeParams
 } from './notifications-params'
 import {
-  OrcadMigrationCatalogParams,
-  OrcadMigrationCatalogReferenceParams,
-  OrcadMigrationCommitCatalogParams
-} from './orcad-migration-params'
-import {
   FederationDispatchParams,
   FederationFleetSnapshotParams,
   FederationOutputReadParams,
@@ -476,6 +471,11 @@ import {
   ProjectHostSetupUpdate,
   ProjectUpdate
 } from './project-runtime-params'
+import {
+  QuirkydMigrationCatalogParams,
+  QuirkydMigrationCatalogReferenceParams,
+  QuirkydMigrationCommitCatalogParams
+} from './quirkyd-migration-params'
 import { ReferenceFind, ReferenceList } from './reference-params'
 import {
   ProjectGroupCreate,
@@ -1137,14 +1137,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'notifications.testPush': null,
   'notifications.unregisterPush': null,
   'notifications.unsubscribe': NotificationUnsubscribeParams,
-  'orcad.migration.abortCatalog': OrcadMigrationCatalogParams,
-  'orcad.migration.abortCatalogByReference': OrcadMigrationCatalogReferenceParams,
-  'orcad.migration.catalogState': OrcadMigrationCatalogParams,
-  'orcad.migration.commitCatalog': OrcadMigrationCommitCatalogParams,
-  'orcad.migration.stageBlobChunk': OrcadMigrationBlobChunkRequestSchema,
-  'orcad.migration.stageCatalog': OrcadMigrationCatalogParams,
-  'orcad.migration.stageSnapshotChunk': OrcadMigrationSnapshotChunkRequestSchema,
-  'orcad.terminalCensus': OrcadTerminalCensusParamsSchema,
   'orchestration.ask': AskParams,
   'orchestration.callerShow': null,
   'orchestration.check': CheckParams,
@@ -1215,6 +1207,14 @@ export const RPC_PARAMS_BY_METHOD = {
   'projectHostSetup.list': null,
   'projectHostSetup.setupExistingFolder': ProjectHostSetupExistingFolder,
   'projectHostSetup.update': ProjectHostSetupUpdate,
+  'quirkyd.migration.abortCatalog': QuirkydMigrationCatalogParams,
+  'quirkyd.migration.abortCatalogByReference': QuirkydMigrationCatalogReferenceParams,
+  'quirkyd.migration.catalogState': QuirkydMigrationCatalogParams,
+  'quirkyd.migration.commitCatalog': QuirkydMigrationCommitCatalogParams,
+  'quirkyd.migration.stageBlobChunk': QuirkydMigrationBlobChunkRequestSchema,
+  'quirkyd.migration.stageCatalog': QuirkydMigrationCatalogParams,
+  'quirkyd.migration.stageSnapshotChunk': QuirkydMigrationSnapshotChunkRequestSchema,
+  'quirkyd.terminalCensus': QuirkydTerminalCensusParamsSchema,
   'reference.find': ReferenceFind,
   'reference.list': ReferenceList,
   'repo.add': RepoPath,

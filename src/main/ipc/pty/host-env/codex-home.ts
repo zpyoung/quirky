@@ -25,9 +25,9 @@ export function shouldSkipCodexHomeEnvForWindowsShell(
 }
 
 // Why: with the real-home flag ON, a host system-default launch resolves to a
-// null managed home. Signal the env builder to strip a nested-Orca-inherited
+// null managed home. Signal the env builder to strip a nested-Quirky-inherited
 // override instead of injecting one, so Codex runs on the user's own ~/.codex.
-export function shouldStripInheritedOrcaCodexHome(args: {
+export function shouldStripInheritedQuirkyCodexHome(args: {
   target: CodexAccountSelectionTarget
   selectedCodexHomePath: string | null
   skipCodexHomeEnv: boolean
@@ -38,26 +38,26 @@ export function shouldStripInheritedOrcaCodexHome(args: {
   )
 }
 
-export const CODEX_HOME_ENV_KEYS = ['CODEX_HOME', 'ORCA_CODEX_HOME'] as const
+export const CODEX_HOME_ENV_KEYS = ['CODEX_HOME', 'QUIRKY_CODEX_HOME'] as const
 
 // Why: system-default real-home routing runs Codex on the user's own ~/.codex.
-// Nested Orca panes inherit the parent's Orca-owned override; strip only that
-// (CODEX_HOME matching Orca's private ORCA_CODEX_HOME marker), and always drop
+// Nested Quirky panes inherit the parent's Quirky-owned override; strip only that
+// (CODEX_HOME matching Quirky's private QUIRKY_CODEX_HOME marker), and always drop
 // the marker so a shell-ready wrapper cannot restore the managed home. A
-// user-set CODEX_HOME with no Orca marker is preserved untouched (see #8606).
-export function stripInheritedOrcaCodexHomeOverride(baseEnv: Record<string, string>): void {
-  for (const key of getLocalOrcaCodexHomeEnvKeysToDelete(baseEnv)) {
+// user-set CODEX_HOME with no Quirky marker is preserved untouched (see #8606).
+export function stripInheritedQuirkyCodexHomeOverride(baseEnv: Record<string, string>): void {
+  for (const key of getLocalQuirkyCodexHomeEnvKeysToDelete(baseEnv)) {
     delete baseEnv[key]
   }
 }
 
 // Why: in-process spawns share main's inherited environment, so equality with
 // the private marker is authoritative here. Persistent daemons compare locally.
-export function getLocalOrcaCodexHomeEnvKeysToDelete(env: Record<string, string>): string[] {
-  const inheritedOrcaOverride = env.ORCA_CODEX_HOME ?? process.env.ORCA_CODEX_HOME
+export function getLocalQuirkyCodexHomeEnvKeysToDelete(env: Record<string, string>): string[] {
+  const inheritedQuirkyOverride = env.QUIRKY_CODEX_HOME ?? process.env.QUIRKY_CODEX_HOME
   const inheritedCodexHome = env.CODEX_HOME ?? process.env.CODEX_HOME
-  const keysToDelete = ['ORCA_CODEX_HOME']
-  if (inheritedOrcaOverride && inheritedCodexHome === inheritedOrcaOverride) {
+  const keysToDelete = ['QUIRKY_CODEX_HOME']
+  if (inheritedQuirkyOverride && inheritedCodexHome === inheritedQuirkyOverride) {
     keysToDelete.push('CODEX_HOME')
   }
   return keysToDelete

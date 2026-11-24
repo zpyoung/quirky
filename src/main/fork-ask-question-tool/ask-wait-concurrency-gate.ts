@@ -1,4 +1,4 @@
-// Why: a parked `orca ask` blocks on a human, so it outlives every other long-poll class.
+// Why: a parked `quirky ask` blocks on a human, so it outlives every other long-poll class.
 // Four keeps user asks to a quarter of the runtime's 16-slot long-poll budget, leaving
 // orchestration.ask's own reservation and the browser-host slots untouched by a waiting fleet.
 export const ASK_WAIT_CONCURRENCY_CAP = 4

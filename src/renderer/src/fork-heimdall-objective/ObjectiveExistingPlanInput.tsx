@@ -42,7 +42,7 @@ function importErrorCopy(error: ExistingPlanImportError): string {
     case 'read-failed':
       return translate(
         'fork.heimdallObjective.enrollment.existingPlanReadError',
-        'Orca could not read that file. Choose another file or paste the plan.'
+        'Quirky could not read that file. Choose another file or paste the plan.'
       )
   }
 }

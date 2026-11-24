@@ -7,7 +7,7 @@ import {
   type ObjectiveActionNaturalKey
 } from '../../shared/fork-heimdall-objective/objective-actions'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { runCriterionCheck } from './check-runner'
 import { computeWorkspaceContentIdentity } from './content-identity'
 import { objectiveResultDigest, type ObjectiveSnapshotBinding } from './execution-context'
@@ -224,7 +224,7 @@ export async function executeObjectiveLocalAction(args: {
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
 }): Promise<ActionOutcome> {
   if (args.action.kind === 'ingest-plan') {
     return ingestObjectivePlanReport({ ...args, action: args.action })

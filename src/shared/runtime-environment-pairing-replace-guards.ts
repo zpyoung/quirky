@@ -7,22 +7,22 @@ import { RuntimeEnvironmentStoreError } from './runtime-environment-store-file'
 
 /** Refuses replacing or removing a pairing that SSH access or a managed deployment depends on. */
 export function assertNoIndependentSshAccess(environment: KnownRuntimeEnvironment): void {
-  if (environment.orcadDeployment) {
+  if (environment.quirkydDeployment) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      'Orca runs this server on an SSH host for you; its pairing cannot be replaced or removed here. To decommission it, run `orca environment stop --environment <name> --yes` or use Settings > Orca on your SSH hosts; for a host that is gone, run `orca environment forget --environment <name> --yes`.'
+      'Quirky runs this server on an SSH host for you; its pairing cannot be replaced or removed here. To decommission it, run `quirky environment stop --environment <name> --yes` or use Settings > Quirky on your SSH hosts; for a host that is gone, run `quirky environment forget --environment <name> --yes`.'
     )
   }
   if (environment.pendingSshAccessOperation) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      "This server's SSH access change didn't finish. Retry or cancel it under Settings > Remote Orca Servers > SSH access for paired servers before replacing its pairing or removing it."
+      "This server's SSH access change didn't finish. Retry or cancel it under Settings > Remote Quirky Servers > SSH access for paired servers before replacing its pairing or removing it."
     )
   }
   if (environment.sshAccess) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      "Unlink this server's SSH access under Settings > Remote Orca Servers > SSH access for paired servers before replacing its pairing or removing it."
+      "Unlink this server's SSH access under Settings > Remote Quirky Servers > SSH access for paired servers before replacing its pairing or removing it."
     )
   }
 }
@@ -47,10 +47,10 @@ export function assertPairingReplaceableByAdd(
       `${alreadyPaired} The cloud workspace's server reuses that server's identity, so it was not saved.`
     )
   }
-  if (environment.orcadDeployment?.kind === 'wsl') {
+  if (environment.quirkydDeployment?.kind === 'wsl') {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      `${alreadyPaired} Orca manages it as a WSL host, so its pairing cannot be replaced here.`
+      `${alreadyPaired} Quirky manages it as a WSL host, so its pairing cannot be replaced here.`
     )
   }
   try {
@@ -64,7 +64,7 @@ export function assertPairingReplaceableByAdd(
   if (!refreshable) {
     throw new RuntimeEnvironmentStoreError(
       'invalid_argument',
-      `${alreadyPaired} To update its connection, add it again under Settings > Remote Orca Servers.`
+      `${alreadyPaired} To update its connection, add it again under Settings > Remote Quirky Servers.`
     )
   }
 }

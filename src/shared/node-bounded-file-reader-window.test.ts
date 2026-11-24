@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { readNodeFileHandleWithinLimit } from './node-bounded-file-reader'
 
 async function withFile(run: (path: string) => Promise<void>): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-window-read-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-window-read-'))
   const path = join(root, 'data')
   await writeFile(path, 'prefix-IMAGE-trailer')
   try {

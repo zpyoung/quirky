@@ -57,7 +57,7 @@ export async function createWorktreeWithAgent(args: {
     if (hasLaunchModelFlags(flags)) {
       throw new RuntimeClientError(
         'incompatible_runtime',
-        'This Orca host cannot start an agent on a chosen model or effort. Update Orca on the execution host, or omit --model and --effort.'
+        'This Quirky host cannot start an agent on a chosen model or effort. Update Quirky on the execution host, or omit --model and --effort.'
       )
     }
     if (launch.surface) {

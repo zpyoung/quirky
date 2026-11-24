@@ -32,7 +32,7 @@ describe('loop notes file', () => {
   let root = ''
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-loop-notes-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-loop-notes-'))
   })
 
   afterEach(async () => {
@@ -61,9 +61,9 @@ describe('loop notes file', () => {
     await ensureLoopNotesFile(target, 'my-loop')
 
     expect((await stat(first.notesPath)).isFile()).toBe(true)
-    expect(first.notesPath).toBe(join(root, '.orca', 'loops', 'my-loop', 'notes.md'))
+    expect(first.notesPath).toBe(join(root, '.quirky', 'loops', 'my-loop', 'notes.md'))
     const exclude = await readFile(join(root, '.git', 'info', 'exclude'), 'utf8')
-    expect(exclude.split('\n').filter((line) => line === '/.orca/loops/')).toHaveLength(1)
+    expect(exclude.split('\n').filter((line) => line === '/.quirky/loops/')).toHaveLength(1)
     await expect(stat(join(root, '.gitignore'))).rejects.toThrow()
     const status = await git(root, ['status', '--porcelain'])
     expect(status.stdout).toBe('')
@@ -102,7 +102,7 @@ describe('loop notes file', () => {
 
     await ensureLoopNotesFile(target, 'my-loop')
 
-    expect(await readFile(excludePath, 'utf8')).toBe('*.tmp\n/.orca/loops/\n')
+    expect(await readFile(excludePath, 'utf8')).toBe('*.tmp\n/.quirky/loops/\n')
   })
 
   it('writes only the notes file in a folder workspace', async () => {
@@ -137,7 +137,7 @@ describe('loop notes file', () => {
     })
 
     expect(first && second).toBe(true)
-    const log = await readFile(join(root, '.orca', 'loops', 'my-loop', 'log.md'), 'utf8')
+    const log = await readFile(join(root, '.quirky', 'loops', 'my-loop', 'log.md'), 'utf8')
     const lines = log.split('\n').filter(Boolean)
     expect(lines).toEqual([
       formatLoopLogLine({

@@ -253,7 +253,7 @@ describe('SortableTabContextMenu', () => {
           onRenameOpen
         })
         await act(async () => getButton(container, 'Copy Tab ID').click())
-        expect(writeClipboardText).toHaveBeenCalledExactlyOnceWith('orcaTabId: tab-1')
+        expect(writeClipboardText).toHaveBeenCalledExactlyOnceWith('quirkyTabId: tab-1')
         expect(onActivate).not.toHaveBeenCalled()
         expect(onClose).not.toHaveBeenCalled()
         expect(onRenameOpen).not.toHaveBeenCalled()
@@ -298,11 +298,11 @@ describe('SortableTabContextMenu', () => {
   })
 
   it('offers the session-history chat/CLI move right above Pin Tab', () => {
-    const { container } = renderMenu({ nativeChat: { sessionId: 'orca-chat-1', agent: 'codex' } })
+    const { container } = renderMenu({ nativeChat: { sessionId: 'quirky-chat-1', agent: 'codex' } })
     const marker = getSurfaceSwitchMarker(container)
 
     expect(marker.getAttribute('data-tab-id')).toBe('term-1')
-    expect(marker.getAttribute('data-structured-session-id')).toBe('orca-chat-1')
+    expect(marker.getAttribute('data-structured-session-id')).toBe('quirky-chat-1')
     expect(marker.getAttribute('data-leading-separator')).toBe('true')
     expect(getButton(container, 'Split terminal').compareDocumentPosition(marker)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING

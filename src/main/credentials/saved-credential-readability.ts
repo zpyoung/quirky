@@ -3,8 +3,8 @@ import { getSecretStore } from '../../shared/secret-store'
 
 /** Why a credential file this host holds cannot be used; absent when it can be. */
 export type SavedCredentialUnreadable =
-  /** Sealed by the other Orca app on this machine: the desktop (safeStorage) and orcad (its own
-   *  host key) share ~/.orca but cannot open each other's files. */
+  /** Sealed by the other Quirky app on this machine: the desktop (safeStorage) and quirkyd (its own
+   *  host key) share ~/.quirky but cannot open each other's files. */
   | 'sealed-elsewhere'
   /** Corrupt, not readable by this user, or this host cannot decrypt anything right now. */
   | 'unreadable'
@@ -16,13 +16,13 @@ export type SavedCredentialFile = {
   legacyRaw?: boolean
 }
 
-/** Why: orcad reports encryption available before (or without) loading its key, then throws. */
+/** Why: quirkyd reports encryption available before (or without) loading its key, then throws. */
 function secretStoreWorks(): boolean {
   try {
     const store = getSecretStore()
     return (
-      store.decryptString(store.encryptString('orca-secret-store-probe')) ===
-      'orca-secret-store-probe'
+      store.decryptString(store.encryptString('quirky-secret-store-probe')) ===
+      'quirky-secret-store-probe'
     )
   } catch {
     return false
@@ -76,9 +76,9 @@ export function savedCredentialUnreadable(
   }
 }
 
-/** A paired client must not overwrite what the other Orca app on this machine reads. */
+/** A paired client must not overwrite what the other Quirky app on this machine reads. */
 export function refuseCredentialSealedElsewhere(credentialName: string): never {
   throw new Error(
-    `The ${credentialName} on this computer was saved by another Orca app here, which this one cannot read. Change it in that app, or forget it here first.`
+    `The ${credentialName} on this computer was saved by another Quirky app here, which this one cannot read. Change it in that app, or forget it here first.`
   )
 }

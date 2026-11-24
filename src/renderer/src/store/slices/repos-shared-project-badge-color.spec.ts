@@ -9,33 +9,33 @@ import {
 import { clearRuntimeCompatibilityCacheForTests } from '../../runtime/runtime-rpc-client'
 
 export function registerReposSharedProjectBadgeColorTests(): void {
-  // Mirrors the real report: one project name ("orca") set up on the local Mac and on a
-  // remote Orca server, where only the local repo row carries the user's chosen color.
+  // Mirrors the real report: one project name ("quirky") set up on the local Mac and on a
+  // remote Quirky server, where only the local repo row carries the user's chosen color.
   const SHARED_PROJECT_ID = 'github:stablyai/orca'
   const LOCAL_GREEN = '#22c55e'
   const REMOTE_NEUTRAL = '#737373'
 
   const localRepo: Repo = {
     id: 'local-repo',
-    path: '/local/orca',
-    displayName: 'orca',
+    path: '/local/quirky',
+    displayName: 'quirky',
     badgeColor: LOCAL_GREEN,
-    upstream: { owner: 'stablyai', repo: 'orca' },
+    upstream: { owner: 'stablyai', repo: 'quirky' },
     addedAt: 1
   }
 
   const remoteRepo: Repo = {
     id: 'remote-repo',
-    path: '/srv/orca',
-    displayName: 'orca',
+    path: '/srv/quirky',
+    displayName: 'quirky',
     badgeColor: REMOTE_NEUTRAL,
-    upstream: { owner: 'stablyai', repo: 'orca' },
+    upstream: { owner: 'stablyai', repo: 'quirky' },
     addedAt: 1
   }
 
   const localProject: Project = {
     id: SHARED_PROJECT_ID,
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: LOCAL_GREEN,
     sourceRepoIds: ['local-repo'],
     createdAt: 1,
@@ -44,7 +44,7 @@ export function registerReposSharedProjectBadgeColorTests(): void {
 
   const remoteProject: Project = {
     id: SHARED_PROJECT_ID,
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: REMOTE_NEUTRAL,
     sourceRepoIds: ['remote-repo'],
     createdAt: 2,
@@ -58,7 +58,7 @@ export function registerReposSharedProjectBadgeColorTests(): void {
       hostId: 'local',
       repoId,
       path,
-      displayName: 'orca',
+      displayName: 'quirky',
       setupState: 'ready',
       setupMethod: 'imported-existing-folder',
       createdAt: 1,
@@ -82,7 +82,7 @@ export function registerReposSharedProjectBadgeColorTests(): void {
       return { projects: [remoteProject] }
     }
     if (method === 'projectHostSetup.list') {
-      return { setups: [setup(SHARED_PROJECT_ID, 'remote-repo', '/srv/orca')] }
+      return { setups: [setup(SHARED_PROJECT_ID, 'remote-repo', '/srv/quirky')] }
     }
     return {}
   }
@@ -103,7 +103,7 @@ export function registerReposSharedProjectBadgeColorTests(): void {
       ...updates
     }))
     projectsList.mockResolvedValue([localProject])
-    listHostSetups.mockResolvedValue([setup(SHARED_PROJECT_ID, 'local-repo', '/local/orca')])
+    listHostSetups.mockResolvedValue([setup(SHARED_PROJECT_ID, 'local-repo', '/local/quirky')])
     runtimeEnvironmentsList.mockResolvedValue([{ id: 'env-1', name: 'awin' }])
     runtimeEnvironmentCall.mockImplementation((args: RuntimeEnvironmentCallRequest) => ({
       id: `rpc-${args.method}`,

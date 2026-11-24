@@ -183,7 +183,7 @@ describe('useIpcEvents updater integration', () => {
     expect(focusTerminalTabSurface).toHaveBeenCalledWith('tab-new', undefined)
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-background-mount-terminal-worktree',
+        type: 'quirky-background-mount-terminal-worktree',
         detail: { worktreeId: 'wt-3', tabIds: ['tab-new'] }
       })
     )
@@ -252,7 +252,7 @@ describe('useIpcEvents updater integration', () => {
     expect(focusTerminalTabSurface).toHaveBeenCalledWith('tab-new', undefined)
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-background-mount-terminal-worktree',
+        type: 'quirky-background-mount-terminal-worktree',
         detail: { worktreeId: 'wt-2', tabIds: ['tab-new'] }
       })
     )
@@ -456,7 +456,7 @@ describe('useIpcEvents updater integration', () => {
     expect(revealWorktreeInSidebar).not.toHaveBeenCalled()
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-background-mount-terminal-worktree',
+        type: 'quirky-background-mount-terminal-worktree',
         detail: { worktreeId: 'wt-2', tabIds: ['tab-new'] }
       })
     )
@@ -583,7 +583,7 @@ describe('useIpcEvents updater integration', () => {
     expect(dispatchEvent).toHaveBeenCalledOnce()
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-background-mount-terminal-worktree',
+        type: 'quirky-background-mount-terminal-worktree',
         detail: { worktreeId: 'wt-2', tabIds: ['tab-cli-bg-reveal'] }
       })
     )
@@ -620,7 +620,7 @@ describe('useIpcEvents updater integration', () => {
     expect(dispatchEvent).toHaveBeenCalledOnce()
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-background-mount-terminal-worktree',
+        type: 'quirky-background-mount-terminal-worktree',
         detail: { worktreeId: 'wt-2', tabIds: ['tab-recovery-bg'] }
       })
     )
@@ -761,7 +761,7 @@ describe('useIpcEvents updater integration', () => {
     })
     expect(dispatchEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'orca-split-terminal-pane',
+        type: 'quirky-split-terminal-pane',
         detail: {
           tabId: 'tab-existing',
           worktreeId: 'wt-2',

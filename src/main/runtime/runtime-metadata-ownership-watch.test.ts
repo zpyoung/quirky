@@ -12,13 +12,13 @@ import {
   type RuntimeMetadataOwnershipWatch
 } from './runtime-metadata-ownership-watch'
 
-// Counts blocking fs calls against orca-runtime.json so the poll tick's I/O stays off the main thread.
+// Counts blocking fs calls against quirky-runtime.json so the poll tick's I/O stays off the main thread.
 const metadataSyncCalls = vi.hoisted(() => {
   const state = { recording: false, calls: [] as string[] }
   return {
     state,
     record(fn: string, target: unknown): void {
-      if (state.recording && typeof target === 'string' && target.endsWith('orca-runtime.json')) {
+      if (state.recording && typeof target === 'string' && target.endsWith('quirky-runtime.json')) {
         state.calls.push(fn)
       }
     }
@@ -51,7 +51,7 @@ vi.mock('node:fs/promises', async () => {
     readFile: (async (target: unknown, options: never) => {
       const call = (): unknown =>
         (actual.readFile as (...args: never[]) => unknown)(target as never, options)
-      if (typeof target !== 'string' || !target.endsWith('orca-runtime.json')) {
+      if (typeof target !== 'string' || !target.endsWith('quirky-runtime.json')) {
         return call()
       }
       metadataReadGate.reads += 1
@@ -97,7 +97,7 @@ function record(overrides: Partial<RuntimeMetadata> = {}): RuntimeMetadata {
   return {
     runtimeId: OWNED_RUNTIME_ID,
     pid: OWNED_PID,
-    transports: [{ kind: 'unix', endpoint: '/tmp/orca-owner.sock' }],
+    transports: [{ kind: 'unix', endpoint: '/tmp/quirky-owner.sock' }],
     authToken: 'secret',
     startedAt: 100,
     ...overrides
@@ -209,7 +209,7 @@ describe('watchRuntimeMetadataOwnership', () => {
   }
 
   function makeUserDataPath(): string {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-ownership-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-ownership-'))
     userDataPaths.push(userDataPath)
     return userDataPath
   }

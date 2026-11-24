@@ -17,7 +17,7 @@ import type { GitPushTarget } from '../../../../shared/worktree/types'
 const pushTarget: GitPushTarget = {
   remoteName: 'fork',
   branchName: 'feature/pr-head',
-  remoteUrl: 'https://github.com/contributor/orca.git'
+  remoteUrl: 'https://github.com/contributor/quirky.git'
 }
 
 const unchangedStatus: GitStatusResult = {

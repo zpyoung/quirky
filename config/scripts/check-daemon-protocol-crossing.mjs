@@ -14,7 +14,7 @@ import {
 import { selectLatestStableReleaseTag } from './stable-release-tags.mjs'
 
 // Same override the cross-version-wire harness honors, so both pair against one ref.
-const RELEASE_REF_ENV = 'ORCA_CROSS_VERSION_BASELINE_REF'
+const RELEASE_REF_ENV = 'QUIRKY_CROSS_VERSION_BASELINE_REF'
 
 function git(repoRoot, args) {
   return execFileSync('git', args, {

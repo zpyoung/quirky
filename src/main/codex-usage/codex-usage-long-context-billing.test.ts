@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStoreWithState, setupCodexUsageStoreEnv } from './store-test-harness'
 
 const { getPathMock } = vi.hoisted(() => ({
-  getPathMock: vi.fn(() => '/tmp/orca-test-userdata')
+  getPathMock: vi.fn(() => '/tmp/quirky-test-userdata')
 }))
 
 vi.mock('electron', () => ({
@@ -139,7 +139,7 @@ describe('long-context cost across rollups', () => {
   })
 
   it('prices a mixed two-day rollout per request, and the summary matches the breakdown', async () => {
-    rolloutDir = mkdtempSync(join(tmpdir(), 'orca-codex-long-context-'))
+    rolloutDir = mkdtempSync(join(tmpdir(), 'quirky-codex-long-context-'))
     const rolloutPath = join(rolloutDir, 'rollout-session-1.jsonl')
     const shortRequest: Usage = { input: 200_000, cached: 100_000, output: 10_000 }
     const requests = [

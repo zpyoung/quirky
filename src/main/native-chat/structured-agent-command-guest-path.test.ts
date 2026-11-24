@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 function binDir(name: string): string {
-  const directory = mkdtempSync(join(tmpdir(), `orca-${name}-`))
+  const directory = mkdtempSync(join(tmpdir(), `quirky-${name}-`))
   scratch.push(directory)
   for (const binary of ['codex', 'codex-custom']) {
     writeFileSync(join(directory, binary), '#!/bin/sh\nexit 0\n')

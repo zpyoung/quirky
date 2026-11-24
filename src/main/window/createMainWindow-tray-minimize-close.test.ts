@@ -147,7 +147,7 @@ describe('createMainWindow', () => {
       ])
     })
 
-    it("records the Orca runtime's end, since Windows emits no will-quit for it", () => {
+    it("records the Quirky runtime's end, since Windows emits no will-quit for it", () => {
       setPlatform('win32')
       recordAgentSessionRuntimeEndMock.mockClear()
       const { windowHandlers } = setupCloseWindow()

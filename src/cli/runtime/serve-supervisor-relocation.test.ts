@@ -32,8 +32,8 @@ describe('relocateServeSupervisor', () => {
   let userData: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-supervisor-relocation-'))
-    resources = join(root, 'Orca.app', 'Contents', 'Resources')
+    root = await mkdtemp(join(tmpdir(), 'quirky-supervisor-relocation-'))
+    resources = join(root, 'Quirky.app', 'Contents', 'Resources')
     appRoot = join(resources, 'app.asar.unpacked')
     userData = join(root, 'profile')
     await mkdir(join(appRoot, 'out', 'cli'), { recursive: true })
@@ -49,7 +49,7 @@ describe('relocateServeSupervisor', () => {
 
   const deps = (overrides: Partial<SupervisorRelocationDeps> = {}): SupervisorRelocationDeps => ({
     env: { ELECTRON_RUN_AS_NODE: '1' },
-    execPath: join(root, 'Orca.app', 'Contents', 'MacOS', 'Orca'),
+    execPath: join(root, 'Quirky.app', 'Contents', 'MacOS', 'Quirky'),
     argv: ['/ignored/node', join(appRoot, 'out', 'cli', 'index.js'), 'serve', '--supervise'],
     appRoot,
     userDataPath: userData,
@@ -96,7 +96,7 @@ describe('relocateServeSupervisor', () => {
   it('stays in place outside a packaged app', async () => {
     for (const d of [
       deps({ env: {} }),
-      deps({ env: { ELECTRON_RUN_AS_NODE: '1', ORCA_APP_EXECUTABLE: '/dev/Orca' } }),
+      deps({ env: { ELECTRON_RUN_AS_NODE: '1', QUIRKY_APP_EXECUTABLE: '/dev/Quirky' } }),
       deps({ appRoot: join(root, 'checkout') })
     ]) {
       await expect(relocateServeSupervisor(d)).resolves.toBe('in-place')
@@ -111,7 +111,7 @@ describe('relocateServeSupervisor', () => {
       env: {
         ELECTRON_RUN_AS_NODE: '1',
         APPDIR: resources.replace(/\/Resources$/, ''),
-        APPIMAGE: '/a/Orca.AppImage'
+        APPIMAGE: '/a/Quirky.AppImage'
       }
     })
     await expect(relocateServeSupervisor(d)).resolves.toBe('in-place')
@@ -211,7 +211,7 @@ describe('relocateServeSupervisor', () => {
   describe('restartServeSupervisorIfReplaced', () => {
     const log = vi.fn()
     beforeEach(async () => {
-      await mkdir(join(root, 'Orca.app', 'Contents', 'MacOS'), { recursive: true })
+      await mkdir(join(root, 'Quirky.app', 'Contents', 'MacOS'), { recursive: true })
       await writeFile(deps().execPath, '')
       await chmod(deps().execPath, 0o755)
     })

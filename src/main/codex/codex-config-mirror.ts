@@ -6,7 +6,7 @@ import {
   writeFileAtomically,
   writeFileAtomicallyIfUnchanged
 } from '../codex-accounts/fs-utils'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import { rewriteRelativePathConfigValues } from './codex-config-path-reference-rewrite'
 import { normalizeDeprecatedCodexHookFeatureFlag } from './config-toml-deprecated-hook-flag'
 import { parseWslUncPath } from '../../shared/wsl-paths'
@@ -23,12 +23,12 @@ import { applyCodexDaemonSocketGuard } from './codex-daemon-socket-path-guard'
 import { stripRuntimeOwnedTomlSections } from './config-toml-runtime-owned-sections'
 import { mergeSystemCodexConfigIntoRuntime } from './codex-config-mirror-merge'
 
-// Why: the runtime copy is Orca-owned and mirrors `mcp_servers` env tokens, so every rewrite is owner-only.
+// Why: the runtime copy is Quirky-owned and mirrors `mcp_servers` env tokens, so every rewrite is owner-only.
 const RUNTIME_CONFIG_WRITE = { mode: 0o600 } as const
 
 export function syncSystemConfigIntoManagedCodexHome(
   homes: CodexSettingsPromotionHomes = {
-    runtimeHomePath: getOrcaManagedCodexHomePath(),
+    runtimeHomePath: getQuirkyManagedCodexHomePath(),
     systemHomePath: getSystemCodexHomePath()
   }
 ): void {
@@ -42,7 +42,7 @@ export function syncSystemConfigIntoManagedCodexHome(
 /** Returns false when no mirror pass ran, so the caller still owes the daemon guard. */
 function mirrorSystemConfigIntoManagedCodexHome(homes: CodexSettingsPromotionHomes): boolean {
   // Why: the mirror overwrites runtime settings from ~/.codex, so changes the
-  // user made inside Orca-launched Codex (/model, /approvals) must be written
+  // user made inside Quirky-launched Codex (/model, /approvals) must be written
   // back to ~/.codex first or this very pass silently reverts them.
   const promotionPlan = promoteCodexRuntimeSettingsToSystem(homes)
   if (!promotionPlan) {
@@ -97,7 +97,7 @@ function mirrorSystemConfigIntoManagedCodexHome(homes: CodexSettingsPromotionHom
     return true
   }
   // Why: the baseline advances only after a successful mirror; recording an
-  // unpromoted runtime change as Orca-written would strand it forever.
+  // unpromoted runtime change as Quirky-written would strand it forever.
   snapshotCodexRuntimeSettingsBaseline(homes.runtimeHomePath, {
     conflicts: new Map(
       [...promotionPlan.conflicts].filter(([key]) => mirrorResult.preservedConflictKeys.has(key))
@@ -146,7 +146,7 @@ function writeCodexDaemonSocketGuard(runtimeHomePath: string, runtimeConfig: str
  */
 export function syncSystemConfigIntoLegacySharedCodexHome(
   homes: CodexSettingsPromotionHomes = {
-    runtimeHomePath: getOrcaManagedCodexHomePath(),
+    runtimeHomePath: getQuirkyManagedCodexHomePath(),
     systemHomePath: getSystemCodexHomePath()
   }
 ): void {
@@ -198,7 +198,7 @@ export function syncSystemConfigIntoLegacySharedCodexHome(
 }
 
 /**
- * Why: MCP servers added from an Orca terminal exist only in the retired home,
+ * Why: MCP servers added from an Quirky terminal exist only in the retired home,
  * so its last mirror's baseline decides which ones ~/.codex owns. With no
  * baseline the whole root stays canonical, as before; an unreadable one throws
  * rather than guess. Read-only: this one-way refresh never advances it.

@@ -71,7 +71,7 @@ function harness(
       notifyHiddenWorkspaces: true,
       ...options.settings
     }),
-    readWorkspaceLabels: () => ({ repoLabel: 'orca', worktreeLabel: 'feature' }),
+    readWorkspaceLabels: () => ({ repoLabel: 'quirky', worktreeLabel: 'feature' }),
     isWorkspaceMuted: () => state.muted,
     readHookRow: () => state.hookRow,
     dispatch: (event) => sent.push(event),
@@ -127,7 +127,7 @@ describe('TerminalAgentPhonePush', () => {
       {
         type: 'notification',
         source: 'agent-task-complete',
-        title: 'orca / feature - Claude finished',
+        title: 'quirky / feature - Claude finished',
         body: 'Fixed it.',
         worktreeId: WT,
         notificationId: ID,
@@ -177,8 +177,8 @@ describe('TerminalAgentPhonePush', () => {
     state.hookRow = row({ mainAgent: { state: 'done', outcome: 'failure', stateStartedAt: 5_000 } })
     push.observe(moved('errored'))
     expect(sent.map((event) => [event.agentState, event.title, event.body])).toEqual([
-      ['waiting', 'orca / feature - Claude needs input', 'Using Bash: rm -rf build'],
-      ['done', 'orca / feature - Claude failed', 'Fixed it.']
+      ['waiting', 'quirky / feature - Claude needs input', 'Using Bash: rm -rf build'],
+      ['done', 'quirky / feature - Claude failed', 'Fixed it.']
     ])
   })
 
@@ -317,7 +317,7 @@ describe('TerminalAgentPhonePush', () => {
       notificationId: sent[0]?.notificationId,
       worktreeId: WT,
       paneKey: PANE,
-      repoLabel: 'orca',
+      repoLabel: 'quirky',
       worktreeLabel: 'feature',
       agentType: 'claude',
       agentState: 'done',

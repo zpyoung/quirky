@@ -102,7 +102,7 @@ describe('plan and result schemas', () => {
           name: 'demo',
           status: 'partial',
           removedPaths: [],
-          stagedPaths: ['/root/.demo.orca-skill-delete-1']
+          stagedPaths: ['/root/.demo.quirky-skill-delete-1']
         }
       ]
     })

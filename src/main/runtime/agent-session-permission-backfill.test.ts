@@ -13,7 +13,7 @@ import { openTestJournalHostDatabase } from '../native-chat/agent-session-journa
 
 let root: string
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-permission-backfill-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-permission-backfill-'))
 })
 afterEach(async () => {
   await rm(root, { recursive: true, force: true })

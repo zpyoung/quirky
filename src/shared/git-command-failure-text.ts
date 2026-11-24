@@ -2,9 +2,9 @@
  * The text a failed Git invocation left behind, for the predicates that classify a
  * failure by what Git said.
  *
- * Why all three streams and not just `message` + `stderr`: the errors Orca classifies
+ * Why all three streams and not just `message` + `stderr`: the errors Quirky classifies
  * do not all come straight out of `execFile`. Node puts Git's stderr in both `message`
- * and `stderr`, but Orca also throws its own failures with the Git output on `stdout`
+ * and `stderr`, but Quirky also throws its own failures with the Git output on `stdout`
  * (the removal dirty check attaches `git status --porcelain` output that way). Reading
  * all three is what keeps the classifiers from disagreeing about the same error object.
  *

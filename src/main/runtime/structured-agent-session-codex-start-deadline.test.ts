@@ -62,7 +62,7 @@ function envelope(method: string, fence: number, fields: Record<string, unknown>
 }
 
 async function chatHoldingAMessage(child: ScriptedAgentChild) {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-start-deadline-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-start-deadline-'))
   const host = await ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),
     stateDirectory: root,

@@ -6,7 +6,7 @@ import { readRuntimeFileContent } from '@/runtime/runtime-file-read-client'
 import { runtimePathExists } from '@/runtime/runtime-file-metadata-client'
 import { basename, joinPath, normalizeRelativePath } from './path'
 
-const MARKDOWN_TEMPLATE_ROOT = '.orca/templates'
+const MARKDOWN_TEMPLATE_ROOT = '.quirky/templates'
 const MARKDOWN_TEMPLATE_MAX_DEPTH = 8
 const MARKDOWN_TEMPLATE_MAX_COUNT = 100
 

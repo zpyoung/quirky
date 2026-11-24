@@ -10,7 +10,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
   useEffect(() => {
     const blockedMedia = (event: SecurityPolicyViolationEvent): void => {
       if (event.effectiveDirective === 'media-src') {
-        setFailure('Update Orca Mobile to play media in this workspace')
+        setFailure('Update Quirky Mobile to play media in this workspace')
       }
     }
     document.addEventListener('securitypolicyviolation', blockedMedia)

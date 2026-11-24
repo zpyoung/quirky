@@ -1,8 +1,8 @@
 import { readFileSync, existsSync } from 'node:fs'
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './orca-app'
+import { test, expect } from './quirky-app'
 import { TEST_REPO_PATH_FILE } from '../global-setup'
-import { attachRepoAndOpenTerminal } from './orca-restart'
+import { attachRepoAndOpenTerminal } from './quirky-restart'
 import { discoverActivePtyId, waitForActiveTerminalManager, waitForPaneCount } from './terminal'
 import {
   waitForSessionReady,
@@ -13,7 +13,7 @@ import {
 } from './store'
 
 const REQUIRE_WINDOWS_TERMINAL_RESTART_E2E =
-  process.env.ORCA_REQUIRE_WINDOWS_TERMINAL_RESTART_E2E === '1'
+  process.env.QUIRKY_REQUIRE_WINDOWS_TERMINAL_RESTART_E2E === '1'
 const MISSING_SEEDED_REPO_MESSAGE = 'Global setup did not produce a seeded test repo'
 
 export function seededRepoPathOrSkip(): string {

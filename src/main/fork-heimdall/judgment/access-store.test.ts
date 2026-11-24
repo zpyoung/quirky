@@ -8,7 +8,7 @@ let root: string
 let databasePath: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-judgment-access-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-judgment-access-'))
   databasePath = join(root, 'heimdall.db')
 })
 

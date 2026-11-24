@@ -37,7 +37,7 @@ describe('abandoned profile database backups', () => {
   })
 
   it('removes only old temporary files whose owner is proven exited', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-backup-orphans-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-backup-orphans-'))
     roots.push(root)
     const databasePath = join(root, 'profile-state.db')
     const backup = profileStateDatabaseBackupPath(

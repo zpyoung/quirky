@@ -5,7 +5,7 @@ import type { CodexUsagePersistedState } from './types'
 import { createStoreWithState, setupCodexUsageStoreEnv } from './store-test-harness'
 
 const { getPathMock } = vi.hoisted(() => ({
-  getPathMock: vi.fn(() => '/tmp/orca-test-userdata')
+  getPathMock: vi.fn(() => '/tmp/quirky-test-userdata')
 }))
 
 vi.mock('electron', () => ({
@@ -40,11 +40,11 @@ describe('CodexUsageStore', () => {
     await store.refresh(true)
 
     const persistedJson = readFileSync(
-      join(storeEnv.tempUserData, 'orca-codex-usage.json'),
+      join(storeEnv.tempUserData, 'quirky-codex-usage.json'),
       'utf-8'
     )
     expect(scanCodexUsageFilesViaWorker).toHaveBeenCalledWith([], {
-      path: join(storeEnv.tempUserData, 'orca-codex-usage-sources.json'),
+      path: join(storeEnv.tempUserData, 'quirky-codex-usage-sources.json'),
       schemaVersion: CODEX_USAGE_SCHEMA_VERSION,
       worktreeFingerprint: '[]',
       reuse: false
@@ -104,8 +104,8 @@ describe('CodexUsageStore', () => {
 
   it('rescans from scratch when the cache predates per-request long-context counts', async () => {
     const scanMock = vi.mocked(scanCodexUsageFilesViaWorker)
-    const sourceCachePath = join(storeEnv.tempUserData, 'orca-codex-usage-sources.json')
-    const cacheFile = join(storeEnv.tempUserData, 'orca-codex-usage.json')
+    const sourceCachePath = join(storeEnv.tempUserData, 'quirky-codex-usage-sources.json')
+    const cacheFile = join(storeEnv.tempUserData, 'quirky-codex-usage.json')
     const seeded = new CodexUsageStore({ getRepos: () => [], getAllWorktreeMeta: () => ({}) })
     await seeded.setEnabled(true)
     await seeded.refresh(true)

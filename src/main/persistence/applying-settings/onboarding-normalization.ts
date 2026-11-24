@@ -31,7 +31,7 @@ export function normalizeNotificationSettings(value: unknown): NotificationSetti
     rawSoundId === 'beep' ||
     rawSoundId === 'custom'
       ? rawSoundId
-      : rawSoundId === 'orca' || rawSoundId === 'chime'
+      : rawSoundId === 'quirky' || rawSoundId === 'chime'
         ? 'two-tone'
         : rawSoundId === 'pop'
           ? 'blop'

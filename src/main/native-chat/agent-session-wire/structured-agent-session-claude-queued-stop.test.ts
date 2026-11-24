@@ -1,5 +1,5 @@
 // A follow-up Claude queued behind the running turn is dropped by Stop, so the chat must record it
-// as withdrawn and stop reading as working — under the SessionStart hook Orca installs, whose frame
+// as withdrawn and stop reading as working — under the SessionStart hook Quirky installs, whose frame
 // proves the start before the turn's system/init says the CLI can cancel its queue.
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -46,7 +46,7 @@ let claude: ReturnType<typeof fakeClaude>
 
 beforeEach(async () => {
   vi.useFakeTimers()
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-queued-stop-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-queued-stop-'))
   resetHostTestOperationIds()
   queued = []
   claude = fakeClaude({

@@ -1,6 +1,6 @@
 import { inheritOmpLaunchEnvironment } from '../host-env/omp-launch-environment'
 import { getAppEnvironment } from '../../../../shared/app-environment'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { isAgentStatusHooksEnabled } from '../../../agent-hooks/managed-agent-hook-controls'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
@@ -10,18 +10,18 @@ import { stampRuntimeSourceEnv } from '../../../../shared/runtime-source-env'
 import { getRuntimeSourceStamp } from '../../../runtime/host-descriptor'
 import {
   getCompatibleSelectedCodexHomePath,
-  shouldStripInheritedOrcaCodexHome
+  shouldStripInheritedQuirkyCodexHome
 } from '../host-env/codex-home'
 import type { GetSelectedCodexHomePath } from '../host-env/types'
 import { isCurrentPtyExit, ptyOwnership } from './ownership-state'
 import { localProvider } from './registry'
 import { clearProviderPtyState } from './state-cleanup'
 import { visibleRendererPtys } from '../delivery/visibility-state'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { prepareAntigravityAccountForLaunch } from '../../../antigravity/native-account-launch'
 
 export function configureLocalPtyProvider(args: {
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
   getSettings?: () => GlobalSettings
   getSelectedCodexHomePath?: GetSelectedCodexHomePath
   trustedTerminalHandleEnv: Set<string>
@@ -70,7 +70,7 @@ export function configureLocalPtyProvider(args: {
         userDataPath: getAppEnvironment().getPath('userData'),
         selectedCodexHomePath,
         skipCodexHomeEnv,
-        stripInheritedOrcaCodexHome: shouldStripInheritedOrcaCodexHome({
+        stripInheritedQuirkyCodexHome: shouldStripInheritedQuirkyCodexHome({
           target: codexSelectionTarget,
           selectedCodexHomePath,
           skipCodexHomeEnv,
@@ -88,16 +88,16 @@ export function configureLocalPtyProvider(args: {
         routeBrowserOpensToClient: runtime?.shouldRelayTerminalBrowserOpens?.()
       })
       // Why: agents need their terminal handle at process start to self-identify in orchestration messages without an extra RPC.
-      const requestedHandle = baseEnv.ORCA_TERMINAL_HANDLE
+      const requestedHandle = baseEnv.QUIRKY_TERMINAL_HANDLE
       const preAllocatedHandle =
         requestedHandle && trustedTerminalHandleEnv.has(requestedHandle)
           ? requestedHandle
           : runtime?.preAllocateHandleForPty(id)
       if (requestedHandle && requestedHandle !== preAllocatedHandle) {
-        delete env.ORCA_TERMINAL_HANDLE
+        delete env.QUIRKY_TERMINAL_HANDLE
       }
       if (preAllocatedHandle) {
-        env.ORCA_TERMINAL_HANDLE = preAllocatedHandle
+        env.QUIRKY_TERMINAL_HANDLE = preAllocatedHandle
       }
       stampRuntimeSourceEnv(
         env,
@@ -111,7 +111,7 @@ export function configureLocalPtyProvider(args: {
         return
       }
       // Read before the clean-up below forgets it.
-      const viewShown = ORCA_LAYOUT_OWNER_IS_MAIN && visibleRendererPtys.has(id)
+      const viewShown = QUIRKY_LAYOUT_OWNER_IS_MAIN && visibleRendererPtys.has(id)
       clearProviderPtyState(id)
       ptyOwnership.delete(id)
       runtime?.onPtyExit(id, code, incarnationId, {

@@ -39,7 +39,7 @@ function open(): Promise<AgentSessionRecordStore> {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-death-evidence-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-death-evidence-'))
 })
 
 afterEach(async () => {

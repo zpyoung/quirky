@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { ORCHESTRATION_FEDERATION_LIFECYCLE_SETTLEMENT_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 
 export function createIdleSyncHarness(initialSequence = 2, protocolVersion?: 1 | 2 | 3) {
   let remoteRuntimeEpoch = 'remote_epoch_1'
@@ -37,7 +37,7 @@ export function createIdleSyncHarness(initialSequence = 2, protocolVersion?: 1 |
         federated.remote_runtime_epoch = runtimeEpoch
       }
     }) as never
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(createDb())
   vi.spyOn(runtime, 'resolveOrchestrationWorkerServer').mockReturnValue({
     peerFingerprint: federated.peer_fingerprint

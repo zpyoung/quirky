@@ -10,7 +10,7 @@ import type { ProviderRateLimits } from '../../shared/rate-limit-types'
 
 const SUPPORTED_HOSTS = new Set(['api.z.ai', 'open.bigmodel.cn', 'dev.bigmodel.cn'])
 const CREDENTIAL_IDENTITY_KEY = randomBytes(32)
-export const ZCODE_PLAN_CREDENTIAL_SOURCE = 'orca-plan'
+export const ZCODE_PLAN_CREDENTIAL_SOURCE = 'quirky-plan'
 export type ZcodePlanCredential = { apiKey: string; baseUrl: string }
 export type ZcodeUsageCredentials = { apiKey: string; quotaUrl: string; authProvenance: string }
 export type ZcodeUsageCredentialOptions = {

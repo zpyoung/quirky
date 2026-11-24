@@ -1,7 +1,7 @@
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { describe, expect, it, vi } from 'vitest'
 import type { SpawnOptions as SdkSpawnOptions } from '@anthropic-ai/claude-agent-sdk'
-import type { PipedProcessSpawner, ProcessSpec } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner, ProcessSpec } from '@quirky/process-host/process-spec'
 
 import type * as ProviderSupervisor from '../provider-process/provider-process-supervisor'
 import { createProviderSpawnSpec } from '../provider-process/provider-process-supervisor'
@@ -35,7 +35,7 @@ function sdkOptions(overrides: Partial<SdkSpawnOptions> = {}): SdkSpawnOptions {
 }
 
 describe('claude agent SDK process spawn', () => {
-  it('routes the SDK spawn through Orca and retains the pid the lease adjudicates on', () => {
+  it('routes the SDK spawn through Quirky and retains the pid the lease adjudicates on', () => {
     const process = fakeSpawn()
     const spawn = createClaudeCodeProcessSpawn(process.spawnImpl, 'win32')
 
@@ -82,9 +82,9 @@ describe('claude agent SDK process spawn', () => {
       expect(spec.detached).toBe(true)
       expect(spec.cwd).toBe('/work/repo')
       const supervisorSpec = JSON.parse(
-        Buffer.from(String(spec.env?.ORCA_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
+        Buffer.from(String(spec.env?.QUIRKY_PROVIDER_SUPERVISOR_SPEC), 'base64').toString()
       )
-      // A gone Orca closes Claude as its own close does (stdin end and SIGTERM), not with the
+      // A gone Quirky closes Claude as its own close does (stdin end and SIGTERM), not with the
       // root-only stdin-end drain a managed provider gets by default.
       expect(vi.mocked(createProviderSpawnSpec)).toHaveBeenLastCalledWith(
         expect.anything(),
@@ -146,12 +146,12 @@ describe('claude agent SDK process spawn', () => {
     }
   )
 
-  it('keeps the child out of the SDK abort path so exit proof stays Orca-owned', () => {
+  it('keeps the child out of the SDK abort path so exit proof stays Quirky-owned', () => {
     const process = fakeSpawn()
     const controller = new AbortController()
     createClaudeCodeProcessSpawn(process.spawnImpl).spawn(sdkOptions({ signal: controller.signal }))
 
-    // Node's spawn({signal}) kills the child on abort; Orca's ladder must be the
+    // Node's spawn({signal}) kills the child on abort; Quirky's ladder must be the
     // only thing that can end this process, or close() would report an assumed exit.
     expect(process.specs[0]).not.toHaveProperty('signal')
   })

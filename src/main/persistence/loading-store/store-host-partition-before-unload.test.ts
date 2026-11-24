@@ -26,9 +26,9 @@ afterEach(async () => {
 })
 
 function openStore(): Store {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-host-before-unload-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-host-before-unload-'))
   directories.push(directory)
-  return createSqliteTestStore(Store, { dataFile: join(directory, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(directory, 'quirky-data.json') })
 }
 
 /** The renderer's host split leaves out terminal maps for a host with only editor tabs. */

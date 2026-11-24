@@ -12,7 +12,7 @@ import type {
 export type ConnectionDiagnosis = {
   likelyCause: string
   nextStep: string
-  reportability: 'none' | 'orca-relay'
+  reportability: 'none' | 'quirky-relay'
 }
 
 type DiagnoseConnectionArgs = {
@@ -66,8 +66,8 @@ function diagnoseFailure(
   if (/relay director resolve failed \(503\)/i.test(evidence)) {
     const retryMs = parseRetryDelayMs(evidence)
     return {
-      likelyCause: `Relay service was temporarily unavailable${retryMs == null ? '.' : ` and asked Orca to retry in ${formatDelay(retryMs)}.`}`,
-      nextStep: 'Keep Orca open; recovery should retry automatically.',
+      likelyCause: `Relay service was temporarily unavailable${retryMs == null ? '.' : ` and asked Quirky to retry in ${formatDelay(retryMs)}.`}`,
+      nextStep: 'Keep Quirky open; recovery should retry automatically.',
       reportability: 'none'
     }
   }
@@ -89,17 +89,19 @@ function diagnoseFailure(
         : 'The connected host'
     return {
       likelyCause: `${path} stopped answering authenticated health checks.`,
-      nextStep: 'Orca closed the stale session and started recovery.',
-      reportability: relayLiveness ? 'orca-relay' : 'none'
+      nextStep: 'Quirky closed the stale session and started recovery.',
+      reportability: relayLiveness ? 'quirky-relay' : 'none'
     }
   }
 
   if (/relay-session-failed|active relay session failed/i.test(evidence)) {
     return {
       likelyCause: 'The active Relay session closed unexpectedly.',
-      nextStep: 'Orca started Relay recovery; the event history includes the cell close reason.',
+      nextStep: 'Quirky started Relay recovery; the event history includes the cell close reason.',
       reportability:
-        failure?.code === 'relay-session-failed' && failure.path === 'relay' ? 'orca-relay' : 'none'
+        failure?.code === 'relay-session-failed' && failure.path === 'relay'
+          ? 'quirky-relay'
+          : 'none'
     }
   }
 
@@ -118,7 +120,7 @@ function diagnoseFailure(
         : 'The saved direct endpoint did not answer before the connection timeout.',
       nextStep:
         args.pendingPath === 'relay'
-          ? 'Relay recovery is in progress; keep Orca open while it retries.'
+          ? 'Relay recovery is in progress; keep Quirky open while it retries.'
           : 'Check the local/VPN network and confirm the desktop is awake.',
       reportability: 'none'
     }
@@ -126,8 +128,8 @@ function diagnoseFailure(
 
   if (/handshake-timeout|handshake timeout/i.test(evidence)) {
     return {
-      likelyCause: 'The endpoint opened, but the encrypted Orca handshake did not finish.',
-      nextStep: 'Confirm the desktop is running a compatible Orca version and retry.',
+      likelyCause: 'The endpoint opened, but the encrypted Quirky handshake did not finish.',
+      nextStep: 'Confirm the desktop is running a compatible Quirky version and retry.',
       reportability: 'none'
     }
   }
@@ -153,7 +155,7 @@ export function getReportableConnectionIncidentId(args: DiagnoseConnectionArgs):
     return null
   }
   return diagnoseFailure(args, selected.entry, diagnosticEvidence(selected.entry)).reportability ===
-    'orca-relay'
+    'quirky-relay'
     ? selected.entry.id
     : null
 }
@@ -167,7 +169,7 @@ const RELAY_DIAL_ADVICE: Record<
   'host-offline': {
     likelyCause: (code) =>
       `Relay answered, but the desktop is not connected to it (close code ${code}, host offline).`,
-    nextStep: 'Check the desktop is awake, Orca is running, and it is signed in to Orca Cloud.'
+    nextStep: 'Check the desktop is awake, Quirky is running, and it is signed in to Quirky Cloud.'
   },
   'credential-refused': {
     likelyCause: (code) => `Relay refused this device’s relay credential (close code ${code}).`,
@@ -180,7 +182,7 @@ const RELAY_DIAL_ADVICE: Record<
   connecting: {
     likelyCause: (code) =>
       `Relay closed the dial with code ${code}; recovery re-resolves and retries.`,
-    nextStep: 'Keep Orca open while Relay recovery retries.'
+    nextStep: 'Keep Quirky open while Relay recovery retries.'
   }
 }
 

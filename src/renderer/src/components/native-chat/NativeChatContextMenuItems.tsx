@@ -117,7 +117,7 @@ function NativeChatRewindMenuItem({
   )
 }
 
-/** The link popover's icons: external opens leave Orca, an in-app browser opens stay. */
+/** The link popover's icons: external opens leave Quirky, an in-app browser opens stay. */
 function LinkActionIcon({ action }: { action: LinkAction }): React.JSX.Element {
   if (action.external === true) {
     return <ExternalLink />

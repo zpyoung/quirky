@@ -22,14 +22,14 @@ describe('Hermes remote installer through a local filesystem adapter (no SSH)', 
   const service = new HermesHookService()
 
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-hermes-remote-adapter-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-hermes-remote-adapter-'))
     mkdirSync(join(directory, '.hermes'))
     configPath = join(directory, '.hermes', 'config.yaml')
   })
   afterEach(() => rmSync(directory, { recursive: true, force: true }))
 
   it('does not rewrite a configured CRLF file or an existing backup', async () => {
-    const initial = '# operator notes\r\nplugins:\r\n  enabled: [zeta, orca-status, alpha]\r\n'
+    const initial = '# operator notes\r\nplugins:\r\n  enabled: [zeta, quirky-status, alpha]\r\n'
     writeFileSync(configPath, initial)
     writeFileSync(`${configPath}.bak`, 'recovery point')
     const before = statSync(configPath)
@@ -62,7 +62,7 @@ describe('Hermes remote installer through a local filesystem adapter (no SSH)', 
       expect(installed).toContain(`prompt: |${eol}  First${eol}  Second`)
       expect(parse(installed)).toEqual({
         ...parse(input),
-        plugins: { enabled: ['other', 'orca-status'] }
+        plugins: { enabled: ['other', 'quirky-status'] }
       })
       const before = statSync(configPath)
       expect((await service.installRemote(filesystem, directory)).state).toBe('installed')

@@ -151,7 +151,7 @@ afterEach(() => {
 }
 
 {
-  // A read no retry gets past (damage, a newer Orca's chat) takes the whole pane, even after the
+  // A read no retry gets past (damage, a newer Quirky's chat) takes the whole pane, even after the
   // transcript loaded: its words alone, and nothing that could only be refused again.
 
   const APPROVAL: AgentJournalRenderItem = JSON.parse(
@@ -174,7 +174,7 @@ afterEach(() => {
   /** A chat with its transcript on screen, a pending approval, a goal, a queued card and a running
    *  background task, whose read then fails with `reason`. */
   function renderLoadedChatThenFailedRead(
-    reason: 'journalCorrupt' | 'journalUnavailable' | 'journalWrittenByNewerOrca'
+    reason: 'journalCorrupt' | 'journalUnavailable' | 'journalWrittenByNewerQuirky'
   ): void {
     mocks.status = 'error'
     mocks.readRefusal = { code: 'agent_session_journal_unreadable', details: { reason } }
@@ -215,7 +215,10 @@ afterEach(() => {
 
   it.each([
     ['journalCorrupt', 'Unable to load this chat.'],
-    ['journalWrittenByNewerOrca', 'This chat was saved by a newer Orca. Update Orca to open it.']
+    [
+      'journalWrittenByNewerQuirky',
+      'This chat was saved by a newer Quirky. Update Quirky to open it.'
+    ]
   ] as const)('a %s read after the transcript loaded leaves only its words', (reason, words) => {
     renderLoadedChatThenFailedRead(reason)
 

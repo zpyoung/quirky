@@ -7,7 +7,7 @@ const deployment = {
   localPort: 41000,
   remotePort: 6768
 }
-const managed = [{ id: 'env-a', orcadDeployment: deployment }]
+const managed = [{ id: 'env-a', quirkydDeployment: deployment }]
 
 describe('SSH workspace browser route eligibility', () => {
   it('keeps the same target when an SSH workspace becomes managed', () => {
@@ -46,7 +46,7 @@ describe('SSH workspace browser route eligibility', () => {
     const wsl = [
       {
         id: 'env-a',
-        orcadDeployment: {
+        quirkydDeployment: {
           kind: 'wsl' as const,
           distro: 'target-a',
           localPort: 41000,
@@ -59,7 +59,7 @@ describe('SSH workspace browser route eligibility', () => {
 
   it('keeps a paired runtime-owned deployment on its owning runtime', () => {
     const nested = [
-      { id: 'env-a', orcadDeployment: { ...deployment, sshTargetId: 'runtime-ssh-a' } }
+      { id: 'env-a', quirkydDeployment: { ...deployment, sshTargetId: 'runtime-ssh-a' } }
     ]
     expect(resolveSshWorkspaceBrowserRouteEligibility('runtime:env-a', {}, nested)).toBeNull()
   })

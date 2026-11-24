@@ -1,28 +1,28 @@
 /** One-line flag descriptions shared by every command's help output. */
 export const FLAG_HELP_TEXT: Record<string, string> = {
   'external-worktree-visibility':
-    '--external-worktree-visibility show|hide|inherit  Override or inherit non-Orca worktree visibility',
+    '--external-worktree-visibility show|hide|inherit  Override or inherit non-Quirky worktree visibility',
   agent: '--agent <id>          Launch a known TUI agent in the first terminal',
   'base-branch': '--base-branch <ref>    Base branch/ref to create the worktree from',
   command: '--command <text>       Command to run in the terminal on startup',
-  comment: '--comment <text>       Comment stored in Orca metadata',
+  comment: '--comment <text>       Comment stored in Quirky metadata',
   cursor: '--cursor <n>           Line cursor from a previous read (returns only new output)',
   action: '--action <name>       Secondary accessibility action name',
-  activate: '--activate             Reveal the new worktree in the Orca app',
+  activate: '--activate             Reveal the new worktree in the Quirky app',
   app: '--app <app>            App name, bundle ID, or pid:N',
   direction:
     '--direction <dir>      Direction: up|down|left|right for scroll, horizontal|vertical for split',
-  'display-name': '--display-name <name>  Override the Orca display name',
+  'display-name': '--display-name <name>  Override the Quirky display name',
   environment:
-    '--environment <selector> Run against a saved paired Orca server (id or name); terminal handles belong to the server that issued them',
+    '--environment <selector> Run against a saved paired Quirky server (id or name); terminal handles belong to the server that issued them',
   'pairing-code':
-    '--pairing-code <code>  Run against a remote Orca server using an orca://pair?... code',
+    '--pairing-code <code>  Run against a remote Quirky server using an quirky://pair?... code',
   'element-index': '--element-index <n>   Element index from get-app-state',
   title: '--title <text>         Custom title for the terminal tab (omit to reset)',
   enter: '--enter                Append Enter after sending text',
   force:
     '--force                Force worktree removal when supported; does not force branch deletion',
-  focus: '--focus                Reveal the created terminal session in Orca',
+  focus: '--focus                Reveal the created terminal session in Quirky',
   for: '--for exit|tui-idle    Wait condition to satisfy',
   'from-element-index': '--from-element-index <n> Source element index from get-app-state',
   'from-x': '--from-x <x>           Source window-local x coordinate',
@@ -95,7 +95,7 @@ export const FLAG_HELP_TEXT: Record<string, string> = {
   timezone: '--timezone <tz>       IANA timezone for the automation',
   enabled: '--enabled              Enable the automation',
   disabled: '--disabled             Disable the automation',
-  current: '--current              Use the current Orca worktree linked Linear issue',
+  current: '--current              Use the current Quirky worktree linked Linear issue',
   comments: '--comments             Include threaded Linear comments',
   children: '--children             Include recursive child issues',
   depth: '--depth <n>            Child issue depth for --children/--full',
@@ -121,7 +121,7 @@ export const FLAG_HELP_TEXT: Record<string, string> = {
   expression: '--expression <js>     JavaScript expression to evaluate',
   amount: '--amount <pixels>      Scroll distance in pixels',
   index: '--index <n>            Tab index to switch to',
-  page: '--page <id>            Stable browser page id from `orca tab list --json`',
+  page: '--page <id>            Stable browser page id from `quirky tab list --json`',
   profile: '--profile <id>        Browser profile id',
   'show-profile': '--show-profile        Include tab profile in text output',
   format: '--format <png|jpeg>    Screenshot image format'

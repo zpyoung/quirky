@@ -55,7 +55,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -138,7 +138,7 @@ describe('Store', () => {
       {
         displayName: 'renamed',
         worktreeBasePath: '../new-worktrees',
-        upstream: { owner: 'stablyai', repo: 'orca' }
+        upstream: { owner: 'stablyai', repo: 'quirky' }
       }
     )
 
@@ -414,7 +414,7 @@ describe('Store', () => {
         repo,
         write
       )
-    ).rejects.toThrow('The project changed while Orca was checking it')
+    ).rejects.toThrow('The project changed while Quirky was checking it')
     expect(write).not.toHaveBeenCalled()
   })
 
@@ -541,10 +541,10 @@ describe('Store', () => {
     const updated = store.updateRepo(
       { id: 'r1' },
       {
-        upstream: { owner: ' stablyai ', repo: ' orca ' }
+        upstream: { owner: ' stablyai ', repo: ' quirky ' }
       }
     )
-    expect(updated!.upstream).toEqual({ owner: 'stablyai', repo: 'orca' })
+    expect(updated!.upstream).toEqual({ owner: 'stablyai', repo: 'quirky' })
 
     store.updateRepo({ id: 'r1' }, { upstream: null })
     store.flush()
@@ -560,16 +560,16 @@ describe('Store', () => {
       { id: 'r1' },
       {
         gitRemoteIdentity: {
-          canonicalKey: 'gitlab.example.com/team/orca',
+          canonicalKey: 'gitlab.example.com/team/quirky',
           remoteName: 'origin',
-          remoteUrl: 'git@gitlab.example.com:team/orca.git'
+          remoteUrl: 'git@gitlab.example.com:team/quirky.git'
         }
       }
     )
     expect(updated!.gitRemoteIdentity).toEqual({
-      canonicalKey: 'gitlab.example.com/team/orca',
+      canonicalKey: 'gitlab.example.com/team/quirky',
       remoteName: 'origin',
-      remoteUrl: 'git@gitlab.example.com:team/orca.git'
+      remoteUrl: 'git@gitlab.example.com:team/quirky.git'
     })
 
     store.updateRepo({ id: 'r1' }, { gitRemoteIdentity: null })
@@ -613,9 +613,9 @@ describe('Store', () => {
 
   it('leaves a hostless persisted upstream hostless rather than inventing one', async () => {
     const store = await createStore()
-    store.addRepo(makeRepo({ upstream: { owner: 'stablyai', repo: 'orca' } }))
+    store.addRepo(makeRepo({ upstream: { owner: 'stablyai', repo: 'quirky' } }))
 
-    expect(store.getRepo('r1')!.upstream).toEqual({ owner: 'stablyai', repo: 'orca' })
+    expect(store.getRepo('r1')!.upstream).toEqual({ owner: 'stablyai', repo: 'quirky' })
     expect(store.getRepo('r1')!.upstream).not.toHaveProperty('host')
   })
 

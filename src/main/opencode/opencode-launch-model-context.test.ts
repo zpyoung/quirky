@@ -79,19 +79,19 @@ describe('OpenCode execution-host model context', () => {
   })
 })
 
-describe.skipIf(!process.env.ORCA_REAL_OPENCODE_CLI_TEST)(
+describe.skipIf(!process.env.QUIRKY_REAL_OPENCODE_CLI_TEST)(
   'real current OpenCode model preflight',
   () => {
     it('waits for initialization and verifies a custom primary before and after a private overlay', async () => {
-      const executable = process.env.ORCA_REAL_OPENCODE_CLI_TEST
+      const executable = process.env.QUIRKY_REAL_OPENCODE_CLI_TEST
       if (!executable) {
         throw new Error('Real OpenCode executable required')
       }
-      const home = await mkdtemp(join(tmpdir(), 'orca-opencode-model-context-'))
+      const home = await mkdtemp(join(tmpdir(), 'quirky-opencode-model-context-'))
       try {
         const env: NodeJS.ProcessEnv = {}
         for (const [key, value] of Object.entries(process.env)) {
-          if (!/API_KEY|TOKEN|SECRET|AUTH|CREDENTIAL|OPENCODE_|ORCA_/.test(key)) {
+          if (!/API_KEY|TOKEN|SECRET|AUTH|CREDENTIAL|OPENCODE_|QUIRKY_/.test(key)) {
             env[key] = value
           }
         }
@@ -106,7 +106,7 @@ describe.skipIf(!process.env.ORCA_REAL_OPENCODE_CLI_TEST)(
           await mkdir(path, { mode: 0o700 })
           env[key] = path
         }
-        env.ORCA_BACKGROUND_LAUNCH = '1'
+        env.QUIRKY_BACKGROUND_LAUNCH = '1'
         env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
           default_agent: 'reviewer',
           model: 'opencode/big-pickle',

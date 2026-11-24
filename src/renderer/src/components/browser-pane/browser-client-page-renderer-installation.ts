@@ -52,7 +52,7 @@ export function installBrowserClientPageRenderer(
 ): BrowserClientPageRendererInstallation | null {
   if (
     typeof window !== 'undefined' &&
-    (window as unknown as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ === true
+    (window as unknown as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ === true
   ) {
     return null
   }

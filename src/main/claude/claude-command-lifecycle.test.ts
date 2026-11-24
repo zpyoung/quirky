@@ -1,6 +1,6 @@
 // Replays of real Claude CLI 2.1.280 sessions (`__fixtures__/claude-lifecycle-capture-*.jsonl`)
 // in which the CLI withdrew a queued send, interrupted a turn, or failed one. The recorded
-// frames are the script; at each recorded control request the test decides how Orca's side of
+// frames are the script; at each recorded control request the test decides how Quirky's side of
 // it went — the answer arriving, lost, or failing — and the CLI's own frames from while that
 // request was outstanding are delivered either way.
 
@@ -95,7 +95,7 @@ type ControlPoint = {
 async function replayCapture(
   name: string,
   options: {
-    /** What Orca did at the recorded control request; by default nothing (the CLI acted alone). */
+    /** What Quirky did at the recorded control request; by default nothing (the CLI acted alone). */
     atControl?: (point: ControlPoint) => Promise<void>
     /** Drop these from the capture's init frames, as an older CLI would not advertise them. */
     withoutCapabilities?: string[]
@@ -259,7 +259,7 @@ function acceptedAs(uuid: string) {
   return { providerIdentity: { provider: 'claude', sessionId: PROVIDER_SESSION_ID, uuid } }
 }
 
-/** Orca's Stop with no turn named, as the chat sends it; the interrupt answers per `answer`. */
+/** Quirky's Stop with no turn named, as the chat sends it; the interrupt answers per `answer`. */
 function stopWithInterruptAnswer(answer: 'recorded' | 'lost') {
   return async (point: ControlPoint): Promise<void> => {
     point.routes.interrupt = () => {
@@ -352,7 +352,7 @@ describe('a Stop that withdraws the follow-up one at a time (no cancel_queued)',
   )
 })
 
-describe('a queued send the CLI withdraws without Orca hearing why', () => {
+describe('a queued send the CLI withdraws without Quirky hearing why', () => {
   it('settles the withdrawn send from its own cancelled frame', async () => {
     const replay = await replayCapture('cancel-async')
 

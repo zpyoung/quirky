@@ -129,14 +129,14 @@ describe('key encoding', () => {
   })
 
   it('separates the provider namespaces', () => {
-    const orca = agentJournalItemKey({ provider: 'orca', clientMessageId: 'x' })
+    const quirky = agentJournalItemKey({ provider: 'quirky', clientMessageId: 'x' })
     const legacy = agentJournalItemKey({
       provider: 'legacy',
       agent: 'claude',
       sessionId: 'x',
       recordId: 'x'
     })
-    expect(orca).not.toBe(legacy)
+    expect(quirky).not.toBe(legacy)
   })
 })
 
@@ -205,13 +205,13 @@ describe('oversized identity bounding on Unicode boundaries', () => {
   it('keeps an astral character that lands entirely inside the head', () => {
     const inside = `${'a'.repeat(38)}😀${'x'.repeat(1100)}`
     const bounded = boundJournalKeyComponent(inside)
-    expect(bounded.startsWith(`${'a'.repeat(38)}😀~orca-oversized~`)).toBe(true)
+    expect(bounded.startsWith(`${'a'.repeat(38)}😀~quirky-oversized~`)).toBe(true)
     expect(() => encodeURIComponent(bounded)).not.toThrow()
   })
 
   it('drops only the split surrogate from the straddling head', () => {
     const bounded = boundJournalKeyComponent(STRADDLING)
-    expect(bounded.startsWith(`${'a'.repeat(39)}~orca-oversized~`)).toBe(true)
+    expect(bounded.startsWith(`${'a'.repeat(39)}~quirky-oversized~`)).toBe(true)
     expect(() => encodeURIComponent(bounded)).not.toThrow()
   })
 })

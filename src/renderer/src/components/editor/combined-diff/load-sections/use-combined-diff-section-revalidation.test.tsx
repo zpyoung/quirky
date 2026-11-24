@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { QUIRKY_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import type { OpenFile } from '@/store/slices/editor'
 import type { FsChangedPayload } from '../../../../../../shared/filesystem-entry-types'
 import { useCombinedDiffSectionRevalidation } from './use-combined-diff-section-revalidation'
@@ -42,7 +42,7 @@ function renderReview(): ReturnType<typeof vi.fn> {
 function dispatch(payload: FsChangedPayload, runtimeEnvironmentId: string | null = null): void {
   act(() => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_WORKTREE_FILE_CHANGE_EVENT, {
+      new CustomEvent(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, {
         detail: { payload, runtimeEnvironmentId }
       })
     )

@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { build, transform } from 'esbuild'
 
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-completion-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-completion-'))
 const received = []
 let rejectCompletion = true
 const server = createServer(async (request, response) => {
@@ -56,13 +56,13 @@ try {
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   Object.assign(process.env, {
-    ORCA_BACKGROUND_LAUNCH: '1',
-    ORCA_PANE_KEY: 'completion-proof',
-    ORCA_TAB_ID: 'proof-tab',
-    ORCA_AGENT_HOOK_PORT: String(server.address().port),
-    ORCA_AGENT_HOOK_TOKEN: 'isolated-proof-token',
-    ORCA_AGENT_HOOK_ENDPOINT: '',
-    ORCA_PI_STATUS_OWNED: '',
+    QUIRKY_BACKGROUND_LAUNCH: '1',
+    QUIRKY_PANE_KEY: 'completion-proof',
+    QUIRKY_TAB_ID: 'proof-tab',
+    QUIRKY_AGENT_HOOK_PORT: String(server.address().port),
+    QUIRKY_AGENT_HOOK_TOKEN: 'isolated-proof-token',
+    QUIRKY_AGENT_HOOK_ENDPOINT: '',
+    QUIRKY_PI_STATUS_OWNED: '',
     WSL_DISTRO_NAME: ''
   })
   const handlers = new Map()

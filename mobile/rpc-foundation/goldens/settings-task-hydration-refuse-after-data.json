@@ -214,7 +214,7 @@
       }
     },
     "2db932a72b8a": {
-      "name": "trustedOrcaHooks",
+      "name": "trustedQuirkyHooks",
       "ordinal": 54,
       "value": {}
     },
@@ -554,7 +554,7 @@
       "value": ["github", "linear"]
     },
     "64bf72888fbb": {
-      "name": "projectRepoNotInOrca",
+      "name": "projectRepoNotInQuirky",
       "ordinal": 101,
       "value": {
         "$rpc": "null"
@@ -731,7 +731,7 @@
       "json": "{\"id\":\"frame-11\",\"deviceToken\":\"recording-device\",\"method\":\"preflight.check\"}"
     },
     "7d8029e889cf": {
-      "name": "projectRepoNotInOrca",
+      "name": "projectRepoNotInQuirky",
       "ordinal": 27,
       "value": {
         "$rpc": "null"
@@ -807,7 +807,7 @@
       "value": false
     },
     "8d73e3205bf5": {
-      "name": "trustedOrcaHooks",
+      "name": "trustedQuirkyHooks",
       "ordinal": 128,
       "value": {}
     },

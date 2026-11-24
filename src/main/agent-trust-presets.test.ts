@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { runCodexAppServerSession } from './codex/codex-app-server-session'
 
 const testState = {
@@ -42,30 +42,30 @@ const { runExclusivelyForCodexTrustConfig } =
   await import('./codex/codex-trust-config-mutation-queue')
 const { getLocalCodexTrustConfigFiles } = await import('./codex/codex-home-paths')
 
-// Why: fixture tests pin Orca's half; only the real binary proves Codex reads the key
-// Orca writes. CI sets REQUIRED so a missing binary fails instead of skipping.
+// Why: fixture tests pin Quirky's half; only the real binary proves Codex reads the key
+// Quirky writes. CI sets REQUIRED so a missing binary fails instead of skipping.
 const codexTrustContract = {
-  binary: process.env.ORCA_CODEX_TRUST_CONTRACT_BINARY,
-  version: process.env.ORCA_CODEX_TRUST_CONTRACT_VERSION
+  binary: process.env.QUIRKY_CODEX_TRUST_CONTRACT_BINARY,
+  version: process.env.QUIRKY_CODEX_TRUST_CONTRACT_VERSION
 }
-if (process.env.ORCA_CODEX_TRUST_CONTRACT_REQUIRED === '1' && !codexTrustContract.binary) {
-  throw new Error('ORCA_CODEX_TRUST_CONTRACT_REQUIRED=1 but no Codex binary was given')
+if (process.env.QUIRKY_CODEX_TRUST_CONTRACT_REQUIRED === '1' && !codexTrustContract.binary) {
+  throw new Error('QUIRKY_CODEX_TRUST_CONTRACT_REQUIRED=1 but no Codex binary was given')
 }
 
 beforeEach(() => {
-  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'orca-trust-presets-'))
-  testState.userDataDir = mkdtempSync(join(tmpdir(), 'orca-trust-presets-user-data-'))
-  testState.previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = testState.userDataDir
+  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'quirky-trust-presets-'))
+  testState.userDataDir = mkdtempSync(join(tmpdir(), 'quirky-trust-presets-user-data-'))
+  testState.previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = testState.userDataDir
 })
 
 afterEach(() => {
   rmSync(testState.fakeHomeDir, { recursive: true, force: true })
   rmSync(testState.userDataDir, { recursive: true, force: true })
   if (testState.previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = testState.previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = testState.previousUserDataPath
   }
   testState.fakeHomeDir = ''
   testState.userDataDir = ''
@@ -74,7 +74,7 @@ afterEach(() => {
 
 describe('markCursorWorkspaceTrusted', () => {
   it('writes ~/.cursor/projects/<slug>/.workspace-trusted with the cwd payload', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-cursor-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-cursor-ws-'))
     try {
       markCursorWorkspaceTrusted(workspace, testState.fakeHomeDir)
       const projectsDir = join(testState.fakeHomeDir, '.cursor', 'projects')
@@ -91,7 +91,7 @@ describe('markCursorWorkspaceTrusted', () => {
   })
 
   it('is idempotent — re-marking the same workspace does not overwrite trustedAt', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-cursor-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-cursor-ws-'))
     try {
       markCursorWorkspaceTrusted(workspace, testState.fakeHomeDir)
       const projectsDir = join(testState.fakeHomeDir, '.cursor', 'projects')
@@ -109,7 +109,7 @@ describe('markCursorWorkspaceTrusted', () => {
 
 describe('markCopilotFolderTrusted', () => {
   it('appends the workspace to trustedFolders in ~/.copilot/config.json', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-copilot-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-copilot-ws-'))
     try {
       markCopilotFolderTrusted(workspace, testState.fakeHomeDir)
       const configPath = join(testState.fakeHomeDir, '.copilot', 'config.json')
@@ -127,7 +127,7 @@ describe('markCopilotFolderTrusted', () => {
     if (process.platform === 'win32') {
       return
     }
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-copilot-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-copilot-ws-'))
     const configPath = join(testState.fakeHomeDir, '.copilot', 'config.json')
     // Why: a restrictive runner umask would mask a dropped mode.
     const originalUmask = process.umask(0o022)
@@ -149,7 +149,7 @@ describe('markCopilotFolderTrusted', () => {
     if (process.platform === 'win32') {
       return
     }
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-copilot-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-copilot-ws-'))
     const originalUmask = process.umask(0o022)
     try {
       markCopilotFolderTrusted(workspace, testState.fakeHomeDir)
@@ -162,7 +162,7 @@ describe('markCopilotFolderTrusted', () => {
   })
 
   it('preserves existing config keys and dedups already-trusted folders', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-copilot-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-copilot-ws-'))
     const realpath = realpathSync(workspace)
     try {
       mkdirSync(join(testState.fakeHomeDir, '.copilot'), { recursive: true })
@@ -187,7 +187,7 @@ describe('markCopilotFolderTrusted', () => {
 
 describe('markAntigravityWorkspaceTrusted', () => {
   it('appends the workspace to trustedWorkspaces in ~/.gemini/antigravity-cli/settings.json', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-agy-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-agy-ws-'))
     try {
       markAntigravityWorkspaceTrusted(workspace, testState.fakeHomeDir)
       const configPath = join(testState.fakeHomeDir, '.gemini', 'antigravity-cli', 'settings.json')
@@ -204,7 +204,7 @@ describe('markAntigravityWorkspaceTrusted', () => {
   // Why: the same settings.json also carries model, permissions and toolPermission. A
   // clobbering write here would silently reset the user's agy configuration.
   it('preserves sibling settings keys and dedups an already-trusted workspace', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-agy-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-agy-ws-'))
     const realpath = realpathSync(workspace)
     try {
       mkdirSync(join(testState.fakeHomeDir, '.gemini', 'antigravity-cli'), { recursive: true })
@@ -234,7 +234,7 @@ describe('markAntigravityWorkspaceTrusted', () => {
   // Why: agy's trust is exact-path, not inherited — a parent entry does not cover a child,
   // which is what makes the per-worktree preflight necessary at all.
   it('adds a child worktree even when its parent is already trusted', () => {
-    const parent = mkdtempSync(join(tmpdir(), 'orca-agy-parent-'))
+    const parent = mkdtempSync(join(tmpdir(), 'quirky-agy-parent-'))
     const child = join(parent, 'child-worktree')
     try {
       mkdirSync(child, { recursive: true })
@@ -259,7 +259,7 @@ describe('markCodexProjectTrusted', () => {
   // app-server session; an unqueued write here lands inside its
   // capture->restore window and is silently reverted.
   it('queues behind an in-flight Codex trust-config mutation', async () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-codex-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-codex-ws-'))
     const configPath = join(testState.fakeHomeDir, '.codex', 'config.toml')
     let releaseGrant!: () => void
     const grantHoldingTheFile = new Promise<void>((resolve) => {
@@ -294,7 +294,7 @@ describe('markCodexProjectTrusted', () => {
       }
     })
     beforeEach(() => {
-      fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-codex-layout-')))
+      fixtureRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-codex-layout-')))
     })
     afterEach(() => {
       rmSync(fixtureRoot, { recursive: true, force: true })
@@ -303,7 +303,7 @@ describe('markCodexProjectTrusted', () => {
     function git(cwd: string, ...args: string[]): void {
       const result = runProcessSync({
         program: 'git',
-        args: ['-c', 'user.name=Orca', '-c', 'user.email=orca@example.com', ...args],
+        args: ['-c', 'user.name=Quirky', '-c', 'user.email=quirky@example.com', ...args],
         cwd
       })
       expect(result.code, result.stderr).toBe(0)
@@ -407,7 +407,7 @@ describe('markCodexProjectTrusted', () => {
   })
 
   it('writes ~/.codex/config.toml with the project marked trusted', async () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-codex-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-codex-ws-'))
     try {
       const realpath = realpathSync.native(workspace)
       await markCodexProjectTrusted(workspace, getLocalCodexTrustConfigFiles(testState.fakeHomeDir))
@@ -432,7 +432,7 @@ describe('markCodexProjectTrusted', () => {
   })
 
   it('preserves existing config keys and updates an existing project block', async () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'orca-codex-ws-'))
+    const workspace = mkdtempSync(join(tmpdir(), 'quirky-codex-ws-'))
     const realpath = realpathSync.native(workspace)
     try {
       const codexDir = join(testState.fakeHomeDir, '.codex')

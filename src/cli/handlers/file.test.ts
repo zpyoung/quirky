@@ -7,7 +7,7 @@ vi.mock('../runtime-client', () => {
     readonly isRemote: boolean
     call = callMock
     getCliStatus = vi.fn()
-    openOrca = vi.fn()
+    openQuirky = vi.fn()
 
     constructor(
       _userDataPath?: string,
@@ -47,7 +47,7 @@ vi.mock('../runtime-client', () => {
 import { main } from '../index'
 import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from '../test-fixtures'
 
-describe('orca file CLI handlers', () => {
+describe('quirky file CLI handlers', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     callMock.mockReset()
@@ -171,7 +171,7 @@ describe('orca file CLI handlers', () => {
     })
     expect(console.log).not.toHaveBeenCalled()
     expect(vi.mocked(console.error).mock.calls[0][0]).toContain(
-      'Did not open diff for assets/logo.png: the Orca app declined this binary file.'
+      'Did not open diff for assets/logo.png: the Quirky app declined this binary file.'
     )
     expect(process.exitCode).toBe(1)
     process.exitCode = undefined

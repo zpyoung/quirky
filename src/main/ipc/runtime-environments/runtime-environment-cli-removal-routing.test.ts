@@ -48,7 +48,7 @@ import { subscribeRuntimeEnvironment } from './runtime-environment-transport-rou
 let userDataPath: string
 
 beforeEach(() => {
-  userDataPath = mkdtempSync(join(tmpdir(), 'orca-cli-removal-routing-'))
+  userDataPath = mkdtempSync(join(tmpdir(), 'quirky-cli-removal-routing-'))
   resetRuntimeEnvironmentCapabilityEvidence()
   subscribeMock.mockReset()
   supportsMock.mockReset()
@@ -81,7 +81,7 @@ describe('runtime responses the app can no longer attribute to a saved server', 
   it.each([
     ['direct subscription', 'browser.screencast'],
     ['support-routed subscription on a host without shared control', 'files.watch']
-  ])('forwards a %s response after `orca environment rm`', async (_label, method) => {
+  ])('forwards a %s response after `quirky environment rm`', async (_label, method) => {
     const { deliver, onEvent, environment } = await subscribed(method)
     // Mirrors the CLI: it edits the store without telling the running app.
     removeEnvironment(userDataPath, environment.id)

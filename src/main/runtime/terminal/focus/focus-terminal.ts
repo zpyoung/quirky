@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithWaitForLeafPtyId } from '../view/renderer-terminal-snapshot'
+import { QuirkyRuntimeWithWaitForLeafPtyId } from '../view/renderer-terminal-snapshot'
 import type { RuntimeTerminalFocus } from '../../../../shared/runtime-types'
 import type {
   RuntimeTerminalReveal,
@@ -8,7 +8,7 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { getLatestPtyTitle } from '../../runtime-worktree-status-projection'
 import { copySleepingAgentLaunchConfig } from '../../runtime-agent-launch-resolution'
 
-export abstract class OrcaRuntimeWithFocusTerminal extends OrcaRuntimeWithWaitForLeafPtyId {
+export abstract class QuirkyRuntimeWithFocusTerminal extends QuirkyRuntimeWithWaitForLeafPtyId {
   async focusTerminal(
     handle: string,
     options: { navigateHost?: boolean } = {}

@@ -1,13 +1,13 @@
 {
   "tests": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts src/main/browser/browser-client-page-command-executor.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts src/main/browser/browser-client-page-command-executor.test.ts src/main/browser/paired-runtime-browser-client-host-composition.test.ts src/main/browser/paired-runtime-browser-client-host.test.ts",
     "passed": 77,
     "files": 5,
     "newRegressionCases": 2,
     "exitCode": 0
   },
   "baselineOverlay": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 ORCA_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_BROWSER_CACHE_VARIANT=before pnpm exec vitest run --config docs/audits/browser-closed-result-retention/vitest.config.mjs src/main/browser/browser-client-host-command-retention.test.ts src/main/browser/browser-client-host-command-dispatcher.test.ts",
     "passed": 16,
     "expectedFailed": 2,
     "failures": [
@@ -17,7 +17,7 @@
     "exitCode": 1
   },
   "typecheck": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc:node",
     "exitCode": 0
   },
   "publicationQuality": {
@@ -121,7 +121,7 @@
     ]
   },
   "changedQuality": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 ORCA_CODE_QUALITY_BASE=HEAD pnpm run check:code-quality:changed",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_CODE_QUALITY_BASE=HEAD pnpm run check:code-quality:changed",
     "exitCode": 0,
     "note": "The five explicit-file scans include all six TS/CJS/MJS publication paths. The ordinary changed gate does not see ignored new artifacts before staging."
   },
@@ -191,11 +191,11 @@
     "smallCompletedResults": 32,
     "crlfReadControl": 24,
     "environment": {
-      "ORCA_BACKGROUND_LAUNCH": "1",
+      "QUIRKY_BACKGROUND_LAUNCH": "1",
       "ELECTRON_RUN_AS_NODE": "1 for Electron runs",
-      "ORCA_BROWSER_CACHE_VARIANT": "before or fixed"
+      "QUIRKY_BROWSER_CACHE_VARIANT": "before or fixed"
     },
-    "outputOverride": "ORCA_BROWSER_CACHE_OUTPUT"
+    "outputOverride": "QUIRKY_BROWSER_CACHE_OUTPUT"
   },
   "sourceParity": {
     "canonicalLF": true,

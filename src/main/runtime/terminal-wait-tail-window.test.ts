@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'esbuild'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { startOfLastNonBlankLines } from './terminal-wait-tail-window'
 
 let scratch = ''
 let childPath = ''
 
 beforeAll(async () => {
-  scratch = await mkdtemp(join(tmpdir(), 'orca-tail-window-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-tail-window-'))
   childPath = join(scratch, 'leading-blank.cjs')
   await build({
     stdin: {
@@ -48,7 +48,7 @@ describe('terminal wait nonblank tail window', () => {
     const result = await runProcess({
       program: process.execPath,
       args: ['--max-old-space-size=64', childPath],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 2_000,
       maxOutputBytes: 4096
     })

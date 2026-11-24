@@ -40,7 +40,7 @@ function installBrowserGlobals(): { window: Window & typeof globalThis; storage:
 
 function writeRuntimeEnvironment(storage: Storage): void {
   storage.setItem(
-    'orca.web.runtimeEnvironment.v1',
+    'quirky.web.runtimeEnvironment.v1',
     JSON.stringify({
       id: 'web-env-1',
       name: 'Test runtime',

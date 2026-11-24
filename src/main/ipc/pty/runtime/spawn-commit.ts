@@ -223,7 +223,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     ctx.deps.runtime?.noteTerminalSpawnCommand?.(ctx.result.id, ctx.launchCommand ?? null)
   }
   // Why: runtime-owned CLI PTYs bypass the renderer pty:spawn handler; record paneKey here too since hook titles and cache cleanup need this reverse lookup.
-  const paneKey = rememberPaneKeyForPty(ctx.result.id, ctx.env?.ORCA_PANE_KEY)
+  const paneKey = rememberPaneKeyForPty(ctx.result.id, ctx.env?.QUIRKY_PANE_KEY)
   const pendingSerializer = paneKey ? pendingByPaneKey.get(paneKey) : undefined
   const inheritRendererReadiness =
     ctx.result.isReattach === true &&

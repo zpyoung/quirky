@@ -7,7 +7,7 @@ const { createHash } = require('node:crypto')
 const root = path.resolve(__dirname, '../../..')
 const bundles = {}
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 
 async function loadTracker(fixed) {
@@ -43,7 +43,7 @@ async function loadTracker(fixed) {
   bundles[fixed ? 'after' : 'before'] = createHash('sha256')
     .update(result.outputFiles[0].text)
     .digest('hex')
-  const scratch = fs.mkdtempSync(path.join(tmpdir(), 'orca-claude-task-proof-'))
+  const scratch = fs.mkdtempSync(path.join(tmpdir(), 'quirky-claude-task-proof-'))
   let moduleId
   try {
     const bundlePath = path.join(scratch, 'tracker.cjs')

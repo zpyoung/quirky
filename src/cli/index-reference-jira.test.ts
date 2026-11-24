@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -340,7 +340,7 @@ describe('Jira reference keys', () => {
   it('requires Jira agent capability before resolving keys', async () => {
     responses({ 'status.get': { capabilities: [WORKTREE_LINKED_ITEMS_DELTA_RUNTIME_CAPABILITY] } })
     await main(addArgs, '/tmp/api')
-    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Update Orca'))
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('Update Quirky'))
     expect(mocks.callMock).not.toHaveBeenCalledWith('jira.status')
     expectNoWrite()
   })

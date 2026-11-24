@@ -7,8 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { applyPatch, parsePatch, reversePatch } from 'diff'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -30,7 +30,7 @@ for (const parsed of parsePatch(patch)) {
   }
 }
 
-const scratch = await mkdtemp(join(tmpdir(), 'orca-hydration-retention-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-hydration-retention-'))
 const require = createRequire(import.meta.url)
 let runnerModuleId
 try {

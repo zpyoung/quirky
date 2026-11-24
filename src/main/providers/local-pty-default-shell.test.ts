@@ -39,10 +39,13 @@ describe.skipIf(process.platform === 'win32')('default terminal shell', () => {
 
   it('uses explicit interactive args for the configured default shell', () => {
     const plan = createLocalPtyLaunchPlan(
-      { cwd: '/tmp', cols: 80, rows: 24, terminalShellArgs: ['--rcfile', '/tmp/orca rc'] },
+      { cwd: '/tmp', cols: 80, rows: 24, terminalShellArgs: ['--rcfile', '/tmp/quirky rc'] },
       () => ({ getDefaultShell: () => '/bin/bash' })
     )
-    expect(plan).toMatchObject({ shellPath: '/bin/bash', shellArgs: ['--rcfile', '/tmp/orca rc'] })
+    expect(plan).toMatchObject({
+      shellPath: '/bin/bash',
+      shellArgs: ['--rcfile', '/tmp/quirky rc']
+    })
   })
 
   it('allows an explicit empty argument list for wrapper shells', () => {
@@ -71,7 +74,7 @@ describe.skipIf(process.platform === 'win32')('default terminal shell', () => {
           cwd: '/tmp',
           cols: 80,
           rows: 24,
-          terminalShellArgs: ['--rcfile', '/tmp/orca'],
+          terminalShellArgs: ['--rcfile', '/tmp/quirky'],
           ...overrides
         },
         () => ({ getDefaultShell: () => '/bin/zsh' })

@@ -6,7 +6,7 @@ import { applyLayoutCommand } from './workspace-layout-commands'
 import { editorOpenFileId } from './workspace-layout-editor-open-file-id'
 import type { LayoutEditorFile, WorkspaceLayout } from './workspace-layout-model'
 
-vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const WT = 'repo-1::/repo'
 

@@ -4,13 +4,13 @@ import { isDeepStrictEqual } from 'node:util'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
 import { isPlainObject } from '../agent-hooks/hooks-json-read'
-import { getOrcaUserDataPath } from './codex-home-paths'
+import { getQuirkyUserDataPath } from './codex-home-paths'
 import type { CodexHookAnswer, CodexHookHashes } from './codex-hook-trust-derivation'
 import { CODEX_MANAGED_EVENT_LABELS } from './codex-hook-definition'
 import type { CodexEventLabel } from './config-toml-trust'
 
 /**
- * Orca's file of what Codex answered about its hook: the `codex --version`
+ * Quirky's file of what Codex answered about its hook: the `codex --version`
  * behind each binary fingerprint, and per version and hook command, Codex's
  * hashes or why it gives none. Under userData, so a launch that finds nothing
  * new spawns nothing and the CLI's status can read what the app learned. Any
@@ -32,7 +32,7 @@ type MemoizedCodexHookAnswer = Exclude<CodexHookAnswer, { kind: 'pending' }>
 const MAX_RECORDS = 8
 
 export function getCodexHookTrustMemoPath(): string {
-  return join(getOrcaUserDataPath(), 'codex-hook-trust.json')
+  return join(getQuirkyUserDataPath(), 'codex-hook-trust.json')
 }
 
 export function codexBinaryKey(codexPath: string): string {
@@ -130,7 +130,7 @@ export function readMemoizedVersionAnswer(
     : { kind: 'refused', codexVersion, failure: record.failure }
 }
 
-/** Every saved version's hashes: what Orca may have approved its entry with. */
+/** Every saved version's hashes: what Quirky may have approved its entry with. */
 export function readEveryMemoizedCodexHookHashes(): CodexHookHashes[] {
   return Object.values(readMemo().versions).flatMap((record) =>
     'hashes' in record ? [record.hashes] : []

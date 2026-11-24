@@ -9,9 +9,9 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalTurnLifecycle
 } from '../../../shared/agent-session-journal-types'
-import { readAgentSessionOrcaStop } from '../../../shared/agent-session-orca-stop'
+import { readAgentSessionQuirkyStop } from '../../../shared/agent-session-quirky-stop'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
-import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat-orca-stop-cut'
+import { latestNativeChatQuirkyStopCut } from '../../../shared/native-chat-quirky-stop-cut'
 import { AgentSessionRecoveryCapsule } from '../../runtime/agent-session-recovery-capsule'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import {
@@ -99,7 +99,7 @@ async function runningTurn(): Promise<void> {
   await host.flushStreamedEvents(SESSION)
 }
 
-/** The Orca that ran the turn dies with no teardown; the next one starts over the same files and
+/** The Quirky that ran the turn dies with no teardown; the next one starts over the same files and
  *  finds the turn's owner gone. */
 async function restartAfterDeath(): Promise<void> {
   const { root } = hostTestState()
@@ -127,7 +127,7 @@ async function reread() {
   const turnItemId = items.find((item) => item.body.kind === 'turn')?.itemId
   const stopRows = items.filter(
     (item) =>
-      item.body.kind === 'status' && readAgentSessionOrcaStop(item.body.orcaStop) !== undefined
+      item.body.kind === 'status' && readAgentSessionQuirkyStop(item.body.quirkyStop) !== undefined
   )
   const readerErrors = withNativeChatCutTurnNotices(items, { agentName: 'Codex' }).flatMap(
     (item) => (item.body.kind === 'status' && item.body.tone === 'error' ? [item.body.text] : [])
@@ -149,13 +149,13 @@ describe('the row a quit writes for the reply it cut', () => {
       text: LEGACY_TEXT,
       tone: 'error',
       failure: { kind: 'providerExited' },
-      presentation: 'orca-stop',
-      orcaStop: { cause: trigger }
+      presentation: 'quirky-stop',
+      quirkyStop: { cause: trigger }
     })
     expect(row?.turnScope).toEqual({ kind: 'turn', turnItemId })
     // A client that reads no cause still prints exactly one row for the cut, in today's words.
     expect(readerErrors).toEqual([LEGACY_TEXT])
-    expect(latestNativeChatOrcaStopCut(items, [])).toEqual({ turnItemId, cause: trigger })
+    expect(latestNativeChatQuirkyStopCut(items, [])).toEqual({ turnItemId, cause: trigger })
   })
 
   it('writes nothing for a turn the provider finished during the stop', async () => {
@@ -188,12 +188,12 @@ describe('the row a quit writes for the reply it cut', () => {
     expect(stopRows).toEqual([])
     // The cut keeps today's derived notice, and offers no Continue.
     expect(readerErrors).toEqual([LEGACY_TEXT])
-    expect(latestNativeChatOrcaStopCut(items, [])).toBeNull()
+    expect(latestNativeChatQuirkyStopCut(items, [])).toBeNull()
   })
 })
 
-describe('the row a restart writes for a reply its Orca died in', () => {
-  it('says Orca stopped unexpectedly when the Orca before began no quit', async () => {
+describe('the row a restart writes for a reply its Quirky died in', () => {
+  it('says Quirky stopped unexpectedly when the Quirky before began no quit', async () => {
     await runningTurn()
 
     await restartAfterDeath()
@@ -202,10 +202,10 @@ describe('the row a restart writes for a reply its Orca died in', () => {
     expect(stopRows).toHaveLength(1)
     expect(stopRows[0]?.body).toMatchObject({
       text: LEGACY_TEXT,
-      orcaStop: { cause: 'crash' }
+      quirkyStop: { cause: 'crash' }
     })
     expect(readerErrors).toEqual([LEGACY_TEXT])
-    expect(latestNativeChatOrcaStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
+    expect(latestNativeChatQuirkyStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
   })
 
   it('names the update an unfinished quit began, never a crash', async () => {
@@ -216,10 +216,10 @@ describe('the row a restart writes for a reply its Orca died in', () => {
     await restartAfterDeath()
 
     const { stopRows } = await reread()
-    expect(stopRows.map((row) => row.body)).toMatchObject([{ orcaStop: { cause: 'update' } }])
+    expect(stopRows.map((row) => row.body)).toMatchObject([{ quirkyStop: { cause: 'update' } }])
   })
 
-  it('names no cause when the Orca before left no record of itself', async () => {
+  it('names no cause when the Quirky before left no record of itself', async () => {
     await runningTurn()
     await rm(join(hostTestState().root, 'agent-session-runtimes'), { recursive: true, force: true })
 
@@ -232,7 +232,7 @@ describe('the row a restart writes for a reply its Orca died in', () => {
   })
 })
 
-describe('an agent this Orca runs', () => {
+describe('an agent this Quirky runs', () => {
   it('is recorded as held by this runtime', async () => {
     await runningTurn()
     expect(hostTestState().store.getRecord(SESSION)?.lease.ownerProcess?.runtime).toBe(
@@ -240,7 +240,7 @@ describe('an agent this Orca runs', () => {
     )
   })
 
-  it('names no Orca cause when the agent dies while Orca runs', async () => {
+  it('names no Quirky cause when the agent dies while Quirky runs', async () => {
     await runningTurn()
     const child = host.collaboratorsForTests().sessions.get(SESSION)!.child!
 

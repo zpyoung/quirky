@@ -21,7 +21,7 @@ type OutputChunk = Rollup.OutputChunk
 export const CLI_MAIN_ENTRY_NAMES = [
   'agent-hooks/managed-agent-hook-controls',
   'gitlab/project-ref-parser',
-  'orca-profiles/profile-index-store',
+  'quirky-profiles/profile-index-store',
   'claude-accounts/keychain',
   'macos-tree-clone',
   ...[
@@ -46,7 +46,7 @@ const PLAIN_NODE_ENTRY_NAMES = [
   'session-scanner-service-entry',
   'computer-sidecar',
   'wsl-transcript-fs-process-entry',
-  'orcad/orcad-local-serve-selection-entry',
+  'quirkyd/quirkyd-local-serve-selection-entry',
   ...CLI_MAIN_ENTRY_NAMES
 ] as const
 
@@ -154,7 +154,7 @@ function assertNoElectronRequire(
 // resolves in the install dir but throws MODULE_NOT_FOUND in the copy, and the desktop silently
 // falls back to an unrelocated daemon that the next update kills.
 const DAEMON_HOST_MIRRORED_PACKAGES = [
-  '@orca/process-host',
+  '@quirky/process-host',
   'node-pty',
   '@vscode/windows-process-tree'
 ]
@@ -301,7 +301,7 @@ export function createPlainNodeEntryGuardPlugin(
   let daemonOutputDir: string | undefined
 
   return {
-    name: 'orca-plain-node-entry-guard',
+    name: 'quirky-plain-node-entry-guard',
     buildStart(options: NormalizedInputOptions) {
       assertEntryNamesAreRollupInputs(options.input)
     },

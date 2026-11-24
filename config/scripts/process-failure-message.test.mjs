@@ -6,12 +6,12 @@ it('names a timeout and both streams when stderr is empty', () => {
     describeProcessFailure({
       code: null,
       signal: 'SIGTERM',
-      stdout: '{"type":"orca_profile_state_ready"}\r\n',
+      stdout: '{"type":"quirky_profile_state_ready"}\r\n',
       stderr: '',
       timedOut: true,
       outputTruncated: false
     })
-  ).toBe('code=none signal=SIGTERM timed out\nstdout:\n{"type":"orca_profile_state_ready"}')
+  ).toBe('code=none signal=SIGTERM timed out\nstdout:\n{"type":"quirky_profile_state_ready"}')
 })
 
 it('keeps the tail of long output', () => {

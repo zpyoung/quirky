@@ -9,7 +9,7 @@ import type * as AgreementModule from '../terminal-topology/terminal-pane-placem
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
 
 // rollback build (switch-off) — delete with the switch-off code post-flip
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: false }))
 
 const agreementCheck = vi.hoisted(() => ({ throws: false }))
 vi.mock('../terminal-topology/terminal-pane-placement-agreement', async (importOriginal) => {

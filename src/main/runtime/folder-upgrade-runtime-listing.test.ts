@@ -25,7 +25,7 @@ vi.mock('./repo-worktree-admin-fingerprint', () => ({
   readRepoWorktreeAdminFingerprint: vi.fn(async () => null)
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 const REPO_ID = 'repo-upgraded'
@@ -33,7 +33,7 @@ const FOLDER_PATH = 'D:\\project\\a'
 const GIT_PATH = 'D:/project/a'
 const FOLDER_WORKTREE_ID = `${REPO_ID}::${FOLDER_PATH}`
 
-function makeRuntime(): OrcaRuntimeService {
+function makeRuntime(): QuirkyRuntimeService {
   const metaById: Record<string, Record<string, unknown>> = {
     [FOLDER_WORKTREE_ID]: { displayName: 'Draft', hostId: 'local', instanceId: 'kept' }
   }
@@ -72,7 +72,7 @@ function makeRuntime(): OrcaRuntimeService {
     getProjects: () => []
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub carries the repo, meta, lineage and settings reads a worktree listing makes; the rest of Store is unreached.
-  return new OrcaRuntimeService(store as never)
+  return new QuirkyRuntimeService(store as never)
 }
 
 describe('folder-upgraded checkout in runtime listings', () => {

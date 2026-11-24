@@ -8,7 +8,7 @@ import {
 
 // Why: Chromium resizes the page's view for these without checking the view still exists
 // (WebContentsImpl::SetDeviceEmulationSize). A crashed renderer takes its view with it until the
-// reload builds a new one, so one of these sent in that gap segfaults Orca's main process.
+// reload builds a new one, so one of these sent in that gap segfaults Quirky's main process.
 const VIEW_RESIZING_CDP_METHODS: ReadonlySet<string> = new Set([
   'Emulation.setDeviceMetricsOverride',
   'Emulation.setVisibleSize'

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RpcContext } from '../../../core'
 import type { OrchestrationDb, RunRow } from '../../../../orchestration/db'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { DispatchContextRow } from '../../../../orchestration/types'
 import {
   createRootDispatch,
@@ -190,7 +190,7 @@ describe('mail for a lead whose pane coordinates its own Run', () => {
   const coordPane = 'tab_coord:11111111-1111-4111-8111-111111111111'
   const leadPane = 'tab_lead:22222222-2222-4222-9222-222222222222'
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ctx: RpcContext
   let rootRun: RunRow
   let dispatch: DispatchContextRow

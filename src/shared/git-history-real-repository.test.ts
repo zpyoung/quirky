@@ -2,13 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveExecutableCommand } from './node-cli-command-resolution'
 import { loadGitHistoryFromExecutor } from './git-history'
 import { buildDefaultGitHistoryColorMap, buildGitHistoryViewModels } from './git-history-graph'
 
 const repositories: string[] = []
-const gitBinary = resolveExecutableCommand(process.env.ORCA_TEST_GIT_BINARY ?? 'git')
+const gitBinary = resolveExecutableCommand(process.env.QUIRKY_TEST_GIT_BINARY ?? 'git')
 
 afterEach(async () => {
   await Promise.all(
@@ -20,7 +20,7 @@ async function createRepository(inheritedEnv: NodeJS.ProcessEnv = process.env) {
   if (!gitBinary) {
     throw new Error('Git is required for the real history regression')
   }
-  const repo = await mkdtemp(join(tmpdir(), 'orca-history-roots-'))
+  const repo = await mkdtemp(join(tmpdir(), 'quirky-history-roots-'))
   repositories.push(repo)
   const emptyConfig = join(repo, 'empty-git-config')
   const emptyHooks = join(repo, 'empty-hooks')

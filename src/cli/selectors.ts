@@ -50,7 +50,7 @@ export async function resolveCallerDistroPathSelector(
   client: RuntimeClient
 ): Promise<string> {
   // Why not WSL_DISTRO_NAME: it is also set for a Linux-native CLI whose runtime stores
-  // POSIX paths, so it would name a distro for a caller that has none. ORCA_CLI_CWD, which
+  // POSIX paths, so it would name a distro for a caller that has none. QUIRKY_CLI_CWD, which
   // the WSL launcher always sets and which arrives here as the invocation cwd, proves it.
   const callerDistro = parseWslUncPath(cwd)?.distro
   const linuxPath = selector.startsWith('path:') ? selector.slice(5) : ''
@@ -130,7 +130,7 @@ export async function resolveCurrentWorktreeSelection(
   if (!selection) {
     throw new RuntimeClientError(
       'selector_not_found',
-      `No Orca-managed worktree contains the current directory: ${resolvePath(cwd)}`
+      `No Quirky-managed worktree contains the current directory: ${resolvePath(cwd)}`
     )
   }
   return selection
@@ -199,7 +199,7 @@ export async function getBrowserWorktreeSelector(
 
 // Why: mirrors browser's implicit active-tab targeting. When --terminal is
 // omitted, resolve the active terminal in the current worktree so commands
-// like `orca terminal send --text "hello" --enter` Just Work.
+// like `quirky terminal send --text "hello" --enter` Just Work.
 export async function getTerminalHandle(
   flags: Map<string, string | boolean>,
   cwd: string,
@@ -274,7 +274,7 @@ export async function getComputerCommandTarget(
 export type EmulatorCliTarget = {
   worktree?: string
   device?: string
-  emulator?: string // Orca id from list
+  emulator?: string // Quirky id from list
 }
 
 export async function getEmulatorWorktreeSelector(
@@ -296,14 +296,14 @@ export async function getEmulatorWorktreeSelector(
   if (client.isRemote) {
     return undefined
   }
-  const terminalWorktreeId = process.env.ORCA_WORKTREE_ID
+  const terminalWorktreeId = process.env.QUIRKY_WORKTREE_ID
   if (terminalWorktreeId?.trim()) {
     const scoped = await resolveCallerPaneWorktreeSelector(terminalWorktreeId, client)
     if (scoped) {
       return scoped
     }
   }
-  const folderWorkspaceId = process.env.ORCA_WORKSPACE_ID?.trim()
+  const folderWorkspaceId = process.env.QUIRKY_WORKSPACE_ID?.trim()
   if (folderWorkspaceId?.startsWith('folder:')) {
     return folderWorkspaceId
   }

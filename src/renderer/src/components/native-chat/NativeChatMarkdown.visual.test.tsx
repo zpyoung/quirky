@@ -27,7 +27,7 @@ const owner: NativeChatVisualOwner = {
   sessionId: 'session-alpha',
   worktreeId: 'wt-1'
 }
-const LINE = '::orca-visual{file="usage.html" title="Usage"}'
+const LINE = '::quirky-visual{file="usage.html" title="Usage"}'
 
 function withOwner(children: ReactNode, value: NativeChatVisualOwner | null = owner): ReactNode {
   return (
@@ -72,7 +72,7 @@ describe('NativeChatMarkdown visuals', () => {
         withOwner(<NativeChatMarkdown content={LINE} visualMessageId="m1" />)
       )
       await waitFor(() => expect(container.querySelector('iframe')).not.toBeNull())
-      expect(container).not.toHaveTextContent('::orca-visual')
+      expect(container).not.toHaveTextContent('::quirky-visual')
     } finally {
       useAppStore.setState({ settings })
     }
@@ -82,23 +82,26 @@ describe('NativeChatMarkdown visuals', () => {
     const { container } = render(
       withOwner(
         <NativeChatMarkdown
-          content={'Here it is:\n::orca-visual{file="usa'}
+          content={'Here it is:\n::quirky-visual{file="usa'}
           visualMessageId="m1"
           streaming
         />
       )
     )
     expect(container).toHaveTextContent('Here it is:')
-    expect(container).not.toHaveTextContent('::orca-visual')
+    expect(container).not.toHaveTextContent('::quirky-visual')
   })
 
   it('shows unfinished syntax as text once the reply is no longer streaming', () => {
     const { container } = render(
       withOwner(
-        <NativeChatMarkdown content={'Here it is:\n::orca-visual{file="usa'} visualMessageId="m1" />
+        <NativeChatMarkdown
+          content={'Here it is:\n::quirky-visual{file="usa'}
+          visualMessageId="m1"
+        />
       )
     )
-    expect(container).toHaveTextContent('::orca-visual{file="usa')
+    expect(container).toHaveTextContent('::quirky-visual{file="usa')
   })
 
   it('keeps a mounted visual frame while the rest of the reply streams in', async () => {
@@ -134,12 +137,12 @@ describe('NativeChatMarkdown visuals', () => {
 
   it('leaves the line as text where visuals do not apply', () => {
     const noMessage = render(withOwner(<NativeChatMarkdown content={LINE} />))
-    expect(noMessage.container).toHaveTextContent('::orca-visual')
+    expect(noMessage.container).toHaveTextContent('::quirky-visual')
     cleanup()
     const noOwner = render(
       withOwner(<NativeChatMarkdown content={LINE} visualMessageId="m1" />, null)
     )
-    expect(noOwner.container).toHaveTextContent('::orca-visual')
+    expect(noOwner.container).toHaveTextContent('::quirky-visual')
     expect(callRuntimeRpc).not.toHaveBeenCalled()
   })
 
@@ -152,7 +155,7 @@ describe('NativeChatMarkdown visuals', () => {
             role: 'assistant',
             timestamp: 0,
             source: 'transcript',
-            blocks: [{ type: 'text', text: 'Here it is:\n::orca-visual{file="usa' }]
+            blocks: [{ type: 'text', text: 'Here it is:\n::quirky-visual{file="usa' }]
           }}
           expandSignal={false}
           activeTurnIsWorking={activeTurnIsWorking}
@@ -162,11 +165,11 @@ describe('NativeChatMarkdown visuals', () => {
       )
     const { container, rerender } = render(row(true))
     expect(container).toHaveTextContent('Here it is:')
-    expect(container).not.toHaveTextContent('::orca-visual')
+    expect(container).not.toHaveTextContent('::quirky-visual')
     rerender(row(false))
-    expect(container).toHaveTextContent('::orca-visual{file="usa')
+    expect(container).toHaveTextContent('::quirky-visual{file="usa')
     // An earlier row of a still-working turn has stopped growing, so it shows what it says.
     rerender(row(true, false))
-    expect(container).toHaveTextContent('::orca-visual{file="usa')
+    expect(container).toHaveTextContent('::quirky-visual{file="usa')
   })
 })

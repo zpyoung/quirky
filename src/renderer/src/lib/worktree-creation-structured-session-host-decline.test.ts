@@ -79,7 +79,7 @@ function seedPairedServer(): ReturnType<typeof vi.fn> {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch only checks the creation is still pending.
     pendingWorktreeCreations: { 'creation-1': {} as never },
     settings: {
-      ...getDefaultSettings(path.join('workspace', '.orca')),
+      ...getDefaultSettings(path.join('workspace', '.quirky')),
       activeRuntimeEnvironmentId: 'server-1'
     }
   })
@@ -153,7 +153,7 @@ function seedThisMachine(): void {
     ptyIdsByTabId: {},
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch only checks the creation is still pending.
     pendingWorktreeCreations: { 'creation-1': {} as never },
-    settings: getDefaultSettings(path.join('workspace', '.orca')),
+    settings: getDefaultSettings(path.join('workspace', '.quirky')),
     // The user moved to another workspace while the create ran.
     activeWorktreeId: LOCAL_OTHER.id
   })

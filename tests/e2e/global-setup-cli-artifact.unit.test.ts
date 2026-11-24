@@ -24,10 +24,10 @@ beforeEach(() => {
   fixture.exists.mockReturnValue(true)
   for (const name of [
     'SKIP_BUILD',
-    'ORCA_E2E_WEB_CLIENT',
-    'ORCA_E2E_SSH_DOCKER',
-    'ORCA_E2E_SKILL_STAGING',
-    'ORCA_E2E_TEST_REPO_PATH_FILE'
+    'QUIRKY_E2E_WEB_CLIENT',
+    'QUIRKY_E2E_SSH_DOCKER',
+    'QUIRKY_E2E_SKILL_STAGING',
+    'QUIRKY_E2E_TEST_REPO_PATH_FILE'
   ]) {
     vi.stubEnv(name, '')
   }

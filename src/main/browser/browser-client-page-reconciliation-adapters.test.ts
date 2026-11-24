@@ -6,7 +6,7 @@ import type {
   BrowserRoutePageGuestIdentity
 } from './browser-route-page-authority'
 
-const partition = `persist:orca-browser-v1-${'a'.repeat(64)}`
+const partition = `persist:quirky-browser-v1-${'a'.repeat(64)}`
 
 function command(
   type: BrowserClientHostCommandEvent['command']['type'],
@@ -116,7 +116,7 @@ function createHarness() {
     )
   }
   const dependencies = {
-    orcaProfileId: 'orca-profile-a',
+    quirkyProfileId: 'quirky-profile-a',
     authorityConnectionIdentity: 'authority-record-a',
     pairingAuthorityConnectionIdentity: 'pairing-authority-record-a',
     legacyAuthorityConnectionIdentity: 'legacy-authority-record-a',

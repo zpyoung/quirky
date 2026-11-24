@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const runProcessMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 import { runMacPrivilegedCommand } from './cli-privileged-processes'
 

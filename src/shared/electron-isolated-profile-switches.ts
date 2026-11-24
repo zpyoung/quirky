@@ -11,7 +11,7 @@
  * the CLI and needs the same, or the profile is only isolated for one of its two Electron processes.
  */
 export function usesIsolatedProfile(env: NodeJS.ProcessEnv = process.env): boolean {
-  return Boolean(env.ORCA_E2E_USER_DATA_DIR || env.ORCA_E2E_HOME_DIR)
+  return Boolean(env.QUIRKY_E2E_USER_DATA_DIR || env.QUIRKY_E2E_HOME_DIR)
 }
 
 const ISOLATED_PROFILE_SWITCHES = ['--password-store=basic', '--use-mock-keychain']
@@ -22,11 +22,11 @@ export function electronIsolatedProfileSwitches(env: NodeJS.ProcessEnv = process
 
 /**
  * Why stricter than the sidecar: the sidecar always runs on a fresh profile, but the foreground
- * serve process opens the selected profile's sealed secrets, and only ORCA_E2E_USER_DATA_DIR moves
+ * serve process opens the selected profile's sealed secrets, and only QUIRKY_E2E_USER_DATA_DIR moves
  * it off the user's real profile. A HOME override alone would leave those secrets unreadable.
  */
 export function foregroundServeIsolatedProfileSwitches(
   env: NodeJS.ProcessEnv = process.env
 ): string[] {
-  return env.ORCA_E2E_USER_DATA_DIR ? [...ISOLATED_PROFILE_SWITCHES] : []
+  return env.QUIRKY_E2E_USER_DATA_DIR ? [...ISOLATED_PROFILE_SWITCHES] : []
 }

@@ -1,5 +1,5 @@
 /**
- * Which of Orca's pinned Node runtimes a host can run, by glibc alone: the host target's own, a
+ * Which of Quirky's pinned Node runtimes a host can run, by glibc alone: the host target's own, a
  * compat runtime below the default's glibc floor, or none.
  */
 import {
@@ -16,7 +16,7 @@ import type { GlibcVersion } from '../node-runtime/linux-libc-probe'
 export const PINNED_NODE_GLIBC_FLOOR: GlibcVersion = { major: 2, minor: 28 }
 
 type CompatNodeRuntime = {
-  /** The pinned compat runtime and orcad slot it runs (NODE_RUNTIME_COMPAT_ASSETS). */
+  /** The pinned compat runtime and quirkyd slot it runs (NODE_RUNTIME_COMPAT_ASSETS). */
   runtimeTarget: CompatServerTarget
   /** The host target this runtime serves, e.g. linux-x64-glibc for a glibc 2.17 build. */
   hostTarget: ServerTarget

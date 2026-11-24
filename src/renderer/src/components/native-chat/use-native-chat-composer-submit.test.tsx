@@ -220,7 +220,7 @@ describe('composer goal mode', () => {
   it('does not send while an image waits to be attached again', () => {
     const { hook, calls } = harness({
       draft: 'see the screenshot',
-      imageAttachments: [{ id: 'm1', path: '', unavailableName: 'orca-paste-1-ab.png' }]
+      imageAttachments: [{ id: 'm1', path: '', unavailableName: 'quirky-paste-1-ab.png' }]
     })
     act(() => hook.result.current.send())
     expect(calls.sendStructured).not.toHaveBeenCalled()

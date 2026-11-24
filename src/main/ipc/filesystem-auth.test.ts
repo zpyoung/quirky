@@ -136,7 +136,7 @@ describe('filesystem auth worktree roots', () => {
   it('keeps a recovered root when a healthy rebuild still cannot list it', async () => {
     // Why: the rebuild recomputes from the very listing that omitted the row, so replacing the cache
     // would re-deny the worktree the create just recovered (#16520).
-    const scratch = await mkdtemp(join(await realpath(tmpdir()), 'orca-recovered-'))
+    const scratch = await mkdtemp(join(await realpath(tmpdir()), 'quirky-recovered-'))
     const recovered = join(scratch, 'feature')
     await mkdir(recovered)
     const store = makeStore()
@@ -150,7 +150,7 @@ describe('filesystem auth worktree roots', () => {
   })
 
   it('survives a rebuild that was already in flight when the create recovered', async () => {
-    const scratch = await mkdtemp(join(await realpath(tmpdir()), 'orca-recovered-race-'))
+    const scratch = await mkdtemp(join(await realpath(tmpdir()), 'quirky-recovered-race-'))
     const recovered = join(scratch, 'feature')
     await mkdir(recovered)
     const store = makeStore()
@@ -217,7 +217,7 @@ describe('filesystem auth worktree roots', () => {
 
 describe('filesystem-auth path containment', () => {
   it('authorizes missing nested descendants under an allowed repo', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-missing-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-missing-'))
     try {
       const repoPath = join(tempRoot, 'repo')
       await mkdir(repoPath)
@@ -233,7 +233,7 @@ describe('filesystem-auth path containment', () => {
   })
 
   it('authorizes local folder workspace roots outside child repo roots', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-folder-workspace-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-folder-workspace-'))
     try {
       const folderPath = join(tempRoot, 'platform')
       const repoPath = join(folderPath, 'web')
@@ -257,7 +257,7 @@ describe('filesystem-auth path containment', () => {
   })
 
   it('authorizes local folder-backed project group roots outside child repo roots', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-project-group-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-project-group-'))
     try {
       const folderPath = join(tempRoot, 'platform')
       const repoPath = join(folderPath, 'web')
@@ -276,7 +276,7 @@ describe('filesystem-auth path containment', () => {
   })
 
   it('does not authorize SSH-only folder workspace roots as local paths', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-remote-folder-workspace-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-remote-folder-workspace-'))
     try {
       const folderPath = join(tempRoot, 'remote-platform')
       const repoPath = join(folderPath, 'web')
@@ -298,7 +298,7 @@ describe('filesystem-auth path containment', () => {
   })
 
   it('does not authorize repo-less SSH-provenance folder roots as local paths', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-remote-folder-provenance-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-remote-folder-provenance-'))
     try {
       const folderPath = join(tempRoot, 'remote-platform')
       await mkdir(folderPath, { recursive: true })
@@ -320,7 +320,7 @@ describe('filesystem-auth path containment', () => {
   })
 
   it('does not authorize SSH-only folder-backed project group roots as local paths', async () => {
-    const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-remote-project-group-'))
+    const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-remote-project-group-'))
     try {
       const folderPath = join(tempRoot, 'remote-platform')
       const repoPath = join(folderPath, 'web')
@@ -342,7 +342,7 @@ describe('filesystem-auth path containment', () => {
   it.skipIf(process.platform === 'win32')(
     'rejects paths through a symlink out of the repo, and any dangling symlink',
     async () => {
-      const tempRoot = await mkdtemp(join(tmpdir(), 'orca-auth-symlink-'))
+      const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-auth-symlink-'))
       try {
         const repoPath = join(tempRoot, 'repo')
         const outsidePath = join(tempRoot, 'outside')

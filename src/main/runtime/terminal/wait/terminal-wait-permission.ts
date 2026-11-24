@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithAgentPromptRequestCorrelation } from '../../orca-runtime-agent-prompt-request-correlation'
+import { QuirkyRuntimeWithAgentPromptRequestCorrelation } from '../../quirky-runtime-agent-prompt-request-correlation'
 import type { RuntimeTerminalAgentStatusSnapshot } from '../../runtime-terminal-agent-status-query'
 import type { AgentStatus } from '../../../../shared/agent-detection'
 import type { RuntimeTerminalWaitBlockedReason } from '../../../../shared/runtime-terminal-contracts'
@@ -25,14 +25,14 @@ import type { AgentPromptActivity } from '../../agent-prompt-submission-verifica
 import { hasExplicitIdleTitle } from '../../tui-idle-evidence'
 import { readTuiIdleHookTurn, type TuiIdleHookTurn } from '../../tui-idle-hook-lane'
 
-import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
+import type { QuirkyRuntimeWithStopExactTerminalsForWorktree } from '../stop/worktree-terminal-stop-targets'
 
 export type TerminalWaitPermissionInputs = ReturnType<
-  OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['getTerminalWaitPermissionInputs']
+  QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission['getTerminalWaitPermissionInputs']
 >
 
 export type TerminalWaitStatusEvidence = Parameters<
-  OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission['resolveAuthoritativeTerminalWaitPermission']
+  QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission['resolveAuthoritativeTerminalWaitPermission']
 >[1]
 
 export type TerminalInteractiveWaitEvidence = {
@@ -42,12 +42,14 @@ export type TerminalInteractiveWaitEvidence = {
   unconfirmed: boolean
 }
 
-export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission extends OrcaRuntimeWithAgentPromptRequestCorrelation {
+export abstract class QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission extends QuirkyRuntimeWithAgentPromptRequestCorrelation {
   protected abstract getExistingTerminalHandlesForPtyId(
     ...args: Parameters<
-      OrcaRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']
+      QuirkyRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']
     >
-  ): ReturnType<OrcaRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']>
+  ): ReturnType<
+    QuirkyRuntimeWithStopExactTerminalsForWorktree['getExistingTerminalHandlesForPtyId']
+  >
 
   readOpenCodeStartupPromptOwner(ptyId: string, incarnationId: string, launchToken: string) {
     const pty = this.ptysById.get(ptyId)

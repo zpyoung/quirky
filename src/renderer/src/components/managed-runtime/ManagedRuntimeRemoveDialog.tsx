@@ -13,7 +13,7 @@ import {
   DialogTitle
 } from '../ui/dialog'
 
-/** Confirms removing the runtime Orca downloaded: it stops running chats. */
+/** Confirms removing the runtime Quirky downloaded: it stops running chats. */
 export function ManagedRuntimeRemoveDialog(props: {
   agentLabel: string
   host: RuntimeClientTarget

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithGetPtyRecordForPaneKey } from '../../orchestration/terminal-pane-mail-routing'
+import { QuirkyRuntimeWithGetPtyRecordForPaneKey } from '../../orchestration/terminal-pane-mail-routing'
 import type {
   RuntimeLeafRecord,
   RuntimePtyWorktreeRecord
@@ -12,20 +12,20 @@ import {
   ptyHoldsRecordedSurface,
   type PtySurfaceTopology
 } from '../../pty-recorded-surface-topology'
-import type { PtyIncarnationHandleRecord } from '../../orca-runtime-core'
+import type { PtyIncarnationHandleRecord } from '../../quirky-runtime-core'
 import type { TerminalHandleRecord } from '../../runtime-terminal-contracts'
 import { readTerminalTail } from '../../terminal-tail-read'
 import { structuredWorkerTerminalRefusal } from '../../structured-worker-terminal-refusal'
 import { randomUUID } from 'node:crypto'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 
 export type LiveTerminalPty = ReturnType<
-  OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
+  QuirkyRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
 >
 
-export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
+export abstract class QuirkyRuntimeWithBuildPtyTerminalSummary extends QuirkyRuntimeWithGetPtyRecordForPaneKey {
   protected abstract bindPtyIncarnationHandle(
     retained: PtyIncarnationHandleRecord,
     leaf: RuntimeLeafRecord
@@ -171,7 +171,7 @@ export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntime
    */
   private windowlessOwnHandle(handle: string, record: TerminalHandleRecord): boolean {
     if (
-      !ORCA_LAYOUT_OWNER_IS_MAIN ||
+      !QUIRKY_LAYOUT_OWNER_IS_MAIN ||
       this.authoritativeWindowId !== HEADLESS_RUNTIME_WINDOW_ID ||
       !record.ptyId ||
       this.handleByPtyId.get(record.ptyId) !== handle

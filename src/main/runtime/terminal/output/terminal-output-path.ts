@@ -1,12 +1,12 @@
-import type { ApplyLayoutResult, DriverState, PtyLayoutTarget } from '../../orca-runtime-core'
-import { OrcaRuntimeWithGetOrchestrationDispatchAuthority } from './terminal-orchestration-authority'
+import type { ApplyLayoutResult, DriverState, PtyLayoutTarget } from '../../quirky-runtime-core'
+import { QuirkyRuntimeWithGetOrchestrationDispatchAuthority } from './terminal-orchestration-authority'
 import {
   recentTerminalOutputIncludesPath,
   recentTerminalPathCandidatesIncludePath
 } from '../../terminal-output-path-candidates'
 import { clampTerminalViewport } from '../../../../shared/terminal-viewport'
 
-export abstract class OrcaRuntimeWithHasRecentTerminalOutputPath extends OrcaRuntimeWithGetOrchestrationDispatchAuthority {
+export abstract class QuirkyRuntimeWithHasRecentTerminalOutputPath extends QuirkyRuntimeWithGetOrchestrationDispatchAuthority {
   protected abstract enqueueLayout(
     ptyId: string,
     target: PtyLayoutTarget

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 
 // Why bounded: one entry per (PTY, client input session); a session evicted here has been idle
 // behind thousands of newer ones, so it holds no input still awaiting acknowledgement.
@@ -105,10 +105,10 @@ function rememberUnknown(session: Session, seq: number): void {
   }
 }
 
-const ledgers = new WeakMap<OrcaRuntimeService, TerminalInputSequenceLedger>()
+const ledgers = new WeakMap<QuirkyRuntimeService, TerminalInputSequenceLedger>()
 
 export function getTerminalInputSequenceLedger(
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): TerminalInputSequenceLedger {
   let ledger = ledgers.get(runtime)
   if (!ledger) {

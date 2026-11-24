@@ -52,7 +52,7 @@ describe('Help menu renderer target', () => {
     ])
   })
 
-  it('keeps routing Help actions to the Orca window that invoked them', () => {
+  it('keeps routing Help actions to the Quirky window that invoked them', () => {
     const main = fakeWindow()
     const popout = fakeWindow()
     Object.assign(state, { mainWindow: main })

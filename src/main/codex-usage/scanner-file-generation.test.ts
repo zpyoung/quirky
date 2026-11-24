@@ -19,7 +19,7 @@ const fixture = vi.hoisted(() => {
 })
 
 vi.mock('../codex/codex-home-paths', () => ({
-  getOrcaManagedCodexHomePath: () => join(fixture.root, 'runtime'),
+  getQuirkyManagedCodexHomePath: () => join(fixture.root, 'runtime'),
   getSystemCodexHomePath: () => join(fixture.root, 'system')
 }))
 
@@ -50,7 +50,7 @@ const preservedMtime = new Date('2026-05-26T12:00:00.000Z')
 let rolloutPath: string
 
 beforeEach(() => {
-  fixture.root = mkdtempSync(join(tmpdir(), 'orca-codex-file-generation-'))
+  fixture.root = mkdtempSync(join(tmpdir(), 'quirky-codex-file-generation-'))
   const sessions = join(fixture.root, 'runtime', 'sessions')
   mkdirSync(sessions, { recursive: true })
   rolloutPath = join(sessions, 'rollout.jsonl')

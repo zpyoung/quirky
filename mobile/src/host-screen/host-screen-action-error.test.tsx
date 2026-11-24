@@ -129,7 +129,7 @@ describe('a removal that failed', () => {
     // A refusal is not a failure: on the page there is no host list to remove from, so the copy
     // names the app and the confirm this control would re-open stays shut.
     const writes = await runRemoval(new PageHostRemovalUnavailableError())
-    expect(writes.action).toEqual(['Remove this host from the host list in the Orca app.'])
+    expect(writes.action).toEqual(['Remove this host from the host list in the Quirky app.'])
     expect(writes.confirm).toEqual([])
     expect(writes.identity).toEqual([])
   })

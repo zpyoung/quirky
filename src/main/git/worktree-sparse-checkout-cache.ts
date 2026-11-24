@@ -6,7 +6,7 @@ import { detectSparseCheckout } from './worktree-sparse-state'
 // Keys isolate repositories and distros; one global budget bounds retained results.
 //
 // Invalidation coverage:
-//  - Orca-driven remove/move: explicit calls below (worktree-removal.ts, worktree-move.ts).
+//  - Quirky-driven remove/move: explicit calls below (worktree-removal.ts, worktree-move.ts).
 //  - External `git sparse-checkout` toggle while extensions.worktreeConfig is on: it rewrites
 //    `config.worktree`, which the git-common-dir watcher already classifies as structural and
 //    routes through notifyWorktreesChanged -> the invalidator this module registers (repo-scoped).
@@ -139,7 +139,7 @@ async function revalidateInBackground(
   }
 }
 
-/** Drop one worktree's cached state; call when Orca itself removes or moves a worktree path. */
+/** Drop one worktree's cached state; call when Quirky itself removes or moves a worktree path. */
 export function invalidateSparseCheckoutState(repoPath: string, worktreePath: string): void {
   deleteKeysWithPrefix(worktreeKeyPrefix(repoPath, worktreePath))
 }

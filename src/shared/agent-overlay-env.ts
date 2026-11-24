@@ -1,4 +1,4 @@
-// Why: a nested terminal can inherit prior OpenCode/Pi/OMP overlay env; restore the user's recorded source dir, else strip only Orca-owned values.
+// Why: a nested terminal can inherit prior OpenCode/Pi/OMP overlay env; restore the user's recorded source dir, else strip only Quirky-owned values.
 export function restoreOrStripOverlayEnv(
   baseEnv: Record<string, string>,
   keys: {

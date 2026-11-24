@@ -49,7 +49,8 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
           '  if (!process.env.PRIME_AGENT_INTERNAL_DAEMON_WORKER) return'
         ]
       : []
-  const ownerEnv = kind === 'prime-agent' ? 'ORCA_PRIME_AGENT_STATUS_OWNED' : 'ORCA_PI_STATUS_OWNED'
+  const ownerEnv =
+    kind === 'prime-agent' ? 'QUIRKY_PRIME_AGENT_STATUS_OWNED' : 'QUIRKY_PI_STATUS_OWNED'
 
   // Why: OMP suppresses its approval lifecycle unless an extension listens for it,
   // and it is the only signal that the run is parked on a permission prompt rather
@@ -122,7 +123,7 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '// proves the owner is gone -- every other probe result keeps suppression, so',
     '// a live foreign owner still cannot double-report. Mirrors the tri-state in',
     '// main/agent-hooks/managed-hook-owner-identity.ts, which this runtime cannot',
-    '// import (the extension loads inside pi/omp with no Orca deps).',
+    '// import (the extension loads inside pi/omp with no Quirky deps).',
     'function isStatusOwnerAlive(pid: string): boolean {',
     '  const parsed = Number(pid)',
     '  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 0x7fffffff) return false',

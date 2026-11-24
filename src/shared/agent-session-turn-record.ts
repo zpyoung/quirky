@@ -100,7 +100,7 @@ function positiveTime(value: unknown): value is number {
 }
 
 /** The pre-v3 carrier, for clients that predate the `turn` item. The agent name is the session's
- *  when the caller knows it — a command's turn is keyed `orca:…` whatever agent ran it — else it
+ *  when the caller knows it — a command's turn is keyed `quirky:…` whatever agent ran it — else it
  *  comes from the lifecycle identity (`legacy:<agent>:…`). */
 export function legacyAgentJournalTurnStatusBody(
   turn: AgentJournalTurnLifecycle,

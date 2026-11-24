@@ -1,5 +1,5 @@
 import type { CDPSession, ElectronApplication, Page } from '@stablyai/playwright-test'
-import { expect } from './helpers/orca-app'
+import { expect } from './helpers/quirky-app'
 import {
   execInTerminal,
   waitForActiveTerminalManager,

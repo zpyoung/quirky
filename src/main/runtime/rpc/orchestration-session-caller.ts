@@ -1,5 +1,5 @@
 /**
- * Resolves an orchestration caller that names itself by the Orca agent session id in its injected
+ * Resolves an orchestration caller that names itself by the Quirky agent session id in its injected
  * environment. Both dispatchers call this once, before params parse and the unary/streaming split,
  * so it runs ahead of legacy compatibility, receipt lookup and every method. Before parsing, so a
  * session caller need not name itself in a param that requires a caller.
@@ -8,33 +8,33 @@
  * user, so the checks are about getting the identity right, not about keeping anyone out:
  * - Same host only. A paired client, an SSH environment or a WSL shell is another host, where
  *   "same machine, same user" does not hold, so a session claim from one is refused.
- * - The Orca id, never the provider's: that one rotates on `/clear`.
+ * - The Quirky id, never the provider's: that one rotates on `/clear`.
  * - A live lease: released, mid owner change or unreconciled sessions cannot act.
  * - The session wins over any declared caller: a declared handle must name this same session, and
  *   a structured worker's session id maps to the handle and pane it was minted.
- * - A request with no session id that declares an `orca_session_id:` caller gets the party it names: a
+ * - A request with no session id that declares an `quirky_session_id:` caller gets the party it names: a
  *   worker's handle, or a refusal for a chat, whose address alone identifies nobody.
  */
 import { agentSessionLeaseAdmitsWriter } from '../../../shared/agent-session-lease-adjudication'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { ORCA_AGENT_SESSION_ID_ENV } from '../../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_ID_ENV } from '../../../shared/agent-session-caller-env'
 import {
-  ORCA_SESSION_ADDRESS_PREFIX,
-  isOrcaSessionId,
-  parseOrcaSessionAddress
-} from '../../../shared/orca-session-address'
+  QUIRKY_SESSION_ADDRESS_PREFIX,
+  isQuirkySessionId,
+  parseQuirkySessionAddress
+} from '../../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../shared/orchestration-session-caller-codes'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
 import { OrchestrationError } from '../orchestration/orchestration-error'
-import { canonicalOrcaSessionId } from '../orchestration/canonical-orca-session-id'
+import { canonicalQuirkySessionId } from '../orchestration/canonical-quirky-session-id'
 import type { OrchestrationDb } from '../orchestration/db'
 import {
   resolveDeclaredCallerParty,
-  resolveOrcaSessionParty,
+  resolveQuirkySessionParty,
   resolveOrchestrationParty
 } from '../orchestration/orchestration-party'
-import { lookupOrcaAgentSession } from '../orchestration/structured-session-mail-address'
+import { lookupQuirkyAgentSession } from '../orchestration/structured-session-mail-address'
 import { readAgentSessionRecordStore } from '../orchestration/structured-session-lineage'
 import { structuredWorkerHostScope } from '../structured-worker-identity'
 import type { RpcRequest } from './core'
@@ -79,7 +79,7 @@ export type ResolvedOrchestrationRequest = {
 const NO_EFFECTS = { effectsApplied: false } as const
 
 /**
- * Whether this request names its caller by a session id, or declares an `orca_session_id:` address as its
+ * Whether this request names its caller by a session id, or declares an `quirky_session_id:` address as its
  * caller. Synchronous, so every other request, terminal callers included, takes no extra async hop.
  */
 export function needsOrchestrationCallerResolution(request: RpcRequest): boolean {
@@ -100,12 +100,12 @@ function declaredSessionAddress(request: RpcRequest): string | undefined {
   }
   const values: Record<string, unknown> = { ...params }
   const declared = values[name]
-  return typeof declared === 'string' && parseOrcaSessionAddress(declared) ? declared : undefined
+  return typeof declared === 'string' && parseQuirkySessionAddress(declared) ? declared : undefined
 }
 
 /** Only for a request `needsOrchestrationCallerResolution` accepts. Throws the refusal, if any. */
 export async function resolveOrchestrationSessionCaller(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   request: RpcRequest,
   route: OrchestrationRequestRoute | undefined
 ): Promise<ResolvedOrchestrationRequest> {
@@ -116,18 +116,18 @@ export async function resolveOrchestrationSessionCaller(
   const claimed: unknown = evidence?.agentSessionId
   if (route?.pairedDeviceId !== undefined) {
     throw hostBoundary(
-      'This request reached Orca from a paired client, and an Orca session ID identifies a caller only on the host that runs that session.'
+      'This request reached Quirky from a paired client, and an Quirky session ID identifies a caller only on the host that runs that session.'
     )
   }
   if (evidence?.host) {
     throw hostBoundary(
-      `This command ran in ${evidence.host.kind === 'ssh' ? 'an SSH' : 'a WSL'} environment, and an Orca session ID identifies a caller only on the host that runs that session.`
+      `This command ran in ${evidence.host.kind === 'ssh' ? 'an SSH' : 'a WSL'} environment, and an Quirky session ID identifies a caller only on the host that runs that session.`
     )
   }
-  if (typeof claimed !== 'string' || !isOrcaSessionId(claimed)) {
+  if (typeof claimed !== 'string' || !isQuirkySessionId(claimed)) {
     throw new OrchestrationError(
       CODES.unknown,
-      'The caller named an ID that is not an Orca session ID. No effects were applied.',
+      'The caller named an ID that is not an Quirky session ID. No effects were applied.',
       NO_EFFECTS
     )
   }
@@ -136,7 +136,7 @@ export async function resolveOrchestrationSessionCaller(
   assertSessionCanAct(sessionId, record)
   const db = runtime.getOrchestrationDb()
   const caller: OrchestrationSessionCaller = Object.freeze({
-    ...resolveOrcaSessionParty(sessionId, db),
+    ...resolveQuirkySessionParty(sessionId, db),
     sessionId,
     workspaceId: record.location.workspaceId
   })
@@ -152,7 +152,7 @@ export async function resolveOrchestrationSessionCaller(
 }
 
 async function readSessionRecord(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   sessionId: string
 ): Promise<AgentSessionRecord> {
   let store: ReturnType<typeof readAgentSessionRecordStore>
@@ -165,24 +165,24 @@ async function readSessionRecord(
   if (!store) {
     throw new OrchestrationError(
       CODES.notLive,
-      `Agent session ${sessionId} cannot be verified: this Orca is not running its agent-session host. No effects were applied.`,
+      `Agent session ${sessionId} cannot be verified: this Quirky is not running its agent-session host. No effects were applied.`,
       NO_EFFECTS
     )
   }
-  const found = lookupOrcaAgentSession(store, sessionId)
+  const found = lookupQuirkyAgentSession(store, sessionId)
   if (found.kind === 'found') {
     return found.record
   }
   if (found.kind === 'provider-id') {
     throw new OrchestrationError(
       CODES.providerId,
-      `${sessionId} is the provider's own session id, which changes on /clear. This session's Orca session ID is ${ORCA_SESSION_ADDRESS_PREFIX}${found.orcaSessionId}; set ${ORCA_AGENT_SESSION_ID_ENV}=${found.orcaSessionId} instead. No effects were applied.`,
-      { ...NO_EFFECTS, orcaSessionId: found.orcaSessionId }
+      `${sessionId} is the provider's own session id, which changes on /clear. This session's Quirky session ID is ${QUIRKY_SESSION_ADDRESS_PREFIX}${found.quirkySessionId}; set ${QUIRKY_AGENT_SESSION_ID_ENV}=${found.quirkySessionId} instead. No effects were applied.`,
+      { ...NO_EFFECTS, quirkySessionId: found.quirkySessionId }
     )
   }
   throw new OrchestrationError(
     CODES.unknown,
-    `No Orca agent session ${sessionId} exists on this host. No effects were applied.`,
+    `No Quirky agent session ${sessionId} exists on this host. No effects were applied.`,
     NO_EFFECTS
   )
 }
@@ -190,7 +190,7 @@ async function readSessionRecord(
 function assertSessionCanAct(sessionId: string, record: AgentSessionRecord): void {
   if (!structuredWorkerHostScope(record.location)) {
     throw hostBoundary(
-      `Agent session ${sessionId} runs on another host, and an Orca session ID identifies a caller only on the host that runs that session.`
+      `Agent session ${sessionId} runs on another host, and an Quirky session ID identifies a caller only on the host that runs that session.`
     )
   }
   if (agentSessionLeaseAdmitsWriter(record.lease)) {
@@ -211,7 +211,7 @@ function assertSessionCanAct(sessionId: string, record: AgentSessionRecord): voi
   )
 }
 
-/** A request with no session id that declares an `orca_session_id:` caller: a worker's is its handle. */
+/** A request with no session id that declares an `quirky_session_id:` caller: a worker's is its handle. */
 function bindDeclaredSessionAddress(db: OrchestrationDb, request: RpcRequest): RpcRequest {
   const name = ORCHESTRATION_CALLER_PARAM[request.method]
   const declared = declaredSessionAddress(request)
@@ -232,8 +232,8 @@ function declaredNamesCaller(
   if (typeof declared !== 'string') {
     return false
   }
-  if (isOrcaSessionId(declared)) {
-    return canonicalOrcaSessionId(declared) === caller.orcaSessionId
+  if (isQuirkySessionId(declared)) {
+    return canonicalQuirkySessionId(declared) === caller.quirkySessionId
   }
   try {
     return resolveOrchestrationParty(declared, db).address === caller.address

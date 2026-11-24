@@ -11,7 +11,7 @@ import {
   type AgentSessionReadVisualResult
 } from '../../../../shared/rpc-contract/agent-session-visual-params'
 import { nativeChatScratchFolderFor } from '../../../native-chat/native-chat-scratch-folder'
-import { getProfileUserDataPath } from '../../../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../../../quirky-profiles/profile-storage-paths'
 import { readNativeChatVisualFile } from '../../../native-chat/native-chat-visual-file-read'
 import { defineMethod } from '../core'
 import { requireInstalledStructuredHost } from './structured-agent-session-gate'

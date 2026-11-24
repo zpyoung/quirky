@@ -195,7 +195,7 @@ export function assertHeimdallCreateCapabilities(
   ) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The selected runtime does not support Heimdall owner enrollment. Update or restart Orca, or retry without --owner.'
+      'The selected runtime does not support Heimdall owner enrollment. Update or restart Quirky, or retry without --owner.'
     )
   }
   if (
@@ -205,7 +205,7 @@ export function assertHeimdallCreateCapabilities(
   ) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The selected runtime does not support objective gates. Update or restart Orca, or retry without objective gates.'
+      'The selected runtime does not support objective gates. Update or restart Quirky, or retry without objective gates.'
     )
   }
 
@@ -227,7 +227,7 @@ export function assertHeimdallCreateCapabilities(
   ) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The selected runtime does not support host-derived hosted-review enrollment. Update or restart Orca before creating a hosted-review watcher.'
+      'The selected runtime does not support host-derived hosted-review enrollment. Update or restart Quirky before creating a hosted-review watcher.'
     )
   }
   if (

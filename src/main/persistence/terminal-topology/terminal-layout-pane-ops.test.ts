@@ -59,7 +59,7 @@ function legacyOnly(change: ReturnType<typeof diffStoredSession>[number]): boole
 const FOLDED_LEGACY_ROW_CLOSES = new Map([
   [
     'tab-legacy',
-    ['row/repo-1::/Users/dev/orca|tab-legacy/ptyId', 'layout/tab-legacy/ptyIdsByLeafId']
+    ['row/repo-1::/Users/dev/quirky|tab-legacy/ptyId', 'layout/tab-legacy/ptyIdsByLeafId']
   ]
 ])
 
@@ -135,7 +135,7 @@ describe('layout.apply closePane against the legacy pane close', () => {
 
 describe('Store.applyLayoutCommand pane operations', () => {
   async function storeWithSplitTab(hostIds: string[]) {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-layout-pane-ops-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-layout-pane-ops-'))
     directories.push(directory)
     const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
     const window = new WindowSession(getDefaultWorkspaceSession())

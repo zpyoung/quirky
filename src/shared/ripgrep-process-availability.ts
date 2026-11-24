@@ -1,7 +1,7 @@
 import { constants } from 'node:fs'
 import { access, stat } from 'node:fs/promises'
-import { spawnProcess } from '@orca/process-host'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { abortSignalReason, throwIfSignalAborted } from './abort-signal-reason'
 
 const RIPGREP_CWD_CHECK_TIMEOUT_MS = 1000
@@ -149,7 +149,7 @@ function probeRipgrepVersion(
  *
  * `candidates` are the ripgreps worth asking about, in order -- the command that actually failed
  * first, then the host's PATH one. Probing only PATH would misclassify the normal remote setup,
- * where Orca uploaded a bundled binary precisely because the host has no `rg` of its own: the
+ * where Quirky uploaded a bundled binary precisely because the host has no `rg` of its own: the
  * probe would fail and a moved workspace would be reported as a missing ripgrep. Nulls are
  * skipped, and a host with no working ripgrep at all keeps 'ripgrep-unavailable', because only
  * that verdict engages the git/readdir fallback chain.

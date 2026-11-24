@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { toBundledRipgrepPlatform } from '../../shared/bundled-ripgrep'
 import {
   bundledRipgrepCommand,
@@ -48,7 +48,7 @@ describe('bundled ripgrep path', () => {
   })
 
   it('prefers the packaged resources copy', () => {
-    const resourcesDir = mkdtempSync(join(tmpdir(), 'orca-rg-resources-'))
+    const resourcesDir = mkdtempSync(join(tmpdir(), 'quirky-rg-resources-'))
     try {
       const packaged = join(resourcesDir, 'ripgrep', 'linux-x64', 'rg')
       mkdirSync(join(resourcesDir, 'ripgrep', 'linux-x64'), { recursive: true })
@@ -79,13 +79,13 @@ describe('bundled ripgrep path', () => {
 
   it('picks the distro-arch Linux build and fails closed when its drive is unavailable', () => {
     const { wslShellCommand } = bundledRipgrepWslSpawnOptions(
-      'C:\\Program Files\\Orca\\resources\\ripgrep\\linux-x64\\rg'
+      'C:\\Program Files\\Quirky\\resources\\ripgrep\\linux-x64\\rg'
     )
 
-    expect(wslShellCommand).toContain(`wslpath -u 'C:\\Program Files\\Orca\\resources\\ripgrep'`)
+    expect(wslShellCommand).toContain(`wslpath -u 'C:\\Program Files\\Quirky\\resources\\ripgrep'`)
     expect(wslShellCommand).toContain('aarch64|arm64) a=linux-arm64')
     expect(wslShellCommand).toContain('printf %s "$d/$a/rg"')
-    expect(wslShellCommand).toContain('else printf /dev/null/orca-ripgrep-unavailable')
+    expect(wslShellCommand).toContain('else printf /dev/null/quirky-ripgrep-unavailable')
     expect(wslShellCommand).not.toContain('else printf rg')
     expect(bundledRipgrepWslSpawnOptions('rg')).toEqual({})
   })
@@ -94,7 +94,7 @@ describe('bundled ripgrep path', () => {
     'never executes a PATH ripgrep when WSL cannot translate the install drive',
     async () => {
       const { wslShellCommand } = bundledRipgrepWslSpawnOptions(
-        'C:\\Orca\\resources\\ripgrep\\linux-x64\\rg'
+        'C:\\Quirky\\resources\\ripgrep\\linux-x64\\rg'
       )
       const result = await runProcess({
         program: '/bin/bash',

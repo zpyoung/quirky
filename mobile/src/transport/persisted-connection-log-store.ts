@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createConnectionLogStore } from './connection-log-buffer'
 import type { ConnectionLogEntry } from './types'
 
-const STORAGE_PREFIX = 'orca.mobile.connection-log.v1.'
+const STORAGE_PREFIX = 'quirky.mobile.connection-log.v1.'
 const clientSessionId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 const sessionStartedHosts = new Set<string>()
 

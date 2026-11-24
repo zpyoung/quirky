@@ -34,7 +34,7 @@ export const MermaidDiagram = memo(function MermaidDiagram({ source, base }: Mer
   // mermaid writes `#<id>` into the stylesheet it puts inside the SVG, so this has to be a CSS
   // identifier. React spells its own `_R_0_`; the strip is for a React that changes that.
   const suffix = useId().replace(/[^\w-]/g, '')
-  const id = `orca-mermaid-${suffix}`
+  const id = `quirky-mermaid-${suffix}`
   const failed = failedSource === source
 
   useEffect(() => {

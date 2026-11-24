@@ -30,7 +30,7 @@ const initialProps = {
   hasSourceContext: true,
   accountLabel: 'Account one',
   providerSite: 'site-1',
-  project: 'ORCA',
+  project: 'QUIRKY',
   type: 'Bug'
 }
 function setup() {
@@ -92,7 +92,7 @@ afterEach(() => {
 
 describe('Jira title generation lifecycle', () => {
   it('keeps the form usable without desktop generation in the web client', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     Object.defineProperty(window, 'api', { configurable: true, value: {} })
     const { result } = setup()
     expect(result.current.newJiraIssueSummaryAvailable).toBe(false)

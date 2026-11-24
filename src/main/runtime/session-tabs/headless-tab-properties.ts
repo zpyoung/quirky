@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithCloseHeadlessMobileTerminalTab } from './headless-terminal-tab-close'
+import { QuirkyRuntimeWithCloseHeadlessMobileTerminalTab } from './headless-terminal-tab-close'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
@@ -39,7 +39,7 @@ function paneLayoutEditIsNoOp(
   )
 }
 
-export abstract class RuntimeHeadlessTabProperties extends OrcaRuntimeWithCloseHeadlessMobileTerminalTab {
+export abstract class RuntimeHeadlessTabProperties extends QuirkyRuntimeWithCloseHeadlessMobileTerminalTab {
   protected persistHeadlessSessionTabProps(
     worktreeId: string,
     tabId: string,

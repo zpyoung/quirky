@@ -1,8 +1,8 @@
 /** Words for moving what an older build added to a converted host; every string is catalogued. */
-import type { OrcadDeltaMoveRow } from '../../../../shared/orcad-managed-runtime'
+import type { QuirkydDeltaMoveRow } from '../../../../shared/quirkyd-managed-runtime'
 import { translate } from '@/i18n/i18n'
 
-export function deltaMoveRowLabel(row: OrcadDeltaMoveRow): string {
+export function deltaMoveRowLabel(row: QuirkydDeltaMoveRow): string {
   switch (row.kind) {
     case 'repository':
       return translate(

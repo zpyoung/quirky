@@ -17,9 +17,9 @@ import { _internals } from './hook-service'
 type PluginHooks = {
   event: (input: { event: { type: string; properties?: unknown } }) => Promise<void>
 }
-type PluginModule = { OrcaOpenCodeStatusPlugin?: (ctx: unknown) => Promise<PluginHooks> }
+type PluginModule = { QuirkyOpenCodeStatusPlugin?: (ctx: unknown) => Promise<PluginHooks> }
 
-const ENV_KEYS = ['ORCA_PANE_KEY', 'ORCA_AGENT_HOOK_PORT', 'ORCA_AGENT_HOOK_TOKEN'] as const
+const ENV_KEYS = ['QUIRKY_PANE_KEY', 'QUIRKY_AGENT_HOOK_PORT', 'QUIRKY_AGENT_HOOK_TOKEN'] as const
 
 // OpenCode 1 `run` loads the plugin in-process; the host already shows the run as Working from the
 // process, so a session-start idle row there would only blink the pane.
@@ -31,14 +31,14 @@ describe('OpenCode plugin session start inside a `run` process', () => {
   let savedFetch: typeof globalThis.fetch
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-opencode-run-process-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-run-process-'))
     events = []
     savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
     savedArgv = process.argv
     savedFetch = globalThis.fetch
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
-    process.env.ORCA_AGENT_HOOK_PORT = '45678'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_AGENT_HOOK_PORT = '45678'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
     globalThis.fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       const body: unknown = JSON.parse(String(init?.body))
       const payload =
@@ -70,7 +70,7 @@ describe('OpenCode plugin session start inside a `run` process', () => {
     writeFileSync(pluginPath, _internals.getOpenCodePluginSource())
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the generated plugin module exports this factory; the test calls it once.
     const module = (await import(pathToFileURL(pluginPath).href)) as PluginModule
-    const hooks = await module.OrcaOpenCodeStatusPlugin?.({})
+    const hooks = await module.QuirkyOpenCodeStatusPlugin?.({})
     await hooks?.event({
       event: { type: 'session.created', properties: { info: { id: 'root' } } }
     })

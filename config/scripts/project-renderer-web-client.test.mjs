@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const scriptPath = resolve('config/scripts/project-renderer-web-client.mjs')
@@ -12,7 +12,7 @@ function projectFixture(root) {
     program: process.execPath,
     args: [scriptPath],
     cwd: root,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 30000
   })
 }
@@ -24,7 +24,7 @@ function writeFixtureFile(root, relativePath, contents) {
 }
 
 function createRendererFixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-web-projection-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-web-projection-'))
   temporaryRoots.push(root)
   const manifest = {
     'web-index.html': {
@@ -104,7 +104,7 @@ describe('renderer web client projection', () => {
     expect(existsSync(join(root, 'out/web/assets/desktop-entry.js'))).toBe(false)
     expect(existsSync(join(root, 'out/web/stale.js'))).toBe(false)
     const sharedFiles = JSON.parse(
-      readFileSync(join(root, 'out/renderer/.orca-web-client-files.json'), 'utf8')
+      readFileSync(join(root, 'out/renderer/.quirky-web-client-files.json'), 'utf8')
     )
     expect(sharedFiles).toEqual(
       expect.arrayContaining([

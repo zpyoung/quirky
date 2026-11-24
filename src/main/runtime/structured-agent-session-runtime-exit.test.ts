@@ -36,7 +36,7 @@ describe('structured session runtime provider-exit wiring', () => {
   })
 
   it('does not respawn after a provider exit, and the next message starts a new child', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-provider-exit-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-provider-exit-'))
     operations = 0
     const connections: {
       connection: CodexAppServerConnection
@@ -139,7 +139,7 @@ describe('structured session runtime provider-exit wiring', () => {
   })
 
   it('does not reacquire when the production exit callback comes from a requested close', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-requested-close-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-requested-close-'))
     operations = 0
     const connections: {
       connection: CodexAppServerConnection
@@ -239,7 +239,7 @@ describe('structured session runtime provider-exit wiring', () => {
   })
 
   it('waits for a start a send began before tearing down the runtime', async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-recovery-shutdown-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-recovery-shutdown-'))
     let releaseRecovery!: () => void
     const recoveryReleased = new Promise<void>((resolve) => {
       releaseRecovery = resolve
@@ -346,7 +346,7 @@ describe('structured session runtime provider-exit wiring', () => {
     // The first stop refuses, so host eviction cannot prove the child gone and aborts with the
     // session still indexed. What finally stops it is `closeAll`, which delivers the exit
     // callback AFTER host teardown has already run.
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-backstop-exit-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-backstop-exit-'))
     operations = 0
     const connections: {
       connection: CodexAppServerConnection

@@ -4,7 +4,7 @@ import { RUNTIME_OWNED_SSH_TARGET_ID_PREFIX } from '../../../shared/execution-ho
 import { normalizeSshConfigAlias } from '../../../shared/ssh-config-alias'
 import { isLegacyConfigImportTarget } from '../../../shared/ssh-target-source'
 import { loadUserSshConfig, sshConfigHostsToTargets } from '../config/ssh-config-parser'
-import { SshTargetOrcadClaims } from '../targets/ssh-target-orcad-claims'
+import { SshTargetQuirkydClaims } from '../targets/ssh-target-quirkyd-claims'
 import {
   buildRemovedSshTargetTombstone,
   readoptOrphanedWorkspacesForTarget
@@ -86,13 +86,13 @@ export class SshConnectionStore {
     return next
   }
 
-  /** Exclusive managed-orcad ownership of a target; see ssh-target-orcad-claims. */
-  getOrcadRuntimeClaims(): SshTargetOrcadClaims {
-    return new SshTargetOrcadClaims(this.store)
+  /** Exclusive managed-quirkyd ownership of a target; see ssh-target-quirkyd-claims. */
+  getQuirkydRuntimeClaims(): SshTargetQuirkydClaims {
+    return new SshTargetQuirkydClaims(this.store)
   }
 
   /** The profile reads and scrollback reservations a migration exports from. */
-  getOrcadMigrationSource(): Store {
+  getQuirkydMigrationSource(): Store {
     return this.store
   }
 
@@ -174,7 +174,7 @@ export class SshConnectionStore {
       if (
         existing.source === 'manual' ||
         isRuntimeOwnedSshTarget(existing) ||
-        isManagedOrcadSshTarget(existing) ||
+        isManagedQuirkydSshTarget(existing) ||
         (existing.source === undefined && !isLegacyConfigImportTarget(existing))
       ) {
         manualAliases.add(alias)
@@ -266,14 +266,14 @@ export function getRuntimeOwnedSshTargetId(runtimeId: string): string {
   return `${RUNTIME_OWNED_SSH_TARGET_ID_PREFIX}${runtimeId}`
 }
 
-/** Any target Orca created as an implementation detail; hidden from SSH-host surfaces. */
+/** Any target Quirky created as an implementation detail; hidden from SSH-host surfaces. */
 export function isRuntimeOwnedSshTarget(target: SshTarget): boolean {
   return target.owner !== undefined
 }
 
-/** A host serving (or being set up for) a managed Orca server: visible, but never a direct relay. */
-export function isManagedOrcadSshTarget(target: SshTarget): boolean {
-  return target.orcadFence !== undefined || target.orcadProvisioning !== undefined
+/** A host serving (or being set up for) a managed Quirky server: visible, but never a direct relay. */
+export function isManagedQuirkydSshTarget(target: SshTarget): boolean {
+  return target.quirkydFence !== undefined || target.quirkydProvisioning !== undefined
 }
 
 /**
@@ -281,8 +281,8 @@ export function isManagedOrcadSshTarget(target: SshTarget): boolean {
  * changed its retained projects: then it stays on the relay until it is moved again.
  */
 export function allowsDirectSshRelay(target: SshTarget): boolean {
-  if (target.orcadProvisioning) {
+  if (target.quirkydProvisioning) {
     return false
   }
-  return !target.orcadFence || target.orcadFence.sourceChangedAt !== undefined
+  return !target.quirkydFence || target.quirkydFence.sourceChangedAt !== undefined
 }

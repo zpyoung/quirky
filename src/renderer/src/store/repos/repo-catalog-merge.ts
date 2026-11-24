@@ -115,11 +115,11 @@ export function reconcileReadoptedSshWorktreeState(
   }
 }
 
-export function filterTrustedOrcaHooksToValidRepos(
-  trust: AppState['trustedOrcaHooks'],
+export function filterTrustedQuirkyHooksToValidRepos(
+  trust: AppState['trustedQuirkyHooks'],
   validRepoIds: Set<string>
-): AppState['trustedOrcaHooks'] {
-  const next: AppState['trustedOrcaHooks'] = {}
+): AppState['trustedQuirkyHooks'] {
+  const next: AppState['trustedQuirkyHooks'] = {}
   for (const [repoId, entry] of Object.entries(trust)) {
     if (validRepoIds.has(repoId)) {
       next[repoId] = entry

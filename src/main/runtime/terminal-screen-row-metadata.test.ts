@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
-import { projectTerminalVisibleLines } from './orca-runtime-terminal-projection'
+import { projectTerminalVisibleLines } from './quirky-runtime-terminal-projection'
 import { buildVisibleSnapshotReadFallback } from './terminal-tail-read'
 import { MAX_TERMINAL_PREVIEW_CHARS } from './terminal-tail-limits'
 import { redactWorkerTerminalView } from './orchestration/worker-terminal-redaction'

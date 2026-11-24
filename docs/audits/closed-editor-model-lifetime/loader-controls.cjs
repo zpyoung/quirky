@@ -49,6 +49,6 @@ assert.throws(
   /Fixed source drift/
 )
 writeFileSync(
-  process.env.ORCA_CLOSED_MODEL_LOADER_OUTPUT ?? path.join(__dirname, 'loader-results.json'),
+  process.env.QUIRKY_CLOSED_MODEL_LOADER_OUTPUT ?? path.join(__dirname, 'loader-results.json'),
   `${JSON.stringify({ observations, mainMarkdownAliasesPreserved: true, driftRejected: true }, null, 2)}\n`
 )

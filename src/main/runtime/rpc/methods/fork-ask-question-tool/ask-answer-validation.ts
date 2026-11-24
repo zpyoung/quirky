@@ -1,5 +1,12 @@
-import type { AskAnswer, AskAnswers } from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
-import type { AskOption, AskQuestion, AskSpec } from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
+import type {
+  AskAnswer,
+  AskAnswers
+} from '../../../../../shared/fork-ask-question-tool/ask-answer-envelope'
+import type {
+  AskOption,
+  AskQuestion,
+  AskSpec
+} from '../../../../../shared/fork-ask-question-tool/ask-question-schema'
 import {
   nonBlank,
   parseConfirmAnswerValue,
@@ -31,7 +38,10 @@ function validateOneAnswer(
     case 'select': {
       if (raw.source === 'other') {
         if (typeof raw.value !== 'string' || nonBlank(raw.value) === undefined) {
-          errors.push({ path: `${path}.value`, message: 'free-text value must be a non-empty string' })
+          errors.push({
+            path: `${path}.value`,
+            message: 'free-text value must be a non-empty string'
+          })
         }
         return
       }
@@ -47,18 +57,27 @@ function validateOneAnswer(
       }
       for (const value of raw.values as string[]) {
         if (!findOption(question.options, value)) {
-          errors.push({ path: `${path}.values`, message: `${value} is not one of the question options` })
+          errors.push({
+            path: `${path}.values`,
+            message: `${value} is not one of the question options`
+          })
         }
       }
       return
     }
     case 'text':
       if (typeof raw.value !== 'string' || parseTextAnswerValue(question, raw.value) === null) {
-        errors.push({ path: `${path}.value`, message: 'value does not match the question pattern/format' })
+        errors.push({
+          path: `${path}.value`,
+          message: 'value does not match the question pattern/format'
+        })
       }
       return
     case 'number':
-      if (typeof raw.value !== 'number' || parseNumberAnswerValue(question, String(raw.value)) === null) {
+      if (
+        typeof raw.value !== 'number' ||
+        parseNumberAnswerValue(question, String(raw.value)) === null
+      ) {
         errors.push({ path: `${path}.value`, message: 'value is outside the question domain' })
       }
       return
@@ -80,7 +99,12 @@ function buildTypedAnswer(question: AskQuestion, raw: Record<string, unknown>): 
       const value = raw.value as string
       const option = findOption(question.options, value)
       return option
-        ? { value: option.value, label: option.label, note: optionalString(raw.note), source: 'option' }
+        ? {
+            value: option.value,
+            label: option.label,
+            note: optionalString(raw.note),
+            source: 'option'
+          }
         : { value, note: optionalString(raw.note), source: 'other' }
     }
     case 'multiselect': {
@@ -138,7 +162,10 @@ export function validateAskAnswerSubmission(
   }
   for (const question of spec.questions) {
     if (!(question.id in rawAnswers) && !skippedSet.has(question.id)) {
-      errors.push({ path: `answers.${question.id}`, message: 'question was neither answered nor skipped' })
+      errors.push({
+        path: `answers.${question.id}`,
+        message: 'question was neither answered nor skipped'
+      })
     }
   }
   for (const [id, raw] of Object.entries(rawAnswers)) {

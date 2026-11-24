@@ -30,7 +30,7 @@ export function useMobileTasksProjectWorkspaceCommentActions(model: WorkspaceCre
     setProjectEditingCommentDraft,
     setProjectEditingCommentId,
     setProjectMutating,
-    setProjectRepoNotInOrca,
+    setProjectRepoNotInQuirky,
     setProjectRowDetail,
     setProjectRowDetailError,
     setProjectRowItem,
@@ -44,12 +44,12 @@ export function useMobileTasksProjectWorkspaceCommentActions(model: WorkspaceCre
       const kind = projectRowType(row)
       const repo = findProjectRowRepo(row)
       if (!kind || !row.content.number || !row.content.url) {
-        setError('Add the project item repository to Orca before creating a workspace.')
+        setError('Add the project item repository to Quirky before creating a workspace.')
         return
       }
       if (!repo) {
         const slug = splitRepositorySlug(row.content.repository)
-        setProjectRepoNotInOrca({
+        setProjectRepoNotInQuirky({
           owner: slug?.owner ?? 'Unknown',
           repo: slug?.repo ?? row.content.repository ?? 'repository',
           url: row.content.url ?? null

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithStopTerminalsForWorktree } from './worktree-terminal-stop'
+import { QuirkyRuntimeWithStopTerminalsForWorktree } from './worktree-terminal-stop'
 import {
   applyWorktreeSleepResumeRecords,
   captureWorktreeSleepResumeRecords,
@@ -20,10 +20,10 @@ import type { SleepingAgentSessionRecord } from '../../../../shared/agent-sessio
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
-export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRuntimeWithStopTerminalsForWorktree {
+export abstract class QuirkyRuntimeWithWorktreeSleepResumeRecording extends QuirkyRuntimeWithStopTerminalsForWorktree {
   protected readonly sleepResumeRecords: WorktreeSleepResumeRecorder = {
     capture: (worktreeId, ptyIds) =>
       captureWorktreeSleepResumeRecords({
@@ -49,7 +49,7 @@ export abstract class OrcaRuntimeWithWorktreeSleepResumeRecording extends OrcaRu
         )
       try {
         // Switch point: a status accepted before the sleep is saved is written before it, as in the window.
-        await (ORCA_LAYOUT_OWNER_IS_MAIN ? this.inResumeRecordOrder(commit) : commit())
+        await (QUIRKY_LAYOUT_OWNER_IS_MAIN ? this.inResumeRecordOrder(commit) : commit())
       } catch (error) {
         // Why: the PTYs already stopped; a lost record costs the resume, not the sleep.
         console.error('[runtime] could not record slept agent sessions', { worktreeId, error })

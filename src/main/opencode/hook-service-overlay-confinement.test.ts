@@ -20,7 +20,7 @@ let source: string
 let service: OpenCodeHookService
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-overlay-confinement-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-overlay-confinement-'))
   source = join(root, 'source')
   mkdirSync(join(source, 'plugins'), { recursive: true })
   writeFileSync(join(source, 'plugins', 'user.js'), 'export default {}')
@@ -35,7 +35,7 @@ beforeEach(() => {
     getAppMetrics: () => []
   })
   service = new OpenCodeHookService({
-    pluginFileName: 'orca-test.js',
+    pluginFileName: 'quirky-test.js',
     legacyHooksDir: 'legacy-test',
     overlayDir: 'overlay-test',
     pluginSource: () => 'export default {}'
@@ -94,5 +94,5 @@ it('still removes a stale mirrored entry from a real owned overlay', () => {
   }
   rmSync(join(source, 'plugins', 'user.js'))
   expect(service.buildPtyEnv('pane-2', source)).toEqual({ OPENCODE_CONFIG_DIR: overlay })
-  expect(readdirSync(join(overlay, 'plugins'))).toEqual(['orca-test.js'])
+  expect(readdirSync(join(overlay, 'plugins'))).toEqual(['quirky-test.js'])
 })

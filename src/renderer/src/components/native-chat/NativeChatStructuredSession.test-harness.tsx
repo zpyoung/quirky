@@ -71,7 +71,7 @@ export function seededEntry(
 
 export function seedOutbox(sessionId: string, entries: unknown[]): void {
   localStorage.setItem(
-    `orca:desktopStructuredAgentSessionOutbox:v1:${encodeURIComponent(sessionId)}`,
+    `quirky:desktopStructuredAgentSessionOutbox:v1:${encodeURIComponent(sessionId)}`,
     JSON.stringify(entries)
   )
 }

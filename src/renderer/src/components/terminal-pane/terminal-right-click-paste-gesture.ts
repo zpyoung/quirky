@@ -6,7 +6,7 @@ type RightClickPasteMouseEvent = {
 }
 
 /**
- * Why: with "Right-click to paste" on, Orca owns the right button. xterm would
+ * Why: with "Right-click to paste" on, Quirky owns the right button. xterm would
  * otherwise report the press to a mouse-tracking TUI, and Codex pastes the
  * clipboard on that report itself, so one click pasted twice (#25192).
  * Ctrl+right-click stays the app menu, so that press still reaches xterm.

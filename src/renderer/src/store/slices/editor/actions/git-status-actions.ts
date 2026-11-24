@@ -11,7 +11,7 @@ import {
   getKnownGitHead
 } from '../git/branch-compare-state'
 import { recordDroppedEditorFilesInLayoutOwner } from '../tabs/editor-tab-layout-owner'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 
 export function createGitStatusActions(
   set: EditorSet,
@@ -52,7 +52,7 @@ export function createGitStatusActions(
       }),
     // Why: session-local conflict tracking (Resolved-locally) lives only in the renderer; main returns raw git status, so the renderer owns conflictStatusSource.
     setGitStatus: (worktreeId, status) => {
-      const filesBefore = ORCA_LAYOUT_OWNER_IS_MAIN ? get().openFiles : null
+      const filesBefore = QUIRKY_LAYOUT_OWNER_IS_MAIN ? get().openFiles : null
       set((s) => {
         const hadStatusEntry = Object.hasOwn(s.gitStatusByWorktree, worktreeId)
         const prevEntries = s.gitStatusByWorktree[worktreeId] ?? []
@@ -249,7 +249,7 @@ export function createGitStatusActions(
         }
       })
       // A resolved deleted-side conflict drops its placeholder record; main closes its tab.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && filesBefore && filesBefore !== get().openFiles) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && filesBefore && filesBefore !== get().openFiles) {
         recordDroppedEditorFilesInLayoutOwner(get(), filesBefore, worktreeId)
       }
     },

@@ -45,7 +45,7 @@ describe('spawn observer', () => {
   it('reports a runProcessSync launch that throws or times out', () => {
     const seen: string[] = []
     setSpawnObserver((command) => seen.push(command))
-    const missing = path.join(tmpdir(), 'orca-spawn-observer-missing-program')
+    const missing = path.join(tmpdir(), 'quirky-spawn-observer-missing-program')
     expect(() => runProcessSync({ program: missing, args: [] })).toThrow()
     const timedOut = runProcessSync({
       program: process.execPath,

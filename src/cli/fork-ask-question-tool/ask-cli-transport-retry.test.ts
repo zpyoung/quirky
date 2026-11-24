@@ -33,7 +33,9 @@ describe('callWithTransportRetry', () => {
 
   it('gives up after the bounded attempt count and surfaces the last transport error', async () => {
     vi.useFakeTimers()
-    const attempt = vi.fn().mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'still down'))
+    const attempt = vi
+      .fn()
+      .mockRejectedValue(new RuntimeClientError('runtime_unavailable', 'still down'))
     const assertion = expect(callWithTransportRetry(attempt)).rejects.toMatchObject({
       code: 'runtime_unavailable',
       message: 'still down'
@@ -56,7 +58,9 @@ describe('callWithTransportRetry', () => {
 
   it('never retries a non-runtime_unavailable RuntimeClientError', async () => {
     const attempt = vi.fn().mockRejectedValue(new RuntimeClientError('invalid_argument', 'nope'))
-    await expect(callWithTransportRetry(attempt)).rejects.toMatchObject({ code: 'invalid_argument' })
+    await expect(callWithTransportRetry(attempt)).rejects.toMatchObject({
+      code: 'invalid_argument'
+    })
     expect(attempt).toHaveBeenCalledTimes(1)
   })
 
@@ -70,6 +74,9 @@ describe('callWithTransportRetry', () => {
     const assertion = expect(callWithTransportRetry(attempt)).resolves.toBe('ok')
     await vi.runAllTimersAsync()
     await assertion
-    expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), ASK_CLI_TRANSPORT_RETRY_DELAY_MS)
+    expect(setTimeoutSpy).toHaveBeenCalledWith(
+      expect.any(Function),
+      ASK_CLI_TRANSPORT_RETRY_DELAY_MS
+    )
   })
 })

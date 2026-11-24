@@ -49,7 +49,7 @@ import type { BudgetClock } from '../budget-clock'
 import type { LeaseWorkspaceTarget } from '../lease-store'
 import type { WatcherRunner } from '../runner-state'
 import type { WatcherRunnerActions } from '../runner-actions'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { gateRunnerAction } from '../runner-gating'
 
 // `current` is optional here because the runner loop's own `RunnerBudgetClock` declares it
@@ -67,7 +67,7 @@ type OwnerBudgetClock = {
  * being undefined, not anything in here.
  */
 export type OwnerRuntimeDependencies = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   resolveWorkspaceTarget: (workspaceKey: WorkspaceKey) => Promise<LeaseWorkspaceTarget>
   ensureRun: (enrollment: WatcherEnrollment) => Promise<{ runId: string }>
 }

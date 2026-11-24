@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import type { Locator, Page } from '@playwright/test'
 
@@ -36,7 +36,7 @@ async function seedUntrackedFile(
     }
 
     const separator = worktree.path.includes('\\') ? '\\' : '/'
-    const fileName = requestedFileName ?? `orca-discard-confirm-${Date.now()}.txt`
+    const fileName = requestedFileName ?? `quirky-discard-confirm-${Date.now()}.txt`
     const relativePath = fileName
     await window.api.fs.writeFile({
       filePath: `${worktree.path}${separator}${relativePath}`,
@@ -133,42 +133,42 @@ async function expectDeleteDialogLayout(page: Page, fileName: string): Promise<v
 }
 
 test.describe('Source Control discard confirmation', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
   test('keeps long untracked-file confirmation usable and deletes on confirm', async ({
-    orcaPage
+    quirkyPage
   }) => {
     const seededFile = await seedUntrackedFile(
-      orcaPage,
-      `orca-discard-confirm-${'x'.repeat(96)}.txt`
+      quirkyPage,
+      `quirky-discard-confirm-${'x'.repeat(96)}.txt`
     )
-    await openSourceControl(orcaPage)
+    await openSourceControl(quirkyPage)
 
-    const row = orcaPage
+    const row = quirkyPage
       .locator('[data-testid="source-control-entry"]')
       .filter({ hasText: seededFile.fileName })
     await expect(row).toBeVisible()
 
     await deleteUntrackedFileFromRow(row)
-    await expectDeleteDialogLayout(orcaPage, seededFile.fileName)
+    await expectDeleteDialogLayout(quirkyPage, seededFile.fileName)
 
-    await orcaPage.getByRole('button', { name: 'Cancel' }).click()
+    await quirkyPage.getByRole('button', { name: 'Cancel' }).click()
     await expect(row).toBeVisible()
 
     await deleteUntrackedFileFromRow(row)
-    await confirmPendingDelete(orcaPage)
+    await confirmPendingDelete(quirkyPage)
 
     await expect(
-      orcaPage.getByRole('dialog', { name: `Delete "${seededFile.fileName}"?` })
+      quirkyPage.getByRole('dialog', { name: `Delete "${seededFile.fileName}"?` })
     ).toHaveCount(0)
     await expect(row).toHaveCount(0, { timeout: 10_000 })
 
-    await refreshGitStatus(orcaPage)
+    await refreshGitStatus(quirkyPage)
     await expect(
-      orcaPage.locator('[data-testid="source-control-entry"]').filter({
+      quirkyPage.locator('[data-testid="source-control-entry"]').filter({
         hasText: seededFile.fileName
       })
     ).toHaveCount(0)

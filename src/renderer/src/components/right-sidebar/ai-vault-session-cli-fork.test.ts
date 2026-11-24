@@ -71,7 +71,7 @@ describe('Switch to Terminal eligibility', () => {
 })
 
 describe('Switch to Terminal failure text', () => {
-  const UPDATE = 'Update Orca on the host that runs this chat to resume it in a new CLI.'
+  const UPDATE = 'Update Quirky on the host that runs this chat to resume it in a new CLI.'
 
   it.each([
     'agent_session_conflict',

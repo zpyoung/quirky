@@ -1,4 +1,4 @@
-import type { MicrophoneDataEvent } from '@orca/expo-two-way-audio'
+import type { MicrophoneDataEvent } from '@quirky/expo-two-way-audio'
 import { enqueueMobileDictationAudioChunk } from '../hooks/mobile-dictation-audio-chunk'
 import type { DictationCaptureChunk } from './dictation-capture-contract'
 import type { RpcClient } from '../transport/rpc-client'

@@ -121,7 +121,7 @@ function startLinearIssue(): Promise<boolean> {
 
 const HOST_CASES: HostCase[] = [
   {
-    name: 'Windows client -> paired Linux Orca server',
+    name: 'Windows client -> paired Linux Quirky server',
     client: 'win32',
     repo: { path: '/srv/repo', executionHostId: 'runtime:linux-box' },
     runtime: new Map([['linux-box', runtimeStatus('linux')]]),
@@ -135,7 +135,7 @@ const HOST_CASES: HostCase[] = [
     expected: 'linux'
   },
   {
-    name: 'Linux client -> paired Windows Orca server',
+    name: 'Linux client -> paired Windows Quirky server',
     client: 'linux',
     repo: { path: 'D:\\repo', executionHostId: 'runtime:win-box' },
     runtime: new Map([['win-box', runtimeStatus('win32')]]),
@@ -149,14 +149,14 @@ const HOST_CASES: HostCase[] = [
     expected: 'win32'
   },
   {
-    name: 'Linux client -> paired Linux Orca server',
+    name: 'Linux client -> paired Linux Quirky server',
     client: 'linux',
     repo: { path: '/srv/repo', executionHostId: 'runtime:linux-box' },
     runtime: new Map([['linux-box', runtimeStatus('linux')]]),
     expected: 'linux'
   },
   {
-    name: 'Windows client -> paired Windows Orca server',
+    name: 'Windows client -> paired Windows Quirky server',
     client: 'win32',
     repo: { path: 'D:\\repo', executionHostId: 'runtime:win-box' },
     runtime: new Map([['win-box', runtimeStatus('win32')]]),
@@ -270,7 +270,7 @@ describe('launchWorkItemDirect quotes for the execution host (#27971)', () => {
 
     expect(mocks.createWorktree).not.toHaveBeenCalled()
     expect(mocks.toastError).toHaveBeenCalledWith(
-      'This Orca server does not report its operating system. Update the server to launch agents on it.'
+      'This Quirky server does not report its operating system. Update the server to launch agents on it.'
     )
   })
 })

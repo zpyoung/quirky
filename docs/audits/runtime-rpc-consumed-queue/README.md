@@ -32,15 +32,15 @@ The original Node-only negative-control expectation for response retention faile
 Run from the worktree:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/reproduce.cjs
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/extended-controls.cjs
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/resolver-controls.cjs
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/shared/runtime-rpc-call-queue.test.ts src/shared/runtime-rpc-call-queue-retention.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/extended-controls.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/runtime-rpc-consumed-queue/resolver-controls.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/shared/runtime-rpc-call-queue.test.ts src/shared/runtime-rpc-call-queue-retention.test.ts
 ```
 
-The installed Electron binary can run the same scripts with `ELECTRON_RUN_AS_NODE=1`, `ORCA_BACKGROUND_LAUNCH=1`, and the same Node flags. No Electron app or window is created. No network, microphone, or affected-host data is used. No heap-snapshot tools are exposed in this session; the proof measures WeakRef reachability and bounded process counters instead of reading raw heap snapshots.
+The installed Electron binary can run the same scripts with `ELECTRON_RUN_AS_NODE=1`, `QUIRKY_BACKGROUND_LAUNCH=1`, and the same Node flags. No Electron app or window is created. No network, microphone, or affected-host data is used. No heap-snapshot tools are exposed in this session; the proof measures WeakRef reachability and bounded process counters instead of reading raw heap snapshots.
 
-The existing eight queue tests and six added retention/lifecycle tests pass with the fix. To reproduce the three retention failures against the reconstructed baseline, use `ORCA_BACKGROUND_LAUNCH=1 node --expose-gc node_modules/vitest/vitest.mjs run --config docs/audits/runtime-rpc-consumed-queue/baseline.config.mjs src/shared/runtime-rpc-call-queue.test.ts src/shared/runtime-rpc-call-queue-retention.test.ts`; the expected outcome is 11 passing tests and three failures, with exit code 1. Node and Web project typechecks and the changed-code quality gate passed during promotion. Explicit basic/type-aware lint also covers these otherwise ignored audit scripts.
+The existing eight queue tests and six added retention/lifecycle tests pass with the fix. To reproduce the three retention failures against the reconstructed baseline, use `QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc node_modules/vitest/vitest.mjs run --config docs/audits/runtime-rpc-consumed-queue/baseline.config.mjs src/shared/runtime-rpc-call-queue.test.ts src/shared/runtime-rpc-call-queue-retention.test.ts`; the expected outcome is 11 passing tests and three failures, with exit code 1. Node and Web project typechecks and the changed-code quality gate passed during promotion. Explicit basic/type-aware lint also covers these otherwise ignored audit scripts.
 
 ## Source identity
 

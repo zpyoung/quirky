@@ -1,33 +1,33 @@
 import { createHash } from 'node:crypto'
 import { isTerminalPromptMutation } from '../../../shared/orchestration-rpc-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
-import type { OrcaRuntimeService } from '../orca-runtime'
-import type { OrcaSessionId } from '../../../shared/orca-session-address'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
+import type { QuirkySessionId } from '../../../shared/quirky-session-address'
 
 export const EFFECT_FREE_WORKER_DONE_CHECKPOINT = JSON.stringify({
   pending: { effectFree: 'worker_done' }
 })
 
-const REPLAY_NUDGE_KEY = '__orcaReplayNudge'
+const REPLAY_NUDGE_KEY = '__quirkyReplayNudge'
 
 export type MutationReplayNudge =
   | { kind: 'messages'; targets: { to: string; type: string }[] }
   | { kind: 'federation'; runId?: string }
 
-const CALLER_ORCA_SESSION_ID_KEY = '__orcaCallerOrcaSessionId'
+const CALLER_QUIRKY_SESSION_ID_KEY = '__quirkyCallerQuirkySessionId'
 
 export function replayStableCallerParams(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: unknown,
-  callerOrcaSessionId?: OrcaSessionId
+  callerQuirkySessionId?: QuirkySessionId
 ): unknown {
   if (!params || typeof params !== 'object' || Array.isArray(params)) {
     return params
   }
   const source = params as Record<string, unknown>
   // Absent for terminal callers, so their payload hashes are unchanged.
-  const result: Record<string, unknown> = callerOrcaSessionId
-    ? { ...source, [CALLER_ORCA_SESSION_ID_KEY]: callerOrcaSessionId }
+  const result: Record<string, unknown> = callerQuirkySessionId
+    ? { ...source, [CALLER_QUIRKY_SESSION_ID_KEY]: callerQuirkySessionId }
     : { ...source }
   delete result.waitSubmitMs
   for (const property of ['from', 'callerTerminalHandle', 'terminal'] as const) {

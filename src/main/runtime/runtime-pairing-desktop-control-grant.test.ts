@@ -3,17 +3,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { DeviceRegistry } from './device-registry'
-import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { getServeOptions } from '../startup/serve-options'
-import { parseArgs as parseOrcadArgs } from '../orcad/orcad-command-arguments'
+import { parseArgs as parseQuirkydArgs } from '../quirkyd/quirkyd-command-arguments'
 
 function tempDir(): string {
-  return mkdtempSync(join(tmpdir(), 'orca-desktop-control-grant-'))
+  return mkdtempSync(join(tmpdir(), 'quirky-desktop-control-grant-'))
 }
 
 async function dispatchOverWebSocket(
-  server: OrcaRuntimeRpcServer,
+  server: QuirkyRuntimeRpcServer,
   deviceToken: string,
   method: string,
   params: unknown = { app: 'Finder' }
@@ -35,8 +35,8 @@ function errorCode(reply: Record<string, unknown>): unknown {
 describe('desktop control for paired runtime clients', () => {
   it('is refused to a runtime pairing that did not grant it', async () => {
     const userDataPath = tempDir()
-    const server = new OrcaRuntimeRpcServer({
-      runtime: new OrcaRuntimeService(),
+    const server = new QuirkyRuntimeRpcServer({
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       enableWebSocket: false
     })
@@ -48,8 +48,8 @@ describe('desktop control for paired runtime clients', () => {
 
   it('passes the permission gate for a pairing created with the grant', async () => {
     const userDataPath = tempDir()
-    const server = new OrcaRuntimeRpcServer({
-      runtime: new OrcaRuntimeService(),
+    const server = new QuirkyRuntimeRpcServer({
+      runtime: new QuirkyRuntimeService(),
       userDataPath,
       enableWebSocket: false
     })
@@ -67,8 +67,8 @@ describe('pairing and push administration for paired runtime clients', () => {
     'refuses %s without reaching its service',
     async (method, params) => {
       const userDataPath = tempDir()
-      const runtime = new OrcaRuntimeService()
-      const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+      const runtime = new QuirkyRuntimeService()
+      const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
       server['deviceRegistry'] = new DeviceRegistry(userDataPath)
       const device = server['deviceRegistry']!.addDevice('laptop', 'runtime')
       const registerPush = vi.spyOn(runtime, 'registerMobilePushDevice')
@@ -114,9 +114,9 @@ describe('the --grant-desktop-control serve flag', () => {
     ).toThrow('--grant-desktop-control applies only to the default runtime pairing offer.')
   })
 
-  it('reaches orcad', () => {
-    expect(parseOrcadArgs(['--grant-desktop-control'])).toEqual({ grantDesktopControl: true })
-    expect(() => parseOrcadArgs(['--grant-desktop-control', '--no-pairing'])).toThrow(
+  it('reaches quirkyd', () => {
+    expect(parseQuirkydArgs(['--grant-desktop-control'])).toEqual({ grantDesktopControl: true })
+    expect(() => parseQuirkydArgs(['--grant-desktop-control', '--no-pairing'])).toThrow(
       '--grant-desktop-control applies only to the default runtime pairing offer'
     )
   })

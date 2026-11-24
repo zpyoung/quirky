@@ -77,7 +77,7 @@ export function buildHydratedEditorSessionState(
       const id =
         shouldHydrateWithOwnedEditorFileId(worktreeId, pf.runtimeEnvironmentId) ||
         usedOpenFileIds.has(pf.filePath) ||
-        // Why: a tab Orca moved to the workspace owning its file names it by its owned id (F42).
+        // Why: a tab Quirky moved to the workspace owning its file names it by its owned id (F42).
         savedTabEntityIds(worktreeId).has(ownedId)
           ? ownedId
           : pf.filePath

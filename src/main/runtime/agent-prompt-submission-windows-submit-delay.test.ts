@@ -5,7 +5,7 @@ import {
   getTerminalPasteIngestMs
 } from '../../shared/agent-prompt-injection'
 import { setSshTargetRegistryHandlers } from '../ssh/targets/ssh-target-registry'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 
 const WORKTREE_PATH = '/tmp/worktree-a'
@@ -41,12 +41,12 @@ vi.mock('../git/worktree', () => ({
 
 // Why: 'aider' is not a settlement agent, so submission takes the open-loop delay under test.
 async function createPromptRuntime(): Promise<{
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   handle: string
   writes: string[]
   submitTimes: number[]
 }> {
-  const runtime = new OrcaRuntimeService(makeStore() as never)
+  const runtime = new QuirkyRuntimeService(makeStore() as never)
   const writes: string[] = []
   const submitTimes: number[] = []
   const startedAt = Date.now()
@@ -74,7 +74,7 @@ const HOST_PROBE_PROMPT = 'p'.repeat(12_000)
 
 /** The pane's execution host is spawn-time state the fixture cannot express; patch the
  *  record the runtime actually consults so remote and WSL panes are reachable here. */
-function patchPtyRecord(runtime: OrcaRuntimeService, patch: Record<string, unknown>): void {
+function patchPtyRecord(runtime: QuirkyRuntimeService, patch: Record<string, unknown>): void {
   const ptys = (runtime as unknown as { ptysById: Map<string, Record<string, unknown>> }).ptysById
   const record = ptys.get(PTY_ID)
   expect(record).toBeDefined()
@@ -296,13 +296,13 @@ describe('agent prompt render gate on a ConPTY host', () => {
     // end on its hard cap -- which is what the cap's arithmetic has to be measured against.
     agentOutput: { markerDelayMs?: number; noiseUntilMs?: number } = {}
   ): Promise<{
-    runtime: OrcaRuntimeService
+    runtime: QuirkyRuntimeService
     handle: string
     writes: string[]
     submitTimes: number[]
   }> {
     const markerDelayMs = agentOutput.markerDelayMs ?? 100
-    const runtime = new OrcaRuntimeService(makeStore() as never)
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
     const writes: string[] = []
     const submitTimes: number[] = []
     const startedAt = Date.now()

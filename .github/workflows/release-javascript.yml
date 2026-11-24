@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 env:
-  ORCA_BACKGROUND_LAUNCH: '1'
+  QUIRKY_BACKGROUND_LAUNCH: '1'
 
 jobs:
   bundle:
@@ -51,7 +51,7 @@ jobs:
           const devSupported = supported && Boolean(
             scripts['build:release:javascript:parallel'] && devDependencies?.tsrs &&
             fs.readFileSync('config/scripts/release-javascript-artifact.mjs', 'utf8')
-              .includes('ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY')
+              .includes('QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY')
           )
           console.log('supported=' + (process.env.DEV_BUILD === 'true' ? devSupported : supported))
           NODE
@@ -79,9 +79,9 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           JAVASCRIPT_BUILD_SCRIPT: ${{ inputs.dev_build && 'build:release:javascript:parallel' || 'build:release:javascript' }}
-          ORCA_CLI_BUILD_COMPILER: ${{ inputs.dev_build && 'tsrs' || 'bun' }}
-          ORCA_BUILD_IDENTITY: ${{ steps.identity.outputs.value }}
-          ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: ${{ inputs.dev_build && 'dev' || '' }}
+          QUIRKY_CLI_BUILD_COMPILER: ${{ inputs.dev_build && 'tsrs' || 'bun' }}
+          QUIRKY_BUILD_IDENTITY: ${{ steps.identity.outputs.value }}
+          QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY: ${{ inputs.dev_build && 'dev' || '' }}
         run: |
           pnpm run "$JAVASCRIPT_BUILD_SCRIPT"
           node config/scripts/release-javascript-artifact.mjs pack

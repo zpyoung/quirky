@@ -25,7 +25,7 @@ export async function resolveOwnerReportLocation(
     return {
       executionHostId: target.executionHostId,
       authorityRoot: target.workspacePath,
-      directory: pathFlavor.join(target.workspacePath, '.orca', 'heimdall', 'owner-reports')
+      directory: pathFlavor.join(target.workspacePath, '.quirky', 'heimdall', 'owner-reports')
     }
   }
   if (!target.gitTarget) {
@@ -40,6 +40,6 @@ export async function resolveOwnerReportLocation(
   return {
     executionHostId: target.executionHostId,
     authorityRoot: gitDirectory,
-    directory: pathFlavor.join(gitDirectory, 'orca-heimdall', 'owner-reports')
+    directory: pathFlavor.join(gitDirectory, 'quirky-heimdall', 'owner-reports')
   }
 }

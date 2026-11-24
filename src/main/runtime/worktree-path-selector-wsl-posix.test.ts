@@ -28,7 +28,7 @@ vi.mock('../git/worktree', async (importOriginal) => ({
 
 import { isWslUncPathForCallerLinuxPath } from '../../shared/cross-platform-path'
 import { parseWslUncPath } from '../../shared/wsl-paths'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const UBUNTU = 'Ubuntu-24.04'
 const DEBIAN = 'Debian'
@@ -103,9 +103,9 @@ function scanReports(registrations: readonly Registration[]): void {
   })
 }
 
-function makeRuntime(registrations: readonly Registration[]): OrcaRuntimeService {
+function makeRuntime(registrations: readonly Registration[]): QuirkyRuntimeService {
   scanReports(registrations)
-  return new OrcaRuntimeService(makeStore(registrations) as never)
+  return new QuirkyRuntimeService(makeStore(registrations) as never)
 }
 
 /**
@@ -114,7 +114,7 @@ function makeRuntime(registrations: readonly Registration[]): OrcaRuntimeService
  * Mirrored rather than imported — `src/cli` is outside this file's tsconfig project.
  */
 async function selectorTheCliWouldSend(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   callerCwd: string,
   typedPath: string
 ): Promise<string> {

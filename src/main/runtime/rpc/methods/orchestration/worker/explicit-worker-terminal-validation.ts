@@ -1,10 +1,10 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { isStructuredWorkerHandle } from '../../../../../../shared/structured-worker-handle'
 import type { OrchestrationCallerIdentity } from '../../../../orchestration/orchestration-caller-identity'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import type { OrcaSessionId } from '../../../../../../shared/orca-session-address'
-import { formatOrcaSessionAddress } from '../../../../../../shared/orca-session-address'
+import type { QuirkySessionId } from '../../../../../../shared/quirky-session-address'
+import { formatQuirkySessionAddress } from '../../../../../../shared/quirky-session-address'
 import {
   admitChatAssignee,
   chatAssigneeOf,
@@ -20,7 +20,7 @@ import type { OrchestrationParty } from '../../../../orchestration/orchestration
  * dispatch's to take, and a pane with no agent cannot read a preamble at all.
  */
 export async function assertExplicitWorkerTerminalUsable(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   terminal: string
   from: string
   coordinator: OrchestrationCallerIdentity | null
@@ -62,9 +62,9 @@ export async function assertExplicitWorkerTerminalUsable(args: {
   }
 }
 
-/** A `--terminal` party: a terminal pane, or a chat named by its Orca session ID. */
+/** A `--terminal` party: a terminal pane, or a chat named by its Quirky session ID. */
 export async function assertExplicitWorkerUsable(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   terminal: OrchestrationParty
   from: string
@@ -77,24 +77,24 @@ export async function assertExplicitWorkerUsable(args: {
     : assertExplicitWorkerTerminalUsable({ ...args, terminal: args.terminal.address }))
 }
 
-/** The same refusals for a chat named by its Orca session ID: itself, unreachable, another worktree. */
+/** The same refusals for a chat named by its Quirky session ID: itself, unreachable, another worktree. */
 async function assertExplicitWorkerChatUsable(args: {
-  runtime: Pick<OrcaRuntimeService, 'ensureStructuredAgentSessionHost'>
+  runtime: Pick<QuirkyRuntimeService, 'ensureStructuredAgentSessionHost'>
   db: OrchestrationDb
-  chat: OrcaSessionId
+  chat: QuirkySessionId
   coordinator: OrchestrationCallerIdentity | null
   resolvedWorktreeId: string | undefined
 }): Promise<void> {
   refuseChatSelfAssignment({
     sessionId: args.chat,
-    coordinatorSessionId: args.coordinator?.orcaSessionId,
+    coordinatorSessionId: args.coordinator?.quirkySessionId,
     remedy: 'Pass --terminal for a different agent, or omit it so worker-start creates one.'
   })
   const session = await admitChatAssignee(args.runtime, args.chat, args.db)
   if (session.location.workspaceId !== args.resolvedWorktreeId) {
     throw new OrchestrationError(
       'terminal_worktree_mismatch',
-      `${formatOrcaSessionAddress(args.chat)} does not belong to worktree ${args.resolvedWorktreeId}.`
+      `${formatQuirkySessionAddress(args.chat)} does not belong to worktree ${args.resolvedWorktreeId}.`
     )
   }
 }

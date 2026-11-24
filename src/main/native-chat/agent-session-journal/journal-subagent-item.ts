@@ -17,7 +17,7 @@ import { boundSubagentEntryId } from '../subagent-entry-id-bounds'
 
 /** Scoped by the journal, which is one session's with one provider. */
 export function subagentJournalItemIdentity(id: string): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: `subagent:${boundSubagentEntryId(id)}` }
+  return { provider: 'quirky', clientMessageId: `subagent:${boundSubagentEntryId(id)}` }
 }
 
 /** The row: the block, and the sentence an older client draws in its place. */

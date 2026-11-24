@@ -8,8 +8,8 @@ import type {
 import { quotePowerShellLiteral } from '../../shared/powershell-native-argument'
 import { hasSufficientWindowsFirewallRemoteScope } from './windows-firewall-remote-scope'
 
-const FIREWALL_RULE_NAME = 'Orca.MobilePairing'
-const FIREWALL_RULE_DISPLAY_NAME = 'Orca Mobile Pairing'
+const FIREWALL_RULE_NAME = 'Quirky.MobilePairing'
+const FIREWALL_RULE_DISPLAY_NAME = 'Quirky Mobile Pairing'
 const POWERSHELL_TIMEOUT_MS = 10_000
 const ELEVATION_TIMEOUT_MS = 5 * 60_000
 
@@ -223,7 +223,7 @@ foreach ($rule in $blockingRules) {
   }
 }
 Get-NetFirewallRule -Name ${quotePowerShellLiteral(FIREWALL_RULE_NAME)} -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-New-NetFirewallRule -Name ${quotePowerShellLiteral(FIREWALL_RULE_NAME)} -DisplayName ${quotePowerShellLiteral(FIREWALL_RULE_DISPLAY_NAME)} -Description 'Allows Orca Mobile to connect to this Orca desktop on private networks.' -Direction Inbound -Action Allow -Enabled True -Profile Private -Protocol TCP -LocalPort ${port} -Program ${quotePowerShellLiteral(executablePath)} -EdgeTraversalPolicy Block | Out-Null`
+New-NetFirewallRule -Name ${quotePowerShellLiteral(FIREWALL_RULE_NAME)} -DisplayName ${quotePowerShellLiteral(FIREWALL_RULE_DISPLAY_NAME)} -Description 'Allows Quirky Mobile to connect to this Quirky desktop on private networks.' -Direction Inbound -Action Allow -Enabled True -Profile Private -Protocol TCP -LocalPort ${port} -Program ${quotePowerShellLiteral(executablePath)} -EdgeTraversalPolicy Block | Out-Null`
 }
 
 // Why the elevated child keeps `-EncodedCommand` while the local runner does not: `Start-Process

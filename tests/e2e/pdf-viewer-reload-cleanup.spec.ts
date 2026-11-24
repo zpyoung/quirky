@@ -1,15 +1,15 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { createPdfFindFixture } from './helpers/pdf-find-fixture'
 
 test('PDF reloads release workers, scroll listeners, and localization observers', async ({
-  orcaPage,
+  quirkyPage,
   seededRepoPath,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  const cdp = await orcaPage.context().newCDPSession(orcaPage)
-  await orcaPage.evaluate(() => {
+  const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
+  await quirkyPage.evaluate(() => {
     const observers = new Set<MutationObserver>()
     const NativeMutationObserver = window.MutationObserver
     window.MutationObserver = class extends NativeMutationObserver {
@@ -33,7 +33,7 @@ test('PDF reloads release workers, scroll listeners, and localization observers'
   const filePath = path.join(seededRepoPath, 'pdf-perf-review.pdf')
   registerPostElectronShutdownCleanup(async () => rmSync(filePath, { force: true }))
   writeFileSync(filePath, createPdfFindFixture({ title: 'Build 0' }))
-  await orcaPage.evaluate((filePath) => {
+  await quirkyPage.evaluate((filePath) => {
     const state = window.__store?.getState()
     if (!state?.activeWorktreeId) {
       throw new Error('No fixture worktree')
@@ -46,11 +46,11 @@ test('PDF reloads release workers, scroll listeners, and localization observers'
       mode: 'edit'
     })
   }, filePath)
-  const pageText = orcaPage.locator('.pdfViewer .page').first().locator('.textLayer')
+  const pageText = quirkyPage.locator('.pdfViewer .page').first().locator('.textLayer')
   await expect(pageText).toContainText('Build 0 - page 1')
   const samples: object[] = []
   const countWorkers = () =>
-    orcaPage.workers().filter((worker) => worker.url().includes('pdf.worker')).length
+    quirkyPage.workers().filter((worker) => worker.url().includes('pdf.worker')).length
   await expect.poll(countWorkers).toBe(1)
   for (let build = 1; build <= 12; build += 1) {
     const captured = await cdp.send('Runtime.evaluate', {
@@ -80,7 +80,7 @@ test('PDF reloads release workers, scroll listeners, and localization observers'
       localizationObservers: observers.result.value
     })
   }
-  await orcaPage.evaluate(() => {
+  await quirkyPage.evaluate(() => {
     const state = window.__store?.getState()
     const file = state?.openFiles.find((candidate) =>
       candidate.filePath.endsWith('pdf-perf-review.pdf')
@@ -90,7 +90,7 @@ test('PDF reloads release workers, scroll listeners, and localization observers'
     }
     state.closeFile(file.id)
   })
-  await expect(orcaPage.locator('.pdfViewer')).toHaveCount(0)
+  await expect(quirkyPage.locator('.pdfViewer')).toHaveCount(0)
   await expect.poll(countWorkers).toBe(0)
   const closedListeners = await cdp.send('Runtime.evaluate', {
     expression: `(getEventListeners(globalThis.__pdfReviewPreviousContainer).scroll || []).length`,

@@ -15,7 +15,7 @@ import { removeWorkspaceSessionOwnerEverywhere } from './session-owner-removal'
 import { findRepoRowForHostScopedWrite } from '../tracking-repos/repo-update-operations'
 import type { WorkspaceAttachmentMutation } from '../../../shared/workspace-attachment-mutation'
 import { normalizeWorkspaceAttachmentUpdate } from '../../../shared/workspace-attachments'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 
 export type FolderWorkspaceMutationOperations = {
   state: PersistedState
@@ -116,7 +116,7 @@ export class FolderWorkspacePersistenceOperations {
         ? { pendingFirstAgentMessageRename: true }
         : {}),
       // Switch point: creation is the workspace's first Recent stamp.
-      lastActivityAt: ORCA_SIDEBAR_INPUTS_IS_MAIN ? now : 0,
+      lastActivityAt: QUIRKY_SIDEBAR_INPUTS_IS_MAIN ? now : 0,
       createdAt: now,
       updatedAt: now
     }

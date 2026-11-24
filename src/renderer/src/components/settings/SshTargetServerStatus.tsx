@@ -12,7 +12,7 @@ import { SshHostDeltaMoveDialog } from './SshHostDeltaMoveDialog'
 import { SshHostNodeMirrorAction } from './SshHostNodeMirrorAction'
 import { canMoveSshHostAnyway, SshHostMoveAnywayDialog } from './SshHostMoveAnywayAction'
 import { canRestartSshHostServer, SshHostRestartServerDialog } from './SshHostRestartServerAction'
-import { getManagedOrcadApi } from './use-managed-server-catalog'
+import { getManagedQuirkydApi } from './use-managed-server-catalog'
 
 export type SshTargetServerDialog =
   | 'details'
@@ -21,7 +21,7 @@ export type SshTargetServerDialog =
   | 'restart'
   | 'move-anyway'
 
-/** Whether Orca on this SSH host serves it, and why not when it doesn't. */
+/** Whether Quirky on this SSH host serves it, and why not when it doesn't. */
 export function SshTargetServerStatusLine({
   target,
   state
@@ -85,7 +85,7 @@ export function SshTargetServerMenuItems({
       ) : null}
       {canRestart ? (
         <DropdownMenuItem onSelect={() => onOpenDialog('restart')}>
-          {translate('auto.components.settings.restartServer.action', 'Restart Orca’s server…')}
+          {translate('auto.components.settings.restartServer.action', 'Restart Quirky’s server…')}
         </DropdownMenuItem>
       ) : null}
       {canMoveAnyway ? (
@@ -116,7 +116,7 @@ export function SshTargetServerDialogs({
   onDialogChange: (dialog: SshTargetServerDialog | null) => void
   onChanged: () => void
 }): React.JSX.Element {
-  const api = getManagedOrcadApi()
+  const api = getManagedQuirkydApi()
   const status = state?.managedServer
   const detail = sshHostServerStatusLine(target, state)?.detail
   const openChange =

@@ -1,4 +1,4 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { ReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import type { PtyIpcSpawnState } from './spawn-state'
 
@@ -11,7 +11,7 @@ import type { PtyIpcSpawnState } from './spawn-state'
 export function keepAbsentBindingForSwap(
   ctx: PtyIpcSpawnState
 ): ((dead: ReplacedPaneOwner) => void) | undefined {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN || ctx.replacedPaneOwner || ctx.args.connectionId) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || ctx.replacedPaneOwner || ctx.args.connectionId) {
     return undefined
   }
   return (dead) => {

@@ -1,4 +1,4 @@
-// What each Orca runtime that ran chats here says about itself: that it started, and, when it ends
+// What each Quirky runtime that ran chats here says about itself: that it started, and, when it ends
 // gracefully, how (a quit or an update). A later start reads them to tell an owner that died with a
 // quit from one that died in a crash. A crash is only ever concluded from a runtime known to have
 // started and never ended; a runtime with no readable record names no cause.
@@ -11,7 +11,7 @@ import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { durableWriteTempPath, writeFileDurableSync } from '../durable-file-write'
 import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
-import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-orca-stop'
+import type { AgentSessionQuirkyStopCause } from '../../shared/agent-session-quirky-stop'
 import {
   AGENT_SESSION_RESUME_TRIGGERS,
   type AgentSessionResumeTrigger
@@ -93,7 +93,7 @@ export function beginAgentSessionRuntimeRecord(
 }
 
 /**
- * The one "this Orca runtime is ending" entry point, for every graceful exit. Synchronous, so an
+ * The one "this Quirky runtime is ending" entry point, for every graceful exit. Synchronous, so an
  * exit that cannot await still records it; the first call wins. Never throws.
  */
 export function recordAgentSessionRuntimeEnd(
@@ -121,7 +121,7 @@ function readTrigger(value: unknown): AgentSessionResumeTrigger | undefined {
 }
 
 /** How a recorded runtime ended: its quit or update, else a crash. Undefined when unreadable. */
-function readRecordedEnd(path: string, runtime: string): AgentSessionOrcaStopCause | undefined {
+function readRecordedEnd(path: string, runtime: string): AgentSessionQuirkyStopCause | undefined {
   try {
     const parsed: unknown = JSON.parse(
       readNodeFileSyncWithinLimit(path, MAX_RUNTIME_RECORD_BYTES).buffer.toString('utf8')
@@ -154,7 +154,7 @@ function readRecordedEnd(path: string, runtime: string): AgentSessionOrcaStopCau
  */
 export function readAgentSessionRuntimeEnds(
   stateDirectory: string
-): ReadonlyMap<string, AgentSessionOrcaStopCause> | null {
+): ReadonlyMap<string, AgentSessionQuirkyStopCause> | null {
   const directory = join(stateDirectory, RUNTIMES_DIRECTORY)
   let names: string[]
   try {
@@ -162,7 +162,7 @@ export function readAgentSessionRuntimeEnds(
   } catch (error) {
     return error instanceof Error && 'code' in error && error.code === 'ENOENT' ? new Map() : null
   }
-  const ends = new Map<string, AgentSessionOrcaStopCause>()
+  const ends = new Map<string, AgentSessionQuirkyStopCause>()
   for (const name of names) {
     const runtime = RECORD_FILE.exec(name)?.[1]
     const end = runtime ? readRecordedEnd(join(directory, name), runtime) : undefined

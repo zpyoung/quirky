@@ -27,7 +27,7 @@ afterEach(async () => {
 })
 
 async function candidate(): Promise<SessionFileCandidate> {
-  root = await mkdtemp(join(tmpdir(), 'orca-agy-cache-upgrade-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-agy-cache-upgrade-'))
   const path = await writeAntigravityTranscript(
     join(root, 'brain'),
     'conversation',

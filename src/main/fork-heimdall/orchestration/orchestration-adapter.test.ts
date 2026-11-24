@@ -69,7 +69,7 @@ vi.mock('../../runtime/rpc/methods/orchestration/runs/run-scope', () => ({
     address: caller.handle,
     terminalHandle: caller.handle,
     paneKey: caller.paneKey ?? null,
-    orcaSessionId: null
+    quirkySessionId: null
   })
 }))
 vi.mock('../../runtime/rpc/orchestration-mutation-executor', () => ({
@@ -202,7 +202,7 @@ function createAdapter(
     persistOrchestrationRunId: async () => undefined
   }
 ): RuntimeHeimdallOrchestrationAdapter {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fakeRuntime() implements only the OrcaRuntimeService members this adapter calls, not the full interface.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fakeRuntime() implements only the QuirkyRuntimeService members this adapter calls, not the full interface.
   return new RuntimeHeimdallOrchestrationAdapter(world.runtime as never, persistence)
 }
 
@@ -262,7 +262,7 @@ describe('Heimdall orchestration adapter', () => {
   it('creates one run, persists it, and reuses the pane-bound run on a second call', async () => {
     const { runtime } = fakeRuntime()
     const persist = vi.fn(async () => undefined)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fakeRuntime() implements only the OrcaRuntimeService members this adapter calls, not the full interface.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: fakeRuntime() implements only the QuirkyRuntimeService members this adapter calls, not the full interface.
     const adapter = new RuntimeHeimdallOrchestrationAdapter(runtime as never, {
       persistOrchestrationRunId: persist
     })

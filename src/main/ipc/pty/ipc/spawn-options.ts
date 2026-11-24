@@ -15,14 +15,14 @@ export async function buildPtyIpcSpawnOptions(ctx: PtyIpcSpawnState): Promise<vo
   const settings = ctx.deps.getSettings?.()
   const deletions = assemblePtySpawnEnvDeletions({
     env: ctx.preAllocatedHandle
-      ? { ...ctx.env, ORCA_TERMINAL_HANDLE: ctx.preAllocatedHandle }
+      ? { ...ctx.env, QUIRKY_TERMINAL_HANDLE: ctx.preAllocatedHandle }
       : ctx.env,
     callerEnvToDelete: args.envToDelete,
     agentTeamsEnvToDelete: ctx.agentTeamsEnvToDelete ?? [],
     isDaemonHostSpawn: ctx.isDaemonHostSpawn,
     connectionId: args.connectionId,
     skipCodexHomeEnv: ctx.skipCodexHomeEnv,
-    stripInheritedOrcaCodexHome: ctx.stripInheritedOrcaCodexHome,
+    stripInheritedQuirkyCodexHome: ctx.stripInheritedQuirkyCodexHome,
     codexResumeHomeSelected: ctx.codexResumeHomeSelected,
     settings
   })

@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { resolveOmpSessionsDir } from '../../src/main/ai-vault/omp-session-root.ts'
 
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout path')
-const root = await mkdtemp(join(tmpdir(), 'orca-omp-root-parity-'))
+const root = await mkdtemp(join(tmpdir(), 'quirky-omp-root-parity-'))
 const home = join(root, 'home')
 const xdg = join(root, 'data')
 const keys = [

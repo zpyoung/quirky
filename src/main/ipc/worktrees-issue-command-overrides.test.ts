@@ -120,7 +120,7 @@ describe('registerWorktreeHandlers', () => {
   it.each(['command', ' '])(
     'preserves local file writes with an unavailable runtime: %j',
     async (content) => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-runtime-ignore-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-runtime-ignore-'))
       const repo = {
         id: 'repo-1',
         path: root,
@@ -128,8 +128,8 @@ describe('registerWorktreeHandlers', () => {
         badgeColor: '#000',
         addedAt: 0
       }
-      mkdirSync(join(root, '.orca'))
-      writeFileSync(join(root, '.orca', 'issue-command'), 'old command\n')
+      mkdirSync(join(root, '.quirky'))
+      writeFileSync(join(root, '.quirky', 'issue-command'), 'old command\n')
       store.getRepo.mockReturnValue(repo)
       store.getRepos.mockReturnValue([repo])
       const resolver = vi
@@ -140,10 +140,10 @@ describe('registerWorktreeHandlers', () => {
       try {
         await handlers['hooks:writeIssueCommand'](null, { repoId: repo.id, content })
         if (content.trim()) {
-          expect(readFileSync(join(root, '.orca', 'issue-command'), 'utf8')).toBe('command\n')
-          expect(readFileSync(join(root, '.gitignore'), 'utf8')).toBe('.orca\n')
+          expect(readFileSync(join(root, '.quirky', 'issue-command'), 'utf8')).toBe('command\n')
+          expect(readFileSync(join(root, '.gitignore'), 'utf8')).toBe('.quirky\n')
         } else {
-          expect(existsSync(join(root, '.orca', 'issue-command'))).toBe(false)
+          expect(existsSync(join(root, '.quirky', 'issue-command'))).toBe(false)
           expect(existsSync(join(root, '.gitignore'))).toBe(false)
           expect(resolver).not.toHaveBeenCalled()
         }
@@ -192,10 +192,10 @@ describe('registerWorktreeHandlers', () => {
       undefined
     )
     expect(result).toMatchObject({
-      runnerScriptPath: '/workspace/repo/.git/orca/issue-command-runner.sh',
+      runnerScriptPath: '/workspace/repo/.git/quirky/issue-command-runner.sh',
       envVars: {
-        ORCA_ROOT_PATH: '/workspace/repo',
-        ORCA_WORKTREE_PATH: '/workspace/improve-dashboard'
+        QUIRKY_ROOT_PATH: '/workspace/repo',
+        QUIRKY_WORKTREE_PATH: '/workspace/improve-dashboard'
       }
     })
   })
@@ -215,7 +215,7 @@ describe('registerWorktreeHandlers', () => {
     await expect(
       handlers['hooks:writeIssueCommand'](null, {
         repoId: 'repo-ssh',
-        content: 'orca issue command'
+        content: 'quirky issue command'
       })
     ).rejects.toThrow('Remote filesystem unavailable')
   })

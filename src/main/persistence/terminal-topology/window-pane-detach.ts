@@ -2,7 +2,7 @@
 // (planTerminalLeafMove) is, before any partition is written.
 
 import { randomUUID } from 'node:crypto'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   collectLayoutLeafIdsInOrder,
@@ -76,13 +76,13 @@ export function resolveWindowPaneDetach(
   const home = holders.find((holder) => holder.hostId === holderIds[0])
   // Switch point: main holds every pane the window shows, so the home copy's last pane is the
   // tab's; a stray copy in another partition still moves with it.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN && home && home.panes < 2) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN && home && home.panes < 2) {
     return { code: 'last_pane' }
   }
   const bound = new Set(holders.flatMap(({ ptyId }) => (ptyId ? [ptyId] : [])))
   // Switch point: main's binding, not the window's claim, names the moved terminal; when an SSH
   // respawn bound one copy before the other, the workspace's home partition holds the live one.
-  const ptyId = ORCA_LAYOUT_OWNER_IS_MAIN
+  const ptyId = QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? bound.size === 1
       ? [...bound][0]!
       : (home?.ptyId ?? null)

@@ -58,7 +58,7 @@ export const SYNTHETIC_AGENT_TITLE_PROFILES: Record<string, SyntheticAgentTitleP
     permissionLabel: 'OMP - action required',
     idleLabel: 'OMP ready',
     titleIdentityGroup: 'pi-compatible',
-    // Why: on an Orca-hosted pane it is Orca's own injected titlebar extension writing the
+    // Why: on an Quirky-hosted pane it is Quirky's own injected titlebar extension writing the
     // working title (src/main/pi/titlebar-extension-source.ts). See pi above.
     synthesizeWorkingTitle: false
   },

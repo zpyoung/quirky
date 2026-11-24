@@ -12,7 +12,7 @@ import {
   xvfbSocketPath
 } from './x-display-artifacts'
 
-// Why: headless `orca serve` backs browser panes with offscreen BrowserWindows.
+// Why: headless `quirky serve` backs browser panes with offscreen BrowserWindows.
 // On Linux, Electron has no display platform without an X server and segfaults
 // when such a window loads a page (verified: --headless/--ozone-platform=headless
 // also crash; only a virtual display works). So before app.whenReady, ensure a
@@ -52,7 +52,7 @@ function sleepSync(ms: number): void {
 }
 
 // Why not socket presence alone: a stale socket we failed to unlink (a root-owned one left by a
-// crashed system Xvfb, which `User=orca` serve cannot remove) still exists after our own Xvfb
+// crashed system Xvfb, which `User=quirky` serve cannot remove) still exists after our own Xvfb
 // refused to bind the display. Treating that as ready sets DISPLAY to a dead server and Chromium
 // dies in Ozone init with SIGSEGV instead of reporting an unusable display.
 // Why our PID in the lock: another account's server may win the same free number between our
@@ -112,14 +112,14 @@ export function hasUsableLinuxDisplay(env: NodeJS.ProcessEnv = process.env): boo
 }
 
 export const MISSING_LINUX_DISPLAY_MESSAGE = [
-  'Orca needs a usable display server, but the selected X11 or Wayland endpoint is unavailable.',
+  'Quirky needs a usable display server, but the selected X11 or Wayland endpoint is unavailable.',
   'Check DISPLAY, WAYLAND_DISPLAY, XDG_RUNTIME_DIR, and any --ozone-platform override.',
-  `Use \`orca-ide serve\` to run headless. On a bare server, ${XVFB_INSTALL_GUIDANCE}`
+  `Use \`quirky-ide serve\` to run headless. On a bare server, ${XVFB_INSTALL_GUIDANCE}`
 ].join('\n')
 
 export const MISSING_SERVE_DISPLAY_MESSAGE = [
-  'Orca serve needs an X display for its browser panes, and could not start its own.',
-  `Wayland alone is not enough. To let Orca start one, ${XVFB_INSTALL_GUIDANCE}`,
+  'Quirky serve needs an X display for its browser panes, and could not start its own.',
+  `Wayland alone is not enough. To let Quirky start one, ${XVFB_INSTALL_GUIDANCE}`,
   'Or set DISPLAY to a running X server.'
 ].join('\n')
 
@@ -140,7 +140,7 @@ function hasUsableXDisplay(value: string | undefined): boolean {
   }
   const displayNumber = Number(localDisplay[1])
   if (isUnixSocket(xvfbSocketPath(displayNumber))) {
-    // Why :99 is never treated as foreign: Orca's own teardown unlinks the lock before the socket,
+    // Why :99 is never treated as foreign: Quirky's own teardown unlinks the lock before the socket,
     // so a lockless :99 socket is our own half-finished cleanup even when DISPLAY names it. Higher
     // numbers stay foreign-checked: a container may publish them without a lock.
     return displayNumber === FIRST_VIRTUAL_DISPLAY_NUMBER
@@ -191,7 +191,7 @@ export function ensureVirtualDisplayForHeadlessServe(options: { isServeMode: boo
     }
     console.warn(
       `[serve] DISPLAY=${configuredDisplay} is not verifiably live; leaving it untouched. ` +
-        'Unset DISPLAY to let Orca start its own Xvfb.'
+        'Unset DISPLAY to let Quirky start its own Xvfb.'
     )
     return false
   }

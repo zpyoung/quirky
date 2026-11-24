@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import { stopCodexBackfillRecoveryProcess } from './codex-state-db-backfill-recovery-process'

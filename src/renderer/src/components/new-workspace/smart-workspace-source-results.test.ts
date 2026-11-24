@@ -386,13 +386,13 @@ describe('Branch source results', () => {
   it('gives Jira intent exclusive ownership of Smart results', () => {
     const jiraIssue = {
       id: 'jira-1',
-      key: 'ORCA-123',
+      key: 'QUIRKY-123',
       siteId: 'site-1',
       title: 'Link Jira'
     } as never
     const rows = buildSmartWorkspaceSourceRows({
       mode: 'smart',
-      value: 'https://company.atlassian.net/browse/ORCA-123',
+      value: 'https://company.atlassian.net/browse/QUIRKY-123',
       branches: [{ refName: 'origin/main', localBranchName: 'main' }],
       githubItems: [{ repoId: 'repo-a', type: 'issue', number: 1, title: 'GitHub' } as never],
       gitlabItems: [{ repoId: 'repo-a', type: 'issue', number: 2, title: 'GitLab' } as never],
@@ -404,14 +404,14 @@ describe('Branch source results', () => {
       resultLimit: 12
     })
 
-    expect(rows).toEqual([{ kind: 'jira', value: 'jira-site-1-ORCA-123', issue: jiraIssue }])
+    expect(rows).toEqual([{ kind: 'jira', value: 'jira-site-1-QUIRKY-123', issue: jiraIssue }])
   })
 
   it('suppresses typed and provider rows while unresolved Jira intent owns the query', () => {
     expect(
       buildSmartWorkspaceSourceRows({
         mode: 'smart',
-        value: 'https://company.atlassian.net/browse/ORCA-123',
+        value: 'https://company.atlassian.net/browse/QUIRKY-123',
         branches: [{ refName: 'origin/main', localBranchName: 'main' }],
         githubItems: [{ repoId: 'repo-a', type: 'issue', number: 1, title: 'GitHub' } as never],
         gitlabItems: [],
@@ -427,13 +427,13 @@ describe('Branch source results', () => {
 
   it('keeps a resolved Jira row when ignored URL data exceeds the generic search limit', () => {
     const jiraIssue = {
-      key: 'ORCA-123',
+      key: 'QUIRKY-123',
       siteId: 'site-1'
     } as never
     expect(
       buildSmartWorkspaceSourceRows({
         mode: 'smart',
-        value: `https://company.atlassian.net/browse/ORCA-123#${'x'.repeat(2100)}`,
+        value: `https://company.atlassian.net/browse/QUIRKY-123#${'x'.repeat(2100)}`,
         branches: [],
         githubItems: [],
         gitlabItems: [],
@@ -444,7 +444,7 @@ describe('Branch source results', () => {
         linearAvailable: false,
         resultLimit: 12
       })
-    ).toEqual([{ kind: 'jira', value: 'jira-site-1-ORCA-123', issue: jiraIssue }])
+    ).toEqual([{ kind: 'jira', value: 'jira-site-1-QUIRKY-123', issue: jiraIssue }])
   })
 
   it('ignores malformed Linear collection rows instead of throwing during render', () => {
@@ -719,8 +719,8 @@ describe('Task URL Enter protection', () => {
 
 describe('Jira issue search', () => {
   it('keeps valid Jira URL intent blocking in both Smart and Jira modes', () => {
-    const firstUrl = 'https://company.atlassian.net/browse/ORCA-1'
-    const secondUrl = 'https://company.atlassian.net/browse/ORCA-2'
+    const firstUrl = 'https://company.atlassian.net/browse/QUIRKY-1'
+    const secondUrl = 'https://company.atlassian.net/browse/QUIRKY-2'
 
     expect(isBlockingJiraUrlIntent('smart', firstUrl)).toBe(true)
     expect(isBlockingJiraUrlIntent('jira', firstUrl)).toBe(true)
@@ -730,7 +730,7 @@ describe('Jira issue search', () => {
   })
 
   it('accepts a Jira query only when it is short enough and has words to search', () => {
-    expect(getJiraIssueSearchQuery('  orca-123 ')).toBe('orca-123')
+    expect(getJiraIssueSearchQuery('  quirky-123 ')).toBe('quirky-123')
     expect(getJiraIssueSearchQuery('say "hello"')).toBe('say "hello"')
     expect(getJiraIssueSearchQuery('()')).toBeNull()
     expect(getJiraIssueSearchQuery('   ')).toBeNull()
@@ -741,7 +741,7 @@ describe('Jira issue search', () => {
 
   it('renders connected Jira search results in Jira mode', () => {
     const jiraIssue = {
-      key: 'ORCA-123',
+      key: 'QUIRKY-123',
       siteId: 'site-1',
       title: 'Search Jira'
     } as never
@@ -758,6 +758,6 @@ describe('Jira issue search', () => {
       resultLimit: 12
     })
 
-    expect(rows).toEqual([{ kind: 'jira', value: 'jira-site-1-ORCA-123', issue: jiraIssue }])
+    expect(rows).toEqual([{ kind: 'jira', value: 'jira-site-1-QUIRKY-123', issue: jiraIssue }])
   })
 })

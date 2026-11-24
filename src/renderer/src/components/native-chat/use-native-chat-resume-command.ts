@@ -14,7 +14,7 @@ import type { NativeChatStructuredComposerTransport } from './native-chat-compos
 
 const RESUME = 'resume'
 
-/** A structured chat's catalog with Orca's `/resume`, in place of an agent command of that name. */
+/** A structured chat's catalog with Quirky's `/resume`, in place of an agent command of that name. */
 export function withNativeChatResumeCommand(
   commands: readonly SlashCommandSuggestion[]
 ): SlashCommandSuggestion[] {
@@ -25,7 +25,7 @@ export function withNativeChatResumeCommand(
       'Open Agent Session History'
     ),
     argumentHint: translate('components.native-chat.resumeCommand.argumentHint', '[search]'),
-    orcaOwned: true
+    quirkyOwned: true
   }
   const at = commands.findIndex(({ name }) => name === RESUME)
   return at === -1
@@ -43,9 +43,9 @@ export function parseNativeChatResumeDraft(draft: string): string | null {
 }
 
 export type NativeChatResumeCommand = {
-  /** Opens Session History for a `/resume` draft; false means the draft is not Orca's. */
+  /** Opens Session History for a `/resume` draft; false means the draft is not Quirky's. */
   consume: (draft: string) => boolean
-  /** Choosing the draft-leading Orca row runs it; mid-prompt it stays an ordinary completion. */
+  /** Choosing the draft-leading Quirky row runs it; mid-prompt it stays an ordinary completion. */
   interceptPick: <TItem extends NativeChatPickerItem>(
     pick: (item: TItem) => void
   ) => (item: TItem) => void
@@ -140,8 +140,8 @@ export function useNativeChatResumeCommand(args: {
     <TItem extends NativeChatPickerItem>(pick: (item: TItem) => void) =>
       (item: TItem) => {
         const leading = autocomplete.mode === 'slash' && autocomplete.dispatchable
-        // Choosing Orca's own row is explicit, so an earlier skill pick of the same name doesn't count.
-        if (leading && item.kind === 'command' && item.orcaOwned) {
+        // Choosing Quirky's own row is explicit, so an earlier skill pick of the same name doesn't count.
+        if (leading && item.kind === 'command' && item.quirkyOwned) {
           clearSkillOrigin()
           // The caret can sit right after `/resume` with a search already typed past it.
           open(parseNativeChatResumeDraft(textareaRef.current?.value ?? '') ?? '')

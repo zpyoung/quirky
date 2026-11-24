@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { runProcessMock } = vi.hoisted(() => ({ runProcessMock: vi.fn() }))
 
-// The cheap reader goes through Orca's single child-process entry point (windowsHide, argv
+// The cheap reader goes through Quirky's single child-process entry point (windowsHide, argv
 // encoding, tree termination); mock at that seam rather than node:child_process.
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 import {
   getCheapProcessTableSnapshot,

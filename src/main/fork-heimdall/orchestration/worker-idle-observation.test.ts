@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { WORKER_LAST_MESSAGE_MAX_BYTES } from '../../../shared/fork-heimdall/owner/worker-last-message'
 import { observeWorkerIdle } from './worker-idle-observation'
@@ -51,7 +51,7 @@ function fleet(activity: string, verdict: 'live' | 'unverifiable' = 'live', host
 
 const sendTerminalAgentPrompt = vi.fn(async () => ({}))
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the prompt send is exercised; the other runtime reads are mocked at module level.
-const runtime = { sendTerminalAgentPrompt } as unknown as OrcaRuntimeService
+const runtime = { sendTerminalAgentPrompt } as unknown as QuirkyRuntimeService
 
 function transcript(text: string) {
   return {

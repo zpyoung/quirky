@@ -16,7 +16,7 @@ import {
   writeTerminalDockPaneUserUndocked
 } from './terminal-dock-pane-state'
 
-const STORAGE_KEY = 'orca.terminalDock.paneState.v1'
+const STORAGE_KEY = 'quirky.terminalDock.paneState.v1'
 
 function hasStoredPaneEntry(paneKey: string): boolean {
   const raw = window.localStorage.getItem(STORAGE_KEY)

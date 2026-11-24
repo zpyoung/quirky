@@ -44,7 +44,7 @@ function keyedRow(overrides: Partial<DeviceEntry> = {}): DeviceEntry {
 }
 
 function registryWith(rows: DeviceEntry[]): { dir: string; registry: DeviceRegistry } {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-ephemeral-rows-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-ephemeral-rows-'))
   dirs.push(dir)
   writeFileSync(join(dir, DEVICE_REGISTRY_FILENAME), JSON.stringify(rows))
   return { dir, registry: new DeviceRegistry(dir) }

@@ -1,4 +1,4 @@
-// On a real host: what a newer Orca left in a chat, and a provider row the reader would reject,
+// On a real host: what a newer Quirky left in a chat, and a provider row the reader would reject,
 // never leave the chat unable to take its next message.
 
 import { cp, rm } from 'node:fs/promises'
@@ -106,7 +106,7 @@ const NEWER_APPROVAL: AgentJournalItemBody = JSON.parse(
   })
 )
 
-it("settles a newer Orca's pending approval as it was, and the chat takes its next message", async () => {
+it("settles a newer Quirky's pending approval as it was, and the chat takes its next message", async () => {
   await attach()
   // Still pending when its provider went away.
   emit(7, NEWER_APPROVAL)
@@ -126,7 +126,7 @@ it("settles a newer Orca's pending approval as it was, and the chat takes its ne
 // A newer host's background agent can hold such an approval while no turn runs. A queued send would
 // wait behind it forever; the plain send the client makes instead starts a turn, whose card cancel
 // then settles it.
-it("takes a send past a newer Orca's live approval, and the next turn's card cancel settles it", async () => {
+it("takes a send past a newer Quirky's live approval, and the next turn's card cancel settles it", async () => {
   // A provider whose card Cancel goes through the Stop: a card no live turn raised is declined.
   const dismissPrompt = vi.fn(async ({ commit }: { commit: () => Promise<void> }) => commit())
   Object.assign(hostTestState().host.deps.adapter, {

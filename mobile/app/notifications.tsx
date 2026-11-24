@@ -9,7 +9,7 @@ export default function NativeNotificationsRoute() {
     <NotificationsScreen
       operations={nativeNotificationSettingsOperations}
       onBack={() => router.back()}
-      description="Get agent alerts even when the app is closed. Delivered through Orca’s push service and Apple or Google."
+      description="Get agent alerts even when the app is closed. Delivered through Quirky’s push service and Apple or Google."
     >
       {(enabled) => (
         <>

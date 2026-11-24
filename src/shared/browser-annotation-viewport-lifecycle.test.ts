@@ -35,7 +35,7 @@ async function createGuest() {
     )
   }
   const markerHosts = (): number =>
-    window.document.querySelectorAll('[data-orca-browser-annotation-overlay]').length
+    window.document.querySelectorAll('[data-quirky-browser-annotation-overlay]').length
   return { window, context, install, markerHosts, requestAnimationFrame, cancelAnimationFrame }
 }
 
@@ -48,7 +48,7 @@ describe('browser annotation guest document lifecycle', () => {
     guest.window.dispatchEvent(new guest.window.Event('beforeunload'))
 
     expect(guest.markerHosts()).toBe(0)
-    expect(Reflect.has(guest.context, '__orcaBrowserAnnotationViewportBridge')).toBe(false)
+    expect(Reflect.has(guest.context, '__quirkyBrowserAnnotationViewportBridge')).toBe(false)
     expect(guest.cancelAnimationFrame).toHaveBeenCalledWith(17)
     guest.requestAnimationFrame.mockClear()
     guest.window.dispatchEvent(new guest.window.Event('scroll'))

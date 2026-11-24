@@ -49,7 +49,7 @@ function directHello(): MobileE2EEV2Hello {
     clientNonceB64: Buffer.from(nacl.randomBytes(32)).toString('base64'),
     capabilities: { framing: [2], payloadKinds: ['text', 'binary'] },
     context: {
-      protocol: 'orca-mobile-e2ee',
+      protocol: 'quirky-mobile-e2ee',
       initiator: 'mobile',
       responder: 'desktop',
       transport: 'direct'

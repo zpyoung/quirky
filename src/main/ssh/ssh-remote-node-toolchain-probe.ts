@@ -4,8 +4,8 @@ import { quotePowerShellLiteral as powerShellLiteral } from '../../shared/powers
 
 /** The host-Node floor for the npm path. */
 export const MIN_HOST_NODE_MAJOR = 18
-const NODE_VERSION_MARKER = '__ORCA_NODE_VERSION__'
-const NPM_VERSION_MARKER = '__ORCA_NPM_VERSION__'
+const NODE_VERSION_MARKER = '__QUIRKY_NODE_VERSION__'
+const NPM_VERSION_MARKER = '__QUIRKY_NPM_VERSION__'
 
 export function buildPosixNodeToolchainProbe(nodePath: string): string {
   const nodeBinDir = posixPath.dirname(nodePath)
@@ -58,7 +58,7 @@ function linesAfterMarker(output: string, marker: string): string[] | null {
     return null
   }
   const rest = lines.slice(markerIndex + 1)
-  const next = rest.findIndex((line) => line.startsWith('__ORCA_'))
+  const next = rest.findIndex((line) => line.startsWith('__QUIRKY_'))
   return next === -1 ? rest : rest.slice(0, next)
 }
 

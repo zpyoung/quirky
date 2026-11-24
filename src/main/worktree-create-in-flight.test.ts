@@ -32,7 +32,7 @@ describe('withoutInFlightWorktreeCreates', () => {
   })
 
   it('hides the real path Git lists under a symlinked workspace with missing parents', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-create-hold-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-create-hold-'))
     let release = () => {}
     try {
       const actual = join(root, 'actual')

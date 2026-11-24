@@ -23,7 +23,7 @@ afterEach(async () => {
 })
 
 it('stops spawning Git in a deleted folder and resumes once it returns', async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'orca-missing-git-cwd-'))
+  root = await mkdtemp(path.join(tmpdir(), 'quirky-missing-git-cwd-'))
   const cwd = path.join(root, 'repo')
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 

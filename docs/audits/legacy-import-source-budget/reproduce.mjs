@@ -8,8 +8,8 @@ import { join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -68,7 +68,7 @@ async function run(version) {
       }
     ]
   })
-  const directory = await fsPromises.mkdtemp(join(tmpdir(), 'orca-legacy-source-budget-'))
+  const directory = await fsPromises.mkdtemp(join(tmpdir(), 'quirky-legacy-source-budget-'))
   const filePath = join(directory, 'growing.jsonl')
   const initial = `${JSON.stringify({
     type: 'assistant',

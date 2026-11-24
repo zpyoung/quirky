@@ -177,7 +177,7 @@ describe('useDocPreviewGuestTools ids', () => {
     const attached = attachDocPreviewWebview({
       previewId: PREVIEW_ID,
       container: previewContainer,
-      url: 'orca-preview://grant/index.html',
+      url: 'quirky-preview://grant/index.html',
       ariaLabel: 'HTML preview',
       onLoadStarted: () => currentTools().resetBrowserOverlayViewport(),
       onLoadStopped: vi.fn(),

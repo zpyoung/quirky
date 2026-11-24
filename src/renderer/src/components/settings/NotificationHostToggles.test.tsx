@@ -19,7 +19,7 @@ function host(id: SidebarHostOption['id'], label: string): SidebarHostOption {
   return {
     id,
     label,
-    detail: id === 'local' ? 'This computer' : 'Orca server',
+    detail: id === 'local' ? 'This computer' : 'Quirky server',
     kind: id === 'local' ? 'local' : 'runtime',
     health: 'local',
     presence: 'local'

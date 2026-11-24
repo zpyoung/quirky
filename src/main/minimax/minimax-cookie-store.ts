@@ -6,7 +6,7 @@ import { hardenExistingSecureFile, writeSecureFile } from '../../shared/secure-f
 import type { SecretAtRestProtection } from '../../shared/secret-at-rest-protection'
 
 const MINIMAX_COOKIE_FILE = 'minimax-session-cookie.enc'
-export const COOKIE_ENVELOPE_PREFIX = 'orca-minimax-cookie:v1:'
+export const COOKIE_ENVELOPE_PREFIX = 'quirky-minimax-cookie:v1:'
 let cachedMiniMaxCookie: string | null = null
 let warnedMiniMaxCookieStatusHardenFailure = false
 
@@ -15,12 +15,12 @@ type MiniMaxCookieEnvelope = {
   payload: Buffer
 }
 
-function getOrcaDir(): string {
-  return join(homedir(), '.orca')
+function getQuirkyDir(): string {
+  return join(homedir(), '.quirky')
 }
 
 export function getMiniMaxCookiePath(): string {
-  return join(getOrcaDir(), MINIMAX_COOKIE_FILE)
+  return join(getQuirkyDir(), MINIMAX_COOKIE_FILE)
 }
 
 function encodeCookieEnvelope(kind: MiniMaxCookieEnvelope['kind'], payload: Buffer): string {

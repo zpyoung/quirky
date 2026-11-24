@@ -5,7 +5,7 @@
 // provider, and nothing here proves it did not: a fact that proves non-delivery
 // is a rejection and lives in `structured-agent-session-dispatch-rejection.ts`.
 //
-// That leaves the invariant this file exists to state: Orca NEVER re-delivers a
+// That leaves the invariant this file exists to state: Quirky NEVER re-delivers a
 // message under its own id on the strength of an `unknown`, whatever the reason
 // says. A retry that could be a second delivery is the harm this whole path
 // exists to remove, and a user who wants the message sent anyway rotates the id

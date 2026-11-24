@@ -36,7 +36,7 @@ describe('last-status persistence stays off the main thread', () => {
 
   beforeEach(async () => {
     _internals.resetCachesForTests()
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-persist-nonblocking-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-persist-nonblocking-'))
     server = new AgentHookServer()
     await server.start({ env: 'production', userDataPath })
   })

@@ -4,7 +4,7 @@ import { acquireElectronDebugger, type ElectronDebuggerLease } from './electron-
 import type { CdpClientResponseWriter } from './cdp-client-response-writer'
 import type { CdpSyntheticSessionRegistry } from './cdp-synthetic-session-registry'
 import { sendGuestCdpCommand } from './guest-cdp-command'
-import { isOrcaFrameSessionTraffic } from './guest-focused-frame-route'
+import { isQuirkyFrameSessionTraffic } from './guest-focused-frame-route'
 
 /**
  * The IO boundary with webContents.debugger: lease-based attach, event fan-out to
@@ -47,9 +47,9 @@ export class CdpDebuggerChannel {
         Record<string, unknown>,
         string | undefined
       ]
-      // Why: Orca's own frame sessions (focused cross-site frame input) were never asked for by
+      // Why: Quirky's own frame sessions (focused cross-site frame input) were never asked for by
       // the agent's client; their events would describe sessions it does not know.
-      if (isOrcaFrameSessionTraffic(this.webContents, method, params, sessionId || undefined)) {
+      if (isQuirkyFrameSessionTraffic(this.webContents, method, params, sessionId || undefined)) {
         return
       }
       const client = this.getClient()

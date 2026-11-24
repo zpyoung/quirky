@@ -57,7 +57,7 @@ afterEach(() => {
 })
 
 describe('resolveTerminalTabActivityStatus', () => {
-  // Why: Orca injects its own "<Agent> - action required" OSC title on a blocked/waiting hook and
+  // Why: Quirky injects its own "<Agent> - action required" OSC title on a blocked/waiting hook and
   // classifies that title back as evidence. Once the pane's row aged past the freshness window it
   // stopped registering its identity, so the self-authored title outranked the pane's own `done`
   // row and the tab glyph claimed a question nobody was asking.

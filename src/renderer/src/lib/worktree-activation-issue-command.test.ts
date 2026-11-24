@@ -14,10 +14,10 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore()
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, undefined, {
-      runnerScriptPath: '/tmp/repo/.git/orca/issue-command-runner.sh',
+      runnerScriptPath: '/tmp/repo/.git/quirky/issue-command-runner.sh',
       envVars: {
-        ORCA_ROOT_PATH: '/tmp/repo',
-        ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
+        QUIRKY_ROOT_PATH: '/tmp/repo',
+        QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1'
       }
     })
 
@@ -26,10 +26,10 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     })
     expect(store.setActiveTab).toHaveBeenCalledWith('tab-1')
     expect(store.queueTabIssueCommandSplit).toHaveBeenCalledWith('tab-1', {
-      command: 'bash /tmp/repo/.git/orca/issue-command-runner.sh',
+      command: 'bash /tmp/repo/.git/quirky/issue-command-runner.sh',
       env: {
-        ORCA_ROOT_PATH: '/tmp/repo',
-        ORCA_WORKTREE_PATH: '/tmp/worktrees/wt-1'
+        QUIRKY_ROOT_PATH: '/tmp/repo',
+        QUIRKY_WORKTREE_PATH: '/tmp/worktrees/wt-1'
       }
     })
   })
@@ -38,14 +38,14 @@ describe('ensureWorktreeHasInitialTerminal', () => {
     const store = createMockStore()
 
     ensureWorktreeHasInitialTerminal(store, 'wt-1', undefined, undefined, {
-      runnerScriptPath: 'C:\\repo\\.git\\orca\\issue-command-runner.sh',
+      runnerScriptPath: 'C:\\repo\\.git\\quirky\\issue-command-runner.sh',
       shell: { family: 'posix', executable: 'wsl.exe' },
-      envVars: { ORCA_ROOT_PATH: 'C:\\repo' }
+      envVars: { QUIRKY_ROOT_PATH: 'C:\\repo' }
     })
 
     expect(store.queueTabIssueCommandSplit).toHaveBeenCalledWith('tab-1', {
-      command: 'bash /mnt/c/repo/.git/orca/issue-command-runner.sh',
-      env: { ORCA_ROOT_PATH: 'C:\\repo' }
+      command: 'bash /mnt/c/repo/.git/quirky/issue-command-runner.sh',
+      env: { QUIRKY_ROOT_PATH: 'C:\\repo' }
     })
   })
 
@@ -58,22 +58,22 @@ describe('ensureWorktreeHasInitialTerminal', () => {
       'wt-1',
       undefined,
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/setup-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+        runnerScriptPath: '/tmp/repo/.git/quirky/setup-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
       },
       {
-        runnerScriptPath: '/tmp/repo/.git/orca/issue-command-runner.sh',
-        envVars: { ORCA_ROOT_PATH: '/tmp/repo' }
+        runnerScriptPath: '/tmp/repo/.git/quirky/issue-command-runner.sh',
+        envVars: { QUIRKY_ROOT_PATH: '/tmp/repo' }
       }
     )
 
     expect(createdTabStartups(store)['tab-2']).toEqual({
-      command: 'bash /tmp/repo/.git/orca/setup-runner.sh',
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      command: 'bash /tmp/repo/.git/quirky/setup-runner.sh',
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
     expect(store.queueTabIssueCommandSplit).toHaveBeenCalledWith('tab-1', {
-      command: 'bash /tmp/repo/.git/orca/issue-command-runner.sh',
-      env: { ORCA_ROOT_PATH: '/tmp/repo' }
+      command: 'bash /tmp/repo/.git/quirky/issue-command-runner.sh',
+      env: { QUIRKY_ROOT_PATH: '/tmp/repo' }
     })
   })
 

@@ -44,7 +44,7 @@ function describeSleepFailure(error: unknown): string {
   if (detail.includes('ambiguous_terminal_owner')) {
     return translate(
       'auto.components.sidebar.sleep.worktree.flow.twin.unattributed',
-      "Orca couldn't tell which host runs this workspace's terminals, so the workspace was kept open. Reconnect its hosts and try again."
+      "Quirky couldn't tell which host runs this workspace's terminals, so the workspace was kept open. Reconnect its hosts and try again."
     )
   }
   if (detail.includes('legacy')) {

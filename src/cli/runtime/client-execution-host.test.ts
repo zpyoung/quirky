@@ -6,7 +6,7 @@ import { RuntimeClient } from './client'
 import { addEnvironmentFromPairingCode } from './environments'
 import { encodePairingOffer } from '../../shared/pairing'
 
-const SELECTORS = ['ORCA_ENVIRONMENT', 'ORCA_PAIRING_CODE', 'ORCA_REMOTE_PAIRING'] as const
+const SELECTORS = ['QUIRKY_ENVIRONMENT', 'QUIRKY_PAIRING_CODE', 'QUIRKY_REMOTE_PAIRING'] as const
 const pairingCode = encodePairingOffer({
   v: 2,
   endpoint: 'ws://127.0.0.1:6768',
@@ -16,9 +16,9 @@ const pairingCode = encodePairingOffer({
 })
 // Each selector names a real paired server, so honouring it routes there.
 const selection = {
-  ORCA_ENVIRONMENT: 'other-server',
-  ORCA_PAIRING_CODE: pairingCode,
-  ORCA_REMOTE_PAIRING: pairingCode
+  QUIRKY_ENVIRONMENT: 'other-server',
+  QUIRKY_PAIRING_CODE: pairingCode,
+  QUIRKY_REMOTE_PAIRING: pairingCode
 }
 const roots: string[] = []
 
@@ -32,7 +32,7 @@ function serverProfileWith(env: Partial<Record<(typeof SELECTORS)[number], strin
   const root = mkdtempSync(join(tmpdir(), 'cli-owner-'))
   roots.push(root)
   addEnvironmentFromPairingCode(root, { name: 'other-server', pairingCode })
-  vi.stubEnv('ORCA_USER_DATA_PATH', root)
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', root)
   for (const key of SELECTORS) {
     vi.stubEnv(key, env[key])
   }
@@ -42,9 +42,9 @@ function serverProfileWith(env: Partial<Record<(typeof SELECTORS)[number], strin
 it("stays on its own server with an agent's empty selectors, and explicit flags still route", () => {
   // The agent environment sets all three empty so a profile's export cannot win.
   const root = serverProfileWith({
-    ORCA_ENVIRONMENT: '',
-    ORCA_PAIRING_CODE: '',
-    ORCA_REMOTE_PAIRING: ''
+    QUIRKY_ENVIRONMENT: '',
+    QUIRKY_PAIRING_CODE: '',
+    QUIRKY_REMOTE_PAIRING: ''
   })
   expect(new RuntimeClient().isRemote).toBe(false)
   expect(new RuntimeClient(root, undefined, null, 'other-server').isRemote).toBe(true)

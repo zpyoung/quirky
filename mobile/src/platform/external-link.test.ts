@@ -47,8 +47,8 @@ describe('opening a URL from a phone screen', () => {
   })
 
   it('checks no scheme of its own, because on a phone this is what every call site already did', () => {
-    openExternalLink('orca://x')
-    expect(linking.openURL.mock.calls).toEqual([['orca://x']])
+    openExternalLink('quirky://x')
+    expect(linking.openURL.mock.calls).toEqual([['quirky://x']])
   })
 })
 

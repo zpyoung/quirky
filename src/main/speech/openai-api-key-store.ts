@@ -15,19 +15,19 @@ type StoredOpenAiKey = {
 const OPENAI_SPEECH_TOKEN_FILE = 'openai-speech-token.enc'
 let cachedOpenAiSpeechApiKey: string | null = null
 
-function getOrcaDir(): string {
-  return join(homedir(), '.orca')
+function getQuirkyDir(): string {
+  return join(homedir(), '.quirky')
 }
 
-function ensureOrcaDir(): void {
-  const dir = getOrcaDir()
+function ensureQuirkyDir(): void {
+  const dir = getQuirkyDir()
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
 }
 
 export function getOpenAiKeyPath(): string {
-  return join(getOrcaDir(), OPENAI_SPEECH_TOKEN_FILE)
+  return join(getQuirkyDir(), OPENAI_SPEECH_TOKEN_FILE)
 }
 
 function readLegacyJsonStoredOpenAiKey(): StoredOpenAiKey | null {
@@ -53,8 +53,8 @@ export function hasOpenAiSpeechApiKey(): boolean {
 }
 
 /**
- * Whether the stored key decrypts on this host. Why orcad needs it: a key the desktop sealed with
- * Electron's safeStorage exists on disk but orcad's own secret store cannot open it.
+ * Whether the stored key decrypts on this host. Why quirkyd needs it: a key the desktop sealed with
+ * Electron's safeStorage exists on disk but quirkyd's own secret store cannot open it.
  */
 export function canReadOpenAiSpeechApiKey(): boolean {
   if (!hasOpenAiSpeechApiKey()) {
@@ -82,7 +82,7 @@ export function saveOpenAiSpeechApiKey(apiKey: string): void {
   if (!trimmed) {
     throw new Error('OpenAI API key is required')
   }
-  ensureOrcaDir()
+  ensureQuirkyDir()
   if (getSecretStore().isEncryptionAvailable()) {
     writeFileSync(getOpenAiKeyPath(), getSecretStore().encryptString(trimmed), { mode: 0o600 })
     cachedOpenAiSpeechApiKey = trimmed

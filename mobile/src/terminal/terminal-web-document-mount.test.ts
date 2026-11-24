@@ -56,7 +56,7 @@ const { createTerminalDocument } = await import('./document/create-terminal-docu
 const { mountTerminalWebDocument } = await import('./terminal-web-document-mount')
 const { TerminalWebView } = await import('./TerminalWebView.web')
 
-const HOST_CLASS = 'orca-terminal-document-host'
+const HOST_CLASS = 'quirky-terminal-document-host'
 
 /** One host element carrying the document's markup, as the mount plants it. */
 function plantHost() {

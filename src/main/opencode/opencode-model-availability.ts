@@ -1,5 +1,5 @@
 import { resolveStartupShell, tokenizeStartupCommand } from '../../shared/tui-agent-startup-shell'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 
 export async function resolveOpenCodeDirectModelExecutable(options: {

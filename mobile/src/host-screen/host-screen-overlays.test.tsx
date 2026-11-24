@@ -51,7 +51,7 @@ async function renderSheet(row: Partial<Worktree>) {
     settings: {},
     showNewWorktree: false,
     state: {
-      actionTarget: { worktreeId: 'wt', repo: 'orca', branch: 'main', ...row },
+      actionTarget: { worktreeId: 'wt', repo: 'quirky', branch: 'main', ...row },
       confirmDelete: null,
       view: INITIAL_MOBILE_VIEW,
       hostLabelById: new Map(),

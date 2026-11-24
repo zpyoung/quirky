@@ -3,7 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { spawnSync } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { FEATURE_WALL_TILES } from '../../src/shared/feature-wall-tiles.ts'
 import { verifyLosslessFeatureWallMedia } from './verify-feature-wall-lossless-media.mjs'
 
@@ -14,9 +14,9 @@ const DEFAULT_MARKETING_REPO = path.join(
   'source',
   'repos',
   'Stably',
-  'orca-marketing-website'
+  'quirky-marketing-website'
 )
-const MARKETING_REPO = process.env.ORCA_MARKETING_REPO || DEFAULT_MARKETING_REPO
+const MARKETING_REPO = process.env.QUIRKY_MARKETING_REPO || DEFAULT_MARKETING_REPO
 const DEST_ROOT = path.join(ROOT, 'resources', 'onboarding', 'feature-wall')
 
 const TILES = [
@@ -33,8 +33,8 @@ const TILES = [
   },
   {
     id: 'tile-03',
-    gifRelativePath: 'public/whats-new/orca-github.gif',
-    posterRelativePath: 'public/whats-new/posters/orca-github.jpg'
+    gifRelativePath: 'public/whats-new/quirky-github.gif',
+    posterRelativePath: 'public/whats-new/posters/quirky-github.jpg'
   },
   {
     id: 'tile-04',
@@ -43,8 +43,8 @@ const TILES = [
   },
   {
     id: 'tile-05',
-    gifRelativePath: 'public/whats-new/orca-design-mode.gif',
-    posterRelativePath: 'public/whats-new/posters/orca-design-mode.jpg'
+    gifRelativePath: 'public/whats-new/quirky-design-mode.gif',
+    posterRelativePath: 'public/whats-new/posters/quirky-design-mode.jpg'
   },
   {
     id: 'tile-06',
@@ -63,8 +63,8 @@ const TILES = [
   },
   {
     id: 'tile-09',
-    gifRelativePath: 'public/whats-new/orca-cli-demo.gif',
-    posterRelativePath: 'public/whats-new/posters/orca-cli-demo.jpg'
+    gifRelativePath: 'public/whats-new/quirky-cli-demo.gif',
+    posterRelativePath: 'public/whats-new/posters/quirky-cli-demo.jpg'
   },
   {
     id: 'tile-10',
@@ -78,8 +78,8 @@ const TILES = [
   },
   {
     id: 'tile-12',
-    gifRelativePath: 'public/whats-new/orca-markdown-editor.gif',
-    posterRelativePath: 'public/whats-new/posters/orca-markdown-editor.jpg'
+    gifRelativePath: 'public/whats-new/quirky-markdown-editor.gif',
+    posterRelativePath: 'public/whats-new/posters/quirky-markdown-editor.jpg'
   }
 ]
 
@@ -105,7 +105,7 @@ function gitRecordedAtSeconds(tile, relativePath) {
 await mkdir(DEST_ROOT, { recursive: true })
 
 const originals = new Map()
-const stagingRoot = await mkdtemp(path.join(tmpdir(), 'orca-feature-wall-media-'))
+const stagingRoot = await mkdtemp(path.join(tmpdir(), 'quirky-feature-wall-media-'))
 try {
   for (const tile of TILES) {
     const sourceRoot = sourceRootForTile(tile)

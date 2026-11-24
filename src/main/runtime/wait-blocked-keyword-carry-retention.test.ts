@@ -1,19 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as ownership from '../../shared/own-retained-string'
-import { OrcaRuntimeWithScheduleWaitBlockedCheck } from './terminal/wait/terminal-wait-blocked-checks'
-import { WAIT_BLOCKED_KEYWORD_CARRY_CHARS } from './orca-runtime-postlude'
+import { QuirkyRuntimeWithScheduleWaitBlockedCheck } from './terminal/wait/terminal-wait-blocked-checks'
+import { WAIT_BLOCKED_KEYWORD_CARRY_CHARS } from './quirky-runtime-postlude'
 import type { WaitBlockedCheckState } from './wait-blocked-check-state'
 
 function createScheduleHost() {
   const state = new Map<string, WaitBlockedCheckState>()
   const host = {
     waitBlockedCheckStateByPtyId: state,
-    runWaitBlockedCheck: vi.fn<OrcaRuntimeWithScheduleWaitBlockedCheck['runWaitBlockedCheck']>()
+    runWaitBlockedCheck: vi.fn<QuirkyRuntimeWithScheduleWaitBlockedCheck['runWaitBlockedCheck']>()
   }
   return {
     state,
     schedule(ptyId: string, appendedText: string, at: number) {
-      OrcaRuntimeWithScheduleWaitBlockedCheck.prototype['scheduleWaitBlockedCheck'].call(
+      QuirkyRuntimeWithScheduleWaitBlockedCheck.prototype['scheduleWaitBlockedCheck'].call(
         host,
         ptyId,
         appendedText,

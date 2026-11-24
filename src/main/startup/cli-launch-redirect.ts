@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { posix, resolve, win32 } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { CLI_BOOLEAN_FLAGS, findCliCommandIndex } from '../../shared/cli-argument-boundary'
 import { ELECTRON_NO_SANDBOX_REQUEST_ENV } from '../../shared/electron-no-sandbox-request'
 import { CLI_COMMAND_NAMES } from './cli-command-names'
@@ -31,7 +31,7 @@ const DESKTOP_VALUE_FLAGS = new Set(['--disable-features'])
 const CLI_LAUNCH_VALUE_FLAG_NAMES = [...VALUE_TAKING_FLAGS].map((flag) => flag.slice(2))
 
 // Fence recursion if a wrapper drops ELECTRON_RUN_AS_NODE again.
-const REDIRECT_ATTEMPT_ENV = 'ORCA_CLI_LAUNCH_REDIRECTED'
+const REDIRECT_ATTEMPT_ENV = 'QUIRKY_CLI_LAUNCH_REDIRECTED'
 
 // Redirect packaged CLI-shaped launches before Chromium initializes.
 export function maybeRedirectCliLaunch(
@@ -75,11 +75,11 @@ export function maybeRedirectCliLaunch(
     return { redirected: false }
   }
   if (env[REDIRECT_ATTEMPT_ENV] === '1') {
-    process.stderr.write('Unable to start the Orca CLI through Electron node mode.\n')
+    process.stderr.write('Unable to start the Quirky CLI through Electron node mode.\n')
     return { redirected: true, status: 1 }
   }
   if (!exists(cliEntryPath)) {
-    process.stderr.write(`Unable to locate the Orca CLI entrypoint at ${cliEntryPath}\n`)
+    process.stderr.write(`Unable to locate the Quirky CLI entrypoint at ${cliEntryPath}\n`)
     return { redirected: true, status: 1 }
   }
 
@@ -102,8 +102,8 @@ export function maybeRedirectCliLaunch(
 type DirectServeLaunch = { args: string[]; userDataPath: string | null; noSandbox: boolean }
 
 /**
- * A direct `<binary> serve` on Linux. It runs through the CLI like `orca-ide serve` does, so it
- * honours ORCA_USER_DATA_PATH and --supervise; exec keeps the pid, so signals still reach it.
+ * A direct `<binary> serve` on Linux. It runs through the CLI like `quirky-ide serve` does, so it
+ * honours QUIRKY_USER_DATA_PATH and --supervise; exec keeps the pid, so signals still reach it.
  */
 export function getDirectServeLaunch(
   argv: string[],
@@ -117,7 +117,7 @@ export function getDirectServeLaunch(
   if (commandIndex === -1 || args[commandIndex] !== 'serve') {
     return null
   }
-  // Why: the CLI has no --user-data-dir; it reads the profile from ORCA_USER_DATA_PATH.
+  // Why: the CLI has no --user-data-dir; it reads the profile from QUIRKY_USER_DATA_PATH.
   let userDataPath: string | null = null
   const leading: string[] = []
   for (let index = 0; index < commandIndex; index += 1) {
@@ -150,7 +150,7 @@ function execDirectServe(
   // Why no fence: exec sets ELECTRON_RUN_AS_NODE itself, and the server's terminals inherit this env.
   delete childEnv[REDIRECT_ATTEMPT_ENV]
   if (serve.userDataPath) {
-    childEnv.ORCA_USER_DATA_PATH = serve.userDataPath
+    childEnv.QUIRKY_USER_DATA_PATH = serve.userDataPath
   }
   if (serve.noSandbox) {
     childEnv[ELECTRON_NO_SANDBOX_REQUEST_ENV] = '1'
@@ -159,7 +159,7 @@ function execDirectServe(
     execve(execPath, [execPath, cliEntryPath, ...serve.args], childEnv)
   } catch (error) {
     process.stderr.write(
-      `[serve] Serving in-process; could not start the Orca CLI: ${error instanceof Error ? error.message : String(error)}\n`
+      `[serve] Serving in-process; could not start the Quirky CLI: ${error instanceof Error ? error.message : String(error)}\n`
     )
   }
 }
@@ -330,8 +330,8 @@ function getPathApi(platform: NodeJS.Platform): typeof win32 | typeof posix {
 function buildElectronRunAsNodeEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const childEnv = { ...env }
   // Preserve user values without exposing them to Electron's bootstrap.
-  childEnv.ORCA_NODE_OPTIONS = env.NODE_OPTIONS ?? ''
-  childEnv.ORCA_NODE_REPL_EXTERNAL_MODULE = env.NODE_REPL_EXTERNAL_MODULE ?? ''
+  childEnv.QUIRKY_NODE_OPTIONS = env.NODE_OPTIONS ?? ''
+  childEnv.QUIRKY_NODE_REPL_EXTERNAL_MODULE = env.NODE_REPL_EXTERNAL_MODULE ?? ''
   childEnv.ELECTRON_RUN_AS_NODE = '1'
   childEnv[REDIRECT_ATTEMPT_ENV] = '1'
   delete childEnv.NODE_OPTIONS

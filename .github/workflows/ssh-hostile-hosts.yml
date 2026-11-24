@@ -1,8 +1,8 @@
 name: SSH hostile hosts
 
-# Hostile-host matrix: the real client-side managed orcad deploy against container SSH targets
+# Hostile-host matrix: the real client-side managed quirkyd deploy against container SSH targets
 # (old glibc, musl, no libstdc++, noexec home, no egress on either side) and against each macOS runner's own
-# loopback sshd, asserting the runtime each host resolves and whether orcad activates there.
+# loopback sshd, asserting the runtime each host resolves and whether quirkyd activates there.
 # Heavy (three slot builds plus eight images), so it runs only when the deploy, the runtime store
 # or the slot build changes, and on demand.
 on:
@@ -12,19 +12,19 @@ on:
       # The managed deploy runs on these remote install and runtime primitives.
       - 'src/main/ssh/remote-*'
       - 'src/main/ssh/*runtime*'
-      - 'src/main/ssh/orcad-*'
+      - 'src/main/ssh/quirkyd-*'
       - 'src/main/managed-server/**'
-      - 'src/main/orcad/orcad-artifact-materializer.ts'
-      - 'src/main/orcad/orcad-host-unavailable.ts'
+      - 'src/main/quirkyd/quirkyd-artifact-materializer.ts'
+      - 'src/main/quirkyd/quirkyd-host-unavailable.ts'
       - 'src/main/node-runtime/**'
       - 'src/main/ssh/ssh-remote-*'
       - 'src/main/ssh/hostile-host-test-support/**'
       - 'src/main/ssh/sftp-*'
       - 'src/shared/node-runtime-pin.ts'
-      - 'src/shared/orcad-artifacts.ts'
-      - 'config/scripts/build-orcad-*.mjs'
-      - 'config/scripts/orcad-prebuild-*.mjs'
-      - 'config/scripts/verify-packaged-orcad-template.cjs'
+      - 'src/shared/quirkyd-artifacts.ts'
+      - 'config/scripts/build-quirkyd-*.mjs'
+      - 'config/scripts/quirkyd-prebuild-*.mjs'
+      - 'config/scripts/verify-packaged-quirkyd-template.cjs'
       - 'config/patches/node-pty*'
       # The deploy runs over this SSH transport.
       - 'src/main/ssh/connection/**'
@@ -58,7 +58,7 @@ jobs:
     container: quay.io/pypa/manylinux_2_28_x86_64@sha256:407f771c51a2c3e83ebe5a7970b4289ead3a6db21d9b9c089168775cad11d328
     timeout-minutes: 25
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
       CC: gcc
       CXX: g++
       PYTHON: /opt/python/cp312-cp312/bin/python3
@@ -83,13 +83,13 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
       - name: Build and smoke the linux-x64-glibc slot
         run: |
-          pnpm build:orcad-prebuilds --slot=linux-x64-glibc
-          pnpm build:orcad-prebuilds --require-slots linux-x64-glibc
-          pnpm build:orcad-prebuilds --slot=linux-x64-glibc --smoke
+          pnpm build:quirkyd-prebuilds --slot=linux-x64-glibc
+          pnpm build:quirkyd-prebuilds --require-slots linux-x64-glibc
+          pnpm build:quirkyd-prebuilds --slot=linux-x64-glibc --smoke
       - uses: actions/upload-artifact@v7
         with:
           name: hostile-hosts-glibc-slot
-          path: out/orcad-prebuilds
+          path: out/quirkyd-prebuilds
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
@@ -113,7 +113,7 @@ jobs:
           touch "$VERIFICATION_CACHE_PATH"
           # Same digest as the headless-server musl lane; re-resolve it whenever NODE_RUNTIME_PIN moves.
           docker run --rm --init -i \
-            -e ORCA_BACKGROUND_LAUNCH=1 \
+            -e QUIRKY_BACKGROUND_LAUNCH=1 \
             -v "$VERIFICATION_CACHE_PATH:/root/.cache/pnpm/lockfile-verified.jsonl" \
             -v "$GITHUB_WORKSPACE:/work" -w /work \
             node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sh -s <<'MUSL_SLOT'
@@ -122,14 +122,14 @@ jobs:
           git config --global --add safe.directory /work
           npm install -g "$(node -p "require('./package.json').packageManager.split('+')[0]")"
           pnpm install --frozen-lockfile --ignore-scripts
-          pnpm build:orcad-prebuilds --slot=linux-x64-musl
-          pnpm build:orcad-prebuilds --require-slots linux-x64-musl
-          pnpm build:orcad-prebuilds --slot=linux-x64-musl --smoke
+          pnpm build:quirkyd-prebuilds --slot=linux-x64-musl
+          pnpm build:quirkyd-prebuilds --require-slots linux-x64-musl
+          pnpm build:quirkyd-prebuilds --slot=linux-x64-musl --smoke
           MUSL_SLOT
       - uses: actions/upload-artifact@v7
         with:
           name: hostile-hosts-musl-slot
-          path: out/orcad-prebuilds
+          path: out/quirkyd-prebuilds
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -149,13 +149,13 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
       - name: Build and smoke the glibc 2.17 compat slot under the glibc-217 Node
         run: |
-          compat_node="$(node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217 --print-runtime)"
+          compat_node="$(node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217 --print-runtime)"
           case "$compat_node" in
             "$GITHUB_WORKSPACE"/*) ;;
             *) echo "glibc-217 Node cached outside the workspace: $compat_node" >&2; exit 1 ;;
           esac
           docker run --rm --init -i \
-            -e ORCA_BACKGROUND_LAUNCH=1 \
+            -e QUIRKY_BACKGROUND_LAUNCH=1 \
             -e COMPAT_NODE="/work/${compat_node#"$GITHUB_WORKSPACE"/}" \
             -e CC=gcc -e CXX=g++ \
             -e PYTHON=/opt/python/cp312-cp312/bin/python3 \
@@ -163,15 +163,15 @@ jobs:
             quay.io/pypa/manylinux2014_x86_64@sha256:6f74cabeac2432570aa4bfdb29f7c1f30313d4d6654d764c44e574b6ffdd4ed5 bash -s <<'GLIBC217_COMPAT_SLOT'
           set -eu
           export PATH="$(dirname "$COMPAT_NODE"):$PATH"
-          node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217
-          node config/scripts/build-orcad-prebuilds.mjs --require-slots linux-x64-glibc217
+          node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217
+          node config/scripts/build-quirkyd-prebuilds.mjs --require-slots linux-x64-glibc217
           # The image's devtoolset LD_LIBRARY_PATH must not stand in for a host C++ runtime.
-          env -u LD_LIBRARY_PATH node config/scripts/build-orcad-prebuilds.mjs --slot=linux-x64-glibc217 --smoke
+          env -u LD_LIBRARY_PATH node config/scripts/build-quirkyd-prebuilds.mjs --slot=linux-x64-glibc217 --smoke
           GLIBC217_COMPAT_SLOT
       - uses: actions/upload-artifact@v7
         with:
           name: hostile-hosts-glibc217-slot
-          path: out/orcad-prebuilds
+          path: out/quirkyd-prebuilds
           include-hidden-files: true
           retention-days: 1
           if-no-files-found: error
@@ -181,7 +181,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -195,17 +195,17 @@ jobs:
           path: ${{ runner.temp }}/hostile-host-prebuild-lanes
       - name: Merge verified Linux slots
         run: |
-          node config/scripts/merge-orcad-prebuilds.mjs "$RUNNER_TEMP"/hostile-host-prebuild-lanes/*
-          pnpm build:orcad-prebuilds --require-slots linux-x64-glibc,linux-x64-musl,linux-x64-glibc217
+          node config/scripts/merge-quirkyd-prebuilds.mjs "$RUNNER_TEMP"/hostile-host-prebuild-lanes/*
+          pnpm build:quirkyd-prebuilds --require-slots linux-x64-glibc,linux-x64-musl,linux-x64-glibc217
       # Only the x64 Linux slots exist here, so the template is built for those two, and
       # glibc217 is staged beside its base.
       - uses: ./.github/actions/build-mobile-web-bundle
-      - name: Build the orcad template
-        run: node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc,linux-x64-musl
+      - name: Build the quirkyd template
+        run: node config/scripts/build-quirkyd-template.mjs --targets linux-x64-glibc,linux-x64-musl
       - name: Run the hostile-host matrix
         env:
-          ORCA_RUN_SSH_HOSTILE_HOSTS: '1'
-          ORCA_SSH_HOSTILE_HOST_CELLS: ${{ github.event.inputs.cells || '' }}
+          QUIRKY_RUN_SSH_HOSTILE_HOSTS: '1'
+          QUIRKY_SSH_HOSTILE_HOST_CELLS: ${{ github.event.inputs.cells || '' }}
         run: pnpm test:node src/main/ssh/hostile-host-test-support/ssh-hostile-hosts.docker.test.ts
 
   # macOS: the runner is the SSH host. A user-level sshd on a loopback port logs in
@@ -226,7 +226,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -235,14 +235,14 @@ jobs:
         with:
           native-runtime: node
       - uses: ./.github/actions/build-mobile-web-bundle
-      - name: Build and smoke this runner's slot and the orcad template
+      - name: Build and smoke this runner's slot and the quirkyd template
         run: |
-          pnpm build:orcad-prebuilds
-          pnpm build:orcad-prebuilds --require-slots ${{ matrix.target }}
-          pnpm build:orcad-prebuilds --smoke
-          node config/scripts/build-orcad-template.mjs --targets ${{ matrix.target }}
+          pnpm build:quirkyd-prebuilds
+          pnpm build:quirkyd-prebuilds --require-slots ${{ matrix.target }}
+          pnpm build:quirkyd-prebuilds --smoke
+          node config/scripts/build-quirkyd-template.mjs --targets ${{ matrix.target }}
       - name: Run the macOS hostile-host cell
         env:
-          ORCA_RUN_SSH_HOSTILE_HOSTS: '1'
-          ORCA_SSH_HOSTILE_HOST_CELLS: ${{ matrix.cell }}
+          QUIRKY_RUN_SSH_HOSTILE_HOSTS: '1'
+          QUIRKY_SSH_HOSTILE_HOST_CELLS: ${{ matrix.cell }}
         run: pnpm test:node src/main/ssh/hostile-host-test-support/ssh-hostile-hosts.docker.test.ts

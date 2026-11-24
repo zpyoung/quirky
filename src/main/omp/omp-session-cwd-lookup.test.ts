@@ -20,7 +20,7 @@ let root = ''
 let sessionsDir = ''
 
 beforeEach(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), 'orca-omp-cwd-')))
+  root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-omp-cwd-')))
   sessionsDir = join(root, 'sessions')
   const actual = await vi.importActual<typeof FsPromises>('node:fs/promises')
   io.open.mockReset().mockImplementation(actual.opendir)
@@ -39,7 +39,11 @@ async function record(bucket: string, file = FILE): Promise<string> {
   return path
 }
 
-async function lookup(cwd = '/repo/orca', homeDir = join(root, 'home'), temp = join(root, 'temp')) {
+async function lookup(
+  cwd = '/repo/quirky',
+  homeDir = join(root, 'home'),
+  temp = join(root, 'temp')
+) {
   const launchEnv = {
     OMP_CODING_AGENT_DIR: sessionsDir,
     HOME: homeDir,
@@ -63,7 +67,7 @@ async function lookup(cwd = '/repo/orca', homeDir = join(root, 'home'), temp = j
 
 describe('OMP known-workspace transcript lookup', () => {
   it('opens only the known cwd group and stops its iterator at the first ID match', async () => {
-    const expected = await record('--repo-orca--')
+    const expected = await record('--repo-quirky--')
     await record('--unrelated-project--')
     const visited: string[] = []
     let yielded = 0
@@ -85,7 +89,7 @@ describe('OMP known-workspace transcript lookup', () => {
     })
 
     expect(await lookup()).toBe(expected)
-    expect(visited).toEqual([join(sessionsDir, '--repo-orca--')])
+    expect(visited).toEqual([join(sessionsDir, '--repo-quirky--')])
     expect(yielded).toBe(2)
     expect(closed).toBe(1)
   })
@@ -122,8 +126,8 @@ describe('OMP known-workspace transcript lookup', () => {
     const digest = windows
       ? '25910242104f20d3250db9cb42dca52b1ef2afc76aeebbb03cf50c958c3927e9'
       : '5e800b892f87de7d83df9a448eb6a6f9e4c8ce34f082e23cc225a87e622553ac'
-    const expected = await record(`abs-orca-${digest}`)
-    expect(await lookup(windows ? 'C:\\repo\\orca' : '/repo/orca')).toBe(expected)
+    const expected = await record(`abs-quirky-${digest}`)
+    expect(await lookup(windows ? 'C:\\repo\\quirky' : '/repo/quirky')).toBe(expected)
   })
 
   it('matches OMP historical absolute scope for a relative name beginning with two dots', async () => {
@@ -149,7 +153,7 @@ describe('OMP known-workspace transcript lookup', () => {
   )
 
   it('never descends into session artifacts even when a child carries the wanted ID', async () => {
-    const dir = join(sessionsDir, '--repo-orca--')
+    const dir = join(sessionsDir, '--repo-quirky--')
     const artifact = FILE.slice(0, -'.jsonl'.length)
     await mkdir(join(dir, artifact), { recursive: true })
     await writeFile(join(dir, artifact, FILE), '{}\n')
@@ -158,7 +162,7 @@ describe('OMP known-workspace transcript lookup', () => {
   })
 
   it('refuses unreadable groups without opening another workspace', async () => {
-    await record('--repo-orca--')
+    await record('--repo-quirky--')
     io.open.mockRejectedValue(new Error('EACCES'))
     expect(await lookup()).toBeNull()
     expect(io.open).toHaveBeenCalledTimes(1)
@@ -169,7 +173,7 @@ describe('OMP known-workspace transcript lookup', () => {
     await mkdir(outside, { recursive: true })
     await mkdir(sessionsDir, { recursive: true })
     await writeFile(join(outside, FILE), '{}\n')
-    const group = join(sessionsDir, '--repo-orca--')
+    const group = join(sessionsDir, '--repo-quirky--')
     await symlink(outside, group)
     expect(await lookup()).toBeNull()
     expect(io.open).not.toHaveBeenCalled()

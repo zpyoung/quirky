@@ -8,7 +8,7 @@ const canonicalLf = (text) => text.replaceAll('\r\n', '\n')
 const readText = (name) => canonicalLf(readFileSync(name, 'utf8'))
 const sha256 = (text) => createHash('sha256').update(text).digest('hex')
 function loadSources({
-  variant = process.env.ORCA_PLUGIN_LOG_VARIANT ?? 'fixed',
+  variant = process.env.QUIRKY_PLUGIN_LOG_VARIANT ?? 'fixed',
   read = readText,
   exists = existsSync
 } = {}) {

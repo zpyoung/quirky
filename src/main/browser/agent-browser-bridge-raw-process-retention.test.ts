@@ -27,7 +27,7 @@ let bridge: AgentBrowserBridge
 
 beforeEach(() => {
   vi.clearAllMocks()
-  userDataPath.current = mkdtempSync(join(tmpdir(), 'orca-agent-browser-retention-'))
+  userDataPath.current = mkdtempSync(join(tmpdir(), 'quirky-agent-browser-retention-'))
   bridge = new AgentBrowserBridge(mockBrowserManager())
   Object.defineProperty(bridge, 'agentBrowserBin', { value: process.execPath, configurable: true })
 })
@@ -38,7 +38,7 @@ afterEach(() => {
 })
 
 function run(script: string): Promise<string> {
-  return bridge['runAgentBrowserRaw']('orca-tab-retention', ['-e', script])
+  return bridge['runAgentBrowserRaw']('quirky-tab-retention', ['-e', script])
 }
 
 function rememberChild(script: string) {

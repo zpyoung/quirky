@@ -26,7 +26,7 @@ export type ClaudeCommandTurn = {
   /** The command input's uuid, which the result answering it names. */
   sentUuid: string
   compacted: boolean
-  /** Orca asked Claude to stop the command. */
+  /** Quirky asked Claude to stop the command. */
   interruptRequested: boolean
   /** Claude reported the compaction failed, with its words for a person when it gave any. */
   failed: { detail?: ProviderDiagnostic } | null

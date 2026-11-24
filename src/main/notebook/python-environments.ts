@@ -1,7 +1,7 @@
 import { closeSync, existsSync, openSync, readdirSync, readSync, statSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative } from 'node:path'
-import { runProcess } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcess } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import type {
   CreateVenvResult,
   PythonEnvironment,

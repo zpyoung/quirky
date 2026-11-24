@@ -127,7 +127,7 @@ export function getLegendItems(provider: 'claude' | 'codex') {
   ]
 }
 
-export function OrcaLogo(): React.JSX.Element {
+export function QuirkyLogo(): React.JSX.Element {
   return (
     <svg
       width={26}

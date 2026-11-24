@@ -60,7 +60,7 @@ describe('ZCode AI Vault SQLite worker', () => {
   it.each(['message', 'part', 'both'] as const)(
     'reads partially migrated %s sequence columns and keeps legacy NULL rows last',
     async (tables) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-legacy-sequence-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-legacy-sequence-'))
       directories.push(directory)
       const dbPath = join(directory, 'db.sqlite')
       writeOpenCodeSqliteDatabase(dbPath, [
@@ -107,7 +107,7 @@ describe('ZCode AI Vault SQLite worker', () => {
   )
 
   it('uses stored message and part sequence for first prompt, preview, and search', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-sequence-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-sequence-'))
     directories.push(directory)
     const dbPath = join(directory, 'db.sqlite')
     writeOpenCodeSqliteDatabase(dbPath, [
@@ -174,7 +174,7 @@ describe('ZCode AI Vault SQLite worker', () => {
   })
 
   it('lists, parses, and captures ZCode sessions without labelling them OpenCode', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-ai-vault-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-ai-vault-'))
     directories.push(directory)
     const dbPath = join(directory, 'db.sqlite')
     writeOpenCodeSqliteDatabase(dbPath, [
@@ -244,7 +244,7 @@ describe('ZCode AI Vault SQLite worker', () => {
   })
 
   it('excludes ZCode hidden transcript messages from preview and search', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-ai-vault-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-ai-vault-'))
     directories.push(directory)
     const dbPath = join(directory, 'db.sqlite')
     writeOpenCodeSqliteDatabase(dbPath, [

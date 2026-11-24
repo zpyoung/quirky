@@ -65,7 +65,7 @@ export function setRepoMaintenanceActivityProbe(probe: RepoMaintenanceActivityPr
 
 /** Support escape hatch: kills the sweep without touching the user's git config. */
 function isDisabled(): boolean {
-  return process.env.ORCA_DISABLE_REPO_REF_MAINTENANCE === '1'
+  return process.env.QUIRKY_DISABLE_REPO_REF_MAINTENANCE === '1'
 }
 
 function localMaintenanceOptions(): RepoRefMaintenanceOptions {
@@ -174,9 +174,9 @@ function refsDirectoryForMainProcess(commonDir: string, wslDistro: string | unde
 
 /**
  * `maintenance.auto=false` and `gc.auto=0` are the two knobs a user reaches for
- * to tell Git to stop maintaining a repository on its own. Orca sets both on its
+ * to tell Git to stop maintaining a repository on its own. Quirky sets both on its
  * own fetches, but only as per-invocation `-c` flags, so this probe sees the
- * user's persisted config and never Orca's own suppression.
+ * user's persisted config and never Quirky's own suppression.
  */
 export function isGitAutoMaintenanceDisabled(configOutput: string): boolean {
   return configOutput

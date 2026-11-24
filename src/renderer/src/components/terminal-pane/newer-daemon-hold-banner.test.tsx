@@ -19,7 +19,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const TAB_ID = 'tab-1'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey(TAB_ID, LEAF_ID)
-const TITLE = 'This terminal was opened in a newer version of Orca'
+const TITLE = 'This terminal was opened in a newer version of Quirky'
 const BODY = 'Reopen it here to keep working. Your agent session will resume.'
 const FAILED_TITLE = "Couldn't reopen this terminal"
 

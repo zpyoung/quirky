@@ -214,7 +214,7 @@ function setRendererPlatform(platform: NodeJS.Platform): void {
 describe('rendered right sidebar titlebar drag regions', () => {
   beforeEach(() => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = false
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = false
     setRendererPlatform('darwin')
     mockAppState.rightSidebarOpen = true
     mockAppState.rightSidebarTab = 'explorer'
@@ -267,7 +267,7 @@ describe('rendered right sidebar titlebar drag regions', () => {
 
   it('keeps paired Linux web clients on the browser-style top strip', () => {
     setRendererPlatform('linux')
-    ;(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ = true
+    ;(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ = true
 
     const markup = renderToStaticMarkup(<RightSidebar />)
     const activityStrip = openingTag(markup, 'right-sidebar-activity-strip')

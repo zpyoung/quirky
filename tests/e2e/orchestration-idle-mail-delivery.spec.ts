@@ -14,10 +14,10 @@
  *
  * The ordering fixes on this path (microtask deferral, probe-window respawn,
  * waiter reservations) are sub-millisecond races that E2E cannot steer; they are
- * covered in src/main/runtime/orca-runtime.test.ts. What lives here is every
+ * covered in src/main/runtime/quirky-runtime.test.ts. What lives here is every
  * behavior that needs a real process, a real title, or a real pane.
  */
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import type { ElectronApplication, Page, TestInfo } from '@stablyai/playwright-test'
 import { randomUUID } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
@@ -52,7 +52,7 @@ import {
 import { waitForPtyShellEcho } from './terminal-pty-readiness'
 import { parkHiddenTabBehindDecoy } from './helpers/terminal-hidden-parking'
 
-const POINTER_COMMAND = 'orca-dev orchestration check'
+const POINTER_COMMAND = 'quirky-dev orchestration check'
 
 // Why generous: the push runs a microtask behind the send, may defer once more
 // behind a liveness probe, and submits Enter after a 500ms delay.
@@ -106,13 +106,13 @@ async function readUserDataDir(electronApp: ElectronApplication): Promise<string
 }
 
 async function setUpMailFixture(
-  orcaPage: Page,
+  quirkyPage: Page,
   electronApp: ElectronApplication
 ): Promise<MailFixture> {
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage)
 
   const userDataDir = await readUserDataDir(electronApp)
   const client = new RuntimeClient(userDataDir, 30_000, null, null)
@@ -135,8 +135,8 @@ async function setUpMailFixture(
   }): Promise<AgentPane> => {
     // The fixture's pane is already mounted, so its leaf exists — which is what
     // push delivery resolves the write target through.
-    const ptyId = await waitForActivePanePtyId(orcaPage)
-    const { paneKey } = await waitForActivePaneHookDescriptor(orcaPage)
+    const ptyId = await waitForActivePanePtyId(quirkyPage)
+    const { paneKey } = await waitForActivePaneHookDescriptor(quirkyPage)
     const resolved = await client.call<{ terminal: { handle: string } }>('terminal.resolvePane', {
       paneKey
     })
@@ -145,9 +145,9 @@ async function setUpMailFixture(
     // Why prove the shell echoes first: keystrokes typed at a shell that has not
     // reached its prompt are simply dropped, and the agent then never starts for
     // a reason unrelated to anything under test.
-    await waitForPtyShellEcho(orcaPage, ptyId, 60_000)
+    await waitForPtyShellEcho(quirkyPage, ptyId, 60_000)
     const agent = createMailPaneAgent(options)
-    await execInTerminal(orcaPage, ptyId, agent.launchCommand)
+    await execInTerminal(quirkyPage, ptyId, agent.launchCommand)
     await expect
       .poll(() => agent.hasStarted(), { timeout: 60_000, message: 'agent never started' })
       .toBe(true)
@@ -276,11 +276,11 @@ async function expectStaysPending(
 
 test.describe('orchestration push-on-idle mail delivery', () => {
   test('delivers mail that arrives while the agent is already idle', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Already idle delivery')
@@ -300,11 +300,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('holds mail while the agent is working and releases it on the idle frame', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     pane.agent.setTitle(CODEX_WORKING_TITLE)
     await waitForObservedTitle(client, pane.handle, CODEX_WORKING_TITLE)
@@ -312,7 +312,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
 
     const subject = 'Held while working'
     const messageId = await sendMail(client, mailbox, { subject })
-    await expectStaysPending(orcaPage, userDataDir, pane, messageId)
+    await expectStaysPending(quirkyPage, userDataDir, pane, messageId)
 
     // Releasing the gate proves the silence above was the working status and not
     // a harness that never wired the send to this pane at all.
@@ -329,11 +329,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   // no status, so idle IS a transition here. The no-transition variant needs a
   // restore-seeded idle and lives in orchestration-idle-mail-restore.spec.ts.
   test('delivers mail queued before a fresh agent has reported any status', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     const mailbox = await createRunMailbox(client, pane, 'First live idle frame')
 
@@ -341,7 +341,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
     // resumed agent sits before it paints its prompt.
     const subject = 'First live idle frame'
     const messageId = await sendMail(client, mailbox, { subject })
-    await expectStaysPending(orcaPage, userDataDir, pane, messageId)
+    await expectStaysPending(quirkyPage, userDataDir, pane, messageId)
 
     // Idle is this pane's FIRST live status, so there is no busy→idle edge here
     // either; delivery has to hang off the liveness of the observation.
@@ -354,11 +354,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   // nowhere to file mail to a bare handle: the send is refused outright, which
   // is what keeps an unsafe pointer out of the pane on the next idle frame.
   test('keeps unbound direct mail durable without pointing to an unsafe check', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
 
@@ -371,7 +371,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
     pane.agent.setTitle(CODEX_IDLE_TITLE)
     await waitForObservedTitle(client, pane.handle, CODEX_IDLE_TITLE)
 
-    await orcaPage.waitForTimeout(NO_DELIVERY_SETTLE_MS)
+    await quirkyPage.waitForTimeout(NO_DELIVERY_SETTLE_MS)
     expect(readMailRow(userDataDir, messageId)).toMatchObject({
       to_handle: pane.handle,
       run_id: 'run_unbound',
@@ -382,11 +382,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('leaves the mail to a live waiter instead of pushing it into the pane', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Live waiter')
@@ -433,11 +433,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('pushes to the pane when the only waiter filters this message type out', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Filtered waiter')
@@ -452,7 +452,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
         timeoutMs: 8_000
       })
       .catch(() => undefined)
-    await orcaPage.waitForTimeout(1_000)
+    await quirkyPage.waitForTimeout(1_000)
 
     const subject = 'Filtered waiter'
     const messageId = await sendMail(client, mailbox, { subject, type: 'status' })
@@ -467,11 +467,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('worker completion points and wakes its idle Run coordinator without consuming mail', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
 
@@ -533,7 +533,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
     await waitForObservedTitle(client, pane.handle, CODEX_WORKING_TITLE)
     pane.agent.setTitle(CODEX_IDLE_TITLE)
     await waitForObservedTitle(client, pane.handle, CODEX_IDLE_TITLE)
-    await orcaPage.waitForTimeout(NO_DELIVERY_SETTLE_MS)
+    await quirkyPage.waitForTimeout(NO_DELIVERY_SETTLE_MS)
     expect(pane.agent.readStdin()).toBe(stdinAfterFirstPointer)
     expect(duplicate.result.message.id).toBe(sent.result.message.id)
     expect(readMailbox(userDataDir, runAddress).filter((row) => row.read === 0)).toEqual([
@@ -550,11 +550,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('never points direct Run A mail after the pane binds Run B', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, userDataDir, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, userDataDir, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     pane.agent.setTitle(CODEX_WORKING_TITLE)
     await waitForObservedTitle(client, pane.handle, CODEX_WORKING_TITLE)
@@ -611,11 +611,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('writes and submits the pointer for the active coordinator pane', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Coordinator pointer submit')
@@ -628,11 +628,11 @@ test.describe('orchestration push-on-idle mail delivery', () => {
   })
 
   test('writes the pointer but never Enter for a Cursor agent pane', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
-    const { client, openAgentPane } = await setUpMailFixture(orcaPage, electronApp)
+    const { client, openAgentPane } = await setUpMailFixture(quirkyPage, electronApp)
     const pane = await openAgentPane()
     // Cursor treats injected PTY text as editable prompt content, so submitting
     // has to stay under user control there too.
@@ -644,7 +644,7 @@ test.describe('orchestration push-on-idle mail delivery', () => {
     await sendMail(client, mailbox, { subject })
 
     await expectPointed(pane)
-    await orcaPage.waitForTimeout(2_000)
+    await quirkyPage.waitForTimeout(2_000)
     expectNotSubmitted(pane)
   })
 })
@@ -653,39 +653,39 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
   const parkingDelayMs = 500
 
   test.use({
-    orcaAppExtraEnv: {
-      ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(parkingDelayMs),
+    quirkyAppExtraEnv: {
+      QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(parkingDelayMs),
       // The working-title round trip (PTY -> daemon -> main) must beat the Enter
       // timer; 500ms is a production heuristic, not a budget CI can honour.
-      ORCA_E2E_ORCHESTRATION_POINTER_ENTER_DELAY_MS: '5000'
+      QUIRKY_E2E_ORCHESTRATION_POINTER_ENTER_DELAY_MS: '5000'
     }
   })
 
   test('keeps one pointer and one idempotent prompt on the same parked PTY', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }, testInfo: TestInfo) => {
     test.setTimeout(180_000)
     const { client, userDataDir, worktreeId, openAgentPane } = await setUpMailFixture(
-      orcaPage,
+      quirkyPage,
       electronApp
     )
     const pane = await openAgentPane()
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Cold parked delivery')
-    const beforePark = await waitForPaneIdentitySnapshot(orcaPage, 1)
+    const beforePark = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     expect(beforePark.panes[0]?.ptyId).toBe(pane.ptyId)
     const tabId = beforePark.tabId
     const agentPid = pane.agent.readLedger().find((entry) => entry.event === 'start')?.pid
     expect(agentPid).toEqual(expect.any(Number))
 
-    const parkDetectedAfterMs = await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, {
+    const parkDetectedAfterMs = await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, {
       parkDelayMs: parkingDelayMs
     })
-    expect(await getActiveTabId(orcaPage)).not.toBe(tabId)
-    expect(await orcaPage.locator(`[data-terminal-tab-id=${JSON.stringify(tabId)}]`).count()).toBe(
-      0
-    )
+    expect(await getActiveTabId(quirkyPage)).not.toBe(tabId)
+    expect(
+      await quirkyPage.locator(`[data-terminal-tab-id=${JSON.stringify(tabId)}]`).count()
+    ).toBe(0)
 
     const mailSubject = `Cold parked pointer ${randomUUID()}`
     const messageId = await sendMail(client, mailbox, { subject: mailSubject })
@@ -704,14 +704,14 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
     expect(mailDisposition(readMailRow(userDataDir, messageId))).toBe('pushed')
     const stdinAfterPointer = pane.agent.readStdin()
 
-    const promptMarker = `ORCA_E2E_PARKED_PROMPT_${randomUUID()}`
+    const promptMarker = `QUIRKY_E2E_PARKED_PROMPT_${randomUUID()}`
     const promptRequestId = randomUUID()
     const promptParams = {
       terminal: pane.handle,
       text: promptMarker,
       enter: true,
       agentPrompt: true as const,
-      client: { id: 'orca-e2e', type: 'desktop' as const }
+      client: { id: 'quirky-e2e', type: 'desktop' as const }
     }
     const firstSend = await client.call<{
       send: { accepted: boolean; prompt?: { requestId: string; stages: string[] } }
@@ -747,13 +747,13 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
     })
     expect(pane.agent.readStdin()).toBe(stdinAfterFirstSend)
 
-    await activateTerminalTab(orcaPage, tabId)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
-    const afterReveal = await waitForPaneIdentitySnapshot(orcaPage, 1)
+    await activateTerminalTab(quirkyPage, tabId)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
+    const afterReveal = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     expect(afterReveal.tabId).toBe(tabId)
     expect(afterReveal.panes[0]?.ptyId).toBe(pane.ptyId)
     await expect(
-      orcaPage.locator(`[data-terminal-tab-id=${JSON.stringify(tabId)}] .xterm-screen`).first()
+      quirkyPage.locator(`[data-terminal-tab-id=${JSON.stringify(tabId)}] .xterm-screen`).first()
     ).toBeVisible()
     expect(new Set(pane.agent.readLedger().map((entry) => entry.pid))).toEqual(new Set([agentPid]))
 
@@ -782,7 +782,7 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
       contentType: 'application/json'
     })
     const screenshotPath = testInfo.outputPath('cold-parked-agent-revealed.png')
-    await orcaPage.screenshot({ path: screenshotPath, fullPage: true })
+    await quirkyPage.screenshot({ path: screenshotPath, fullPage: true })
     await testInfo.attach('cold-parked-agent-revealed.png', {
       path: screenshotPath,
       contentType: 'image/png'
@@ -790,12 +790,12 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
   })
 
   test('does not submit a parked pointer after the agent starts working', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
     test.setTimeout(180_000)
     const { client, userDataDir, worktreeId, openAgentPane } = await setUpMailFixture(
-      orcaPage,
+      quirkyPage,
       electronApp
     )
     const pane = await openAgentPane({
@@ -803,10 +803,10 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
     })
     await driveToLiveIdle(client, pane)
     const mailbox = await createRunMailbox(client, pane, 'Cold parked working transition')
-    const beforePark = await waitForPaneIdentitySnapshot(orcaPage, 1)
+    const beforePark = await waitForPaneIdentitySnapshot(quirkyPage, 1)
     const tabId = beforePark.tabId
 
-    await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, {
+    await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, {
       parkDelayMs: parkingDelayMs
     })
     const messageId = await sendMail(client, mailbox, {
@@ -820,7 +820,7 @@ test.describe('orchestration delivery to a cold-parked agent', () => {
       })
       .toBe(1)
     await waitForObservedTitle(client, pane.handle, CODEX_WORKING_TITLE)
-    await orcaPage.waitForTimeout(1_000)
+    await quirkyPage.waitForTimeout(1_000)
     expect(countOccurrences(pane.agent.readStdin(), '\r')).toBe(0)
     expect(mailDisposition(readMailRow(userDataDir, messageId))).toBe('pending')
 

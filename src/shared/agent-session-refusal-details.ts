@@ -85,15 +85,15 @@ export const AGENT_SESSION_REFUSAL_REASONS = {
     'claudeAccountSetupFailed',
     /** Settings → Agents → Command names no program this host can run. */
     'agentCommandNotRunnable',
-    /** The runtime Orca installs for the agent is not installed on this host. */
+    /** The runtime Quirky installs for the agent is not installed on this host. */
     'runtimeNotInstalled',
-    /** The agent started, then Orca could not open the chat's conversation for it. */
+    /** The agent started, then Quirky could not open the chat's conversation for it. */
     'attachFailed'
   ],
   agent_session_ownership_unknown: [
     'sessionNotAttached',
     'noLiveOwner',
-    /** Orca cannot prove an agent process it recorded or started has exited. */
+    /** Quirky cannot prove an agent process it recorded or started has exited. */
     'ownerUnproven',
     'claimConflicted',
     'recordMissing',
@@ -136,8 +136,8 @@ export const AGENT_SESSION_REFUSAL_REASONS = {
     'journalCorrupt',
     /** Any other failed open, which can clear. */
     'journalUnavailable',
-    /** A newer Orca wrote the journal, or this chat's rows; only an update writes past it. */
-    'journalWrittenByNewerOrca'
+    /** A newer Quirky wrote the journal, or this chat's rows; only an update writes past it. */
+    'journalWrittenByNewerQuirky'
   ],
   structured_agent_session_unsupported: [
     'clientCapabilityMissing',

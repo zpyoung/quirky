@@ -4,7 +4,7 @@ import type {
   MobilePushPlatform
 } from '../../../src/shared/mobile-push-contract'
 
-// Why: the native APNs/FCM token, not an Expo push token — Orca's own gateway
+// Why: the native APNs/FCM token, not an Expo push token — Quirky's own gateway
 // talks to Apple and Google directly, so it needs the raw device token.
 
 export type MobilePushToken = {
@@ -25,7 +25,7 @@ function toMobilePushToken(raw: { type: string; data: unknown }): MobilePushToke
   if (raw.type === 'ios') {
     return { platform: 'ios', token: raw.data, apnsEnvironment: apnsEnvironment() }
   }
-  // Web tokens carry an object payload and no Orca gateway path; only native counts.
+  // Web tokens carry an object payload and no Quirky gateway path; only native counts.
   return raw.type === 'android' ? { platform: 'android', token: raw.data } : null
 }
 

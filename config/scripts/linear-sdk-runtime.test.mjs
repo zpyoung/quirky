@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { build } from 'vite'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { electronViteConfig } from '../../electron.vite.config'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const projectDir = resolve(import.meta.dirname, '../..')
 const require = createRequire(import.meta.url)
@@ -22,7 +22,7 @@ const smokeScript = `
   const sdk = loadLinearSdk()
   assert.equal(sdk, requireFromLoader('@linear/sdk'))
   assert.equal(loadLinearSdk(), sdk, 'repeat loads must reuse the SDK')
-  const client = new sdk.LinearClient({ apiKey: 'orca-offline-smoke-test' })
+  const client = new sdk.LinearClient({ apiKey: 'quirky-offline-smoke-test' })
   assert.equal(typeof client.issues, 'function')
   assert.equal(typeof client.teams, 'function')
   assert.ok(sdk.AuthenticationLinearError.prototype instanceof Error)
@@ -31,7 +31,7 @@ const smokeScript = `
 
 beforeAll(async () => {
   // Keep normal dependency resolution while executing outside Vitest's module loader.
-  outputDir = await mkdtemp(join(projectDir, 'node_modules', 'orca-linear-sdk-runtime-'))
+  outputDir = await mkdtemp(join(projectDir, 'node_modules', 'quirky-linear-sdk-runtime-'))
   const mainBuild = electronViteConfig.main.build
   await build({
     configFile: false,
@@ -67,7 +67,7 @@ describe('resolved Linear SDK through the production CommonJS loader', () => {
         program,
         args: ['-e', smokeScript, join(outputDir, 'linear-sdk.cjs')],
         cwd: projectDir,
-        env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ELECTRON_RUN_AS_NODE: '1' },
+        env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', ELECTRON_RUN_AS_NODE: '1' },
         timeoutMs: 20000
       })
       expect(result.code, result.stderr).toBe(0)

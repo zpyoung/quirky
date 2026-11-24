@@ -46,7 +46,7 @@ describe('HostFrameNavigationRegistry', () => {
     registry.register(visual)
     expect(hostFrameKindForName(visual.name)).toBe('chat-visual')
     expect(hostFrameKindForName(`${PLUGIN_PANEL_FRAME_NAME_PREFIX}demo`)).toBe('plugin-panel')
-    expect(hostFrameKindForName('orca-chat-visual')).toBeNull()
+    expect(hostFrameKindForName('quirky-chat-visual')).toBeNull()
 
     expect(registry.shouldBlock(visual, null, 'about:srcdoc')).toBe(false)
     // Its own navigation (location, meta refresh, link) and any child it starts are refused.

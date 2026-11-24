@@ -41,7 +41,7 @@ describe('quitFromUserCommand', () => {
     popout.window = null
   })
 
-  it('only closes the desktop windows of an `orca serve` host (#15537)', () => {
+  it('only closes the desktop windows of an `quirky serve` host (#15537)', () => {
     const main = fakeWindow()
     const dashboard = fakeWindow()
     popout.window = dashboard

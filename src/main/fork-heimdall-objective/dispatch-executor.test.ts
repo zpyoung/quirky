@@ -12,13 +12,13 @@ import type { ObjectiveAction } from '../../shared/fork-heimdall-objective/objec
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
 import { ObjectivePlanTaskSchema } from '../../shared/fork-heimdall-objective/plan-schema'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { deriveObjectiveFailureContext } from './dispatch-failure-context'
 import { executeObjectiveDispatch } from './dispatch-executor'
 import type { ObjectiveSnapshotBinding } from './execution-context'
 import type { ObjectiveStore } from './objective-store'
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService is a class with private fields; executeObjectiveDispatch never calls it in these tests.
-const runtime = {} as OrcaRuntimeService
+// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService is a class with private fields; executeObjectiveDispatch never calls it in these tests.
+const runtime = {} as QuirkyRuntimeService
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Store is a class with private fields; executeObjectiveDispatch never calls it in these tests.
 const store = {} as Store
 

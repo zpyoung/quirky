@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Locator } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 
@@ -46,21 +46,21 @@ function draft(composer: Locator): Promise<string> {
   )
 }
 
-test('Up and Down walk the prompts already in the chat', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
+test('Up and Down walk the prompts already in the chat', async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
   const [tabId] = descriptor.paneKey.split(':')
   const sessionId = `e2e-prompt-recall-${randomUUID()}`
   const transcriptPath = path.join(
-    mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-prompt-recall-')),
+    mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-prompt-recall-')),
     `${sessionId}.jsonl`
   )
   writeFileSync(transcriptPath, claudeTranscript(sessionId))
 
-  await orcaPage.evaluate(
+  await quirkyPage.evaluate(
     async ({ paneKey, worktreeId, tabId, sessionId, transcriptPath }) => {
       const settings = await window.api.settings.set({ experimentalNativeChat: true })
       const store = window.__store
@@ -88,12 +88,12 @@ test('Up and Down walk the prompts already in the chat', async ({ orcaPage }) =>
     { ...descriptor, tabId, sessionId, transcriptPath }
   )
 
-  const chat = orcaPage.locator('[data-native-chat-root="true"]')
+  const chat = quirkyPage.locator('[data-native-chat-root="true"]')
   await expect(chat.getByText('Answer 4.')).toBeVisible()
   const composer = chat.getByRole('textbox')
   await composer.click()
   const press = async (key: 'ArrowUp' | 'ArrowDown'): Promise<string> => {
-    await orcaPage.keyboard.press(key)
+    await quirkyPage.keyboard.press(key)
     // Why: the editor learns of a caret the browser moved a task later; a person never out-types that.
     await expect
       .poll(() =>

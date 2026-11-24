@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout')
-const orcaRoot = fileURLToPath(new URL('../../', import.meta.url))
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-history-title-'))
+const quirkyRoot = fileURLToPath(new URL('../../', import.meta.url))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-history-title-'))
 process.env.HOME = join(scratch, 'home')
 process.env.USERPROFILE = process.env.HOME
 for (const [key, value] of Object.entries({
@@ -32,10 +32,10 @@ const { SessionManager } = await import(
   source(process.argv[2], 'packages/coding-agent/src/session/session-manager.ts')
 )
 const { parseMessageGraphSessionFile } = await import(
-  source(orcaRoot, 'src/main/ai-vault/session-scanner-graph-parsers.ts')
+  source(quirkyRoot, 'src/main/ai-vault/session-scanner-graph-parsers.ts')
 )
 const { createSessionParseStats, parseAgentSessionFileCached } = await import(
-  source(orcaRoot, 'src/main/ai-vault/session-scanner-parse-cache.ts')
+  source(quirkyRoot, 'src/main/ai-vault/session-scanner-parse-cache.ts')
 )
 const stats = createSessionParseStats()
 const manager = SessionManager.create(scratch, join(scratch, 'sessions'))

@@ -1,5 +1,5 @@
 import type { OrchestrationDb } from '../../runtime/orchestration/db'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { inspectWorkerTerminal } from '../../runtime/rpc/methods/orchestration/worker/worker-observation'
 import type {
   DispatchResult,
@@ -41,7 +41,7 @@ export function dispatchResultWithTerminal(
     : result
 }
 export async function inspectHeimdallWorkerTerminal(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   dispatchId: string
 ) {
   return await inspectWorkerTerminal(runtime, runtime.getOrchestrationDb(), dispatchId)

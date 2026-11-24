@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { GIT_METHODS } from './git'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -21,7 +21,7 @@ describe('git RPC methods', () => {
         didHitLimit: true,
         statusLength: 1_001
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(makeRequest('git.status', { worktree: 'id:wt-1' }))
@@ -43,7 +43,7 @@ describe('git RPC methods', () => {
         conflictOperation: 'unknown',
         ignoredPaths: ['dist/']
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -64,7 +64,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitStatus: vi.fn().mockResolvedValue({ entries: [], conflictOperation: 'unknown' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -84,7 +84,7 @@ describe('git RPC methods', () => {
         entries: [],
         conflictOperation: 'unknown'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -112,7 +112,7 @@ describe('git RPC methods', () => {
         entries: [],
         conflictOperation: 'unknown'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -131,7 +131,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       checkRuntimeGitIgnoredPaths: vi.fn().mockResolvedValue(['dist/bundle.js'])
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -158,7 +158,7 @@ describe('git RPC methods', () => {
         entries: [{ path: 'lib.ts', status: 'modified', area: 'unstaged' }],
         conflictOperation: 'unknown'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -190,7 +190,7 @@ describe('git RPC methods', () => {
         originalIsBinary: false,
         modifiedIsBinary: false
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -248,7 +248,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitHistory: vi.fn().mockResolvedValue(history)
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -273,7 +273,7 @@ describe('git RPC methods', () => {
       bulkUnstageRuntimeGitPaths: vi.fn().mockResolvedValue({ ok: true }),
       discardRuntimeGitPath: vi.fn().mockResolvedValue({ ok: true }),
       bulkDiscardRuntimeGitPaths: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -299,7 +299,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       bulkDiscardRuntimeGitPaths: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -331,7 +331,7 @@ describe('git RPC methods', () => {
       pushRuntimeGit: vi.fn().mockResolvedValue({ ok: true }),
       getRuntimeGitRemoteFileUrl: vi.fn().mockResolvedValue('https://example.com/file#L3'),
       getRuntimeGitRemoteCommitUrl: vi.fn().mockResolvedValue('https://example.com/commit/abc')
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
     const commitOid = '0123456789abcdef0123456789abcdef01234567'
 
@@ -395,7 +395,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitRemoteCommitUrl: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -413,7 +413,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       pushRuntimeGit: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -430,7 +430,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       rebaseRuntimeGitFromBase: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -447,7 +447,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       fetchRuntimeGit: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
     const pushTarget = { remoteName: 'fork', branchName: 'feature' }
 
@@ -472,19 +472,19 @@ describe('git RPC methods', () => {
         ahead: 0,
         behind: 0
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
       makeRequest('git.forkSync', {
         worktree: 'id:wt-1',
-        expectedUpstream: { owner: 'stablyai', repo: 'orca' }
+        expectedUpstream: { owner: 'stablyai', repo: 'quirky' }
       })
     )
 
     expect(runtime.syncRuntimeGitForkDefaultBranch).toHaveBeenCalledWith('id:wt-1', {
       owner: 'stablyai',
-      repo: 'orca'
+      repo: 'quirky'
     })
     expect(response).toMatchObject({
       ok: true,
@@ -496,13 +496,13 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       syncRuntimeGitForkDefaultBranch: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
       makeRequest('git.forkSync', {
         worktree: 'id:wt-1',
-        expectedUpstream: { owner: '   ', repo: 'orca' }
+        expectedUpstream: { owner: '   ', repo: 'quirky' }
       })
     )
 
@@ -517,7 +517,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       syncRuntimeGitForkDefaultBranch: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -537,7 +537,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       fastForwardRuntimeGit: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
     const pushTarget = { remoteName: 'fork', branchName: 'feature' }
 
@@ -573,7 +573,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       generateRuntimeCommitMessage: vi.fn().mockResolvedValue({ success: true, message: 'test' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -602,7 +602,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       generateRuntimeCommitMessage: vi.fn().mockResolvedValue({ success: true, message: 'test' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -629,7 +629,7 @@ describe('git RPC methods', () => {
       generateRuntimePullRequestFields: vi
         .fn()
         .mockResolvedValue({ success: true, fields: { title: 'Test', body: '', draft: false } })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     await dispatcher.dispatch(
@@ -663,7 +663,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       generateRuntimeCommitMessage: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -687,7 +687,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitBranchDiff: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -695,7 +695,7 @@ describe('git RPC methods', () => {
         worktree: 'id:wt-1',
         filePath: 'src/a.ts',
         compare: {
-          headOid: '--output=/tmp/orca-test',
+          headOid: '--output=/tmp/quirky-test',
           mergeBase: 'a'.repeat(40)
         }
       })
@@ -709,13 +709,13 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitBranchCompare: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
       makeRequest('git.branchCompare', {
         worktree: 'id:wt-1',
-        baseRef: '--output=/tmp/orca-test'
+        baseRef: '--output=/tmp/quirky-test'
       })
     )
 
@@ -727,7 +727,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitBranchCompare: vi.fn().mockResolvedValue({ summary: {}, entries: [] })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const accepted = await dispatcher.dispatch(
@@ -765,7 +765,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       getRuntimeGitHistory: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -783,7 +783,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       checkoutRuntimeGitBranch: vi.fn().mockResolvedValue({ ok: true, branch: 'feature/x' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -798,7 +798,7 @@ describe('git RPC methods', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       checkoutRuntimeGitBranch: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(
@@ -815,7 +815,7 @@ describe('git RPC methods', () => {
       listRuntimeGitLocalBranches: vi
         .fn()
         .mockResolvedValue({ current: 'main', branches: ['main', 'feature/x'] })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: GIT_METHODS })
 
     const response = await dispatcher.dispatch(

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   aggregateEnvironment,
   aggregateNeeds,
@@ -19,14 +19,14 @@ async function verifyCases(environments, script, env = {}) {
       .join('\n')
     return `(\n${exports}\n${script}\n)\nprintf 'AGGREGATE_CASE_${index}=%s\\n' "$?"`
   })
-  const directory = mkdtempSync(join(tmpdir(), 'orca-aggregate-cases-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-aggregate-cases-'))
   const file = join(directory, 'cases.sh')
   try {
     writeFileSync(file, cases.join('\n'))
     const result = await runProcess({
       program: 'bash',
       args: [file],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ...env },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', ...env },
       timeoutMs: 10_000
     })
     expect(result.code, result.stderr).toBe(0)

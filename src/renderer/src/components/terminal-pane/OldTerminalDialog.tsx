@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { translate } from '@/i18n/i18n'
 
-/** Learn more for a terminal opened before an Orca update its shell does not have. */
+/** Learn more for a terminal opened before an Quirky update its shell does not have. */
 export function OldTerminalDialog({
   open,
   onOpenChange,

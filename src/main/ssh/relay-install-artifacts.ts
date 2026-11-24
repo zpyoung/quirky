@@ -1,9 +1,9 @@
 /**
- * What a relay-era (≤1.4.224) install directory on a host contains. Orca no longer builds or
+ * What a relay-era (≤1.4.224) install directory on a host contains. Quirky no longer builds or
  * deploys the relay; the host census reads these names to classify the directories and
  * daemons older versions left behind. Delete with the census.
  */
-import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/orcad-artifacts'
+import { QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME } from '../../shared/quirkyd-artifacts'
 import { OPENCODE_SQLITE_READER_FILENAME } from '../../shared/remote-bundle-artifacts'
 
 type RelayArtifact = {
@@ -29,7 +29,7 @@ const RELAY_ARTIFACTS: readonly RelayArtifact[] = [
   { filename: 'node-pty-1.1.0-console-list-agent-patch.cjs', windowsOnly: true },
   { filename: 'node-pty-1.1.0-windows-pty-teardown-patch.cjs', windowsOnly: true },
   { filename: 'node-pty-1.1.0-master-cloexec-patch.cjs' },
-  { filename: ORCAD_WINDOWS_PROCESS_TREE_FILENAME, windowsOnly: true, optional: true }
+  { filename: QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME, windowsOnly: true, optional: true }
 ]
 
 /**

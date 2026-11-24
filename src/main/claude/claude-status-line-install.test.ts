@@ -32,7 +32,7 @@ describe('Claude statusLine by resolved version', () => {
   let settingsPath: string
 
   beforeEach(() => {
-    tmpHome = mkdtempSync(join(tmpdir(), 'orca-claude-statusline-version-'))
+    tmpHome = mkdtempSync(join(tmpdir(), 'quirky-claude-statusline-version-'))
     settingsPath = join(tmpHome, '.claude', 'settings.json')
     vi.stubEnv('HOME', tmpHome)
     vi.stubEnv('USERPROFILE', tmpHome)
@@ -51,7 +51,7 @@ describe('Claude statusLine by resolved version', () => {
     expect(readSettings().hooks.SessionStart).toBeDefined()
   })
 
-  it('removes Orca statusLine on a downgrade and re-adds it after the upgrade', () => {
+  it('removes Quirky statusLine on a downgrade and re-adds it after the upgrade', () => {
     const service = new ClaudeHookService()
     service.install({ claudeVersion: '2.1.261' })
     expect(readSettings().statusLine?.command).toContain('claude-statusline')
@@ -59,7 +59,7 @@ describe('Claude statusLine by resolved version', () => {
     service.install({ claudeVersion: '1.0.63' })
     expect(readSettings().statusLine).toBeUndefined()
 
-    // Why: Orca's own removal must not read as the user's opt-out on the next capable install.
+    // Why: Quirky's own removal must not read as the user's opt-out on the next capable install.
     service.install({ claudeVersion: '1.0.64' })
     expect(readSettings().statusLine?.command).toContain('claude-statusline')
   })
@@ -96,9 +96,9 @@ describe('Claude statusLine on Windows', () => {
   let scriptPath: string
 
   beforeEach(() => {
-    tmpHome = mkdtempSync(join(tmpdir(), 'orca-claude-statusline-win-'))
+    tmpHome = mkdtempSync(join(tmpdir(), 'quirky-claude-statusline-win-'))
     settingsPath = join(tmpHome, '.claude', 'settings.json')
-    scriptPath = join(tmpHome, '.orca', 'agent-hooks', 'claude-statusline.cmd')
+    scriptPath = join(tmpHome, '.quirky', 'agent-hooks', 'claude-statusline.cmd')
     vi.stubEnv('HOME', tmpHome)
     vi.stubEnv('USERPROFILE', tmpHome)
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
@@ -118,24 +118,24 @@ describe('Claude statusLine on Windows', () => {
 
   it('registers a cmd-safe script bare, which Windows PowerShell can run', () => {
     expect(
-      getManagedStatusLineCommand('C:\\Users\\alice\\.orca\\agent-hooks\\claude-statusline.cmd')
-    ).toBe('C:/Users/alice/.orca/agent-hooks/claude-statusline.cmd')
+      getManagedStatusLineCommand('C:\\Users\\alice\\.quirky\\agent-hooks\\claude-statusline.cmd')
+    ).toBe('C:/Users/alice/.quirky/agent-hooks/claude-statusline.cmd')
   })
 
   it('keeps the runtime-home form for an unsafe path rather than an encoded PowerShell launcher', () => {
-    const spaced = 'C:\\Users\\John Smith\\.orca\\agent-hooks\\claude-statusline.cmd'
+    const spaced = 'C:\\Users\\John Smith\\.quirky\\agent-hooks\\claude-statusline.cmd'
     // Why: the encoded launcher would start a hidden PowerShell on every statusline tick.
     expect(getManagedStatusLineCommand(spaced)).toBe(getManagedCommand(spaced))
   })
 
   it.each([
     ['the runtime-home form', () => getManagedCommand(scriptPath)],
-    ['a stale bare path', () => 'C:/Users/someone-else/.orca/agent-hooks/claude-statusline.cmd']
-  ])('replaces %s as Orca-owned', (_name, command) => {
+    ['a stale bare path', () => 'C:/Users/someone-else/.quirky/agent-hooks/claude-statusline.cmd']
+  ])('replaces %s as Quirky-owned', (_name, command) => {
     seedStatusLine(command())
     // Why: the marker from an earlier install must not read as the user's opt-out.
-    mkdirSync(join(tmpHome, '.orca', 'agent-hooks'), { recursive: true })
-    writeFileSync(join(tmpHome, '.orca', 'agent-hooks', 'claude-statusline.installed'), '')
+    mkdirSync(join(tmpHome, '.quirky', 'agent-hooks'), { recursive: true })
+    writeFileSync(join(tmpHome, '.quirky', 'agent-hooks', 'claude-statusline.installed'), '')
 
     new ClaudeHookService().install(CURRENT_CLAUDE)
     expect(readSettings().statusLine).toEqual({

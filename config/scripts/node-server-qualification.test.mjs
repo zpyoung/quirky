@@ -29,7 +29,7 @@ it.each([
   '.github/actions/install-node-dependencies/action.yml',
   '.github/actions/restore-pnpm-verification/action.yml',
   '.github/actions/prepare-native-runtime/action.yml',
-  '.github/actions/prepare-orcad-prebuilds/action.yml',
+  '.github/actions/prepare-quirkyd-prebuilds/action.yml',
   'src/main/ssh/ssh-provider.ts',
   'src/main/providers/local-pty-provider.ts',
   'src/packages/process-host/src/run-process.ts',
@@ -37,10 +37,10 @@ it.each([
   'src/packages/process-host/package.json',
   'src/main/persistence/profile-state/store.ts',
   'src/main/sqlite/database.ts',
-  'src/main/orcad/entry.ts',
+  'src/main/quirkyd/entry.ts',
   'src/main/daemon/entry.ts',
-  'config/scripts/build-orcad-prebuilds.mjs',
-  'config/scripts/orcad-prebuild-slot-contents.mjs',
+  'config/scripts/build-quirkyd-prebuilds.mjs',
+  'config/scripts/quirkyd-prebuild-slot-contents.mjs',
   'src/shared/node-runtime-pin.ts'
 ])('retains all platforms for platform-flavoured input %s', (file) => {
   expect(nodeServerQualification([file], scope)).toEqual({
@@ -82,7 +82,7 @@ it.each([
     false
   ],
   [
-    'src/main/orcad/orcad-launcher.win32.test.ts',
+    'src/main/quirkyd/quirkyd-launcher.win32.test.ts',
     ['ubuntu-22.04', 'windows-2022', 'windows-11-arm'],
     false
   ],
@@ -120,7 +120,7 @@ it('keeps all hosts for shared changes alongside a platform-specific change', ()
 
 it.each([
   'src/main/managed-server/install/remote-node-runtime-store-windows.ts',
-  'src/main/managed-server/install/orcad-remote-node-runtime-windows.ts',
+  'src/main/managed-server/install/quirkyd-remote-node-runtime-windows.ts',
   'src/main/ssh/ssh-posix-command-wrapper.test.ts',
   'src/main/providers/agent-foreground-process-git-bash.win32.test.ts',
   'src/main/runtime/windows-firewall-remote-scope.ts',

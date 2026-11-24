@@ -15,10 +15,10 @@ import path from 'node:path'
 import { RuntimeClient } from '../../src/cli/runtime-client'
 import { makePaneKey } from '../../src/shared/stable-pane-id'
 import { PROTOCOL_VERSION } from '../../src/main/daemon/types'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import {
   createHostCliTerminal,
@@ -65,7 +65,7 @@ test('a sleeping agent in a never-opened workspace resumes once, in its own pane
   // Each resume appends the pane it ran in, so a second resume anywhere is visible.
   writeFileSync(
     fakeAgent,
-    `#!/bin/sh\nprintf '%s\\n' "$ORCA_PANE_KEY" >> '${resumeLog}'\nexec sleep 3600\n`
+    `#!/bin/sh\nprintf '%s\\n' "$QUIRKY_PANE_KEY" >> '${resumeLog}'\nexec sleep 3600\n`
   )
   chmodSync(fakeAgent, 0o755)
   const resumedPaneKeys = (): string[] =>

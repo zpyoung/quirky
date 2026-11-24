@@ -22,7 +22,7 @@ function makeTargetState(): AiVaultSessionResumeTargetState {
         id: 'folder-1',
         projectGroupId: 'group-1',
         name: 'Remote folder',
-        folderPath: '/srv/orca'
+        folderPath: '/srv/quirky'
       }
     ],
     projectGroups: [{ id: 'group-1', connectionId: 'ssh-1' }],
@@ -30,10 +30,10 @@ function makeTargetState(): AiVaultSessionResumeTargetState {
     worktreesByRepo: {
       'repo-1': [
         {
-          id: 'repo-1::/repo/orca',
+          id: 'repo-1::/repo/quirky',
           repoId: 'repo-1',
-          displayName: 'orca',
-          path: '/repo/orca'
+          displayName: 'quirky',
+          path: '/repo/quirky'
         }
       ]
     }
@@ -44,35 +44,35 @@ describe('Vault handoff target selection', () => {
   it('selects the active new-tab identity even when same-host resume disabled it', () => {
     expect(
       resolveAiVaultSessionHandoffWorktreeId(makeSession(), {
-        worktree: { worktreeId: 'repo-1::/archived/orca', disabled: true },
-        newTab: { worktreeId: 'repo-1::/repo/orca', disabled: true }
+        worktree: { worktreeId: 'repo-1::/archived/quirky', disabled: true },
+        newTab: { worktreeId: 'repo-1::/repo/quirky', disabled: true }
       })
-    ).toBe('repo-1::/repo/orca')
+    ).toBe('repo-1::/repo/quirky')
   })
 
   it('keeps the resumable session worktree as the default over another active workspace', () => {
     expect(
       resolveAiVaultSessionHandoffWorktreeId(makeSession(), {
-        worktree: { worktreeId: 'repo-1::/archived/orca', disabled: false },
-        newTab: { worktreeId: 'repo-1::/repo/orca', disabled: false }
+        worktree: { worktreeId: 'repo-1::/archived/quirky', disabled: false },
+        newTab: { worktreeId: 'repo-1::/repo/quirky', disabled: false }
       })
-    ).toBe('repo-1::/archived/orca')
+    ).toBe('repo-1::/archived/quirky')
   })
 
   it('falls back to the session worktree when it is also the active workspace', () => {
     expect(
       resolveAiVaultSessionHandoffWorktreeId(makeSession(), {
-        worktree: { worktreeId: 'repo-1::/repo/orca', disabled: true },
+        worktree: { worktreeId: 'repo-1::/repo/quirky', disabled: true },
         newTab: { worktreeId: null, disabled: true }
       })
-    ).toBe('repo-1::/repo/orca')
+    ).toBe('repo-1::/repo/quirky')
   })
 
   it('preserves the existing session-content gate', () => {
     expect(
       resolveAiVaultSessionHandoffWorktreeId(makeSession({ filePath: '  ', previewMessages: [] }), {
         worktree: { worktreeId: null, disabled: true },
-        newTab: { worktreeId: 'repo-1::/repo/orca', disabled: true }
+        newTab: { worktreeId: 'repo-1::/repo/quirky', disabled: true }
       })
     ).toBeNull()
   })
@@ -96,10 +96,10 @@ describe('Vault handoff target selection', () => {
       resolveAiVaultSessionHandoffLaunchTarget({
         sessionFilePath: '/home/ada/.codex/session.jsonl',
         sessionExecutionHostId: 'runtime:source-env',
-        activeWorktreeId: 'repo-1::/repo/orca',
+        activeWorktreeId: 'repo-1::/repo/quirky',
         targetState: makeTargetState()
       })
-    ).toEqual({ status: 'ready', worktreeId: 'repo-1::/repo/orca' })
+    ).toEqual({ status: 'ready', worktreeId: 'repo-1::/repo/quirky' })
   })
 
   it('rejects a destination that is no longer open', () => {

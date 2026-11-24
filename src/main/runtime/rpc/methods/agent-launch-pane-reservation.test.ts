@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 import { openTestAgentSessionRecordStore } from '../../agent-session-record-store-test-harness'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcContext } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { OrchestrationError } from '../../orchestration/orchestration-error'
@@ -234,7 +234,7 @@ describe('a live-pane refusal under a named operation', () => {
   let store: AgentSessionRecordStore
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-agent-launch-pane-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-agent-launch-pane-'))
     store = await openTestAgentSessionRecordStore(directory)
     setAgentLaunchRecordStore(store)
   })
@@ -251,7 +251,7 @@ describe('a live-pane refusal under a named operation', () => {
   async function dispatch(runtime: RuntimeStub, method: string, params: unknown) {
     const dispatcher = new RpcDispatcher({
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture implements every runtime method reached by agent.launch and dispatcher metadata.
-      runtime: { ...runtime, getRuntimeId: () => 'runtime-1' } as unknown as OrcaRuntimeService,
+      runtime: { ...runtime, getRuntimeId: () => 'runtime-1' } as unknown as QuirkyRuntimeService,
       methods: AGENT_LAUNCH_METHODS
     })
     return dispatcher.dispatch({ id: 'request-1', authToken: 'token', method, params })

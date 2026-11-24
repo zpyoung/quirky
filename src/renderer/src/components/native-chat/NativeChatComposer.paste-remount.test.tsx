@@ -97,7 +97,8 @@ import {
 } from './use-native-chat-composer-attachments'
 
 const PANE = 'tab-1::session-1'
-const STORED = '/srv/agent-session-attachments/0b6f8a52-4a3e-4c4e-9a59-1d5d1f2b8c01/orca-paste.png'
+const STORED =
+  '/srv/agent-session-attachments/0b6f8a52-4a3e-4c4e-9a59-1d5d1f2b8c01/quirky-paste.png'
 
 function composer(
   acceptsImages = true,
@@ -295,10 +296,10 @@ it('keeps a local image paste after the real composer closes and reopens', async
   await waitFor(() => expect(mocks.save).toHaveBeenCalled())
   expect(mocks.state.fieldProps?.imageAttachments).toMatchObject([{ pending: true }])
   first.unmount()
-  await act(async () => finishUpload('/local/native-chat-pastes/orca-paste-1-image.png'))
+  await act(async () => finishUpload('/local/native-chat-pastes/quirky-paste-1-image.png'))
   render(composer())
   expect(mocks.state.fieldProps?.imageAttachments).toMatchObject([
-    { path: '/local/native-chat-pastes/orca-paste-1-image.png' }
+    { path: '/local/native-chat-pastes/quirky-paste-1-image.png' }
   ])
   await waitFor(() => expect(mocks.state.fieldProps?.imageAttachments?.[0]?.pending).toBeFalsy())
 })
@@ -322,7 +323,7 @@ it.each([false, true])(
       fireEvent.click(screen.getByRole('button', { name: 'Remove attachment' }))
     )
     expect(mocks.state.fieldProps?.sendButtonDisabled).toBe(false)
-    await act(async () => finishUpload('/local/native-chat-pastes/orca-paste-1-image.png'))
+    await act(async () => finishUpload('/local/native-chat-pastes/quirky-paste-1-image.png'))
     expect(readNativeChatAttachmentCache(PANE)).toEqual([])
     expect(readNativeChatDraftCache(PANE)).toBe('look at this')
     expect(mocks.state.fieldProps?.imageAttachments).toEqual([])

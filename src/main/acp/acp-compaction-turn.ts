@@ -1,4 +1,4 @@
-// A `/compact` Orca sends as a prompt, run as the command turn the host opened. What the agent
+// A `/compact` Quirky sends as a prompt, run as the command turn the host opened. What the agent
 // writes meanwhile is the command's output, read for how it went and never drawn; its answer ends
 // the turn with one result row, as Claude's and Codex's compactions end.
 

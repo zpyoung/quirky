@@ -9,7 +9,7 @@ import {
   useNewerDaemonHold
 } from './newer-daemon-hold-state'
 
-/** Shown on a restored pane held back because a newer Orca build's daemon may still run it. */
+/** Shown on a restored pane held back because a newer Quirky build's daemon may still run it. */
 export function NewerDaemonHoldBanner({
   tabId,
   leafId
@@ -31,7 +31,7 @@ export function NewerDaemonHoldBanner({
           ? translate('terminal.newerDaemonBanner.failedTitle', "Couldn't reopen this terminal")
           : translate(
               'terminal.newerDaemonBanner.title',
-              'This terminal was opened in a newer version of Orca'
+              'This terminal was opened in a newer version of Quirky'
             )
       }
       body={

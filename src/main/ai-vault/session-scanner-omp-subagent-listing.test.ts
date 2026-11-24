@@ -23,7 +23,7 @@ function childTranscript(id: string, timestamp: string, prompt: string): string 
 
 describe('listOmpSubagentSessions', () => {
   it('lists artifact-dir transcripts under the parent, titled by task label', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'orca-omp-subagent-list-'))
+    const workspace = await mkdtemp(join(tmpdir(), 'quirky-omp-subagent-list-'))
     tempRoots.push(workspace)
     const parentPath = join(workspace, `${SESSION_STEM}.jsonl`)
     const artifactDir = join(workspace, SESSION_STEM)
@@ -69,7 +69,7 @@ describe('listOmpSubagentSessions', () => {
   })
 
   it('resolves empty for a session that never delegated', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'orca-omp-subagent-list-'))
+    const workspace = await mkdtemp(join(tmpdir(), 'quirky-omp-subagent-list-'))
     tempRoots.push(workspace)
     const parentPath = join(workspace, `${SESSION_STEM}.jsonl`)
     await writeFile(parentPath, '')
@@ -79,7 +79,7 @@ describe('listOmpSubagentSessions', () => {
     ).resolves.toEqual({ sessions: [], issues: [] })
   })
   it('traverses each saved generation through its own transcript without flattening descendants', async () => {
-    const workspace = await mkdtemp(join(tmpdir(), 'orca-omp-nested-list-'))
+    const workspace = await mkdtemp(join(tmpdir(), 'quirky-omp-nested-list-'))
     tempRoots.push(workspace)
     const parentPath = join(workspace, `${SESSION_STEM}.jsonl`)
     const childPath = join(workspace, SESSION_STEM, 'Worker.jsonl')

@@ -1,12 +1,12 @@
 import { resolve } from 'node:path'
 import { resolveConfig as resolveElectronConfig } from 'electron-vite'
 import { resolveConfig } from 'vite'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 beforeEach(() => {
-  vi.stubEnv('ORCA_UNMINIFIED_MAIN', '')
-  vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', '')
+  vi.stubEnv('QUIRKY_UNMINIFIED_MAIN', '')
+  vi.stubEnv('QUIRKY_DEV_MAIN_SOURCEMAPS', '')
   vi.stubEnv('NODE_ENV', process.env.NODE_ENV)
 })
 
@@ -65,7 +65,7 @@ console.log(JSON.stringify({ loaded: Object.hasOwn(require.cache, require.resolv
   })
 
   it('honors the unminified main diagnostic override in production', async () => {
-    vi.stubEnv('ORCA_UNMINIFIED_MAIN', '1')
+    vi.stubEnv('QUIRKY_UNMINIFIED_MAIN', '1')
 
     const resolved = await resolveMainConfig('build')
 
@@ -74,7 +74,7 @@ console.log(JSON.stringify({ loaded: Object.hasOwn(require.cache, require.resolv
   })
 
   it('honors the development source-map override alongside unminified compilation', async () => {
-    vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', '0')
+    vi.stubEnv('QUIRKY_DEV_MAIN_SOURCEMAPS', '0')
 
     const development = await resolveMainConfig('serve')
     const production = await resolveMainConfig('build')

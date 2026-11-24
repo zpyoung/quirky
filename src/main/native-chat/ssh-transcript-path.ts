@@ -3,7 +3,7 @@ import { isWslHookRelayConnectionId } from '../../shared/wsl-hook-relay-contract
 
 // Why: the transcript engine addresses a file by one path string. A transcript on an SSH host is
 // named by its connection as well, so both travel in that string and no local file can answer.
-const SSH_TRANSCRIPT_PATH_PREFIX = 'orca-ssh-transcript:'
+const SSH_TRANSCRIPT_PATH_PREFIX = 'quirky-ssh-transcript:'
 
 export type SshTranscriptLocation = { connectionId: string; remotePath: string }
 

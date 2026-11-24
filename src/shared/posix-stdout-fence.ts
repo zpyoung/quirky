@@ -38,9 +38,9 @@ export function buildPosixStdoutFence(
       // Markers are [A-Za-z0-9_] only, so they need no quoting.
       `printf %s ${printBegin.join(' ')}`,
       command,
-      '_orca_capture_status=$?',
+      '_quirky_capture_status=$?',
       `printf %s ${printEnd.join(' ')}`,
-      'exit $_orca_capture_status'
+      'exit $_quirky_capture_status'
     ].join('\n')
   }
 }
@@ -70,8 +70,8 @@ type FenceMarkers = Omit<PosixStdoutFence, 'command'> & {
 }
 
 function fenceMarkers(label: string, nonce: string): FenceMarkers {
-  const beginPrefix = `__ORCA_${label}_CAPTURE_BEGIN_`
-  const endPrefix = `__ORCA_${label}_CAPTURE_END_`
+  const beginPrefix = `__QUIRKY_${label}_CAPTURE_BEGIN_`
+  const endPrefix = `__QUIRKY_${label}_CAPTURE_END_`
   const begin = `${beginPrefix}${nonce}__`
   const end = `${endPrefix}${nonce}__`
   return {

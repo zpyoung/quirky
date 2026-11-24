@@ -202,7 +202,7 @@ export function FileExplorerFilesTreePane({
           dirCache={tree.dirCache}
           runtimeDownloadContext={runtimeDownloadContext}
           supportsFolderDownload={supportsFolderDownload}
-          canOpenInOrcaBrowser={canOpenWorkspaceFileBrowserForPath}
+          canOpenInQuirkyBrowser={canOpenWorkspaceFileBrowserForPath}
           onClick={handleRowClick}
           onDoubleClick={handleDoubleClick}
           onViewFile={handleClick}

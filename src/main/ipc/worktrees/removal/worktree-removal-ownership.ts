@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { getLocalPtyProvider } from '../../pty/provider/registry'
 import { clearProviderPtyState } from '../../pty/provider/state-cleanup'
 import { killAllProcessesForWorktree } from '../../../runtime/worktree-teardown'
@@ -17,7 +17,7 @@ import {
 } from '../../../worktree-removal-process-cleanup'
 
 export async function stopPtysForDestructiveWorktreeRemoval(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   worktreeId: string,
   options: { connectionId?: string; allowUnverifiedStop?: boolean } = {}
 ): Promise<void> {
@@ -75,7 +75,7 @@ export function removeWorktreeMetadataAndTransientState(
     entryPoint = 'worktree-removal'
   }: {
     store: Store
-    runtime: Pick<OrcaRuntimeService, 'releaseRemovedWorktreeHostSessions'>
+    runtime: Pick<QuirkyRuntimeService, 'releaseRemovedWorktreeHostSessions'>
     entryPoint?: 'worktree-removal' | 'folder-removal'
   },
   worktreeId: string,

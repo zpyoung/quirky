@@ -19,15 +19,15 @@ pnpm build:cli     # out/cli is not built by `pnpm dev`
 pnpm dev
 ```
 
-`pnpm dev` writes `orca` / `orca-dev` wrappers pointing at `out/cli/index.js`
+`pnpm dev` writes `quirky` / `quirky-dev` wrappers pointing at `out/cli/index.js`
 (`config/scripts/dev-cli-terminal-wrapper.mjs:13`) but never builds it. Run `pnpm build:cli` before
 using the Heimdall CLI. It is also required before an objective run, because dispatched workers
-finish by calling `orca orchestration send` (`src/main/fork-heimdall-objective/role-prompts.ts:177`).
+finish by calling `quirky orchestration send` (`src/main/fork-heimdall-objective/role-prompts.ts:177`).
 
-The dev profile is `~/Library/Application Support/orca-dev`, **shared by every worktree's `pnpm dev`**
+The dev profile is `~/Library/Application Support/quirky-dev`, **shared by every worktree's `pnpm dev`**
 (`config/scripts/run-electron-vite-dev.mjs:428-433`). Two running instances means two writers on the
 same `heimdall.db` and lease store. Quit the others, or isolate with
-`ORCA_DEV_USER_DATA_PATH=/tmp/orca-heimdall pnpm dev` — a fresh profile has no repos registered, so
+`QUIRKY_DEV_USER_DATA_PATH=/tmp/quirky-heimdall pnpm dev` — a fresh profile has no repos registered, so
 you re-add them.
 
 `gh` (or `glab`) must be authenticated before arming a sitter. The sitter reads review state every
@@ -40,7 +40,7 @@ and loads its database as soon as the window renders. There is **no feature flag
 environment variable** that turns Heimdall on or off — with no enrollments it simply does nothing.
 
 The sidebar **Heimdall** entry is rendered unconditionally (`SidebarNav.tsx:233`), unlike its
-flag-gated siblings. There is no keyboard shortcut or command-palette entry. The `orca heimdall`
+flag-gated siblings. There is no keyboard shortcut or command-palette entry. The `quirky heimdall`
 CLI can also create and manage watchers; see [CLI](#cli) below. The UI's enrollment paths are:
 
 | Kind            | Path                                                                                                                                            |
@@ -68,9 +68,9 @@ completions. For direct TypeSafe access, set `"provider":"typesafe"` and supply 
 omitting `provider` also selects TypeSafe. There is no automatic provider fallback.
 
 On a standard macOS installation, the active profile's file is
-`~/Library/Application Support/orca/profiles/<activeProfileId>/fork-heimdall/judgment-access.json`.
-The profile ID is in `orca-profile-index.json`; the default is `local-default`. Development builds
-normally use `orca-dev` instead of `orca`. The running build must include judgment support.
+`~/Library/Application Support/quirky/profiles/<activeProfileId>/fork-heimdall/judgment-access.json`.
+The profile ID is in `quirky-profile-index.json`; the default is `local-default`. Development builds
+normally use `quirky-dev` instead of `quirky`. The running build must include judgment support.
 
 On macOS/Linux the file must have private permissions (`chmod 600`). Delete it or replace its
 contents with `{"enabled":false}` to disable judgment. Invalid configuration degrades to a recorded
@@ -355,21 +355,21 @@ reads the answer. It runs only on the desktop for a local workspace, and records
 Escalations are ledger entries with an open/acknowledged/resolved status. Some need you; some are a
 record of something that happened.
 
-| Kind                         | Needs you? | What it means                                                     |
-| ---------------------------- | ---------- | ----------------------------------------------------------------- |
-| `awaiting-approval`          | **yes**    | a `gated` capability wants an action approved                     |
-| `worker-question`            | **yes**    | a worker is blocked on a question; answer it from the detail pane |
+| Kind                         | Needs you? | What it means                                                          |
+| ---------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `awaiting-approval`          | **yes**    | a `gated` capability wants an action approved                          |
+| `worker-question`            | **yes**    | a worker is blocked on a question; answer it from the detail pane      |
 | `worker-escalation`          | **yes**    | a worker requested intervention, or asked in prose (`prose-question:`) |
-| `park-budget`                | **yes**    | budget spent; raise it, then resume                               |
-| `park-worker-question`       | **yes**    | parked because of the above question                              |
-| `park-worker-escalation`     | **yes**    | parked because of the above escalation                            |
-| `park-configuration-error`   | **yes**    | durable workspace or authority configuration no longer matches    |
-| `park-coordinator-seat-lost` | **yes**    | orchestration ownership lost                                      |
-| `park-stop-predicate`        | sometimes  | resume if you disagree with the stop condition                    |
-| `invalid-kind-payload`       | **yes**    | the enrollment is malformed; commands are refused on it           |
-| `control-disarm`             | no         | records an explicit disarm                                        |
-| `malformed-ledger-entry`     | no         | diagnostic: a ledger append failed validation                     |
-| `handoff-refused`            | no         | records a refused objective → sitter handoff                      |
+| `park-budget`                | **yes**    | budget spent; raise it, then resume                                    |
+| `park-worker-question`       | **yes**    | parked because of the above question                                   |
+| `park-worker-escalation`     | **yes**    | parked because of the above escalation                                 |
+| `park-configuration-error`   | **yes**    | durable workspace or authority configuration no longer matches         |
+| `park-coordinator-seat-lost` | **yes**    | orchestration ownership lost                                           |
+| `park-stop-predicate`        | sometimes  | resume if you disagree with the stop condition                         |
+| `invalid-kind-payload`       | **yes**    | the enrollment is malformed; commands are refused on it                |
+| `control-disarm`             | no         | records an explicit disarm                                             |
+| `malformed-ledger-entry`     | no         | diagnostic: a ledger append failed validation                          |
+| `handoff-refused`            | no         | records a refused objective → sitter handoff                           |
 
 The detail pane lists only `open` and `escalated` ones (`HeimdallDetailPane.tsx:162-170`).
 
@@ -430,9 +430,9 @@ immediately true. The UI's `min="0"` allows it (`objective-enrollment-model.ts:1
 ## The workspace lease
 
 One watcher at a time may write to a given workspace. The lease is a directory of numbered epochs on
-the watched host — `.git/orca-heimdall/lease/epoch-N/holder.json` for a git workspace,
-`.orca/heimdall/lease/epoch-N/holder.json` for a folder (`lease-store.ts:259,277`) — not in the
-Orca profile, so it fences across app instances and across SSH.
+the watched host — `.git/quirky-heimdall/lease/epoch-N/holder.json` for a git workspace,
+`.quirky/heimdall/lease/epoch-N/holder.json` for a folder (`lease-store.ts:259,277`) — not in the
+Quirky profile, so it fences across app instances and across SSH.
 
 The TTL is 90 seconds and the holder renews at a third of that (`runner-loop.ts`,
 `lease-store.ts`). A holder that stops renewing is considered expired and the next watcher claims a
@@ -472,7 +472,7 @@ checks, and merges — each a separately gated capability.
 | `merge`            | off / gated / on                                    | **off**            | authorizes the merge API call                                  |
 | Branch update mode | merge base into branch / rebase onto base           | merge-base-update  |                                                                |
 | Merge method       | repository default / merge commit / squash / rebase | repository default |                                                                |
-| Merge check scope  | all checks / required checks only                  | all checks         | checks on the current review head must pass before merge       |
+| Merge check scope  | all checks / required checks only                   | all checks         | checks on the current review head must pass before merge       |
 | Active budget      | hours > 0, step 0.25                                | 4                  | no upper bound; counts only while a worker or action is active |
 
 All four capabilities default to `off` (`HostedReviewSitterPanel.tsx:43-48`), so a freshly armed
@@ -504,7 +504,7 @@ On any other provider the PR Sitter control simply does not render — no error,
 | `merge`            | `enqueue`, `merge`                                           |
 
 The `prepare-*` / `publish-*` split matters: preparing is a local commit in your worktree, publishing
-is the push. With a capability on **Ask**, Orca may prepare and commit a fix locally and then waits
+is the push. With a capability on **Ask**, Quirky may prepare and commit a fix locally and then waits
 for you before publishing it, triggering CI, updating the branch, or merging.
 
 ### What it reads every tick
@@ -557,7 +557,7 @@ checks only** for a direct sitter.
    your worktree under a fixed policy: it may apply mechanical fixes and fix the demonstrated defect;
    it must escalate on anything ambiguous or behaviour-changing; and it must **never** skip or disable
    tests, suppress lint or type errors, weaken CI gates, or push (`agent-prompt.ts:3-20`). It must
-   produce exactly one commit carrying an `Orca-Heimdall-Attempt` trailer.
+   produce exactly one commit carrying an `Quirky-Heimdall-Attempt` trailer.
 3. **Inspect.** The resulting diff is statically checked before anything is published — CI-definition
    edits, baseline/ratchet edits, added suppressions, added test skips, added CI-bypass flags, test
    deletion, and net test-contract narrowing are all refused (`agent-policy.ts:110-162`).
@@ -740,7 +740,7 @@ with one commit at landing.
 
 Folder workspaces enroll at any requested cap but clamp to 1, with a note. A host without the
 `HEIMDALL_PARALLEL_EXECUTION_RUNTIME_CAPABILITY` runs in place with a note, and enrollment is never
-refused. Change the cap mid-run with `orca heimdall set-concurrency <watcherId> <n>` or the fleet
+refused. Change the cap mid-run with `quirky heimdall set-concurrency <watcherId> <n>` or the fleet
 page control: lowering it drains in-flight work, and raising it takes effect on the next tick.
 
 ### Tier
@@ -797,7 +797,7 @@ entire workspace (`objective-enrollment-model.ts:81-87`). Otherwise up to 64 uni
 line.
 
 `*` `?` `**` are supported; `[] {} () !` are refused, as are absolute paths, `~`, backslashes, drive
-letters, control characters, and parent traversal. A glob rooted at `.git` or `.orca` is refused —
+letters, control characters, and parent traversal. A glob rooted at `.git` or `.quirky` is refused —
 with one exception: the bare `**` is allowed and is not subject to that check
 (`contract-types.ts:117-127`).
 
@@ -838,9 +838,9 @@ Every tick the objective decides at most one action (`objective-actions.ts`):
 Some ticks deliberately take no action even though checks or gates are due. These surface in the
 decision trace as a named no-action reason, not an error:
 
-| Reason                      | Meaning                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `read-only-worker-in-flight` | a plan-review, reviewer, or integrator dispatch is running or its outcome is still unknown; new checks and gates wait for it to land |
+| Reason                       | Meaning                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only-worker-in-flight` | a plan-review, reviewer, or integrator dispatch is running or its outcome is still unknown; new checks and gates wait for it to land  |
 | `check-evidence-stale`       | a check or gate's evidence no longer matches the workspace content it ran against; it is re-issued at the current content, not failed |
 
 `check-evidence-stale` retries are capped: a criterion that keeps drifting out from under its own
@@ -852,7 +852,7 @@ or replan), so a workspace that never holds still cannot loop forever.
 Each dispatched worker gets a structured prompt (`role-prompts.ts:105-121`) carrying the objective
 text, tier, landing bar, budget bucket, `CONCURRENCY: 1`, the write territory as a bullet list, a
 role instruction, role context (the assigned node, or the plan review view), a strict JSON report
-contract, and the exact `orca orchestration send --type worker_done` line to finish with. The report
+contract, and the exact `quirky orchestration send --type worker_done` line to finish with. The report
 must be written atomically to an absolute path the kernel supplies; the kernel parses and validates
 it against a schema, so malformed or out-of-territory reports are rejected rather than interpreted
 loosely.
@@ -1042,25 +1042,25 @@ than blanking (`HeimdallPage.tsx:219-230`).
 
 ### CLI
 
-The `orca heimdall` CLI exposes fleet reads, enrollment, lifecycle controls, steering, and debug
+The `quirky heimdall` CLI exposes fleet reads, enrollment, lifecycle controls, steering, and debug
 reports. Prefer `--json` for agent-driven use; refusals and indeterminate command outcomes include a
 reason and detail and return a nonzero exit code. Start with `list`, then inspect the exact watcher
 with `show` (and `objective` for objective plan/task details) before taking an action:
 
 ```sh
-orca heimdall list [--kind objective|hosted-review] [--worktree <selector>] [--json]
-orca heimdall show <watcherId> [--json]
-orca heimdall objective <watcherId> [--json]
-orca heimdall create objective --objective <text> [--worktree <selector>] [--hours <n|none>] [--turns <n|none>] [--spec <json|@file>] [--json]
-orca heimdall create hosted-review [--worktree <selector>] [--hours <n|none>] [--turns <n|none>] [--spec <json|@file>] [--json]
-orca heimdall pause|resume|disarm|rm <watcherId> [--json]
-orca heimdall approve <watcherId> <escalationId> [--json]
-orca heimdall answer <watcherId> <messageId> --body <text> [--json]
-orca heimdall answer-escalation <watcherId> <escalationId> --body <text> [--json]
-orca heimdall budget <watcherId> [--hours <n|none>] [--turns <n|none>] [--json]
-orca heimdall stop-worker <watcherId> <dispatchId> [--json]
-orca heimdall set-concurrency <watcherId> <maxConcurrency> [--json]
-orca heimdall debug <watcherId> [--out <path>] [--json]
+quirky heimdall list [--kind objective|hosted-review] [--worktree <selector>] [--json]
+quirky heimdall show <watcherId> [--json]
+quirky heimdall objective <watcherId> [--json]
+quirky heimdall create objective --objective <text> [--worktree <selector>] [--hours <n|none>] [--turns <n|none>] [--spec <json|@file>] [--json]
+quirky heimdall create hosted-review [--worktree <selector>] [--hours <n|none>] [--turns <n|none>] [--spec <json|@file>] [--json]
+quirky heimdall pause|resume|disarm|rm <watcherId> [--json]
+quirky heimdall approve <watcherId> <escalationId> [--json]
+quirky heimdall answer <watcherId> <messageId> --body <text> [--json]
+quirky heimdall answer-escalation <watcherId> <escalationId> --body <text> [--json]
+quirky heimdall budget <watcherId> [--hours <n|none>] [--turns <n|none>] [--json]
+quirky heimdall stop-worker <watcherId> <dispatchId> [--json]
+quirky heimdall set-concurrency <watcherId> <maxConcurrency> [--json]
+quirky heimdall debug <watcherId> [--out <path>] [--json]
 ```
 
 Objective creation requires either `--objective <text>` or `--objective-file <path>`; the latter
@@ -1085,7 +1085,7 @@ does not, create is refused rather than silently changing the requested scope. T
 `"required"` from requests to legacy runtimes, preserving their older schema and behavior.
 
 Hosted-review creation requires the derived-payload runtime capability. If it is absent, update and
-restart that Orca runtime; adding candidate branch or review identity fields to `--spec` does not
+restart that Quirky runtime; adding candidate branch or review identity fields to `--spec` does not
 bypass the capability gate.
 
 Watcher-id commands resolve their fleet row and send its observed target plus owner fence. This
@@ -1098,24 +1098,24 @@ does not stop worker terminals. Lifecycle, deletion, and owner-escalation-answer
 their corresponding Heimdall runtime capabilities; update an older host instead of retrying an
 unsupported operation.
 
-See the bundled `orca-heimdall` skill guide for complete create flags/specs and refusal recovery.
+See the bundled `quirky-heimdall` skill guide for complete create flags/specs and refusal recovery.
 
 ### Controls
 
 Nine commands, all routed through `heimdall:command` and fenced by owner identity and a command
 revision, so a stale or wrong-owner request is refused (`control-plane.ts:107-131,400-431`).
 
-| Command             | Precondition                          | Effect                                                                                  |
-| ------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `pause`             | active                                 | waits for the in-flight tick, commits `paused`, releases the lease                       |
-| `resume`            | paused or auto-parked                  | re-enables; **refuses** if budget is still exhausted or a worker question is open        |
-| `disarm`            | not already disarmed                   | stops the current enrollment generation, resolves open escalations, releases the lease   |
-| `approve`           | not disabled or paused                 | approves one action scope and reschedules immediately                                    |
-| `adjust-budget`     | none                                    | commits a new budget and updates the live status                                         |
-| `answer-question`   | question still open                    | answers the worker and un-parks the watcher                                              |
-| `answer-escalation` | parked on that exact owner escalation  | reopens the deviation with a fresh retry-once budget, records your reply, and un-parks    |
-| `set-concurrency`   | objective watcher                      | commits a new cap; lowering drains, raising applies next tick; folders stay at 1         |
-| `stop-worker`       | exact process identity matches         | stops one worker                                                                          |
+| Command             | Precondition                          | Effect                                                                                 |
+| ------------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `pause`             | active                                | waits for the in-flight tick, commits `paused`, releases the lease                     |
+| `resume`            | paused or auto-parked                 | re-enables; **refuses** if budget is still exhausted or a worker question is open      |
+| `disarm`            | not already disarmed                  | stops the current enrollment generation, resolves open escalations, releases the lease |
+| `approve`           | not disabled or paused                | approves one action scope and reschedules immediately                                  |
+| `adjust-budget`     | none                                  | commits a new budget and updates the live status                                       |
+| `answer-question`   | question still open                   | answers the worker and un-parks the watcher                                            |
+| `answer-escalation` | parked on that exact owner escalation | reopens the deviation with a fresh retry-once budget, records your reply, and un-parks |
+| `set-concurrency`   | objective watcher                     | commits a new cap; lowering drains, raising applies next tick; folders stay at 1       |
+| `stop-worker`       | exact process identity matches        | stops one worker                                                                       |
 
 **Disarm cannot be undone with Resume.** `resume` requires `paused` or an automatic park. A later
 `enroll` for the same workspace re-arms the stable watcher record as a new budget generation while
@@ -1182,17 +1182,17 @@ Caveats worth knowing before you rely on paired reads:
 
 ## State on disk, and resetting
 
-| What                                                                          | Where                                                                                                                                                        |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Kernel DB (enrollments, ledger, tick traces, terminal summaries — both kinds) | `<profile>/fork-heimdall/heimdall.db` (`database.ts:187`)                                                                                                    |
-| Objective plans and reports                                                   | `<profile>/fork-heimdall-objective/objective.db`                                                                                                             |
-| Workspace lease holder                                                        | Git: `<absolute-git-dir>/orca-heimdall/lease/epoch-<n>/holder.json`; folder: `<workspace>/.orca/heimdall/lease/epoch-<n>/holder.json`, on the execution host |
+| What                                                                          | Where                                                                                                                                                            |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kernel DB (enrollments, ledger, tick traces, terminal summaries — both kinds) | `<profile>/fork-heimdall/heimdall.db` (`database.ts:187`)                                                                                                        |
+| Objective plans and reports                                                   | `<profile>/fork-heimdall-objective/objective.db`                                                                                                                 |
+| Workspace lease holder                                                        | Git: `<absolute-git-dir>/quirky-heimdall/lease/epoch-<n>/holder.json`; folder: `<workspace>/.quirky/heimdall/lease/epoch-<n>/holder.json`, on the execution host |
 
 The objective database is schema v5: `plan_patch` (repair patches), `plan_review` (plan-review
 verdicts), and `gate_attempt` (objective gate results) are additive over v4, so an older build still
 opens the file read-only.
 
-`<profile>` is the Electron userData directory: `~/Library/Application Support/orca-dev` under
+`<profile>` is the Electron userData directory: `~/Library/Application Support/quirky-dev` under
 `pnpm dev`. To reset, quit the app first. Heimdall's asynchronous shutdown joins Electron's quit
 barrier: it stops new work, gives active operation tails up to 1.5 seconds while retaining their
 leases, then releases with the remaining deadline before closing storage. The bound keeps quit from
@@ -1200,8 +1200,8 @@ hanging, so it is not a promise that every in-flight asynchronous effect or leas
 an interrupted lease still self-heals after its TTL.
 
 ```sh
-rm -rf ~/Library/Application\ Support/orca-dev/fork-heimdall \
-       ~/Library/Application\ Support/orca-dev/fork-heimdall-objective
+rm -rf ~/Library/Application\ Support/quirky-dev/fork-heimdall \
+       ~/Library/Application\ Support/quirky-dev/fork-heimdall-objective
 ```
 
 Leave `orchestration.db` alone — orphaned run rows are inert and it holds unrelated state.
@@ -1211,8 +1211,8 @@ Leave `orchestration.db` alone — orphaned run rows are inert and it holds unre
 Use **Copy debug report** in the watcher detail header, or the CLI:
 
 ```sh
-orca heimdall debug <watcherId>
-orca heimdall debug <watcherId> --out watcher-debug.json
+quirky heimdall debug <watcherId>
+quirky heimdall debug <watcherId> --out watcher-debug.json
 ```
 
 The CLI resolves the watcher through its fleet row and sends the observed target and owner fence, so
@@ -1256,7 +1256,7 @@ debug log level, and no Heimdall-specific log environment variable.
 | Objective replans forever, never dispatches                           | no default TUI agent on the owning host — set one, or pick explicit role agents    |
 | Objective parks immediately on enrollment                             | turn budget set to 0                                                               |
 | Objective proposes an action every tick but never acts, no escalation | that capability is **Off**, not Ask                                                |
-| Two dev instances fighting                                            | shared `orca-dev` profile; isolate with `ORCA_DEV_USER_DATA_PATH`                  |
+| Two dev instances fighting                                            | shared `quirky-dev` profile; isolate with `QUIRKY_DEV_USER_DATA_PATH`              |
 
 ## A safe first run
 
@@ -1274,7 +1274,7 @@ debug log level, and no Heimdall-specific log environment variable.
 From the Phase 4 verification record (`tech-phase-4.md:41-52,1466-1483`):
 
 - **Real forge calls.** Every test to date used a fake; `gh` / `glab` against a live PR is unproven.
-- **The SSH / push rung.** The relay lane is unproven; filed as a test-skip in the orca ledger.
+- **The SSH / push rung.** The relay lane is unproven; filed as a test-skip in the quirky ledger.
 - **The remote sandbox suite never ran** in this worktree — no Docker host configured (`test-gap-124`).
 - **No UI end-to-end coverage.** The only e2e file is a cross-version wire unit test.
 - **Shutdown is bounded, not transactional across arbitrary async effects.** It joins the quit

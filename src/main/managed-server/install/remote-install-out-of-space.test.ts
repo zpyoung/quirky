@@ -40,8 +40,8 @@ function connection(failure: () => Error): RemoteInstallTransport {
 
 let localDir = ''
 beforeEach(() => {
-  localDir = mkdtempSync(join(tmpdir(), 'orca-out-of-space-'))
-  writeFileSync(join(localDir, 'orcad.js'), Buffer.alloc(2 * 1024 * 1024))
+  localDir = mkdtempSync(join(tmpdir(), 'quirky-out-of-space-'))
+  writeFileSync(join(localDir, 'quirkyd.js'), Buffer.alloc(2 * 1024 * 1024))
   vi.mocked(execHostCommand).mockReset()
 })
 afterEach(() => rmSync(localDir, { recursive: true, force: true }))
@@ -52,23 +52,23 @@ describe('a failed install write on a full host', () => {
     const upload = uploadRelayDirectory(
       connection(sftpFailure),
       localDir,
-      '/root/.orca-remote/orcad-0.1.0+abc',
+      '/root/.quirky-remote/quirkyd-0.1.0+abc',
       posix
     )
     await expect(upload).rejects.toBeInstanceOf(RemoteInstallOutOfSpaceError)
     await expect(upload).rejects.toThrow(
-      /out of disk space: the filesystem holding \/root\/\.orca-remote\/orcad-0\.1\.0\+abc has 12 KB free, and Orca needs about 2\.0 MB/
+      /out of disk space: the filesystem holding \/root\/\.quirky-remote\/quirkyd-0\.1\.0\+abc has 12 KB free, and Quirky needs about 2\.0 MB/
     )
     expect(vi.mocked(execHostCommand).mock.calls[0]?.[2]).toBe(
-      remoteFreeSpaceProbeCommand('/root/.orca-remote/orcad-0.1.0+abc')
+      remoteFreeSpaceProbeCommand('/root/.quirky-remote/quirkyd-0.1.0+abc')
     )
   })
 
   it('sizes a single file write by its contents', async () => {
     vi.mocked(execHostCommand).mockResolvedValue(dfLine(0))
     await expect(
-      writeRelayFile(connection(sftpFailure), posix, '/root/.orca-remote/x/.version', 'abc')
-    ).rejects.toThrow(/has 0 KB free, and Orca needs about 1 KB/)
+      writeRelayFile(connection(sftpFailure), posix, '/root/.quirky-remote/x/.version', 'abc')
+    ).rejects.toThrow(/has 0 KB free, and Quirky needs about 1 KB/)
   })
 
   it('keeps the original error when the filesystem still has room', async () => {

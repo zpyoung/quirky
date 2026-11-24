@@ -38,7 +38,7 @@ import type { RuntimeLayoutStreamStatus } from './runtime-layout-client'
 import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-check.test-fixture'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 // The test opens its own stream: boot's document-long one would outlive the test's double.
 vi.mock('./workspace-layout-frame-sync', async (importOriginal) => ({
   ...(await importOriginal<object>()),

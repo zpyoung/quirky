@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 /**
  * Host-wide sweep locating live OpenCode client processes for the

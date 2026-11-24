@@ -8,7 +8,7 @@ import { findAppImageNodeRuntime } from './appimage-bundled-node-runtime'
 let resources = ''
 
 beforeEach(() => {
-  resources = mkdtempSync(join(tmpdir(), 'orca-appimage-node-'))
+  resources = mkdtempSync(join(tmpdir(), 'quirky-appimage-node-'))
 })
 
 afterEach(() => {

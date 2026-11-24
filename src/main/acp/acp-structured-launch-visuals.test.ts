@@ -111,7 +111,7 @@ describe('ACP launch visuals', () => {
   })
 
   // OMP's settings layers (global, profile, project, overlays) replace lists, so any config of
-  // Orca's would hide the user's own skill folders; a plugin folder adds beside them.
+  // Quirky's would hide the user's own skill folders; a plugin folder adds beside them.
   it("gives OMP the plugin folder, leaving the user's config files as they set them", async () => {
     const launch = await resolve('omp', {
       version: '17.0.5',

@@ -23,8 +23,8 @@ describe('event-loop delay probe', () => {
   it('runs only for e2e runs or the explicit opt-in', () => {
     expect(isEventLoopDelayProbeEnabled({})).toBe(false)
     expect(isEventLoopDelayProbeEnabled({ NODE_ENV: 'development' })).toBe(false)
-    expect(isEventLoopDelayProbeEnabled({ ORCA_E2E_USER_DATA_DIR: '/tmp/x' })).toBe(true)
-    expect(isEventLoopDelayProbeEnabled({ ORCA_EVENT_LOOP_DELAY_PROBE: '1' })).toBe(true)
+    expect(isEventLoopDelayProbeEnabled({ QUIRKY_E2E_USER_DATA_DIR: '/tmp/x' })).toBe(true)
+    expect(isEventLoopDelayProbeEnabled({ QUIRKY_EVENT_LOOP_DELAY_PROBE: '1' })).toBe(true)
   })
 
   it('writes nothing when disabled', () => {
@@ -39,7 +39,7 @@ describe('event-loop delay probe', () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'Date'] })
     const dir = userData()
     const started = Date.now()
-    startEventLoopDelayProbe('orcad', dir, { ORCA_EVENT_LOOP_DELAY_PROBE: '1' })
+    startEventLoopDelayProbe('quirkyd', dir, { QUIRKY_EVENT_LOOP_DELAY_PROBE: '1' })
     vi.advanceTimersByTime(2_000)
     const file = join(dir, EVENT_LOOP_DELAY_REPORT_FILE)
     await vi.waitFor(() => expect(readFileSync(file, 'utf8').split('\n')).toHaveLength(3))
@@ -49,7 +49,7 @@ describe('event-loop delay probe', () => {
       .split('\n')
       .map((line) => JSON.parse(line))
       .toSorted((a, b) => a.t - b.t)
-    expect(first).toMatchObject({ process: 'orcad', pid: process.pid, windowMs: 1_000 })
+    expect(first).toMatchObject({ process: 'quirkyd', pid: process.pid, windowMs: 1_000 })
     expect(first.t).toBe(started + 1_000)
     expect(first.max).toBeGreaterThanOrEqual(0)
   })

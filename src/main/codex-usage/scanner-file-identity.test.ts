@@ -57,7 +57,7 @@ vi.mock('node:fs/promises', async () => {
 })
 
 vi.mock('../codex/codex-home-paths', () => ({
-  getOrcaManagedCodexHomePath: () => join(fixture.root, 'runtime'),
+  getQuirkyManagedCodexHomePath: () => join(fixture.root, 'runtime'),
   getSystemCodexHomePath: () => join(fixture.root, 'system')
 }))
 
@@ -93,7 +93,7 @@ function writeSession(name: string, tokens = 10): string {
 }
 
 beforeEach(() => {
-  fixture.root = mkdtempSync(join(tmpdir(), 'orca-codex-file-identity-'))
+  fixture.root = mkdtempSync(join(tmpdir(), 'quirky-codex-file-identity-'))
   mkdirSync(join(fixture.root, 'runtime', 'sessions'), { recursive: true })
   fixture.identities.clear()
   fixture.statErrors.clear()

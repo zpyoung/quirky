@@ -125,7 +125,7 @@ export function useMobileSessionStartup(scope: MobileSessionKeyboardStateModel) 
           activation?.accepted === true &&
           headlessActivationNeedsHostRenderer(activation.value)
         ) {
-          showToast('Open Orca on the host to wake sleeping agents.', 3000)
+          showToast('Open Quirky on the host to wake sleeping agents.', 3000)
         }
       }
       if (client && created !== '1' && !isFloatingWorkspaceRoute) {

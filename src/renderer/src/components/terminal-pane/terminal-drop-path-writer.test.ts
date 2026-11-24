@@ -64,7 +64,7 @@ describe('terminal drop path writer', () => {
       dropTarget: { paneId: pane.id, leafId: pane.leafId, ptyId: 'pty-1', transport } as never,
       manager: manager as never,
       paneTransports: new Map([[pane.id, transport]]) as never,
-      paths: ['/tmp/orca-paste-1-abc.png'],
+      paths: ['/tmp/quirky-paste-1-abc.png'],
       targetShell: 'posix'
     })
 
@@ -72,7 +72,7 @@ describe('terminal drop path writer', () => {
     // Why: image attachment detection in terminal TUIs keys off bracketed paste
     // of the literal path — no shell-escaping, no trailing space.
     expect(sendInputAccepted).toHaveBeenCalledWith(
-      wrapTerminalBracketedPasteText('/tmp/orca-paste-1-abc.png'),
+      wrapTerminalBracketedPasteText('/tmp/quirky-paste-1-abc.png'),
       'driving',
       { signal: expect.any(AbortSignal) }
     )
@@ -271,7 +271,7 @@ describe('terminal drop path writer', () => {
       dropTarget: { paneId: pane.id, leafId: pane.leafId, ptyId: 'pty-1', transport } as never,
       manager: manager as never,
       paneTransports: new Map([[pane.id, transport]]) as never,
-      paths: ['/repo/.orca/drops/download (1).png'],
+      paths: ['/repo/.quirky/drops/download (1).png'],
       targetShell: 'posix'
     })
 
@@ -279,7 +279,7 @@ describe('terminal drop path writer', () => {
     // unframed keystrokes, so agent TUIs left the path as text.
     expect(sendInputAccepted).toHaveBeenCalledTimes(1)
     expect(sendInputAccepted).toHaveBeenCalledWith(
-      wrapTerminalBracketedPasteText('/repo/.orca/drops/download\\ \\(1\\).png'),
+      wrapTerminalBracketedPasteText('/repo/.quirky/drops/download\\ \\(1\\).png'),
       'driving',
       { signal: expect.any(AbortSignal) }
     )

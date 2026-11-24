@@ -1,7 +1,7 @@
 import type { PtyRegistrationClaim } from '../../../runtime/runtime-terminal-state-records'
 import { PaneOwnerContentionError } from './pane-spawn-operation'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { IPtyProvider, PtySpawnResult } from '../../../providers/pty-provider-contract'
 import {
   isCurrentPtyExit,
@@ -19,7 +19,7 @@ import { retirePersistedStablePaneOwner } from './stable-owner'
 /** Tracks a PTY from its spawn reply, before any save: only an observed exit, or a stop on proof,
  *  removes it, so a spawn whose save or stop fails is never forgotten. */
 export function admitPtySpawnOwnership(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   result: PtySpawnResult
 ): void {
   if (result.isReattach || result.agentSessionEnsure?.disposition === 'adopted') {
@@ -40,7 +40,7 @@ export function admitPtySpawnOwnership(
 /** The runtime's incarnation-scoped start fence, read without failing the commit: registration
  *  reports the early exit itself. */
 function exitedBeforeAdmission(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   result: PtySpawnResult
 ): boolean {
   try {
@@ -58,8 +58,8 @@ export async function discardUnpersistedPtySpawn(
   provider: IPtyProvider,
   result: PtySpawnResult,
   runtime:
-    | (Pick<OrcaRuntimeService, 'markPtyLivenessUnverifiable'> &
-        Partial<Pick<OrcaRuntimeService, 'intentionalPtyStops'>>)
+    | (Pick<QuirkyRuntimeService, 'markPtyLivenessUnverifiable'> &
+        Partial<Pick<QuirkyRuntimeService, 'intentionalPtyStops'>>)
     | undefined
 ): Promise<void> {
   if (
@@ -114,10 +114,10 @@ export async function discardUnpersistedPtySpawn(
 
 // Successful registration must not yield before the remaining spawn publication.
 export function registerPersistedPtySpawn(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   store: Store | undefined,
   claim: PtyRegistrationClaim | undefined,
-  ...args: Parameters<OrcaRuntimeService['registerPty']>
+  ...args: Parameters<QuirkyRuntimeService['registerPty']>
 ): Promise<never> | undefined {
   try {
     if (claim && !runtime?.narrowPtyRegistration(args[0], claim, args[3]?.incarnationId)) {

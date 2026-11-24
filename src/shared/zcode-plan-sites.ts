@@ -25,7 +25,7 @@ export type ZcodePlanCredentialsStatus = {
   apiKeyConfigured: boolean
   zcodeCliConfigured: boolean
   apiKeyProtection: SecretAtRestProtection | null
-  /** Set when the saved file cannot be used here; 'sealed-elsewhere' means the other Orca app
-   *  on that machine (desktop vs orcad) saved it. */
+  /** Set when the saved file cannot be used here; 'sealed-elsewhere' means the other Quirky app
+   *  on that machine (desktop vs quirkyd) saved it. */
   apiKeyUnreadable?: 'sealed-elsewhere' | 'unreadable'
 }

@@ -404,7 +404,7 @@ describe('resolveTabAgentFromSignals', () => {
       resolveTabAgentFromSignals({
         hasObservedAgentSignal: false,
         isRemote: false,
-        title: '. Compare Opencode Vs Orca',
+        title: '. Compare Opencode Vs Quirky',
         hookAgent: null,
         launchAgent: 'opencode'
       })

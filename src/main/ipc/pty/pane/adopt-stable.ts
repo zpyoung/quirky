@@ -1,6 +1,6 @@
 import { ptyIncarnationById } from '../provider/ownership-state'
 import { reconcilePaneOwner } from './stable-pane-attach'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { Store } from '../../../persistence'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { getProvider } from '../provider/registry'
@@ -20,7 +20,7 @@ import type { AdoptStablePaneArgs, AdoptStablePaneResult } from '../ipc/spawn-ty
 
 /** Owns attachment through publication, including the lazy fresh path, under one reservation. */
 export async function adoptStablePane(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   store: Store | undefined,
   args: AdoptStablePaneArgs
 ): Promise<AdoptStablePaneResult | null> {

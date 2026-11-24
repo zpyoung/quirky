@@ -3,7 +3,7 @@ import { request } from 'node:https'
 import type { OpenSpeechDownloadRequest } from './speech-model-download-response'
 
 /**
- * Model downloads on a host without Chromium (orcad). Node does not follow redirects, so a 3xx
+ * Model downloads on a host without Chromium (quirkyd). Node does not follow redirects, so a 3xx
  * surfaces as the `redirect` Electron's `net` reports, and the download re-requests it the same
  * way. Node's `https` uses no proxy, so the host must reach the model host directly.
  */

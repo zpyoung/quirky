@@ -36,12 +36,12 @@ The loader reverses the exact zero-context fix for the before run, verifies ever
 From the repository root:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ORCA_PLUGIN_LOG_VARIANT=before pnpm exec vitest run --config docs/audits/plugin-uninstall-log-retirement/phase.config.mjs
-ORCA_BACKGROUND_LAUNCH=1 ORCA_PLUGIN_LOG_VARIANT=fixed pnpm exec vitest run --config docs/audits/plugin-uninstall-log-retirement/phase.config.mjs
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/plugin-uninstall-log-retirement/loader-controls.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_PLUGIN_LOG_VARIANT=before pnpm exec vitest run --config docs/audits/plugin-uninstall-log-retirement/phase.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_PLUGIN_LOG_VARIANT=fixed pnpm exec vitest run --config docs/audits/plugin-uninstall-log-retirement/phase.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/plugin-uninstall-log-retirement/loader-controls.cjs
 ```
 
-For Electron's installed Node runtime, use the installed Electron executable with `ELECTRON_RUN_AS_NODE=1 ORCA_BACKGROUND_LAUNCH=1` and `node_modules/vitest/vitest.mjs` followed by the same `run --config` arguments. `ORCA_PLUGIN_LOG_OUTPUT` and `ORCA_PLUGIN_LOG_LOADER_OUTPUT` select alternate report paths. `before.config.mjs` runs the six permanent retention cases against baseline and is expected to fail those retention assertions.
+For Electron's installed Node runtime, use the installed Electron executable with `ELECTRON_RUN_AS_NODE=1 QUIRKY_BACKGROUND_LAUNCH=1` and `node_modules/vitest/vitest.mjs` followed by the same `run --config` arguments. `QUIRKY_PLUGIN_LOG_OUTPUT` and `QUIRKY_PLUGIN_LOG_LOADER_OUTPUT` select alternate report paths. `before.config.mjs` runs the six permanent retention cases against baseline and is expected to fail those retention assertions.
 
 ## Review correction, 2026-09-17
 

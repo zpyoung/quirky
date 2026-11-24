@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
+import { QuirkyRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type {
@@ -50,7 +50,7 @@ export type OwnedMobileTerminalCreateOptions = {
   refuseSleptWorktree?: boolean
 }
 
-export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
+export abstract class QuirkyRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends QuirkyRuntimeWithResolveMobileSessionTerminalCommand {
   private readonly ownedMobileDispatchRecipes = new Map<
     string,
     {

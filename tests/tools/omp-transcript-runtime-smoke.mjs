@@ -14,7 +14,7 @@ import { readNativeChatTranscript } from '../../src/main/native-chat/transcript-
 
 const reference = process.argv[2]
 assert.ok(reference, 'Pass the read-only oh-my-pi source checkout path')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-transcript-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-transcript-'))
 process.env.HOME = join(scratch, 'home')
 process.env.USERPROFILE = process.env.HOME
 process.env.OMP_CODING_AGENT_DIR = join(scratch, 'agent')
@@ -37,14 +37,14 @@ await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
 const managers = []
 const transcripts = []
 try {
-  process.env.ORCA_AGENT_HOOK_PORT = String(server.address().port)
-  process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
-  delete process.env.ORCA_AGENT_HOOK_ENDPOINT
-  delete process.env.ORCA_PI_STATUS_OWNED
+  process.env.QUIRKY_AGENT_HOOK_PORT = String(server.address().port)
+  process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
+  delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
+  delete process.env.QUIRKY_PI_STATUS_OWNED
   process.title = 'omp'
   for (const kind of ['omp', 'pi']) {
-    process.env.ORCA_PANE_KEY = `transcript-${kind}`
-    process.env.ORCA_AGENT_LAUNCH_TOKEN = `transcript-${kind}`
+    process.env.QUIRKY_PANE_KEY = `transcript-${kind}`
+    process.env.QUIRKY_AGENT_LAUNCH_TOKEN = `transcript-${kind}`
     const extensionPath = join(scratch, `${kind}-agent-status.ts`)
     await writeFile(extensionPath, getPiAgentStatusExtensionSource(kind))
     const load = async () => {
@@ -114,7 +114,7 @@ try {
       producers: ['omp', 'pi'],
       reports: posts.length,
       proof:
-        'Actual OMP loader and persistent SessionManager, custom directory, lazy creation, new-session switch, HTTP metadata, Orca transcript reader, child suppression',
+        'Actual OMP loader and persistent SessionManager, custom directory, lazy creation, new-session switch, HTTP metadata, Quirky transcript reader, child suppression',
       modelCalls: 0,
       rendered: false
     })

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import type { WatcherEnrollment } from '../../../shared/fork-heimdall/watcher-types'
 import { OrchestrationDb } from '../../runtime/orchestration/db'
 import { createRootDispatch } from '../../runtime/orchestration/db/root-dispatch-test-fixture'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import {
   QuestionAlreadyAnsweredError,
   RuntimeHeimdallOrchestrationAdapter
@@ -15,12 +15,12 @@ const COORDINATOR = {
 
 describe('Heimdall question answer delivery', () => {
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
   let ensureRelay: MockInstance<(runId?: string) => void>
 
   beforeEach(() => {
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     ensureRelay = vi
       .spyOn(runtime, 'ensureOrchestrationFederationRelay')
       .mockImplementation(() => {})
@@ -136,7 +136,7 @@ function seedQuestion(db: OrchestrationDb): {
   }
 }
 
-function createAdapter(runtime: OrcaRuntimeService): RuntimeHeimdallOrchestrationAdapter {
+function createAdapter(runtime: QuirkyRuntimeService): RuntimeHeimdallOrchestrationAdapter {
   return new RuntimeHeimdallOrchestrationAdapter(runtime, {
     persistOrchestrationRunId: async () => undefined
   })

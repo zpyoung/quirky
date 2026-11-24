@@ -42,7 +42,7 @@ import { createPullRequestGenerationSlice } from './slices/pull-request-generati
 import { createCommitMessageGenerationSlice } from './slices/commit-message-generation'
 import { createPinnedTabCloseConfirmSlice } from './slices/pinned-tab-close-confirm'
 import { createRecentlyClosedTabsSlice } from './slices/recently-closed-tabs'
-import { createOrcaProfilesSlice } from './slices/orca-profiles'
+import { createQuirkyProfilesSlice } from './slices/quirky-profiles'
 import { createNewIssueDraftSlice } from './slices/new-issue-draft'
 import { createTaskCreationDraftsSlice } from './slices/task-creation-drafts'
 import { createRemoteServerUpdatesSlice } from './slices/remote-server-updates'
@@ -62,7 +62,7 @@ import {
 } from '@/lib/http-link-routing'
 import { installStoreListenerCensus } from './store-listener-census'
 import { installSettledSortEpoch } from './settled-sort-epoch'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import { withEditorBufferRecords } from './editor-buffer-record-lifecycle'
@@ -89,7 +89,7 @@ export const useAppStore = create<AppState>()(
       withReactCommitCascadeWriteProbe((...a) => {
         // Why first: settling inside the bump's own notify means hook subscribers never see it unsettled.
         // Switch point: the stamp-sorted list reads no settled epoch.
-        if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+        if (!QUIRKY_SIDEBAR_INPUTS_IS_MAIN) {
           installSettledSortEpoch(a[2])
         }
         // Why: the inner api is only reachable here, before create() copies subscribe onto the hook.
@@ -135,7 +135,7 @@ export const useAppStore = create<AppState>()(
           ...createCommitMessageGenerationSlice(...a),
           ...createPinnedTabCloseConfirmSlice(...a),
           ...createRecentlyClosedTabsSlice(...a),
-          ...createOrcaProfilesSlice(...a),
+          ...createQuirkyProfilesSlice(...a),
           ...createNewIssueDraftSlice(...a),
           ...createTaskCreationDraftsSlice(...a),
           ...createRemoteServerUpdatesSlice(...a),

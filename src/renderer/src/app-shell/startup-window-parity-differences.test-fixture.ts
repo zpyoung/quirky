@@ -6,7 +6,7 @@ import { parseExecutionHostId, type ExecutionHostId } from '../../../shared/exec
 import { sweepUnattachedTerminalRows } from '../../../shared/workspace-layout/unattached-terminal-row-sweep'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 
-export const GIT = 'repo-1::/Users/dev/orca'
+export const GIT = 'repo-1::/Users/dev/quirky'
 
 /** Main's startup sweep in a layout-owner build; a paired server's partition passes through. */
 export function sweptAtStartup(

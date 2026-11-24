@@ -1,6 +1,6 @@
 export type PdfZoomDirection = 'in' | 'out' | 'reset'
 
-const PDF_ZOOM_REQUEST_EVENT = 'orca:pdf-zoom-request'
+const PDF_ZOOM_REQUEST_EVENT = 'quirky:pdf-zoom-request'
 
 /** Offers an app zoom command to the focused pane's PDF; true when a PDF took it. */
 export function requestPdfZoom(direction: PdfZoomDirection): boolean {

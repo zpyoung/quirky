@@ -5,7 +5,7 @@ import { translate } from '@/i18n/i18n'
 import { activateTabAndFocusPane } from '@/lib/activate-tab-and-focus-pane'
 import { useAppStore } from '@/store'
 import type { SessionInfoIdentity } from '../../../../../shared/fork-session-info/session-info-types'
-import { openAiVaultSessionLogInOrca } from '../ai-vault-session-log-open'
+import { openAiVaultSessionLogInQuirky } from '../ai-vault-session-log-open'
 import type { FocusedSessionSelection } from './focused-session-info'
 import { formatTimestamp } from './session-info-format'
 import { requestSessionInfoVaultNavigation } from './session-info-vault-navigation'
@@ -187,7 +187,7 @@ export function SessionInfoIdentitySection({
               icon={FileJson}
               label={translate('fork.sessionInfo.openTranscript', 'Open transcript')}
               onClick={() =>
-                void openAiVaultSessionLogInOrca({
+                void openAiVaultSessionLogInQuirky({
                   filePath: localTranscript,
                   executionHostId: 'local'
                 })

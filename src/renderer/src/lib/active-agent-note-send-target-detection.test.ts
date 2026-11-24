@@ -132,7 +132,7 @@ describe('active agent note send', () => {
     })
   })
 
-  it('offers the active terminal send target for an Orca-launched agent before hooks report', () => {
+  it('offers the active terminal send target for an Quirky-launched agent before hooks report', () => {
     testState.appState.tabsByWorktree = {
       'wt-1': [{ id: 'tab-1', launchAgent: 'codex' }]
     }

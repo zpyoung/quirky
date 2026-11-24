@@ -32,7 +32,7 @@ type RepositoryFixture = {
 
 async function repositoryFixture(): Promise<RepositoryFixture> {
   return createMergeTrainRepositoryFixture(temporaryDirectories, {
-    tempPrefix: 'orca-objective-recovery-',
+    tempPrefix: 'quirky-objective-recovery-',
     repoId: 'merge-train-recovery-test-repo',
     userName: 'Merge Train Recovery Test',
     userEmail: 'merge-train-recovery@example.test'

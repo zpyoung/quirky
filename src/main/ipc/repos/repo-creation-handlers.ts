@@ -34,7 +34,7 @@ export async function probeLocalGitAvailability(): Promise<boolean> {
  * override for the local host, which is the only scope this handler answers for.
  *
  * Why the untouched default does not count: `workspaceDir` is never blank -- new
- * installs seed it with `~/orca/workspaces`. Treating that seeded value as a choice
+ * installs seed it with `~/quirky/workspaces`. Treating that seeded value as a choice
  * would silently relocate every existing user's projects into the worktree root,
  * where each project would then host its own worktrees inside its working tree.
  */
@@ -53,7 +53,7 @@ function getDefaultCreateProjectParent(store: Store): string {
   if (configured && !isUntouchedDefault) {
     return configured
   }
-  return join(home, 'orca', 'projects')
+  return join(home, 'quirky', 'projects')
 }
 
 export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: Store): void {
@@ -79,7 +79,7 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
     }
   )
 
-  // Create a repo/folder from scratch (orca#763); git repos need an empty initial commit so HEAD has a branch ref for worktrees.
+  // Create a repo/folder from scratch (quirky#763); git repos need an empty initial commit so HEAD has a branch ref for worktrees.
   ipcMain.handle(
     'repos:create',
     async (
@@ -118,7 +118,7 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       let createdDir = false
       let targetExists = false
       try {
-        // Why: the default parent (~/orca/projects) may not exist on a fresh install; create only the parent before probing the target.
+        // Why: the default parent (~/quirky/projects) may not exist on a fresh install; create only the parent before probing the target.
         await mkdir(parentPath, { recursive: true })
         await access(targetPath)
         targetExists = true

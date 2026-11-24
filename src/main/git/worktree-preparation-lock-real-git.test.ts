@@ -32,7 +32,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 async function fixture(
   repoName = 'repo'
 ): Promise<{ root: string; repo: string; prepared: string; final: string }> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), 'orca-preparation-lock-')))
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-preparation-lock-')))
   roots.push(root)
   const repo = join(root, repoName)
   await git(root, ['init', '--quiet', repo])

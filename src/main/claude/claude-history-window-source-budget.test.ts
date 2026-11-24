@@ -98,7 +98,7 @@ const read = (previousLeafUuid: string | null = 'anchor') =>
     transcriptPath: state.path,
     providerSessionId: 'provider',
     previousLeafUuid,
-    sessionId: 'orca',
+    sessionId: 'quirky',
     turnInFlight: false
   })
 
@@ -110,7 +110,7 @@ function padTo(bytes: number): string {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-history-source-budget-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-history-source-budget-'))
   Object.assign(state, {
     path: join(directory, 'session.jsonl'),
     growth: '',
@@ -127,7 +127,7 @@ beforeEach(async () => {
 
 afterEach(async (context) => {
   try {
-    const output = process.env.ORCA_HISTORY_BUDGET_PROOF_OUTPUT
+    const output = process.env.QUIRKY_HISTORY_BUDGET_PROOF_OUTPUT
     if (output) {
       await appendFile(
         output,

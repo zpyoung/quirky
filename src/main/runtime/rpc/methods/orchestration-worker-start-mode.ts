@@ -19,7 +19,7 @@ import {
   type AgentLaunchModeVocabulary
 } from '../../../agent-launch/agent-launch-mode'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 
 export type WorkerStartMode = AgentLaunchMode
 export type WorkerStartModeReason = AgentLaunchModeReason
@@ -60,7 +60,7 @@ export function decideWorkerStartMode(args: {
 }
 
 export async function resolveWorkerStartModeOnHost(
-  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
+  runtime: Pick<QuirkyRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
   mode: WorkerStartModeReceipt,
   worktreeId: string | undefined,
   agent: TuiAgent | undefined

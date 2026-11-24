@@ -16,7 +16,7 @@ const releases: (() => void)[] = []
 type ProfileFixtureLocation = { directory: string; profileId: string; cleanupRoot?: string }
 
 beforeAll(async () => {
-  bundleRoot = mkdtempSync(join(tmpdir(), 'orca-maintenance-worker-'))
+  bundleRoot = mkdtempSync(join(tmpdir(), 'quirky-maintenance-worker-'))
   workerOptions = {
     workerPath: join(bundleRoot, 'profile-state-writer-worker-entry.js'),
     backupWorkerPath: join(bundleRoot, 'profile-state-backup-worker-entry.js')
@@ -54,11 +54,11 @@ export function maintenanceBarrier() {
 }
 
 function paths(profile?: ProfileFixtureLocation) {
-  const directory = profile?.directory ?? mkdtempSync(join(tmpdir(), 'orca-maintenance-profile-'))
+  const directory = profile?.directory ?? mkdtempSync(join(tmpdir(), 'quirky-maintenance-profile-'))
   roots.push(profile?.cleanupRoot ?? directory)
   return {
     directory,
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     databaseFile: join(directory, 'profile-state.db'),
     profileId: profile?.profileId ?? 'maintenance-test'
   }

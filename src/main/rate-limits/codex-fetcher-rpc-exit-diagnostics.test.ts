@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as RunProcess from '@orca/process-host'
+import type * as RunProcess from '@quirky/process-host'
 import { isCodexAuthError } from '../../shared/codex-auth-errors'
 
 const { ptySpawnMock, resolveCodexCommandMock, stubScript } = vi.hoisted(() => ({
@@ -18,7 +18,7 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('@orca/process-host', async (importOriginal) => {
+vi.mock('@quirky/process-host', async (importOriginal) => {
   const actual = await importOriginal<typeof RunProcess>()
   return {
     ...actual,
@@ -57,8 +57,8 @@ import { fetchCodexRateLimits } from './codex-fetcher'
 // once the client has spoken, so the initialize write can never race an EPIPE.
 const STUB_CODEX_SOURCE = `
 process.stdin.on('data', () => {
-  process.stderr.write(process.env.ORCA_STUB_CODEX_STDERR ?? '')
-  process.exit(Number(process.env.ORCA_STUB_CODEX_EXIT_CODE ?? '1'))
+  process.stderr.write(process.env.QUIRKY_STUB_CODEX_STDERR ?? '')
+  process.exit(Number(process.env.QUIRKY_STUB_CODEX_EXIT_CODE ?? '1'))
 })
 `
 
@@ -66,15 +66,15 @@ let tempRoot: string
 let stubPath: string
 
 function runStub(stderr: string, exitCode: number): Promise<{ error: string | null }> {
-  process.env.ORCA_STUB_CODEX_STDERR = stderr
-  process.env.ORCA_STUB_CODEX_EXIT_CODE = String(exitCode)
+  process.env.QUIRKY_STUB_CODEX_STDERR = stderr
+  process.env.QUIRKY_STUB_CODEX_EXIT_CODE = String(exitCode)
   // Why: a temp home with no auth.json keeps the HTTP fallback off the developer's real login.
   return fetchCodexRateLimits({ codexHomePath: tempRoot })
 }
 
 describe('Codex RPC exit diagnostics', () => {
   beforeEach(() => {
-    tempRoot = mkdtempSync(join(tmpdir(), 'orca-codex-rpc-exit-'))
+    tempRoot = mkdtempSync(join(tmpdir(), 'quirky-codex-rpc-exit-'))
     stubPath = join(tempRoot, 'codex-exit-stub.cjs')
     writeFileSync(stubPath, STUB_CODEX_SOURCE)
     resolveCodexCommandMock.mockReturnValue('codex')
@@ -82,8 +82,8 @@ describe('Codex RPC exit diagnostics', () => {
   })
 
   afterEach(() => {
-    delete process.env.ORCA_STUB_CODEX_STDERR
-    delete process.env.ORCA_STUB_CODEX_EXIT_CODE
+    delete process.env.QUIRKY_STUB_CODEX_STDERR
+    delete process.env.QUIRKY_STUB_CODEX_EXIT_CODE
     rmSync(tempRoot, { recursive: true, force: true })
     vi.clearAllMocks()
   })

@@ -45,12 +45,12 @@ export function nodeDownloadBlockedText(blocked: SshManagedServerNodeDownloadBlo
     case 'unset':
       return translate(
         'auto.components.settings.sshHostServer.nodeDownloadBlocked',
-        'Neither this computer nor this host could download Node.js, which Orca’s server needs. Use a Node.js mirror, or check the network on both machines.'
+        'Neither this computer nor this host could download Node.js, which Quirky’s server needs. Use a Node.js mirror, or check the network on both machines.'
       )
     case 'unsupported':
       return translate(
         'auto.components.settings.sshHostServer.nodeDownloadBlockedNoMirror',
-        'Neither this computer nor this host could download Node.js, which Orca’s server needs. Check the network or proxy on both machines, then connect again.'
+        'Neither this computer nor this host could download Node.js, which Quirky’s server needs. Check the network or proxy on both machines, then connect again.'
       )
     case 'tried':
       return translate(

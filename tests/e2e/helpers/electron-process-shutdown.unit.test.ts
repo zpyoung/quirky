@@ -2,7 +2,7 @@ import { EventEmitter, once } from 'node:events'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { PassThrough } from 'node:stream'
 import type { ChildProcess } from 'node:child_process'
 import type { ElectronApplication } from '@stablyai/playwright-test'
@@ -43,7 +43,7 @@ function pidIsGone(pid: number): boolean {
 
 async function ownedDaemon(mode: 'exit' | 'ignore' | 'descendant') {
   const proc = spawnProcess({
-    program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
+    program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath,
     args: [
       '-e',
       `
@@ -64,7 +64,7 @@ async function ownedDaemon(mode: 'exit' | 'ignore' | 'descendant') {
       `,
       mode
     ],
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
     detached: true,
     timeoutMs: null
@@ -91,7 +91,7 @@ async function ownedDaemon(mode: 'exit' | 'ignore' | 'descendant') {
   if (!proc.pid || pids[0] !== proc.pid) {
     throw new Error('Daemon readiness does not belong to the spawned child')
   }
-  const profile = mkdtempSync(path.join(tmpdir(), 'orca-daemon-exit-'))
+  const profile = mkdtempSync(path.join(tmpdir(), 'quirky-daemon-exit-'))
   ownedProfiles.add(profile)
   mkdirSync(path.join(profile, 'daemon'))
   writeFileSync(path.join(profile, 'daemon', 'owned.pid'), JSON.stringify({ pid: proc.pid }))

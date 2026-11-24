@@ -1,6 +1,6 @@
 import type { DispatchCreator } from '../../../../orchestration/db/dispatch-depth'
 import type { OrchestrationSessionCaller } from '../../../../orchestration/orchestration-caller-identity'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { orchestrationCallerIdentity } from './run-scope'
 
 /**
@@ -11,7 +11,7 @@ import { orchestrationCallerIdentity } from './run-scope'
  * incarnation, and a caller cannot be trusted to report its own.
  */
 export function resolveDispatchCreator(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   callerHandle: string | undefined,
   callerSession: OrchestrationSessionCaller | undefined
 ): DispatchCreator {
@@ -26,9 +26,9 @@ export function resolveDispatchCreator(
     paneKey: null
   })
   if (caller.terminalHandle === null) {
-    // A handle-less session: its Orca session id is its whole identity.
-    return caller.orcaSessionId
-      ? { kind: 'session', orcaSessionId: caller.orcaSessionId }
+    // A handle-less session: its Quirky session id is its whole identity.
+    return caller.quirkySessionId
+      ? { kind: 'session', quirkySessionId: caller.quirkySessionId }
       : { kind: 'system' }
   }
   const authority = runtime.getOrchestrationDispatchAuthority?.(caller.terminalHandle)
@@ -41,6 +41,6 @@ export function resolveDispatchCreator(
       runtime.getTerminalPaneKey(caller.terminalHandle) ??
       undefined,
     processIncarnation: authority?.processIncarnation ?? undefined,
-    ...(caller.orcaSessionId ? { orcaSessionId: caller.orcaSessionId } : {})
+    ...(caller.quirkySessionId ? { quirkySessionId: caller.quirkySessionId } : {})
   }
 }

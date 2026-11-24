@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { WatcherEnrollment } from '../../shared/fork-heimdall/watcher-types'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import type { ResolvedRuntimeFileTarget } from '../runtime/files/file-target'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { resolveObjectiveWorkspaceTarget } from './workspace-target'
 
 function enrollment(
@@ -44,9 +44,9 @@ function fileTarget(executionHostId: WatcherEnrollment['executionHostId']) {
 
 function fileRuntime(
   resolveRuntimeFileTarget: (selector: string) => Promise<unknown>
-): OrcaRuntimeService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeFileTarget is exercised.
-  return { resolveRuntimeFileTarget } as unknown as OrcaRuntimeService
+): QuirkyRuntimeService {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeFileTarget is exercised.
+  return { resolveRuntimeFileTarget } as unknown as QuirkyRuntimeService
 }
 
 describe('resolveObjectiveWorkspaceTarget', () => {

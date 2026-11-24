@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { MobilePushFilter } from '../../../src/shared/mobile-push-contract'
 
-const KEY = 'orca:notificationDeliveryPreferences'
+const KEY = 'quirky:notificationDeliveryPreferences'
 export type NotificationDeliveryPreferences = {
   onlyWhenDesktopAway: boolean
   sound: boolean

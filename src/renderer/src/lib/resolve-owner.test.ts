@@ -54,7 +54,7 @@ const FOCUS: Record<ActiveServer, string | null> = {
   other: 'env-other',
   deleted: 'env-gone'
 }
-const SAVED_SERVERS = ['env-a', 'env-b', 'env-orcad', 'env-other']
+const SAVED_SERVERS = ['env-a', 'env-b', 'env-quirkyd', 'env-other']
 
 type Row = {
   name: string
@@ -96,11 +96,11 @@ const ROWS: Row[] = [
   {
     name: 'managed server on an SSH host keeps its own id',
     rows: {
-      repos: [{ id: 'repo-1', executionHostId: 'runtime:env-orcad' }],
-      worktreesByRepo: { 'repo-1': [worktree('runtime:env-orcad', 'env-orcad')] }
+      repos: [{ id: 'repo-1', executionHostId: 'runtime:env-quirkyd' }],
+      worktreesByRepo: { 'repo-1': [worktree('runtime:env-quirkyd', 'env-quirkyd')] }
     },
     ref: { workspaceId: WORKTREE_ID },
-    owner: envAt('env-orcad')
+    owner: envAt('env-quirkyd')
   },
   {
     name: 'paired server',

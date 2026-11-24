@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithTouchMobileSessionTabsForWorktree as TouchMobileSessionTabsForWorktreeMethods } from './mobile-session-membership'
-import { OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding } from '../session-lifecycle/close/has-live-or-persisted-serve-or-ssh-owned-pty-binding'
+import type { QuirkyRuntimeWithTouchMobileSessionTabsForWorktree as TouchMobileSessionTabsForWorktreeMethods } from './mobile-session-membership'
+import { QuirkyRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding } from '../session-lifecycle/close/has-live-or-persisted-serve-or-ssh-owned-pty-binding'
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 import { normalizeCompatibleAgentTitleForOwner } from '../../../shared/agent-title-owner'
 import { getLatestPtyTitle } from '../runtime-worktree-status-projection'
@@ -17,7 +17,7 @@ import {
   mergeMobileSessionTabGroups
 } from '../mobile-session-tab-merge'
 
-export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal extends OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding {
+export abstract class QuirkyRuntimeWithPublishPtyBackedMobileSessionTerminal extends QuirkyRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding {
   protected abstract markPaneLiveTitlesDirty(): void
   protected abstract isMobileSessionSurfaceMembershipAllowed(
     ...args: Parameters<

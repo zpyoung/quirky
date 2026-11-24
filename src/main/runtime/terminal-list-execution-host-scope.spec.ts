@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
@@ -84,8 +84,8 @@ export function registerTerminalListExecutionHostScopeTests(): void {
 
   type GraphLeaf = { worktreeId: string; leafId: string; ptyId: string }
 
-  function makeRuntime(leaves: GraphLeaf[], store = makeStore()): OrcaRuntimeService {
-    const runtime = new OrcaRuntimeService(store as never)
+  function makeRuntime(leaves: GraphLeaf[], store = makeStore()): QuirkyRuntimeService {
+    const runtime = new QuirkyRuntimeService(store as never)
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: 'never' })),
       write: () => true,

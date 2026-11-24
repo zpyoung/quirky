@@ -52,7 +52,7 @@ describe('AskQuestionsPanel', () => {
     render(<AskQuestionsPanel />)
 
     fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), {
-      target: { value: 'orca' }
+      target: { value: 'quirky' }
     })
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
@@ -108,13 +108,13 @@ describe('AskQuestionsPanel', () => {
         'pane-a': [
           card('ask-1', {
             status: 'answered',
-            result: { answers: {}, skipped: [], summary: 'name: orca' }
+            result: { answers: {}, skipped: [], summary: 'name: quirky' }
           })
         ]
       }
     })
     render(<AskQuestionsPanel />)
     expect(screen.getByText('Answered')).toBeInTheDocument()
-    expect(screen.getByText('name: orca')).toBeInTheDocument()
+    expect(screen.getByText('name: quirky')).toBeInTheDocument()
   })
 })

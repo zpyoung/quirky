@@ -16,9 +16,9 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getStoreState, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 
 function seededRepoPathOrSkip(): string {

@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FsChangeEvent, MarkdownDocument } from '../../../../shared/filesystem-entry-types'
 import type { OpenFile } from '@/store/slices/editor'
-import { ORCA_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
+import { QUIRKY_WORKTREE_FILE_CHANGE_EVENT } from '@/hooks/worktree-file-change-event'
 import { useMarkdownDocuments } from './useMarkdownDocuments'
 
 const runtime = vi.hoisted(() => ({ list: vi.fn(), stat: vi.fn() }))
@@ -78,7 +78,7 @@ function change(
   rootPath = '/repo'
 ): void {
   window.dispatchEvent(
-    new CustomEvent(ORCA_WORKTREE_FILE_CHANGE_EVENT, {
+    new CustomEvent(QUIRKY_WORKTREE_FILE_CHANGE_EVENT, {
       detail: { runtimeEnvironmentId: owner, payload: { worktreePath: rootPath, events } }
     })
   )

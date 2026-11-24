@@ -23,7 +23,7 @@ function makeSetup(
 ): ProjectHostSetup {
   return {
     projectId,
-    displayName: 'Orca',
+    displayName: 'Quirky',
     kind: 'git',
     setupState: 'ready',
     setupMethod: 'legacy-repo',
@@ -56,12 +56,12 @@ afterEach(() => {
 
 describe('RepositoryHostSetupsSection settings entry scope', () => {
   it('lists only its own settings entry when same-host clones split the project (#20861)', () => {
-    const cloneA = makeRepo({ id: 'clone-a', displayName: 'Orca', path: '/work/orca' })
-    const cloneB = makeRepo({ id: 'clone-b', displayName: 'Orca B', path: '/work/orca-b' })
+    const cloneA = makeRepo({ id: 'clone-a', displayName: 'Quirky', path: '/work/quirky' })
+    const cloneB = makeRepo({ id: 'clone-b', displayName: 'Quirky B', path: '/work/quirky-b' })
     const remoteRepo = makeRepo({
       id: 'remote-repo',
-      displayName: 'Orca',
-      path: '/home/alice/orca',
+      displayName: 'Quirky',
+      path: '/home/alice/quirky',
       connectionId: 'openclaw 2'
     })
     useAppStore.setState({
@@ -69,7 +69,7 @@ describe('RepositoryHostSetupsSection settings entry scope', () => {
       projects: [
         {
           id: projectId,
-          displayName: 'Orca',
+          displayName: 'Quirky',
           badgeColor: '#737373',
           sourceRepoIds: [cloneA.id, cloneB.id, remoteRepo.id],
           createdAt: 100,
@@ -77,13 +77,13 @@ describe('RepositoryHostSetupsSection settings entry scope', () => {
         }
       ],
       projectHostSetups: [
-        makeSetup({ id: 'clone-a', repoId: 'clone-a', hostId: 'local', path: '/work/orca' }),
-        makeSetup({ id: 'clone-b', repoId: 'clone-b', hostId: 'local', path: '/work/orca-b' }),
+        makeSetup({ id: 'clone-a', repoId: 'clone-a', hostId: 'local', path: '/work/quirky' }),
+        makeSetup({ id: 'clone-b', repoId: 'clone-b', hostId: 'local', path: '/work/quirky-b' }),
         makeSetup({
           id: 'remote-repo',
           repoId: 'remote-repo',
           hostId: toSshExecutionHostId('openclaw 2'),
-          path: '/home/alice/orca'
+          path: '/home/alice/quirky'
         }),
         makeSetup({
           id: 'gpu-setup',
@@ -108,33 +108,33 @@ describe('RepositoryHostSetupsSection settings entry scope', () => {
       )
     })
 
-    expect(container.textContent).toContain('/work/orca')
+    expect(container.textContent).toContain('/work/quirky')
     expect(container.textContent).toContain('Path pending')
-    expect(container.textContent).not.toContain('/work/orca-b')
-    expect(container.textContent).not.toContain('/home/alice/orca')
+    expect(container.textContent).not.toContain('/work/quirky-b')
+    expect(container.textContent).not.toContain('/home/alice/quirky')
     expect(findButton('Open')).toBeUndefined()
     expect(findButton('Add to another host')).toBeUndefined()
   })
 
   it("stores a host switch under the clone entry's own selection key", () => {
     const setSettingsProjectHostSelection = vi.fn()
-    const cloneA = makeRepo({ id: 'clone-a', displayName: 'Orca', path: '/work/orca' })
+    const cloneA = makeRepo({ id: 'clone-a', displayName: 'Quirky', path: '/work/quirky' })
     const cloneATwin = makeRepo({
       id: 'clone-a',
-      displayName: 'Orca',
-      path: '/home/alice/orca',
+      displayName: 'Quirky',
+      path: '/home/alice/quirky',
       connectionId: 'openclaw 2'
     })
     const sshHostId = toSshExecutionHostId('openclaw 2')
     useAppStore.setState({
       repos: [cloneA, cloneATwin],
       projectHostSetups: [
-        makeSetup({ id: 'clone-a', repoId: 'clone-a', hostId: 'local', path: '/work/orca' }),
+        makeSetup({ id: 'clone-a', repoId: 'clone-a', hostId: 'local', path: '/work/quirky' }),
         makeSetup({
           id: 'clone-a-ssh',
           repoId: 'clone-a',
           hostId: sshHostId,
-          path: '/home/alice/orca'
+          path: '/home/alice/quirky'
         })
       ],
       sshTargetLabels: new Map([['openclaw 2', 'openclaw 2']]),

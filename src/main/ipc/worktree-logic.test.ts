@@ -509,8 +509,8 @@ describe('areWorktreePathsEqual', () => {
   it('treats macOS /private/tmp git paths as matching /tmp workspace paths', () => {
     expect(
       areWorktreePathsEqual(
-        '/private/tmp/orca-proof/worktrees/repo/feature',
-        '/tmp/orca-proof/worktrees/repo/feature',
+        '/private/tmp/quirky-proof/worktrees/repo/feature',
+        '/tmp/quirky-proof/worktrees/repo/feature',
         'darwin'
       )
     ).toBe(true)

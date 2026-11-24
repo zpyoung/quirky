@@ -7,8 +7,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1' || !process.argv[2]) {
-  throw new Error('Requires ORCA_BACKGROUND_LAUNCH=1 and the runtime smoke JSON path')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1' || !process.argv[2]) {
+  throw new Error('Requires QUIRKY_BACKGROUND_LAUNCH=1 and the runtime smoke JSON path')
 }
 const data = JSON.parse(readFileSync(process.argv[2], 'utf8'))
 if (!Array.isArray(data.transcripts) || data.transcripts.length !== 4) {
@@ -38,10 +38,10 @@ await buildRenderer({
   build: { outDir: path.join(output, 'renderer'), emptyOutDir: true }
 })
 const { ELECTRON_RUN_AS_NODE: _runAsNode, ...env } = process.env
-const app = await electron.launch({ args: [main], env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' } })
+const app = await electron.launch({ args: [main], env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' } })
 const report = {
   scope:
-    'Production desktop message list renders actual OMP SessionManager transcripts read through Orca; hidden Electron fixture, no full shell or model turn.',
+    'Production desktop message list renders actual OMP SessionManager transcripts read through Quirky; hidden Electron fixture, no full shell or model turn.',
   results: []
 }
 try {

@@ -361,7 +361,9 @@ describe("a desktop's server workspaces on the phone", () => {
     )
     screen.open('runtime:old-wt')
     expect(screen.navigations).toHaveLength(1)
-    expect(screen.notice()).toBe('Update Orca on ThinkPad to open its workspaces from your phone.')
+    expect(screen.notice()).toBe(
+      'Update Quirky on ThinkPad to open its workspaces from your phone.'
+    )
   })
 
   it('opens nothing for a listed server workspace once the phone can no longer reach it', async () => {

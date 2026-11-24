@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import path from 'node:path'
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import type * as LocalCommandResolver from './command-path-resolver'
 
 const { execFileAsyncMock, listLocalCommandPathsMock, runProcessMock } = vi.hoisted(() => ({
@@ -9,7 +9,7 @@ const { execFileAsyncMock, listLocalCommandPathsMock, runProcessMock } = vi.hois
   runProcessMock: vi.fn()
 }))
 
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 vi.mock('./preflight-local-env', () => ({ buildLocalPreflightEnv: () => undefined }))
 

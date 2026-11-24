@@ -83,7 +83,7 @@ describe('structured worker session', () => {
     let envAtSpawn: Record<string, string> | undefined
     createSpy.mockImplementation(async (args: { envelope: { sessionId: string } }) => {
       // `attach` is what spawns the provider child, and the child's env is read from the registry
-      // at spawn time. Registering afterwards ships a worker with no ORCA_TERMINAL_HANDLE.
+      // at spawn time. Registering afterwards ships a worker with no QUIRKY_TERMINAL_HANDLE.
       envAtSpawn = sealedChildEnv(args.envelope.sessionId)
       return { ok: true, value: { sessionId: args.envelope.sessionId } }
     })
@@ -94,17 +94,17 @@ describe('structured worker session', () => {
       dispatchId: 'd_spawn',
       onJournalActivity: () => {}
     })
-    expect(envAtSpawn?.ORCA_TERMINAL_HANDLE).toBe(created.identity.handle)
+    expect(envAtSpawn?.QUIRKY_TERMINAL_HANDLE).toBe(created.identity.handle)
     // This app's own launcher by absolute path, so a login shell's profile cannot swap in a global.
-    expect(envAtSpawn?.ORCA_CLI_COMMAND).toBe(
+    expect(envAtSpawn?.QUIRKY_CLI_COMMAND).toBe(
       join(
         getAppEnvironment().getPath('userData'),
         'cli',
         'bin',
-        process.platform === 'win32' ? 'orca-dev.cmd' : 'orca-dev'
+        process.platform === 'win32' ? 'quirky-dev.cmd' : 'quirky-dev'
       )
     )
-    expect(envAtSpawn?.ORCA_PANE_KEY).toBeUndefined()
+    expect(envAtSpawn?.QUIRKY_PANE_KEY).toBeUndefined()
     releaseStructuredWorkerSession('d_spawn')
   })
 
@@ -168,7 +168,7 @@ describe('structured worker session', () => {
       ok: false,
       refusal: {
         code: 'structured_agent_session_unsupported',
-        message: 'Orca cannot open a structured agent chat for this workspace.'
+        message: 'Quirky cannot open a structured agent chat for this workspace.'
       }
     }))
     await expect(
@@ -274,7 +274,7 @@ describe('structured worker dispatch preamble', () => {
     kind: 'agent',
     senders: [
       {
-        party: { address: 'term_coord', terminalHandle: 'term_coord', orcaSessionId: null },
+        party: { address: 'term_coord', terminalHandle: 'term_coord', quirkySessionId: null },
         name: 'Coordinator'
       }
     ],

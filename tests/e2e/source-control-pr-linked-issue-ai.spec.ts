@@ -35,9 +35,9 @@ test.describe('Source Control AI pull request linkedIssue', () => {
       expected: 'empty'
     }
   ]) {
-    test(`${label} the pull-request recipe`, async ({ orcaPage }) => {
-      await waitForSessionReady(orcaPage)
-      const { prWorktreeId, prWorktreePath, primaryBranch } = await seedCreatePrComposer(orcaPage)
+    test(`${label} the pull-request recipe`, async ({ quirkyPage }) => {
+      await waitForSessionReady(quirkyPage)
+      const { prWorktreeId, prWorktreePath, primaryBranch } = await seedCreatePrComposer(quirkyPage)
       createBranchCommit(prWorktreePath)
 
       const generatorPath = path.join(
@@ -47,7 +47,7 @@ test.describe('Source Control AI pull request linkedIssue', () => {
       writeLinkedIssuePrEchoGenerator(generatorPath, primaryBranch)
 
       try {
-        await orcaPage.evaluate(
+        await quirkyPage.evaluate(
           async ({ generatorPath, linkedIssue, worktreeId }) => {
             const store = window.__store
             if (!store) {
@@ -67,7 +67,7 @@ test.describe('Source Control AI pull request linkedIssue', () => {
                 actions: {
                   pullRequest: {
                     agentId: 'custom' as const,
-                    commandInputTemplate: 'ORCA_E2E_ISSUE={linkedIssue}\n\n{basePrompt}'
+                    commandInputTemplate: 'QUIRKY_E2E_ISSUE={linkedIssue}\n\n{basePrompt}'
                   }
                 }
               }
@@ -76,12 +76,12 @@ test.describe('Source Control AI pull request linkedIssue', () => {
           { generatorPath, linkedIssue, worktreeId: prWorktreeId }
         )
 
-        await openSourceControl(orcaPage, prWorktreeId)
+        await openSourceControl(quirkyPage, prWorktreeId)
 
-        const title = orcaPage.getByRole('textbox', { name: 'Pull request title' })
+        const title = quirkyPage.getByRole('textbox', { name: 'Pull request title' })
         await expect(title).toBeVisible({ timeout: 10_000 })
 
-        const generate = orcaPage.getByRole('button', {
+        const generate = quirkyPage.getByRole('button', {
           name: 'Generate pull request details with AI'
         })
         await expect(generate).toBeEnabled()

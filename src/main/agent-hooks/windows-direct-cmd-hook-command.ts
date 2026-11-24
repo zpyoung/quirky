@@ -19,7 +19,7 @@ export function wrapWindowsDirectCmdHookCommand(scriptPath: string): string | nu
 /**
  * Registration for a managed `.cmd` hook: the bare path skips a PowerShell start-up per event
  * (#18875); paths the shells cannot carry bare keep the encoded launcher. A missing script then
- * prints "not recognized" until Orca reinstalls it instead of exiting silently.
+ * prints "not recognized" until Quirky reinstalls it instead of exiting silently.
  */
 export function wrapWindowsBatchHookCommand(scriptPath: string): string {
   return (

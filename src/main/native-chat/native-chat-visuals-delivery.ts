@@ -12,11 +12,11 @@ import {
 
 /** The agent child's variable holding its chat's scratch folder. The skill reads it; the path is
  *  never written into the skill text. */
-export const NATIVE_CHAT_SCRATCH_DIR_ENV = 'ORCA_CHAT_SCRATCH_DIR'
+export const NATIVE_CHAT_SCRATCH_DIR_ENV = 'QUIRKY_CHAT_SCRATCH_DIR'
 
-/** The variable's pre-rename name. Never set; only stripped, since an Orca started from an older
+/** The variable's pre-rename name. Never set; only stripped, since an Quirky started from an older
  *  chat would otherwise hand that chat's folder on to every agent it launches. */
-export const LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV = 'ORCA_CHAT_VISUALS_DIR'
+export const LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV = 'QUIRKY_CHAT_VISUALS_DIR'
 
 export type NativeChatVisualsLaunch = {
   /** This chat's folder, created and private to this user. */
@@ -63,7 +63,7 @@ export function createNativeChatVisualsDelivery(deps: {
   }
 }
 
-/** `env` naming this chat's folder; without visuals, an inherited value (Orca itself started from
+/** `env` naming this chat's folder; without visuals, an inherited value (Quirky itself started from
  *  a chat) is removed so the agent never writes into another chat's folder. */
 export function withNativeChatVisualsEnv(
   env: Record<string, string>,

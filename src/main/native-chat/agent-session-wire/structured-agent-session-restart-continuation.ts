@@ -4,7 +4,7 @@
 // session's delivery loop, which starts the agent. Both the restart prompt and an opted-in launch
 // come here, so a SETTING can reach this send — acceptable because the work is the user's own, the
 // message asks the agent to verify its last action before repeating it, and each chat it reaches
-// carries a note saying Orca asked it to continue.
+// carries a note saying Quirky asked it to continue.
 
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
@@ -42,7 +42,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 /**
  * All four dispatch states are preserved, never collapsed into transport success.
  *
- * The send layer answers `ok: true` as soon as Orca OWNS the message — a rejected or unverifiable
+ * The send layer answers `ok: true` as soon as Quirky OWNS the message — a rejected or unverifiable
  * provider dispatch is recorded inside the submission, not on the envelope. Reading only the
  * envelope reports a refused `turn/start` as continued and stamps the journal saying so.
  *
@@ -86,7 +86,7 @@ export type StructuredAgentSessionContinuationHost = {
 }
 
 /** Binds one continuation to the host: the superseded check before dispatch, the settlement
- *  waiter for the verdict, and the journal note that attributes the send to Orca. `stillWanted` is
+ *  waiter for the verdict, and the journal note that attributes the send to Quirky. `stillWanted` is
  *  asked at acceptance, inside the session lock, so the first message accepted since decides. */
 export function continuationDeps(
   host: Omit<StructuredAgentSessionContinuationHost, 'stillResumable'>,
@@ -128,7 +128,7 @@ function restartNoteWriter(
     }
     await session.journal.appendItem(
       {
-        provider: 'orca',
+        provider: 'quirky',
         clientMessageId: `${RESTART_CONTINUATION_ROW_PREFIX}${sessionId}:${host.now()}`
       },
       { kind: 'status', text, ...(tone ? { tone } : {}) },
@@ -165,7 +165,7 @@ export type StructuredAgentSessionContinuationDeps = {
   }) => Promise<{
     ok: boolean
     refusal?: AgentSessionWireRefusal
-    /** The submission is where the provider's answer lives; the envelope only says Orca took it.
+    /** The submission is where the provider's answer lives; the envelope only says Quirky took it.
      *  A continuation never sends `delivery`, so a queued answer cannot arrive; the key exists so
      *  the host's union return stays assignable. */
     value?: { submission?: { dispatchState?: string; reason?: string | null }; queued?: unknown }
@@ -187,13 +187,13 @@ export type StructuredAgentSessionContinuationDeps = {
     sessionId: string,
     clientMessageId: string
   ) => Promise<ContinuationSubmission | undefined>
-  /** Records a host-authored journal note: that this send was Orca's, not the user's, or that the
+  /** Records a host-authored journal note: that this send was Quirky's, not the user's, or that the
    *  chat did not carry on. `tone` is a display hint older clients render as plain text. */
   note: (sessionId: string, text: string, tone?: 'error' | 'warning') => Promise<void>
   /** Where a note that could not be written is reported. The note is best effort, but its failure
    *  is not allowed to be silent — a swallowed append is how this regressed unnoticed once already. */
   logger: StructuredAgentSessionLogger
-  /** Answer once Orca accepted the message, as a send does, not once the agent took it. A refusal
+  /** Answer once Quirky accepted the message, as a send does, not once the agent took it. A refusal
    *  before acceptance is then the caller's to report, not a note: a retry adds none. */
   answerAtAcceptance?: true
 }
@@ -206,7 +206,7 @@ export type StartedStructuredAgentSessionContinuation =
 /**
  * Sends the continuation to ONE session and returns once the agent has taken it or its start
  * failed — the point a restart batch counts a start as done — or, with `answerAtAcceptance`, once
- * Orca accepted it. What the provider then answered is the `verdict`, awaited separately so a slow
+ * Quirky accepted it. What the provider then answered is the `verdict`, awaited separately so a slow
  * answer does not hold the batch.
  */
 export async function startStructuredAgentSessionContinuation(
@@ -249,7 +249,7 @@ async function noteOutcome(
   result: StructuredAgentSessionContinuationOutcome
 ): Promise<void> {
   if (result.outcome === 'continued') {
-    // Only an accepted dispatch gets the note: it is a durable claim that Orca asked this agent to
+    // Only an accepted dispatch gets the note: it is a durable claim that Quirky asked this agent to
     // carry on. Best effort — losing it must not turn a delivered continuation into a failure.
     try {
       await deps.note(sessionId, AGENT_SESSION_RESTART_CONTINUATION_NOTE)
@@ -322,7 +322,7 @@ async function sendContinuation(
         sessionId,
         outcome: 'refused',
         reason: sent.refusal?.code ?? 'agent_session_send_failed',
-        // Its details too, so a newer Orca's refusal is filed as one, not as a bare code.
+        // Its details too, so a newer Quirky's refusal is filed as one, not as a bare code.
         ...(sent.refusal ? { refusal: agentSessionRefusalReference(sent.refusal) } : {})
       }
     }
@@ -332,7 +332,7 @@ async function sendContinuation(
   const settle = async (handedOver: ContinuationSubmission | undefined) =>
     verdictOf(
       sessionId,
-      // The send result carries the dispatch as it stood when Orca took the message, which for
+      // The send result carries the dispatch as it stood when Quirky took the message, which for
       // a normal successful send is `pending`, so the settled value is what decides.
       (await deps.awaitSettlement(sessionId, clientMessageId).catch(() => undefined)) ??
         handedOver ??

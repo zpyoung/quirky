@@ -1,4 +1,4 @@
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { RuntimeLeafRecord, RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
@@ -109,10 +109,10 @@ export type TuiIdleRuntimeOptions = {
 }
 
 /** A runtime wired with the narrowest store and controller the wait path needs. */
-export function makeTuiIdleRuntime(options: TuiIdleRuntimeOptions): OrcaRuntimeService {
+export function makeTuiIdleRuntime(options: TuiIdleRuntimeOptions): QuirkyRuntimeService {
   // RuntimeStore and RuntimePtyController are wide contracts; the wait path calls only the
   // members provided here, and a missing one throws loudly rather than silently passing.
-  const runtime = new OrcaRuntimeService(
+  const runtime = new QuirkyRuntimeService(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial store double; the wait path reads only the members defined above.
     makeStore(options.repoPath) as never
   )

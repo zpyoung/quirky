@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptions } from 'node:child_process'
-import { spawnProcess } from '@orca/process-host'
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import {
   SERVE_UPDATE_HANDOFF_PATH_ENV,
   getServeUpdateHandoffPath
@@ -24,14 +24,17 @@ import { RuntimeClientError } from './types'
 import {
   getExecutableAppArgs,
   resolveAppRoot,
-  resolveForegroundOrcaExecutable,
+  resolveForegroundQuirkyExecutable,
   stripElectronRunAsNode
-} from './orca-app-executable'
-import { SERVE_RUNTIME_ELECTRON, SERVE_RUNTIME_ENV } from '../../shared/orcad-local-serve-selection'
+} from './quirky-app-executable'
+import {
+  SERVE_RUNTIME_ELECTRON,
+  SERVE_RUNTIME_ENV
+} from '../../shared/quirkyd-local-serve-selection'
 import { findBundledWebClientRoot } from '../../shared/bundled-web-client-root'
-import { resolveLocalServeRuntime, serveWithOrcad } from './serve-orcad-launch'
+import { resolveLocalServeRuntime, serveWithQuirkyd } from './serve-quirkyd-launch'
 import { findAppSpeechRecognizerDir } from './serve-speech-recognizer'
-import { serveOptionArgs, type ServeOrcaAppArgs } from '../../shared/orcad-serve-argv'
+import { serveOptionArgs, type ServeQuirkyAppArgs } from '../../shared/quirkyd-serve-argv'
 import { waitForRecipeJson } from './serve-recipe-json'
 import {
   preflightElectronServe,
@@ -57,16 +60,16 @@ import {
 
 const STARTUP_ABORT_MS = 30_000
 
-export function launchOrcaApp(): void {
-  const overrideCommand = process.env.ORCA_OPEN_COMMAND
+export function launchQuirkyApp(): void {
+  const overrideCommand = process.env.QUIRKY_OPEN_COMMAND
   if (typeof overrideCommand === 'string' && overrideCommand.trim().length > 0) {
     spawnDetached(overrideCommand, [], { shell: true })
     return
   }
 
-  // Why: `openOrca` waits on this profile's metadata, so the app must start on it too.
+  // Why: `openQuirky` waits on this profile's metadata, so the app must start on it too.
   const userDataPath = resolveLaunchUserDataPath()
-  const overrideExecutable = process.env.ORCA_APP_EXECUTABLE
+  const overrideExecutable = process.env.QUIRKY_APP_EXECUTABLE
   if (typeof overrideExecutable === 'string' && overrideExecutable.trim().length > 0) {
     const pinned = pinLaunchUserDataPath(
       getExecutableAppArgs(overrideExecutable),
@@ -105,7 +108,7 @@ export function launchOrcaApp(): void {
 
   throw new RuntimeClientError(
     'runtime_open_failed',
-    'Could not determine how to launch Orca. Start Orca manually and try again.'
+    'Could not determine how to launch Quirky. Start Quirky manually and try again.'
   )
 }
 
@@ -127,17 +130,17 @@ function spawnDetached(command: string, args: string[], options: SpawnOptions): 
     ...options
   })
   // Why: detached launch errors are reported asynchronously after this function
-  // returns; openOrca already reports the user-facing timeout if startup fails.
+  // returns; openQuirky already reports the user-facing timeout if startup fails.
   child.once('error', () => {})
   child.unref()
 }
 
-export function serveOrcaApp(args: ServeOrcaAppArgs = {}): Promise<number> {
+export function serveQuirkyApp(args: ServeQuirkyAppArgs = {}): Promise<number> {
   // Why first: as a container or PrivatePIDs init, nothing would reap orphaned descendants.
   reexecThisServeUnderInitReaper()
   noteServeSupervisorStart()
-  const executable = resolveForegroundOrcaExecutable()
-  // Why one value: the selector, orcad and Electron must all serve the profile the caller chose.
+  const executable = resolveForegroundQuirkyExecutable()
+  // Why one value: the selector, quirkyd and Electron must all serve the profile the caller chose.
   const userDataPath = resolveLaunchUserDataPath()
   if (args.supervise) {
     // Why: a successful relocation replaces this process and never resolves.
@@ -165,7 +168,7 @@ export function serveOrcaApp(args: ServeOrcaAppArgs = {}): Promise<number> {
 
 function serveOnce(
   executable: string,
-  args: ServeOrcaAppArgs,
+  args: ServeQuirkyAppArgs,
   userDataPath: string
 ): Promise<number> {
   // Why synchronous on the opt-out: it must spawn Electron exactly as before, without asking.
@@ -177,7 +180,7 @@ function serveOnce(
 
 async function serveWithSelectedRuntime(
   executable: string,
-  args: ServeOrcaAppArgs,
+  args: ServeQuirkyAppArgs,
   userDataPath: string
 ): Promise<number> {
   const selection = await resolveLocalServeRuntime({
@@ -186,15 +189,15 @@ async function serveWithSelectedRuntime(
     userDataPath,
     usesMacUpdateHandoff: args.recipeJson !== true && getMacAppBundlePath(executable) !== null
   })
-  if (selection.kind === 'orcad') {
-    // Why only supervised: orcad refuses a held profile as a configuration fault (exit 78), which
-    // the brake would count; exit 3 here lets the supervisor wait for the other Orca instead.
+  if (selection.kind === 'quirkyd') {
+    // Why only supervised: quirkyd refuses a held profile as a configuration fault (exit 78), which
+    // the brake would count; exit 3 here lets the supervisor wait for the other Quirky instead.
     const refusal = args.supervise ? await refuseIfProfileServed(args, userDataPath) : null
     if (refusal !== null) {
       return refusal
     }
-    process.stderr.write(`[serve] running on orcad ${selection.version}\n`)
-    return serveWithOrcad(
+    process.stderr.write(`[serve] running on quirkyd ${selection.version}\n`)
+    return serveWithQuirkyd(
       selection,
       args,
       userDataPath,
@@ -211,7 +214,7 @@ async function serveWithSelectedRuntime(
 
 function serveWithElectron(
   executable: string,
-  args: ServeOrcaAppArgs,
+  args: ServeQuirkyAppArgs,
   userDataPath: string
 ): Promise<number> {
   const preflight = preflightElectronServe(args, userDataPath)
@@ -225,7 +228,7 @@ function serveWithElectron(
 
 function spawnElectronServe(
   executable: string,
-  args: ServeOrcaAppArgs,
+  args: ServeQuirkyAppArgs,
   userDataPath: string
 ): Promise<number> {
   const pinned = pinServeUserDataPath(

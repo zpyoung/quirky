@@ -43,11 +43,11 @@
       "labels": ["Send test notification"],
       "text": [
         "Having trouble receiving alerts?",
-        "Send a test through Orca’s push service.",
+        "Send a test through Quirky’s push service.",
         "Send test notification",
         "Send test notification",
         "Troubleshooting",
-        "Accepted by Orca’s push service. Check for the notification."
+        "Accepted by Quirky’s push service. Check for the notification."
       ]
     },
     "649d12c8eb9b": {
@@ -97,7 +97,7 @@
       "labels": ["Sending…"],
       "text": [
         "Having trouble receiving alerts?",
-        "Send a test through Orca’s push service.",
+        "Send a test through Quirky’s push service.",
         "Send test notification",
         "Sending…",
         "Troubleshooting"
@@ -115,7 +115,7 @@
       "labels": ["Send test notification"],
       "text": [
         "Having trouble receiving alerts?",
-        "Send a test through Orca’s push service.",
+        "Send a test through Quirky’s push service.",
         "Send test notification",
         "Send test notification",
         "Troubleshooting"

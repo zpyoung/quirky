@@ -52,7 +52,7 @@ describe('upgraded folder path projection', () => {
   })
 
   it('revalidates a symlink locally and refuses to inspect a remote symlink', () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-folder-upgrade-path-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-folder-upgrade-path-')))
     roots.push(root)
     const target = join(root, 'target')
     const other = join(root, 'other')

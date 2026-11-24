@@ -4,7 +4,7 @@ import {
   normalizeBrowserNavigationUrl,
   redactKagiSessionToken
 } from '../../../../../shared/browser-url'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import {
   applyBrowserPageViewportLayout,
   syncBrowserPageChromeInset
@@ -98,11 +98,11 @@ export function useBrowserPageWebviewUrlSync({
       webview.src !== normalizedUrl &&
       declaredSrc !== normalizedUrl
     ) {
-      // Why: browserTab.url changes are Orca-driven navigations; gate did-start-loading so only real navigations show loading UI.
-      trackNextLoadingEventRef.current = normalizedUrl !== ORCA_BROWSER_BLANK_URL
+      // Why: browserTab.url changes are Quirky-driven navigations; gate did-start-loading so only real navigations show loading UI.
+      trackNextLoadingEventRef.current = normalizedUrl !== QUIRKY_BROWSER_BLANK_URL
       lastKnownWebviewUrlRef.current = normalizedUrl
       webview.src = normalizedUrl
-      if (normalizedUrl !== ORCA_BROWSER_BLANK_URL) {
+      if (normalizedUrl !== QUIRKY_BROWSER_BLANK_URL) {
         keepAddressBarFocusRef.current = false
         if (document.activeElement === addressBarInputRef.current) {
           focusWebviewNow()

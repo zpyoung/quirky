@@ -63,7 +63,7 @@ async function append(text: string, linkage: AgentJournalProducerLinkage = {}): 
 const subagent: AgentJournalProducerLinkage = { agentId: 'task-1', producerKind: 'agent' }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-worker-journal-page-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-worker-journal-page-'))
   clock = 1_000
   ordinal = 0
   host.journal = await journals.open({

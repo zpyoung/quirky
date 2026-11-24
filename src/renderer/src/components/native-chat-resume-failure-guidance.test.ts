@@ -40,7 +40,7 @@ describe('resumeFailureGuidance', () => {
     'agent_session_conflict',
     'agent_session_ownership_unknown',
     'execution_owner_reconciling'
-  ])('words %s without Orca internals', (reason) => {
+  ])('words %s without Quirky internals', (reason) => {
     expect(resumeFailureGuidance({ outcome: 'refused', reason }).text).not.toMatch(
       /owns|process|session/
     )

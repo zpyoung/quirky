@@ -60,7 +60,7 @@ export function notifyServeSupervisorReady(runtimeId: string): void {
     return
   }
   const message: ServeSupervisorMessage = {
-    type: 'orca:serve-ready',
+    type: 'quirky:serve-ready',
     version: app.getVersion(),
     runtimeId
   }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeWithRuntimeId } from '../../../runtime/construction/runtime-identity-state'
+import { QuirkyRuntimeWithRuntimeId } from '../../../runtime/construction/runtime-identity-state'
 import { TerminalIntentionalStops } from '../../../runtime/terminal-intentional-stops'
 import { TerminalRunFactsRegister } from '../../../runtime/terminal-run-facts'
 import { ptySizes } from '../delivery/visibility-state'
@@ -8,7 +8,7 @@ import { commitRuntimePtySpawn } from './spawn-commit'
 import { createRuntimePtySpawnState, type RuntimePtySpawnArgs } from './spawn-state'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
 
-const PTY_ID = 'orca-pty-run-facts'
+const PTY_ID = 'quirky-pty-run-facts'
 const INCARNATION_ID = 'inc-run-facts'
 
 const ADOPTED = {
@@ -32,7 +32,7 @@ async function commit(
     terminalRunFacts: facts,
     intentionalPtyStops,
     // Why the real method: the case under test is what the runtime does with each commit.
-    noteTerminalSpawnCommit: OrcaRuntimeWithRuntimeId.prototype.noteTerminalSpawnCommit,
+    noteTerminalSpawnCommit: QuirkyRuntimeWithRuntimeId.prototype.noteTerminalSpawnCommit,
     registerPreAllocatedHandleForPty: vi.fn(),
     registerPty: vi.fn(),
     cancelPendingPtyRegistration: vi.fn(),

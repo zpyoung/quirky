@@ -6,28 +6,28 @@ import { delimiter, join } from 'node:path'
 import type * as CodexCliCommandModule from '../shared/node-cli-command-resolution'
 import { WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../shared/windows-batch-spawn'
 import { SKILLS_CLI_VERSION } from '../shared/agent-feature-install-commands'
-import { ORCA_SKILLS_REPOSITORY_URL } from '../shared/fork-skills-repository/skills-repository-url'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from '../shared/fork-skills-repository/skills-repository-url'
 
 const COMMIT = '0123456789abcdef0123456789abcdef01234567'
 const PINNED_ADD = [
   '--yes',
   `skills@${SKILLS_CLI_VERSION}`,
   'add',
-  `${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`
+  `${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`
 ]
 const DETECTED_AGENTS = ['--agent', 'claude-code', '--agent', 'universal']
 
 const {
   detectCommandsMock,
   guideModuleLoadMock,
-  readOrcaCliBuildCommitMock,
+  readQuirkyCliBuildCommitMock,
   resolveCliCommandMock,
   runtimeClientConstructorMock,
   spawnMock
 } = vi.hoisted(() => ({
   detectCommandsMock: vi.fn(() => new Set<string>(['claude'])),
   guideModuleLoadMock: vi.fn(),
-  readOrcaCliBuildCommitMock: vi.fn<() => string | null>(() => null),
+  readQuirkyCliBuildCommitMock: vi.fn<() => string | null>(() => null),
   resolveCliCommandMock: vi.fn(() => 'npx'),
   runtimeClientConstructorMock: vi.fn(),
   spawnMock: vi.fn()
@@ -47,7 +47,7 @@ vi.mock('../shared/node-cli-command-resolution', async (importOriginal) => ({
 
 // Why: the install pins to the build's commit; a test run has no compiled package boundary.
 vi.mock('./cli-version', () => ({
-  readOrcaCliBuildCommit: readOrcaCliBuildCommitMock
+  readQuirkyCliBuildCommit: readQuirkyCliBuildCommitMock
 }))
 
 vi.mock('node:child_process', () => ({
@@ -102,15 +102,15 @@ vi.mock('./runtime-client', async () => {
     RuntimeClient,
     RuntimeClientError,
     RuntimeRpcFailureError,
-    serveOrcaApp: vi.fn(),
-    getDefaultUserDataPath: vi.fn(() => '/tmp/orca-user-data')
+    serveQuirkyApp: vi.fn(),
+    getDefaultUserDataPath: vi.fn(() => '/tmp/quirky-user-data')
   }
 })
 
 import { dispatch } from './dispatch'
 import { main } from './index'
 
-describe('orca skills CLI', () => {
+describe('quirky skills CLI', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     runtimeClientConstructorMock.mockClear()
@@ -119,8 +119,8 @@ describe('orca skills CLI', () => {
     detectCommandsMock.mockReset()
     detectCommandsMock.mockReturnValue(new Set<string>(['claude']))
     spawnMock.mockReset()
-    readOrcaCliBuildCommitMock.mockReset()
-    readOrcaCliBuildCommitMock.mockReturnValue(COMMIT)
+    readQuirkyCliBuildCommitMock.mockReset()
+    readQuirkyCliBuildCommitMock.mockReturnValue(COMMIT)
     process.exitCode = undefined
   })
 
@@ -233,7 +233,7 @@ describe('orca skills CLI', () => {
     await main(['--help'], '/tmp/repo')
 
     expect(String(logSpy.mock.calls[0]?.[0])).toContain(
-      'Usage: orca skills get <topic> [--full | --reference <name>] [--json]'
+      'Usage: quirky skills get <topic> [--full | --reference <name>] [--json]'
     )
     expect(String(logSpy.mock.calls[1]?.[0])).toContain(
       'Commands:\n  list               List version-matched skill guides'
@@ -242,10 +242,10 @@ describe('orca skills CLI', () => {
       'get                Print a version-matched skill guide'
     )
     expect(String(logSpy.mock.calls[1]?.[0])).toContain(
-      'install            Install bundled Orca skills'
+      'install            Install bundled Quirky skills'
     )
     expect(String(logSpy.mock.calls[1]?.[0])).toContain(
-      'update             Update Orca skills to the version this Orca build ships'
+      'update             Update Quirky skills to the version this Quirky build ships'
     )
     expect(String(logSpy.mock.calls[2]?.[0])).toContain('Skills:\n  skills list')
     expect(String(logSpy.mock.calls[2]?.[0])).toContain('skills update')
@@ -276,8 +276,8 @@ describe('orca skills CLI', () => {
         '  gamma',
         '  zeta',
         '',
-        'Usage: orca skills install --skill <name> [--skill <name> ...]',
-        '   or: orca skills install --all',
+        'Usage: quirky skills install --skill <name> [--skill <name> ...]',
+        '   or: quirky skills install --all',
         ''
       ].join('\n')
     )
@@ -341,7 +341,7 @@ describe('orca skills CLI', () => {
           error: {
             code: 'invalid_argument',
             message:
-              "orca skills install --json only supports --dry-run. Real installs stream npx's " +
+              "quirky skills install --json only supports --dry-run. Real installs stream npx's " +
               "own output, which isn't JSON."
           },
           _meta: { runtimeId: null }
@@ -359,7 +359,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'install', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -373,7 +373,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y`,
+          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: true,
           executed: false
@@ -390,7 +390,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'install', '--skill', 'alpha', '--local', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y\n\n` +
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
 
@@ -403,7 +403,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
+          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: false,
           executed: false
@@ -455,7 +455,7 @@ describe('orca skills CLI', () => {
         '--yes',
         `skills@${SKILLS_CLI_VERSION}`,
         'add',
-        `${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`,
+        `${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`,
         '--skill',
         'alpha',
         '--global',
@@ -559,8 +559,8 @@ describe('orca skills CLI', () => {
         '  gamma',
         '  zeta',
         '',
-        'Usage: orca skills update --skill <name> [--skill <name> ...]',
-        '   or: orca skills update --all',
+        'Usage: quirky skills update --skill <name> [--skill <name> ...]',
+        '   or: quirky skills update --all',
         ''
       ].join('\n')
     )
@@ -573,7 +573,7 @@ describe('orca skills CLI', () => {
     await main(['skills', 'update', '--skill', 'legacy-alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to update now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -590,7 +590,7 @@ describe('orca skills CLI', () => {
     expect(stdoutText(stdoutSpy)).toBe(
       `${JSON.stringify(
         {
-          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
+          command: `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --agent claude-code --agent universal -y`,
           skills: ['alpha'],
           global: false,
           executed: false
@@ -618,13 +618,13 @@ describe('orca skills CLI', () => {
     )
   })
 
-  it('refuses a real run when the shell forwards orca to the Orca host', async () => {
-    vi.stubEnv('ORCA_CLI_CWD', '/home/alice/wt')
+  it('refuses a real run when the shell forwards quirky to the Quirky host', async () => {
+    vi.stubEnv('QUIRKY_CLI_CWD', '/home/alice/wt')
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await main(['skills', 'install', '--skill', 'alpha'], '/tmp/repo')
 
-    // Why: the SSH relay and WSL bridge run argv on the Orca host, so a real
+    // Why: the SSH relay and WSL bridge run argv on the Quirky host, so a real
     // install there would silently skip the machine the user is sitting on.
     expect(spawnMock).not.toHaveBeenCalled()
     expect(process.exitCode).toBe(1)
@@ -632,7 +632,7 @@ describe('orca skills CLI', () => {
   })
 
   it('refuses --dry-run through the host-forwarding shim too', async () => {
-    vi.stubEnv('ORCA_CLI_CWD', '/home/alice/wt')
+    vi.stubEnv('QUIRKY_CLI_CWD', '/home/alice/wt')
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await main(['skills', 'install', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
@@ -647,7 +647,7 @@ describe('orca skills CLI', () => {
   it('puts the resolved npx directory on the child PATH', async () => {
     // Why a real directory with a real sibling node: pairing only fires when the
     // node it would add actually exists, so a fictional path proves nothing.
-    const npxBin = mkdtempSync(join(tmpdir(), 'orca-npx-'))
+    const npxBin = mkdtempSync(join(tmpdir(), 'quirky-npx-'))
     for (const name of ['node', 'npx']) {
       writeFileSync(join(npxBin, name), '')
       chmodSync(join(npxBin, name), 0o755)
@@ -675,7 +675,7 @@ describe('orca skills CLI', () => {
   it('leaves PATH untouched when no node ships beside the resolved npx', async () => {
     // Why: prepending a directory that has no node buys nothing and would shadow
     // the caller's own ordering for every other binary the child resolves.
-    const npxBin = mkdtempSync(join(tmpdir(), 'orca-npx-bare-'))
+    const npxBin = mkdtempSync(join(tmpdir(), 'quirky-npx-bare-'))
     writeFileSync(join(npxBin, 'npx'), '')
     chmodSync(join(npxBin, 'npx'), 0o755)
     const child = createFakeChild()
@@ -745,7 +745,7 @@ describe('orca skills CLI', () => {
     expect(spawnMock.mock.calls[0]?.[2]?.env?.PATH).toBe(`/usr/bin${delimiter}/bin`)
   })
 
-  it('refuses to install when Orca detects no agent, instead of targeting them all', async () => {
+  it('refuses to install when Quirky detects no agent, instead of targeting them all', async () => {
     detectCommandsMock.mockReturnValue(new Set<string>())
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -779,14 +779,14 @@ describe('orca skills CLI', () => {
     expect(detectCommandsMock).not.toHaveBeenCalled()
   })
 
-  it('maps detected agents onto the skills CLI namespace, not Orca ids', async () => {
+  it('maps detected agents onto the skills CLI namespace, not Quirky ids', async () => {
     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     detectCommandsMock.mockReturnValue(new Set<string>(['claude', 'cursor-agent', 'acli']))
 
     await main(['skills', 'install', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
 
     // Why: `skills add` exits 1 on an unknown --agent, and the ids differ —
-    // Orca's `claude` is `claude-code` and its `rovo` is `rovodev`.
+    // Quirky's `claude` is `claude-code` and its `rovo` is `rovodev`.
     expect(stdoutText(stdoutSpy)).toContain(
       '--agent claude-code --agent cursor --agent rovodev --agent universal'
     )
@@ -801,7 +801,7 @@ describe('orca skills CLI', () => {
     const [install, update] = stdoutSpy.mock.calls.map((call) => JSON.parse(String(call[0])))
     // Why: `skills update` follows GitHub HEAD, which runs ahead of this release.
     expect(update.command).toBe(install.command)
-    expect(update.command).toContain(`add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`)
+    expect(update.command).toContain(`add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT}`)
   })
 
   it('honours an explicit --agent list for an update', async () => {
@@ -813,7 +813,7 @@ describe('orca skills CLI', () => {
     )
 
     expect(stdoutText(stdoutSpy)).toContain(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent universal -y`
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent universal -y`
     )
   })
 
@@ -824,12 +824,12 @@ describe('orca skills CLI', () => {
     await main(['skills', 'update', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
 
     expect(stdoutText(stdoutSpy)).toContain(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent universal -y`
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent universal -y`
     )
   })
 
   it('refuses to run when the CLI cannot read its own release version', async () => {
-    readOrcaCliBuildCommitMock.mockReturnValue(null)
+    readQuirkyCliBuildCommitMock.mockReturnValue(null)
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await main(['skills', 'update', '--skill', 'alpha', '--dry-run'], '/tmp/repo')
@@ -872,7 +872,7 @@ describe('orca skills CLI', () => {
   })
 
   it('reports forwarding, not missing agents, when a forwarded host detects none', async () => {
-    vi.stubEnv('ORCA_CLI_CWD', '/home/alice/wt')
+    vi.stubEnv('QUIRKY_CLI_CWD', '/home/alice/wt')
     detectCommandsMock.mockReturnValue(new Set<string>())
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
@@ -924,7 +924,7 @@ describe('orca skills CLI', () => {
     )
 
     expect(stdoutText(stdoutSpy)).toBe(
-      `npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
+      `npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n\n` +
         'Rerun without --dry-run to install now.\n'
     )
     expect(spawnMock).not.toHaveBeenCalled()
@@ -942,7 +942,7 @@ describe('orca skills CLI', () => {
 
     // Why: stdout belongs to the child, so this record has to go to stderr.
     expect(stderrSpy).toHaveBeenCalledWith(
-      `Running: npx --yes skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n`
+      `Running: npx --yes skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${COMMIT} --skill alpha --global --agent claude-code --agent universal -y\n`
     )
   })
 
@@ -989,7 +989,7 @@ describe('orca skills CLI', () => {
           error: {
             code: 'invalid_argument',
             message:
-              "orca skills update --json only supports --dry-run. Real updates stream npx's " +
+              "quirky skills update --json only supports --dry-run. Real updates stream npx's " +
               "own output, which isn't JSON."
           },
           _meta: { runtimeId: null }

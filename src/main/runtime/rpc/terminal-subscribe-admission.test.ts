@@ -1,6 +1,6 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -118,7 +118,7 @@ function stubRuntime(overrides: Record<string, unknown> = {}) {
     getSubscriptionRegistrationVersion: registry.getSubscriptionRegistrationVersion,
     releaseSubscriptionByRequest: registry.releaseSubscriptionByRequest,
     ...overrides
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const spawn = (): void => {
     ptyReady = true
     ptyWaits.spawn()
@@ -128,7 +128,7 @@ function stubRuntime(overrides: Record<string, unknown> = {}) {
 
 /** The real runtime, with only handle resolution, the pty wait, the scrollback read and tab mounting doubled. */
 function createRealRuntime() {
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   const sizes = new Map<string, { cols: number; rows: number }>([[PTY_ID, { cols: 120, rows: 40 }]])
   runtime.setPtyController({
     write: () => true,

@@ -19,12 +19,12 @@ function projectIdFor(remoteUrl: string): string {
 describe('resolveImportedFolderProjectLink', () => {
   it('stamps a GitHub project as upstream', () => {
     expect(
-      resolveImportedFolderProjectLink(folder(null), 'github:acme/orca', {
+      resolveImportedFolderProjectLink(folder(null), 'github:acme/quirky', {
         provider: 'github',
         owner: 'acme',
-        repo: 'orca'
+        repo: 'quirky'
       })
-    ).toEqual({ upstream: { owner: 'acme', repo: 'orca' } })
+    ).toEqual({ upstream: { owner: 'acme', repo: 'quirky' } })
   })
 
   it.each([
@@ -72,11 +72,11 @@ describe('resolveImportedFolderProjectLink', () => {
     expect(() =>
       resolveImportedFolderProjectLink(
         folder('https://github.com/acme/other.git'),
-        'github:acme/orca',
+        'github:acme/quirky',
         {
           provider: 'github',
           owner: 'acme',
-          repo: 'orca'
+          repo: 'quirky'
         }
       )
     ).toThrow('its Git remote "origin" points at acme/other')

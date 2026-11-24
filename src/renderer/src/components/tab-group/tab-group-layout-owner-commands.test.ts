@@ -16,7 +16,7 @@ const mocks = vi.hoisted(
 )
 
 // The store's split takes main's group id only in a layout-owner build.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('@/runtime/layout-owner-command', () => ({ sendLayoutCommandToOwner: mocks.send }))
 vi.mock('@/store', () => ({
   get useAppStore() {

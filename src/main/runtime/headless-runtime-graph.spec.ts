@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { publishHeadlessRuntimeGraph } from './headless-runtime-graph'
 
 export function registerHeadlessRuntimeGraphTests(): void {
   describe('headless runtime graph', () => {
     it('lets a session tab inventory settle on a host no renderer publishes for', async () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the inventory census reads only listProcesses.
       runtime.setPtyController({ listProcesses: vi.fn(async () => []) } as never)
       publishHeadlessRuntimeGraph(runtime)

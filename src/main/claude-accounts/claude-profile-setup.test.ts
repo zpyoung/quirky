@@ -108,14 +108,14 @@ describe('Claude account profile setup', () => {
     await f.setup()
     const home = join(f.dataRoot, 'claude-profiles/a/home')
     const read = (file: string) => JSON.parse(readFileSync(file, 'utf8'))
-    const orca = read(join(home, 'settings.json')).hooks
-    expect(orca).toBeDefined()
+    const quirky = read(join(home, 'settings.json')).hooks
+    expect(quirky).toBeDefined()
     const mine = { matcher: '', hooks: [{ type: 'command', command: 'notify-me' }] }
     writeFileSync(settings, JSON.stringify({ model: 'opus', hooks: { Notification: [mine] } }))
     expect((await f.setup()).warnings).toEqual([])
     const hooks = read(join(home, 'settings.json')).hooks
     expect(hooks.Notification).toContainEqual(mine)
-    expect(hooks.Stop).toEqual(orca.Stop)
+    expect(hooks.Stop).toEqual(quirky.Stop)
   })
   itLinks('refuses another account in the same slot without creating anything', async () => {
     const f = fixture()
@@ -142,8 +142,8 @@ describe('Claude account profile setup', () => {
   it('refuses a WSL profile on the Windows host side', async () => {
     fixture()
     const report = await provisionClaudeAccountProfile({
-      dataRoot: '/home/u/.local/share/orca',
-      profile: describeClaudeProfile('/home/u/.local/share/orca', 'a', {
+      dataRoot: '/home/u/.local/share/quirky',
+      profile: describeClaudeProfile('/home/u/.local/share/quirky', 'a', {
         runtime: 'wsl',
         distro: 'Ubuntu',
         executionHostId: 'local'

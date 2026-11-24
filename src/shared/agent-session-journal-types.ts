@@ -55,7 +55,7 @@ export type AgentSessionJournalProviderHandle =
 /** The narrow slice of the durable session record the journal needs. The full
  *  record (owner, lease, account home) belongs to the session store. */
 export type AgentSessionJournalIdentity = {
-  /** Orca agent-session id — the journal's primary key. */
+  /** Quirky agent-session id — the journal's primary key. */
   sessionId: string
   /** Execution-host workspace key. Identical for a worktree, a folder
    *  workspace, a WSL distro, and an SSH host; never a path. */
@@ -75,8 +75,8 @@ export type AgentSessionJournalIdentity = {
 export type AgentJournalItemIdentity =
   | { provider: 'codex'; threadId: string; turnId: string; ordinal: number }
   | { provider: 'claude'; sessionId: string; uuid: string }
-  /** A submission Orca minted before any provider echo existed. */
-  | { provider: 'orca'; clientMessageId: string }
+  /** A submission Quirky minted before any provider echo existed. */
+  | { provider: 'quirky'; clientMessageId: string }
   /** Bridge-era transcript record with no provider-stable identity. */
   | { provider: 'legacy'; agent: AgentType; sessionId: string; recordId: string }
 
@@ -122,7 +122,7 @@ export type AgentJournalMessageItem = {
   /** The skills the user picked from the menu for this message, by the file the agent selects
    *  each by. The text still carries each `$name`; agents that select by name ignore this. */
   skills?: AgentJournalSkillRef[]
-  /** Present on a message another agent sent through Orca; absent, the person's. Host-written,
+  /** Present on a message another agent sent through Quirky; absent, the person's. Host-written,
    *  outside every fingerprint, never sent to the provider. */
   from?: AgentMessageSource
   /** Written on reasoning rows. ABSENT MEANS UNKNOWN — an older host, or a row from before the
@@ -220,7 +220,7 @@ declare const agentJournalUnknownKind: unique symbol
 /** A kind tag this build does not know. Branded, so it never stands in for a known tag. */
 export type AgentJournalUnknownKind = string & { readonly [agentJournalUnknownKind]: true }
 
-/** A subject of a kind a newer Orca wrote: carried as it was, with whatever fields it holds, and
+/** A subject of a kind a newer Quirky wrote: carried as it was, with whatever fields it holds, and
  *  never drawn or approved here. */
 export type AgentJournalUnknownApprovalSubject = { readonly kind: AgentJournalUnknownKind }
 
@@ -342,9 +342,9 @@ type AgentJournalStatusItemFields = {
   }
   /** Present on thread-goal transitions; absent on rows from older hosts. */
   threadGoal?: AgentJournalThreadGoalState
-  /** On the row about a reply Orca's own stop cut off: why Orca stopped. Its cause is open (a newer
-   *  host may name one this build does not know), so read it with `readAgentSessionOrcaStop`. */
-  orcaStop?: { cause: string }
+  /** On the row about a reply Quirky's own stop cut off: why Quirky stopped. Its cause is open (a newer
+   *  host may name one this build does not know), so read it with `readAgentSessionQuirkyStop`. */
+  quirkyStop?: { cause: string }
 }
 
 /** A status row that reports no failure; its text is its writer's own. */
@@ -456,7 +456,7 @@ export type AgentJournalRenderItem = AgentJournalProducerLinkage & {
 // ─── Submissions ────────────────────────────────────────────────────────────
 
 /** The turn a send was answered into: its record's item id, and how the send joined it. `start`:
- *  the provider answered the send's start request with that turn; `steer`: Orca steered it into
+ *  the provider answered the send's start request with that turn; `steer`: Quirky steered it into
  *  that running turn. Known limit: a start the provider silently folds into a running turn reads
  *  as `start`, including into a turn no user entry opened. A newer host may name another way,
  *  which a reader leaves unclaimed. */
@@ -512,7 +512,7 @@ export type AgentJournalSubmission = {
   /** The queued draft this submission hands off; absent for a direct send. Read this, never
    *  a draft id compared with `clientMessageId`. */
   queuedMessageId?: string
-  /** Host-only: who asked for this turn — a person over the client send RPC, or Orca itself.
+  /** Host-only: who asked for this turn — a person over the client send RPC, or Quirky itself.
    *  A restart or a close keeps only a person's Send cut short as a card. The snapshot still
    *  carries it; no released client reads it. */
   origin?: 'client' | 'host'

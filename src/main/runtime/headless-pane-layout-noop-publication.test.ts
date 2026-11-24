@@ -4,13 +4,13 @@
  * paired client for each of those identical writes.
  */
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
+import { QuirkyRuntimeService } from './quirky-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} from './orca-runtime-test-fixtures.spec'
+} from './quirky-runtime-test-fixtures.spec'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
 
@@ -21,7 +21,7 @@ async function setup() {
     makeWorkspaceSessionWithHeadlessTerminal()
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The shared fixture implements RuntimeStore; its annotation erases the Vitest mock call signatures.
-  const runtime = new OrcaRuntimeService(runtimeStore as RuntimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore as RuntimeStore)
   // Hydrate the live snapshot the way the first list/subscribe does.
   await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
   const published: unknown[] = []

@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { isMissingGitBlobPath } from '../../../shared/git-blob-absence'
 import { readGitBlobAtIndexPath } from './git-blob-read'
 import { getDiff } from './file-diff'
@@ -26,7 +26,7 @@ describe('real Git missing paths and failed blob reads', () => {
   let repo: string
 
   beforeEach(() => {
-    repo = mkdtempSync(path.join(tmpdir(), 'orca-real-git-'))
+    repo = mkdtempSync(path.join(tmpdir(), 'quirky-real-git-'))
     gitInit(repo)
     invalidateGitReadCaches()
   })

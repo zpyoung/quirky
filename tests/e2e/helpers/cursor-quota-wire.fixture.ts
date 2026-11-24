@@ -23,8 +23,8 @@ function requiredEnv(name: string): string {
   return value
 }
 
-app.setPath('userData', requiredEnv('ORCA_E2E_USER_DATA_DIR'))
-app.setPath('home', requiredEnv('ORCA_E2E_HOME_DIR'))
+app.setPath('userData', requiredEnv('QUIRKY_E2E_USER_DATA_DIR'))
+app.setPath('home', requiredEnv('QUIRKY_E2E_HOME_DIR'))
 
 function auth(account: string, revision = 'fresh', exp = 4_000_000_000): CursorAuthReadResult {
   const token = parseCursorSessionToken(
@@ -61,7 +61,7 @@ const summary = (used: number) => ({
   individualUsage: { plan: { enabled: true, used, limit: 100 } }
 })
 let stage = 'waiting-for-ready'
-const resultPath = requiredEnv('ORCA_CURSOR_WIRE_RESULT')
+const resultPath = requiredEnv('QUIRKY_CURSOR_WIRE_RESULT')
 writeFileSync(resultPath, JSON.stringify({ stage }))
 
 async function run(): Promise<void> {

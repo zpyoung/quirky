@@ -102,8 +102,8 @@ describe('remote worktree event lineage refresh', () => {
     const lineage = Object.fromEntries(
       Array.from({ length: 105 }, (_, index) => {
         const row = makeLineage({
-          worktreeId: `repo-${index % 25}::/home/orca/workspaces/project/feature-${index}`,
-          parentWorktreeId: `repo-${index % 25}::/home/orca/projects/project`
+          worktreeId: `repo-${index % 25}::/home/quirky/workspaces/project/feature-${index}`,
+          parentWorktreeId: `repo-${index % 25}::/home/quirky/projects/project`
         })
         return [row.worktreeId, row]
       })
@@ -115,7 +115,7 @@ describe('remote worktree event lineage refresh', () => {
   it('downloads nothing for a 25-repository save whose host publishes the values', async () => {
     const rows = Array.from({ length: 105 }, (_, index) =>
       makeWorktree({
-        id: `repo-${index % 25}::/home/orca/workspaces/project/feature-${index}`,
+        id: `repo-${index % 25}::/home/quirky/workspaces/project/feature-${index}`,
         repoId: `repo-${index % 25}`,
         hostId: 'runtime:env-1',
         runtimeOwnerEnvironmentId: 'env-1',

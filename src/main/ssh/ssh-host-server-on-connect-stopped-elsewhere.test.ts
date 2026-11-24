@@ -4,14 +4,14 @@ import { recheckFencedManagedServer } from './managed-server-fence-recheck'
 import {
   withDeactivatedVersion,
   withDeactivatedVersionCommitted,
-  type OrcadActivationRecord
-} from '../managed-server/activation/orcad-activation-record'
-import { planManagedOrcadAutoUpdate } from '../managed-server/lifecycle/orcad-managed-auto-update'
+  type QuirkydActivationRecord
+} from '../managed-server/activation/quirkyd-activation-record'
+import { planManagedQuirkydAutoUpdate } from '../managed-server/lifecycle/quirkyd-managed-auto-update'
 import { compareAppVersions } from '../../shared/app-version'
 import {
-  MANAGED_ORCAD_FENCED_DETAIL,
-  MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
-} from '../managed-server/lifecycle/orcad-managed-serving'
+  MANAGED_QUIRKYD_FENCED_DETAIL,
+  MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
+} from '../managed-server/lifecycle/quirkyd-managed-serving'
 import { resolveHostServerOnConnect } from './ssh-host-server-on-connect'
 import { hostServerDepsStub } from './ssh-host-server-on-connect-test-deps'
 
@@ -19,7 +19,7 @@ const target: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, us
 
 const notActivated = vi.fn(async () => ({
   state: 'unverifiable' as const,
-  detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+  detail: MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
 }))
 
 describe('a linked server another desktop stopped (P1-D)', () => {
@@ -51,7 +51,7 @@ describe('a linked server another desktop stopped (P1-D)', () => {
       route: 'managed',
       environmentId: 'env-9',
       update: { state: 'failed', detail: 'upload failed' },
-      serving: { state: 'unverifiable', detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL }
+      serving: { state: 'unverifiable', detail: MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL }
     })
   })
 
@@ -60,7 +60,7 @@ describe('a linked server another desktop stopped (P1-D)', () => {
       managedEnvironmentId: () => 'env-9',
       ensureServing: vi.fn(async () => ({
         state: 'unverifiable' as const,
-        detail: MANAGED_ORCAD_FENCED_DETAIL
+        detail: MANAGED_QUIRKYD_FENCED_DETAIL
       }))
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toMatchObject({
@@ -81,7 +81,7 @@ describe('a linked server another desktop stopped (P1-D)', () => {
   })
 
   it('plans an update for the record a stop leaves behind', () => {
-    const served: OrcadActivationRecord = {
+    const served: QuirkydActivationRecord = {
       schemaVersion: 1,
       active: '1.0.0+abc',
       previous: null,
@@ -90,7 +90,7 @@ describe('a linked server another desktop stopped (P1-D)', () => {
       snapshot: null
     }
     expect(
-      planManagedOrcadAutoUpdate({
+      planManagedQuirkydAutoUpdate({
         record: withDeactivatedVersionCommitted(served),
         candidateVersion: '1.0.0+abc',
         appVersion: '1.0.0',
@@ -100,8 +100,8 @@ describe('a linked server another desktop stopped (P1-D)', () => {
   })
 })
 
-describe('redeploying a host another desktop stopped, across Orca versions', () => {
-  const servedBy = (appVersion: string, active: string): OrcadActivationRecord => ({
+describe('redeploying a host another desktop stopped, across Quirky versions', () => {
+  const servedBy = (appVersion: string, active: string): QuirkydActivationRecord => ({
     schemaVersion: 1,
     active,
     previous: null,
@@ -109,8 +109,8 @@ describe('redeploying a host another desktop stopped, across Orca versions', () 
     activeAppVersion: appVersion,
     snapshot: null
   })
-  const plan = (record: OrcadActivationRecord, appVersion: string, failedBefore = false) =>
-    planManagedOrcadAutoUpdate({
+  const plan = (record: QuirkydActivationRecord, appVersion: string, failedBefore = false) =>
+    planManagedQuirkydAutoUpdate({
       record,
       candidateVersion: `${appVersion}+cand`,
       appVersion,
@@ -126,7 +126,7 @@ describe('redeploying a host another desktop stopped, across Orca versions', () 
 
   it('keeps released desktops, which plan on activeAppVersion alone, from downgrading it', () => {
     // Frozen copy of the planner shipped before stopped hosts had their own policy.
-    const releasedPlan = (record: OrcadActivationRecord, appVersion: string): string =>
+    const releasedPlan = (record: QuirkydActivationRecord, appVersion: string): string =>
       record.activeAppVersion && compareAppVersions(record.activeAppVersion, appVersion) > 0
         ? 'host-newer'
         : 'update'

@@ -58,7 +58,7 @@ export function upsertJournalItem(
   const submitted =
     existing.body.kind === 'message' &&
     existing.body.role === 'user' &&
-    parseAgentJournalItemKey(itemId)?.provider === 'orca'
+    parseAgentJournalItemKey(itemId)?.provider === 'quirky'
   const { sequenceIndex: _revisedAt, ...revised } = next
   state.items.set(itemId, {
     ...revised,

@@ -27,7 +27,7 @@ import type { AiVaultSession } from '../../../src/shared/ai-vault-types'
 const LAUNCH = { command: 'codex resume abc' }
 
 /** The one home shape that makes a Codex resume ask the host to repin at all. */
-const LEGACY_CODEX_HOME = '/Users/ada/Library/Application Support/orca/codex-runtime-home/home'
+const LEGACY_CODEX_HOME = '/Users/ada/Library/Application Support/quirky/codex-runtime-home/home'
 
 const SESSION: AiVaultSession = {
   id: 'codex:legacy-1',

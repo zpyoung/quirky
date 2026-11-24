@@ -87,7 +87,7 @@ describe('useMobileStructuredAgentTurnTiming', () => {
     vi.setSystemTime(CLIENT_NOW)
     const items = [
       // The acknowledged send: its entry's key is the submission's, not the provider's.
-      user('orca:first', 1),
+      user('quirky:first', 1),
       lifecycle(
         't1',
         2,
@@ -115,7 +115,7 @@ describe('useMobileStructuredAgentTurnTiming', () => {
     expect(timing?.workingStartedAt).toBe(CLIENT_NOW - 2_500)
     // The row's provider key resolves through the submission alias, not journal order.
     expect([...timing!.settledTurns]).toEqual([
-      ['orca:first', { startedAt: HOST_START, workedSeconds: 61, verdict: 'interruption' }],
+      ['quirky:first', { startedAt: HOST_START, workedSeconds: 61, verdict: 'interruption' }],
       ['u2', null]
     ])
 

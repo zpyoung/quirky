@@ -21,17 +21,17 @@ const NATIVE_IME_PRODUCT_SOURCE =
 const NATIVE_IME_HARNESS =
   /^(?:config\/scripts\/focus-nested-wayland-terminal\.sh$|config\/scripts\/(?:run-terminal-ibus-hangul-e2e|terminal-ime-engagement-receipt)\.mjs$|tests\/e2e\/terminal-ime-(?:boundary-probe|byte-reader|engagement-receipt)\.ts$|tests\/e2e\/terminal-(?:ibus-hangul|hangul-terminating-digit|macos-2set-korean)-native\.spec\.ts$)/
 
-// This spec requires ORCA_SIDEBAR_INPUTS=main; ordinary PR builds can only skip it.
-export const MANUAL_ONLY_E2E_SPECS = ['tests/e2e/ssh-orcad-phone-feed-list.spec.ts']
+// This spec requires QUIRKY_SIDEBAR_INPUTS=main; ordinary PR builds can only skip it.
+export const MANUAL_ONLY_E2E_SPECS = ['tests/e2e/ssh-quirkyd-phone-feed-list.spec.ts']
 
 // Shared fixtures and workflow changes must exercise every managed-SSH consumer.
 const MANAGED_SSH_HARNESS =
-  /^tests\/e2e\/helpers\/(?:orcad-managed-workspace|orcad-convert-(?:flow|host|teardown)|orcad-template-variant|orcad-upgrade-(?:profile|retained-state)|docker-ssh-host-target|reserve-local-port|ssh-remote-only-browser-fixture|windows-host-orcad-processes)\.ts$/
+  /^tests\/e2e\/helpers\/(?:quirkyd-managed-workspace|quirkyd-convert-(?:flow|host|teardown)|quirkyd-template-variant|quirkyd-upgrade-(?:profile|retained-state)|docker-ssh-host-target|reserve-local-port|ssh-remote-only-browser-fixture|windows-host-quirkyd-processes)\.ts$/
 
 export const PR_E2E_SOURCE_ROUTES = [
   {
-    id: 'ssh.orcad-editor-ownership',
-    specs: ['tests/e2e/ssh-orcad-editor-ownership.spec.ts'],
+    id: 'ssh.quirkyd-editor-ownership',
+    specs: ['tests/e2e/ssh-quirkyd-editor-ownership.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/runtime\/(?:web-session-existing-tab-index|web-session-tabs-sync\/(?:mirrored-editor-file-identity|tab-builders|apply-preparation-browser|state-equality-files|terminal-surfaces))\.ts$/.test(
@@ -39,8 +39,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-markdown-conversion',
-    specs: ['tests/e2e/ssh-orcad-markdown-conversion.spec.ts'],
+    id: 'ssh.quirkyd-markdown-conversion',
+    specs: ['tests/e2e/ssh-quirkyd-markdown-conversion.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/components\/editor\/(?:useMarkdownDocuments|restored-editor-workspace-runtime-owner|migrate-restored-editor-file-owner)\.ts$/.test(
@@ -48,8 +48,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-markdown-link-refresh',
-    specs: ['tests/e2e/ssh-orcad-markdown-link-refresh.spec.ts'],
+    id: 'ssh.quirkyd-markdown-link-refresh',
+    specs: ['tests/e2e/ssh-quirkyd-markdown-link-refresh.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/components\/editor\/(?:rich-markdown-doc-link|useRichMarkdownProgrammaticSync)\.ts$/.test(
@@ -57,8 +57,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-markdown-live-documents',
-    specs: ['tests/e2e/ssh-orcad-markdown-live-documents.spec.ts'],
+    id: 'ssh.quirkyd-markdown-live-documents',
+    specs: ['tests/e2e/ssh-quirkyd-markdown-live-documents.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/components\/editor\/(?:useMarkdownDocuments|use-markdown-document-watch-refresh|markdown-document-list-request)\.ts$/.test(
@@ -66,16 +66,16 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-explorer-watch-recovery',
-    specs: ['tests/e2e/ssh-orcad-explorer-watch-recovery.spec.ts'],
+    id: 'ssh.quirkyd-explorer-watch-recovery',
+    specs: ['tests/e2e/ssh-quirkyd-explorer-watch-recovery.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       (file === 'src/renderer/src/components/right-sidebar/useFileExplorerWatch.ts' ||
         file === 'src/renderer/src/hooks/worktree-file-change-event.ts')
   },
   {
-    id: 'ssh.orcad-editor-watch-recovery',
-    specs: ['tests/e2e/ssh-orcad-editor-watch-recovery.spec.ts'],
+    id: 'ssh.quirkyd-editor-watch-recovery',
+    specs: ['tests/e2e/ssh-quirkyd-editor-watch-recovery.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/hooks\/(?:useEditorExternalWatch|editor-runtime-file-watch)\.ts$/.test(
@@ -83,8 +83,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-explorer-selected-host',
-    specs: ['tests/e2e/ssh-orcad-explorer-selected-host.spec.ts'],
+    id: 'ssh.quirkyd-explorer-selected-host',
+    specs: ['tests/e2e/ssh-quirkyd-explorer-selected-host.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       (file === 'src/renderer/src/components/right-sidebar/useFileExplorerWatch.ts' ||
@@ -95,14 +95,14 @@ export const PR_E2E_SOURCE_ROUTES = [
         file === 'src/renderer/src/components/right-sidebar/use-file-explorer-tree-load-effects.ts')
   },
   {
-    id: 'serve.orcad-mode-switch',
-    specs: ['tests/e2e/orcad-serve-mode-switch.spec.ts'],
+    id: 'serve.quirkyd-mode-switch',
+    specs: ['tests/e2e/quirkyd-serve-mode-switch.spec.ts'],
     matches: (file) =>
-      /^tests\/e2e\/helpers\/(?:orca-serve-cli-host|headless-paired-runtime-host)\.ts$/.test(
+      /^tests\/e2e\/helpers\/(?:quirky-serve-cli-host|headless-paired-runtime-host)\.ts$/.test(
         file
       ) ||
       (isProductSource(file) &&
-        /^src\/(?:cli\/runtime\/(?:launch|serve-)|main\/orcad\/(?:main|orcad-entry|orcad-instance-lock|orcad-command-arguments|orcad-lifecycle)\.ts$|main\/startup\/desktop-profile-instance-lock\.ts$|main\/daemon\/daemon-(?:spawner|endpoint-adoption|init)|main\/server\/serve-)/.test(
+        /^src\/(?:cli\/runtime\/(?:launch|serve-)|main\/quirkyd\/(?:main|quirkyd-entry|quirkyd-instance-lock|quirkyd-command-arguments|quirkyd-lifecycle)\.ts$|main\/startup\/desktop-profile-instance-lock\.ts$|main\/daemon\/daemon-(?:spawner|endpoint-adoption|init)|main\/server\/serve-)/.test(
           file
         ))
   },
@@ -110,7 +110,7 @@ export const PR_E2E_SOURCE_ROUTES = [
     id: 'startup.windows-missing-appdata',
     specs: ['tests/e2e/windows-missing-appdata-startup.spec.ts'],
     matches: (file) =>
-      file === 'tests/e2e/helpers/orca-serve-cli-host.ts' ||
+      file === 'tests/e2e/helpers/quirky-serve-cli-host.ts' ||
       (isProductSource(file) &&
         /^src\/main\/startup\/(?:windows-app-data-path|main-process-preflight)\.ts$/.test(file))
   },
@@ -124,21 +124,21 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-auto-convert',
-    specs: ['tests/e2e/ssh-orcad-auto-convert.spec.ts'],
+    id: 'ssh.quirkyd-auto-convert',
+    specs: ['tests/e2e/ssh-quirkyd-auto-convert.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       (isProductSource(file) &&
-        /^src\/main\/(?:ipc\/(?:ssh\/)?ssh-host-server-|(?:ssh|managed-server\/[a-z-]+)\/(?:ssh-host-server-|orcad-runtime-conversion|orcad-migration-|orcad-retained-source|orcad-runtime-deployment))/.test(
+        /^src\/main\/(?:ipc\/(?:ssh\/)?ssh-host-server-|(?:ssh|managed-server\/[a-z-]+)\/(?:ssh-host-server-|quirkyd-runtime-conversion|quirkyd-migration-|quirkyd-retained-source|quirkyd-runtime-deployment))/.test(
           file
         ))
   },
   // COMPAT(legacy-relay-bridge): revisit 2027-01-15 with src/main/ssh/legacy-relay/.
   {
-    id: 'ssh.orcad-legacy-relay-bridge',
+    id: 'ssh.quirkyd-legacy-relay-bridge',
     specs: [
-      'tests/e2e/ssh-orcad-legacy-relay-bridge.spec.ts',
-      'tests/e2e/ssh-orcad-relay-tab-only-shell.spec.ts'
+      'tests/e2e/ssh-quirkyd-legacy-relay-bridge.spec.ts',
+      'tests/e2e/ssh-quirkyd-relay-tab-only-shell.spec.ts'
     ],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
@@ -146,22 +146,22 @@ export const PR_E2E_SOURCE_ROUTES = [
         file
       ) ||
       (isProductSource(file) &&
-        /(?:legacy-relay(?:-bridge|\/)|orcad-migration-terminal-gate|ssh-host-relay-terminals-on-connect|orcad-source-dependency-census)/.test(
+        /(?:legacy-relay(?:-bridge|\/)|quirkyd-migration-terminal-gate|ssh-host-relay-terminals-on-connect|quirkyd-source-dependency-census)/.test(
           file
         ))
   },
   {
-    id: 'ssh.orcad-browser-capabilities',
-    specs: ['tests/e2e/ssh-orcad-browser-capabilities.spec.ts'],
+    id: 'ssh.quirkyd-browser-capabilities',
+    specs: ['tests/e2e/ssh-quirkyd-browser-capabilities.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
-      /^src\/main\/(?:runtime\/(?:runtime-browser-commands-factory|orca-runtime-get-status|browser\/browser-client-page-opening)|host\/electron-browser-commands|orcad\/orcad-browser-)/.test(
+      /^src\/main\/(?:runtime\/(?:runtime-browser-commands-factory|quirky-runtime-get-status|browser\/browser-client-page-opening)|host\/electron-browser-commands|quirkyd\/quirkyd-browser-)/.test(
         file
       )
   },
   {
-    id: 'browser.orcad-service-status',
-    specs: ['tests/e2e/ssh-orcad-browser-service-status.spec.ts'],
+    id: 'browser.quirkyd-service-status',
+    specs: ['tests/e2e/ssh-quirkyd-browser-service-status.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/components\/browser-pane\/stream-remote\/remote-browser-stream-(?:errors|status|lifecycle|restart-attempt)\.ts$/.test(
@@ -169,8 +169,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-browser-routing',
-    specs: ['tests/e2e/ssh-orcad-browser-routing.spec.ts'],
+    id: 'ssh.quirkyd-browser-routing',
+    specs: ['tests/e2e/ssh-quirkyd-browser-routing.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/(?:main\/browser\/local-ssh-browser|main\/ipc\/browser\.ts$|renderer\/src\/(?:lib\/(?:ssh-workspace-browser-route-eligibility|worktree-host-connection-phase)|components\/browser-pane\/use-ssh-workspace-browser-route|store\/repos\/converted-ssh-browser-pages|store\/slices\/browser\/browser-tab-actions|hooks\/ipc-events\/ssh-managed-server-state-effects))/.test(
@@ -178,8 +178,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-terminal-browser-link',
-    specs: ['tests/e2e/ssh-orcad-terminal-browser-link.spec.ts'],
+    id: 'ssh.quirkyd-terminal-browser-link',
+    specs: ['tests/e2e/ssh-quirkyd-terminal-browser-link.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/renderer\/src\/(?:lib\/(?:workspace-browser-tab-open|http-link-(?:destinations|routing)|ssh-workspace-browser-route-eligibility)|components\/terminal-pane\/terminal-http-link-source-owner)\.ts$/.test(
@@ -187,8 +187,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-desktop-browser-bridge',
-    specs: ['tests/e2e/ssh-orcad-desktop-browser-bridge.spec.ts'],
+    id: 'ssh.quirkyd-desktop-browser-bridge',
+    specs: ['tests/e2e/ssh-quirkyd-desktop-browser-bridge.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
       /^src\/(?:shared\/desktop-browser-bridge-protocol\.ts$|main\/(?:runtime\/desktop-browser-bridge\/|browser\/desktop-browser-bridge\/|ipc\/desktop-browser-bridge-|runtime\/rpc\/methods\/desktop-browser-bridge\.ts$))/.test(
@@ -196,8 +196,8 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    id: 'ssh.orcad-browser-drop-owner',
-    specs: ['tests/e2e/ssh-orcad-browser-drop-owner.spec.ts'],
+    id: 'ssh.quirkyd-browser-drop-owner',
+    specs: ['tests/e2e/ssh-quirkyd-browser-drop-owner.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       /^tests\/e2e\/helpers\/browser-split-(?:guest-probes|page-server)\.ts$/.test(file) ||
@@ -207,8 +207,8 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
-    id: 'ssh.orcad-open-in-owner',
-    specs: ['tests/e2e/ssh-orcad-open-in-owner.spec.ts'],
+    id: 'ssh.quirkyd-open-in-owner',
+    specs: ['tests/e2e/ssh-quirkyd-open-in-owner.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       (isProductSource(file) &&
@@ -217,8 +217,8 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
-    id: 'ssh.orcad-terminal-root-owner',
-    specs: ['tests/e2e/ssh-orcad-terminal-root-owner.spec.ts'],
+    id: 'ssh.quirkyd-terminal-root-owner',
+    specs: ['tests/e2e/ssh-quirkyd-terminal-root-owner.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       file === 'tests/e2e/helpers/terminal-workspace-root-link.ts' ||
@@ -228,23 +228,23 @@ export const PR_E2E_SOURCE_ROUTES = [
         ))
   },
   {
-    id: 'ssh.orcad-idle-exit',
-    specs: ['tests/e2e/ssh-orcad-idle-exit.spec.ts'],
+    id: 'ssh.quirkyd-idle-exit',
+    specs: ['tests/e2e/ssh-quirkyd-idle-exit.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       (isProductSource(file) &&
-        /^src\/(?:main\/(?:orcad\/orcad-(?:idle-|managed-idle-)|(?:ssh|managed-server\/[a-z-]+)\/orcad-(?:already-active-wake|runtime-deployment|managed-serving|managed-wake|managed-tunnel|recovery-slot|remote-launch|remote-runtime-control))|shared\/orcad-idle-exit)/.test(
+        /^src\/(?:main\/(?:quirkyd\/quirkyd-(?:idle-|managed-idle-)|(?:ssh|managed-server\/[a-z-]+)\/quirkyd-(?:already-active-wake|runtime-deployment|managed-serving|managed-wake|managed-tunnel|recovery-slot|remote-launch|remote-runtime-control))|shared\/quirkyd-idle-exit)/.test(
           file
         ))
   },
   {
     // Why: managed SSH hosts are now the only SSH path, so these specs carry its user journeys.
     // Connect/Disconnect sources too: the journeys disconnect and reconnect a managed host (#30130).
-    id: 'ssh.orcad-journeys',
+    id: 'ssh.quirkyd-journeys',
     specs: [
-      'tests/e2e/ssh-orcad-terminal-journeys.spec.ts',
-      'tests/e2e/ssh-orcad-workspace-tools.spec.ts',
-      'tests/e2e/ssh-orcad-vm-provisioned-root.spec.ts'
+      'tests/e2e/ssh-quirkyd-terminal-journeys.spec.ts',
+      'tests/e2e/ssh-quirkyd-workspace-tools.spec.ts',
+      'tests/e2e/ssh-quirkyd-vm-provisioned-root.spec.ts'
     ],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
@@ -252,35 +252,35 @@ export const PR_E2E_SOURCE_ROUTES = [
         file
       ) ||
       (isProductSource(file) &&
-        /^src\/(?:main\/(?:ssh|managed-server\/[a-z-]+)\/orcad-managed-|main\/ipc\/(?:ssh\/)?ssh-port-forward|main\/(?:ipc\/(?:(?:ssh\/)?ssh-(?:connect-flow|connection-handlers|host-user-disconnect|session-teardown)|(?:runtime-environments\/)?runtime-environment-(?:connectivity-handlers|manual-disconnect))|ssh\/(?:connection\/ssh-connection-manager|ssh-user-disconnect))\.ts$|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|web-session-close-|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
+        /^src\/(?:main\/(?:ssh|managed-server\/[a-z-]+)\/quirkyd-managed-|main\/ipc\/(?:ssh\/)?ssh-port-forward|main\/(?:ipc\/(?:(?:ssh\/)?ssh-(?:connect-flow|connection-handlers|host-user-disconnect|session-teardown)|(?:runtime-environments\/)?runtime-environment-(?:connectivity-handlers|manual-disconnect))|ssh\/(?:connection\/ssh-connection-manager|ssh-user-disconnect))\.ts$|renderer\/src\/startup\/(?:ssh-startup-reconnect|startup-ssh-connection-restore)\.ts$|renderer\/src\/runtime\/(?:web-runtime-session|web-session-close-|runtime-terminal-artifact-read\.ts$)|renderer\/src\/components\/terminal-pane\/(?:remote-runtime-|terminal-host-(?:workspace-file|file-link-existence)\.ts$))/.test(
           file
         ))
   },
   {
     // Unsaved drafts stay on the desktop and are renamed to the server when a move commits.
-    id: 'ssh.orcad-editor-drafts-migration',
-    specs: ['tests/e2e/ssh-orcad-editor-drafts-migration.spec.ts'],
+    id: 'ssh.quirkyd-editor-drafts-migration',
+    specs: ['tests/e2e/ssh-quirkyd-editor-drafts-migration.spec.ts'],
     matches: (file) =>
       MANAGED_SSH_HARNESS.test(file) ||
       (isProductSource(file) &&
-        /^src\/main\/(?:persistence\/migrating-orcad-catalog\/orcad-source-(?:draft-rename|workspace-session|session-copy-resolution|export)|ssh\/orcad-migration-source-retention|ipc\/ssh\/ssh)\.ts$/.test(
+        /^src\/main\/(?:persistence\/migrating-quirkyd-catalog\/quirkyd-source-(?:draft-rename|workspace-session|session-copy-resolution|export)|ssh\/quirkyd-migration-source-retention|ipc\/ssh\/ssh)\.ts$/.test(
           file
         ))
   },
   {
     // Why: hand-kept routes missed #30130 and #30120; scoped to managed-host code to bound lane cost.
-    id: 'ssh.orcad-remote-sources',
+    id: 'ssh.quirkyd-remote-sources',
     specs: [
-      'tests/e2e/ssh-orcad-pairing-repair.spec.ts',
-      'tests/e2e/ssh-orcad-retained-upgrade-state.spec.ts',
-      'tests/e2e/ssh-orcad-shared-home-machines.spec.ts',
-      'tests/e2e/ssh-orcad-shared-login-migration.spec.ts',
-      'tests/e2e/ssh-orcad-terminal-network-outage.spec.ts',
-      'tests/e2e/ssh-orcad-windows-cli-matrix.spec.ts'
+      'tests/e2e/ssh-quirkyd-pairing-repair.spec.ts',
+      'tests/e2e/ssh-quirkyd-retained-upgrade-state.spec.ts',
+      'tests/e2e/ssh-quirkyd-shared-home-machines.spec.ts',
+      'tests/e2e/ssh-quirkyd-shared-login-migration.spec.ts',
+      'tests/e2e/ssh-quirkyd-terminal-network-outage.spec.ts',
+      'tests/e2e/ssh-quirkyd-windows-cli-matrix.spec.ts'
     ],
     matches: (file) =>
       isProductSource(file) &&
-      /^src\/(?:main\/(?:ssh|orcad|managed-server)\/|main\/ipc\/(?:ssh|runtime-environment|orcad-)|cli\/runtime\/(?:launch-)?serve|shared\/(?:remote-runtime|orcad-|protocol-version\.ts$|runtime-capability)|renderer\/src\/store\/repos\/(?:repo-removal|runtime-project-terminal-stop)|renderer\/src\/components\/sidebar\/(?:sleep-|SleepTwin|WorkspaceSleep|use-worktree-sleep|ssh-host-remove|host-rename-remove|HostRemove)|renderer\/src\/components\/terminal-pane\/(?:TerminalRemoteRuntimeReconnectBanner|use-managed-pairing-refused|TerminalPaneRuntimePortals))/.test(
+      /^src\/(?:main\/(?:ssh|quirkyd|managed-server)\/|main\/ipc\/(?:ssh|runtime-environment|quirkyd-)|cli\/runtime\/(?:launch-)?serve|shared\/(?:remote-runtime|quirkyd-|protocol-version\.ts$|runtime-capability)|renderer\/src\/store\/repos\/(?:repo-removal|runtime-project-terminal-stop)|renderer\/src\/components\/sidebar\/(?:sleep-|SleepTwin|WorkspaceSleep|use-worktree-sleep|ssh-host-remove|host-rename-remove|HostRemove)|renderer\/src\/components\/terminal-pane\/(?:TerminalRemoteRuntimeReconnectBanner|use-managed-pairing-refused|TerminalPaneRuntimePortals))/.test(
         file
       )
   },
@@ -328,7 +328,7 @@ export const PR_E2E_SOURCE_ROUTES = [
   {
     // Why a route beside terminal-input.ime-and-synthetic-forwarding rather than more specs on
     // it: that route selects the CDP-synthetic specs, which drive composition through
-    // Input.imeSetComposition and so prove Orca's handling without an input method existing.
+    // Input.imeSetComposition and so prove Quirky's handling without an input method existing.
     // This one names the surface only a real ibus-hangul session can judge, and is the sole
     // trigger that puts the real-IME lane on a PR.
     id: 'terminal-ime.native-input-method',
@@ -352,7 +352,7 @@ export const PR_E2E_SOURCE_ROUTES = [
     specs: ['tests/e2e/paired-quick-open-large-tree.spec.ts'],
     matches: (file) =>
       isProductSource(file) &&
-      /^(?:src\/main\/ipc\/filesystem-(?:list-files|search-file-paths)\.ts|src\/main\/ripgrep\/bundled-ripgrep-path\.ts|src\/main\/providers\/(?:filesystem-provider-contract|ssh-filesystem-provider(?:-capabilities)?)\.ts|src\/main\/runtime\/(?:orca-runtime-files|rpc\/methods\/files)\.ts|src\/renderer\/src\/(?:components\/(?:QuickOpen|quick-open-file-list|quick-open-search)\.tsx?|runtime\/(?:runtime-file-search-client|runtime-legacy-quick-open-inventory)\.ts)|src\/shared\/(?:quick-open-(?:install-rg|path-search|transport-budget)|ripgrep-process-availability|bundled-ripgrep)\.ts)$/.test(
+      /^(?:src\/main\/ipc\/filesystem-(?:list-files|search-file-paths)\.ts|src\/main\/ripgrep\/bundled-ripgrep-path\.ts|src\/main\/providers\/(?:filesystem-provider-contract|ssh-filesystem-provider(?:-capabilities)?)\.ts|src\/main\/runtime\/(?:quirky-runtime-files|rpc\/methods\/files)\.ts|src\/renderer\/src\/(?:components\/(?:QuickOpen|quick-open-file-list|quick-open-search)\.tsx?|runtime\/(?:runtime-file-search-client|runtime-legacy-quick-open-inventory)\.ts)|src\/shared\/(?:quick-open-(?:install-rg|path-search|transport-budget)|ripgrep-process-availability|bundled-ripgrep)\.ts)$/.test(
         file
       )
   },
@@ -453,7 +453,7 @@ export const PR_E2E_SOURCE_ROUTES = [
   {
     // Why a second, wider pattern: restart survival breaks from seams that never say
     // "client-hosted" - page adoption, the host lease/reconciliation plan, the session-tab
-    // snapshot the client culls rows against. orca-runtime.ts is included despite its churn: it
+    // snapshot the client culls rows against. quirky-runtime.ts is included despite its churn: it
     // publishes the snapshot flag the client holds its rows on, and no narrower path names that
     // seam.
     id: 'client-hosted-browser.restart-survival',
@@ -461,7 +461,7 @@ export const PR_E2E_SOURCE_ROUTES = [
     matches: (file) =>
       isProductSource(file) &&
       (file === 'src/main/runtime/browser/browser-commands.ts' ||
-        /^src\/.*(?:[Cc]lient-?[Hh]osted|browser-host-(?:lease|page|client-page)|browser-client-(?:host|page)|runtime-browser-(?:client-)?page|session-tabs-sync|host-session-snapshot-authority|orca-runtime\.ts|\/runtime-(?:status|types)\.ts)/.test(
+        /^src\/.*(?:[Cc]lient-?[Hh]osted|browser-host-(?:lease|page|client-page)|browser-client-(?:host|page)|runtime-browser-(?:client-)?page|session-tabs-sync|host-session-snapshot-authority|quirky-runtime\.ts|\/runtime-(?:status|types)\.ts)/.test(
           file
         ))
   }

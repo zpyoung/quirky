@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const PTY_ID = 'repo::/tmp/exit-record-wait@@pty'
 const WORKTREE_ID = 'repo::/tmp/exit-record-wait'
@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe('waitForPtyExitRecord', () => {
   it('resolves true once the exit reaches the runtime record', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.registerPty(PTY_ID, WORKTREE_ID, null)
     const wait = runtime.waitForPtyExitRecord(PTY_ID, 10_000)
     runtime.onPtyExit(PTY_ID, 0)
@@ -20,7 +20,7 @@ describe('waitForPtyExitRecord', () => {
 
   it('resolves false when no exit arrives within the budget', async () => {
     vi.useFakeTimers()
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.registerPty(PTY_ID, WORKTREE_ID, null)
     const wait = runtime.waitForPtyExitRecord(PTY_ID, 1_000)
     await vi.advanceTimersByTimeAsync(1_000)
@@ -29,7 +29,7 @@ describe('waitForPtyExitRecord', () => {
   })
 
   it('does not wait for a PTY the runtime never registered or already saw exit', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     await expect(runtime.waitForPtyExitRecord('unknown-pty', 10_000)).resolves.toBe(true)
     runtime.registerPty(PTY_ID, WORKTREE_ID, null)
     runtime.onPtyExit(PTY_ID, 0)

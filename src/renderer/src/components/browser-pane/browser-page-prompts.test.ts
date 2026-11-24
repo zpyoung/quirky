@@ -91,7 +91,7 @@ describe('browser page prompts', () => {
     expect(respondPagePrompt).not.toHaveBeenCalled()
   })
 
-  it("says so when the user said yes but Orca couldn't carry it out", async () => {
+  it("says so when the user said yes but Quirky couldn't carry it out", async () => {
     respondPagePrompt.mockResolvedValue('failed')
     const { emit } = installSubscription(
       vi.fn<ConfirmationDialogContextValue>().mockResolvedValue(true)

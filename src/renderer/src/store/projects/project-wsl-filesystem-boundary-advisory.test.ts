@@ -18,7 +18,7 @@ const WSL_DEFAULT = {
 } as unknown as GlobalSettings
 
 function makeRepo(overrides: Partial<Repo> = {}): Repo {
-  return { id: 'repo-1', path: 'C:\\Users\\alice\\orca', ...overrides } as Repo
+  return { id: 'repo-1', path: 'C:\\Users\\alice\\quirky', ...overrides } as Repo
 }
 
 function makeProject(overrides: Partial<Project> = {}): Project {

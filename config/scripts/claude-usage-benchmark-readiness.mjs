@@ -20,7 +20,7 @@ export async function createClaudeBenchmarkSplitWorker(arm) {
     }).catch((error) => { throw error; });`
   const worker = new Worker(code, {
     eval: true,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
   })
   const waiting = new Map()
   await new Promise((resolve, reject) => {

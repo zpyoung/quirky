@@ -1,7 +1,7 @@
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { getPtyIpc } from '../../pty-host-bindings'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { TerminalIntentionalStopKind } from '../../../runtime/terminal-intentional-stops'
 import type { IPtyProvider } from '../../../providers/pty-provider-contract'
 import { SSH_PROVIDER_UNREGISTERED_REASON } from '../../../../shared/pty-liveness-verdict'
@@ -19,7 +19,7 @@ import { PtyExitProof, PtyRetirementWithoutProof } from '../../../pty-exit-proof
 
 export type PtyKillIpcDeps = {
   store?: Store
-  runtime?: OrcaRuntimeService
+  runtime?: QuirkyRuntimeService
   getLocalPtyProviderStartupPromise: (hostId?: ResolvedPtyHost) => Promise<void> | undefined
   shutdownProviderAndDetectExit: (
     provider: IPtyProvider,

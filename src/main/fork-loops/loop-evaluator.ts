@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import type { CheckOutcome, EvaluatorVerdict } from '../../shared/fork-loops/loop-types'
 import {
   resolveExecutableCommand,

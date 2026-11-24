@@ -34,20 +34,20 @@ describe('CliInstaller', () => {
   // must fall back to ~/.local/bin (user-writable, no sudo) rather than failing
   // silently when the parent directory is absent.
   it.skipIf(process.platform === 'win32')(
-    'falls back to ~/.local/bin/orca on macOS when /usr/local/bin does not exist',
+    'falls back to ~/.local/bin/quirky on macOS when /usr/local/bin does not exist',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       // Simulate arm64: point defaultMacCommandPath at a dir that does not exist
       // in the fixture so existsSync(dirname(...)) returns false.
-      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'orca')
+      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'quirky')
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: absentUsrLocalBin,
@@ -55,13 +55,13 @@ describe('CliInstaller', () => {
       })
 
       const status = await installer.getStatus()
-      expect(status.commandPath).toBe(join(homePath, '.local', 'bin', 'orca'))
+      expect(status.commandPath).toBe(join(homePath, '.local', 'bin', 'quirky'))
       expect(status.state).toBe('not_installed')
       expect(status.supported).toBe(true)
 
       const installed = await installer.install()
       expect(installed.state).toBe('installed')
-      expect(installed.commandPath).toBe(join(homePath, '.local', 'bin', 'orca'))
+      expect(installed.commandPath).toBe(join(homePath, '.local', 'bin', 'quirky'))
       expect(installed.pathConfigured).toBe(true)
     }
   )
@@ -69,20 +69,20 @@ describe('CliInstaller', () => {
   // Why: on Intel Macs /usr/local/bin exists, so the installer must keep using
   // it as the canonical path and not regress to ~/.local/bin.
   it.skipIf(process.platform === 'win32')(
-    'uses /usr/local/bin/orca on macOS when /usr/local/bin exists',
+    'uses /usr/local/bin/quirky on macOS when /usr/local/bin exists',
     async () => {
       const fixture = await makeFixture()
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       await mkdir(usrLocalBin, { recursive: true })
 
-      const installPath = join(usrLocalBin, 'orca')
+      const installPath = join(usrLocalBin, 'quirky')
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         defaultMacCommandPath: installPath,
         processPathEnv: usrLocalBin
@@ -95,19 +95,19 @@ describe('CliInstaller', () => {
     }
   )
 
-  // Why: users can have a managed Orca command in ~/.local/bin even when
+  // Why: users can have a managed Quirky command in ~/.local/bin even when
   // /usr/local/bin exists; Settings must follow the shell-visible command.
   it.skipIf(process.platform === 'win32')(
-    'uses an existing managed macOS orca command from the shell PATH before /usr/local/bin',
+    'uses an existing managed macOS quirky command from the shell PATH before /usr/local/bin',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
       await symlink(launcherPath, userInstallPath)
@@ -117,7 +117,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -139,17 +139,24 @@ describe('CliInstaller', () => {
   // Why: POSIX command lookup skips broken symlinks and keeps searching PATH,
   // so a stale earlier artifact must not steal status from the install path.
   it.skipIf(process.platform === 'win32')(
-    'skips a broken managed macOS orca symlink before /usr/local/bin',
+    'skips a broken managed macOS quirky symlink before /usr/local/bin',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
-      const oldLauncherPath = join(fixture.root, 'Old.app', 'Contents', 'Resources', 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
+      const oldLauncherPath = join(
+        fixture.root,
+        'Old.app',
+        'Contents',
+        'Resources',
+        'bin',
+        'quirky'
+      )
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
       await symlink(oldLauncherPath, userInstallPath)
@@ -159,7 +166,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -182,18 +189,18 @@ describe('CliInstaller', () => {
   )
 
   // Why: PATH lookup stops at the first existing command; a later managed
-  // ~/.local/bin/orca must not steal status from /usr/local/bin/orca.
+  // ~/.local/bin/quirky must not steal status from /usr/local/bin/quirky.
   it.skipIf(process.platform === 'win32')(
-    'keeps the default macOS command when a managed orca appears later on PATH',
+    'keeps the default macOS command when a managed quirky appears later on PATH',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
       await symlink(launcherPath, defaultInstallPath)
@@ -204,7 +211,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -218,18 +225,18 @@ describe('CliInstaller', () => {
   )
 
   // Why: shells skip missing PATH entries, so a managed command later in PATH
-  // is still the shell-visible Orca command until the default path is installed.
+  // is still the shell-visible Quirky command until the default path is installed.
   it.skipIf(process.platform === 'win32')(
-    'uses a later managed macOS orca command when the default command is missing',
+    'uses a later managed macOS quirky command when the default command is missing',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
       await symlink(launcherPath, userInstallPath)
@@ -239,7 +246,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -256,22 +263,22 @@ describe('CliInstaller', () => {
     }
   )
 
-  // Why: bash/zsh skip non-executable PATH entries even at Orca's configured
+  // Why: bash/zsh skip non-executable PATH entries even at Quirky's configured
   // install slot, then keep looking for a runnable command later in PATH.
   it.skipIf(process.platform === 'win32')(
-    'uses a later managed macOS orca command when the default command is not executable',
+    'uses a later managed macOS quirky command when the default command is not executable',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
-      await writeFile(defaultInstallPath, '#!/usr/bin/env bash\necho other-orca\n', 'utf8')
+      await writeFile(defaultInstallPath, '#!/usr/bin/env bash\necho other-quirky\n', 'utf8')
       await symlink(launcherPath, userInstallPath)
 
       const installer = new CliInstaller({
@@ -279,7 +286,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -292,11 +299,11 @@ describe('CliInstaller', () => {
 
       const installed = await installer.install()
       expect(installed.commandPath).toBe(userInstallPath)
-      await expect(readFile(defaultInstallPath, 'utf8')).resolves.toContain('other-orca')
+      await expect(readFile(defaultInstallPath, 'utf8')).resolves.toContain('other-quirky')
     }
   )
 
-  // Why: a non-Orca command after an empty default install slot can be shadowed
+  // Why: a non-Quirky command after an empty default install slot can be shadowed
   // by installing the default path without replacing the user's command.
   it.skipIf(process.platform === 'win32')(
     'installs the default macOS command instead of replacing an unmanaged later command',
@@ -306,12 +313,12 @@ describe('CliInstaller', () => {
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
-      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-orca\n', {
+      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-quirky\n', {
         encoding: 'utf8',
         mode: 0o755
       })
@@ -321,7 +328,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -336,23 +343,23 @@ describe('CliInstaller', () => {
       expect(installed.commandPath).toBe(defaultInstallPath)
       expect(installed.state).toBe('installed')
       await expect(readlink(defaultInstallPath)).resolves.toBe(launcherPath)
-      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-orca')
+      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-quirky')
     }
   )
 
-  // Why: an off-PATH ~/.local/bin/orca must not hijack CLI registration and
+  // Why: an off-PATH ~/.local/bin/quirky must not hijack CLI registration and
   // leave the shell-visible /usr/local/bin command missing.
   it.skipIf(process.platform === 'win32')(
-    'ignores managed macOS orca commands that are not visible on the shell PATH',
+    'ignores managed macOS quirky commands that are not visible on the shell PATH',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
       await symlink(launcherPath, userInstallPath)
@@ -362,7 +369,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -383,18 +390,18 @@ describe('CliInstaller', () => {
   )
 
   it.skipIf(process.platform === 'win32')(
-    'reports a conflict for an unmanaged macOS orca that shadows the install path',
+    'reports a conflict for an unmanaged macOS quirky that shadows the install path',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
-      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-orca\n', {
+      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-quirky\n', {
         encoding: 'utf8',
         mode: 0o755
       })
@@ -404,7 +411,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -414,35 +421,35 @@ describe('CliInstaller', () => {
       const status = await installer.getStatus()
       expect(status.commandPath).toBe(userInstallPath)
       expect(status.state).toBe('conflict')
-      await expect(installer.install()).rejects.toThrow('Refusing to replace non-Orca command')
+      await expect(installer.install()).rejects.toThrow('Refusing to replace non-Quirky command')
       await expect(lstat(defaultInstallPath)).rejects.toMatchObject({ code: 'ENOENT' })
-      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-orca')
+      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-quirky')
     }
   )
 
   // Why: bash/zsh skip non-executable PATH entries, so reporting them as a
   // conflict would block a valid later install path the shell would use.
   it.skipIf(process.platform === 'win32')(
-    'skips a non-executable unmanaged macOS orca before the install path',
+    'skips a non-executable unmanaged macOS quirky before the install path',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
       const usrLocalBin = join(fixture.root, 'usr', 'local', 'bin')
       const userLocalBin = join(homePath, '.local', 'bin')
-      const defaultInstallPath = join(usrLocalBin, 'orca')
-      const userInstallPath = join(userLocalBin, 'orca')
-      const launcherPath = join(resourcesPath, 'bin', 'orca')
+      const defaultInstallPath = join(usrLocalBin, 'quirky')
+      const userInstallPath = join(userLocalBin, 'quirky')
+      const launcherPath = join(resourcesPath, 'bin', 'quirky')
       await mkdir(usrLocalBin, { recursive: true })
       await mkdir(userLocalBin, { recursive: true })
-      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-orca\n', 'utf8')
+      await writeFile(userInstallPath, '#!/usr/bin/env bash\necho other-quirky\n', 'utf8')
 
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: defaultInstallPath,
@@ -457,25 +464,25 @@ describe('CliInstaller', () => {
       expect(installed.commandPath).toBe(defaultInstallPath)
       expect(installed.state).toBe('installed')
       await expect(readlink(defaultInstallPath)).resolves.toBe(launcherPath)
-      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-orca')
+      await expect(readFile(userInstallPath, 'utf8')).resolves.toContain('other-quirky')
     }
   )
 
-  // Why: when macCommandPath falls back to ~/.local/bin/orca on arm64, commandName
-  // must still be 'orca' (not 'orca-ide' which is Linux-only).
+  // Why: when macCommandPath falls back to ~/.local/bin/quirky on arm64, commandName
+  // must still be 'quirky' (not 'quirky-ide' which is Linux-only).
   it.skipIf(process.platform === 'win32')(
-    'reports commandName as orca (not orca-ide) when falling back to ~/.local/bin on macOS',
+    'reports commandName as quirky (not quirky-ide) when falling back to ~/.local/bin on macOS',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
-      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'orca')
+      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'quirky')
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: absentUsrLocalBin,
@@ -483,7 +490,7 @@ describe('CliInstaller', () => {
       })
 
       const status = await installer.getStatus()
-      expect(status.commandName).toBe('orca')
+      expect(status.commandName).toBe('quirky')
     }
   )
 
@@ -495,13 +502,13 @@ describe('CliInstaller', () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
       const resourcesPath = await createPackagedMacLauncher(fixture.root)
-      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'orca')
+      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'quirky')
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: absentUsrLocalBin,
@@ -515,21 +522,21 @@ describe('CliInstaller', () => {
 
       expect(s1.commandPath).toBe(s2.commandPath)
       expect(s2.commandPath).toBe(s3.commandPath)
-      expect(s1.commandPath).toBe(join(homePath, '.local', 'bin', 'orca'))
+      expect(s1.commandPath).toBe(join(homePath, '.local', 'bin', 'quirky'))
     }
   )
 
   // Why: the arm64 fallback must apply for packaged builds, not just dev launchers.
   it.skipIf(process.platform === 'win32')(
-    'resolves to ~/.local/bin/orca on arm64 even when isPackaged is true',
+    'resolves to ~/.local/bin/quirky on arm64 even when isPackaged is true',
     async () => {
       const fixture = await makeFixture()
       const homePath = join(fixture.root, 'home')
-      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'orca')
+      const absentUsrLocalBin = join(fixture.root, 'usr', 'local', 'bin', 'quirky')
       const resourcesPath = join(fixture.root, 'resources')
-      const bundledLauncher = join(resourcesPath, 'bin', 'orca')
+      const bundledLauncher = join(resourcesPath, 'bin', 'quirky')
       await mkdir(join(resourcesPath, 'bin'), { recursive: true })
-      await writeFile(bundledLauncher, '#!/usr/bin/env bash\necho orca\n', {
+      await writeFile(bundledLauncher, '#!/usr/bin/env bash\necho quirky\n', {
         encoding: 'utf8',
         mode: 0o755
       })
@@ -539,7 +546,7 @@ describe('CliInstaller', () => {
         isPackaged: true,
         resourcesPath,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         homePath,
         defaultMacCommandPath: absentUsrLocalBin,
@@ -547,7 +554,7 @@ describe('CliInstaller', () => {
       })
 
       const status = await installer.getStatus()
-      expect(status.commandPath).toBe(join(homePath, '.local', 'bin', 'orca'))
+      expect(status.commandPath).toBe(join(homePath, '.local', 'bin', 'quirky'))
       expect(status.supported).toBe(true)
     }
   )

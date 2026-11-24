@@ -96,7 +96,7 @@ describe('getServeOptions', () => {
 
   it('shares cross-flag validation with the CLI-form launch', () => {
     const argv = normalizeServeModeArgv([
-      '/opt/orca/orca-ide',
+      '/opt/quirky/quirky-ide',
       'serve',
       '--no-pairing',
       '--mobile-pairing'

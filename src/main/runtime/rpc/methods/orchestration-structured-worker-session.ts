@@ -23,7 +23,7 @@ import type {
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
 import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { OrchestrationError } from '../../orchestration/orchestration-error'
 import { mintAgentSessionOperationId } from '../../orchestration/structured-pointer-operation-id'
 import { structuredPointerCallerKey } from '../../orchestration/structured-mailbox-pointer-host'
@@ -61,7 +61,7 @@ const bindingsByDispatchId = new Map<string, StructuredWorkerBinding>()
  */
 export function releaseStructuredWorkerSession(
   dispatchId: string,
-  runtime?: Pick<OrcaRuntimeService, 'forgetStructuredSessionMail'>,
+  runtime?: Pick<QuirkyRuntimeService, 'forgetStructuredSessionMail'>,
   workerSessionId?: string | null
 ): void {
   const binding = bindingsByDispatchId.get(dispatchId)
@@ -80,7 +80,7 @@ export function releaseStructuredWorkerSession(
 }
 
 export async function createStructuredWorkerSession(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   worktreeId: string
   agent: TuiAgent
   dispatchId: string
@@ -97,7 +97,7 @@ export async function createStructuredWorkerSession(args: {
   const sessionId = randomUUID()
   // Registered BEFORE the session is created, because `attach` is what spawns the provider child
   // and the child's environment is read from this registry at spawn time. Registering afterwards
-  // ships a worker with no ORCA_TERMINAL_HANDLE, whose bare `orca orchestration check` then
+  // ships a worker with no QUIRKY_TERMINAL_HANDLE, whose bare `quirky orchestration check` then
   // resolves to whatever single leaf sits in the worktree — by default the COORDINATOR's pane.
   //
   // The scope is provisionally local; the record's own location is asserted local below, and a
@@ -199,7 +199,7 @@ function structuredCreateMayHaveCommitted(
  */
 export async function discardStructuredWorkerSession(
   sessionId: string,
-  runtime: Pick<OrcaRuntimeService, 'retireStructuredAgentSessionTabFromSnapshot'>
+  runtime: Pick<QuirkyRuntimeService, 'retireStructuredAgentSessionTabFromSnapshot'>
 ): Promise<void> {
   const host = getStructuredAgentSessionHost()
   if (!host) {

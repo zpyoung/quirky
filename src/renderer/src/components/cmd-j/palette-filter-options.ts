@@ -17,7 +17,7 @@ import type { SidebarHostOption } from '../sidebar/sidebar-host-options'
 import {
   expandEquivalentExecutionHostIds,
   pickerExecutionHosts
-} from '../../../../shared/managed-orcad-execution-host'
+} from '../../../../shared/managed-quirkyd-execution-host'
 import { buildPaletteFilterOptionSearchText } from './palette-filter-option-list'
 
 export type PaletteFilterOption = {

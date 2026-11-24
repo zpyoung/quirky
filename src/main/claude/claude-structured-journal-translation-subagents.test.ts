@@ -10,8 +10,8 @@ import type {
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 
 /** The union's other arms carry no client message id, so reading one narrows. */
-function orcaClientMessageId(identity: AgentJournalItemIdentity): string | null {
-  return identity.provider === 'orca' ? identity.clientMessageId : null
+function quirkyClientMessageId(identity: AgentJournalItemIdentity): string | null {
+  return identity.provider === 'quirky' ? identity.clientMessageId : null
 }
 
 function harness() {
@@ -47,7 +47,7 @@ function harness() {
   }
   const fallbackRows = (): AgentJournalItemBody[] =>
     items
-      .filter((item) => (orcaClientMessageId(item.identity) ?? '').startsWith('provider-frame:'))
+      .filter((item) => (quirkyClientMessageId(item.identity) ?? '').startsWith('provider-frame:'))
       .map((item) => item.body)
   /** Attribution stamped on a row, found by the text it carries, so a test
    *  names the row it means instead of indexing into the append order. */
@@ -75,7 +75,7 @@ function harness() {
 function userTurn(uuid: string) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     startsTurn: true as const,
     message: {
       type: 'user',
@@ -90,7 +90,7 @@ function userTurn(uuid: string) {
 function systemFrame(subtype: string, fields: Record<string, unknown>) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: { type: 'system', subtype, session_id: 'claude-session', ...fields }
   }
 }
@@ -98,7 +98,7 @@ function systemFrame(subtype: string, fields: Record<string, unknown>) {
 function spawnResult(uuid: string, toolUseId: string) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'user',
       uuid,
@@ -115,7 +115,7 @@ function spawnResult(uuid: string, toolUseId: string) {
 function resultFrame() {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: 'result',
       subtype: 'success',
@@ -141,7 +141,7 @@ describe('claude journal translation — subagents', () => {
     )
     translator.handle(spawnResult('user-2', 'toolu_1'))
     translator.handle(resultFrame())
-    translator.handle({ type: 'ended', sessionId: 'orca-session', reason: 'closed' })
+    translator.handle({ type: 'ended', sessionId: 'quirky-session', reason: 'closed' })
     expect(
       items.filter(
         (item) =>
@@ -161,7 +161,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function childProse(uuid: string, parentToolUseId: string, text: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'assistant',
         uuid,
@@ -176,7 +176,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function spawnCall(uuid: string, toolUseId: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'assistant',
         uuid,
@@ -197,7 +197,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function childSpawnCall(uuid: string, parentToolUseId: string, toolUseId: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'assistant',
         uuid,
@@ -242,7 +242,7 @@ describe('claude journal translation — which agent produced a row', () => {
     translator.handle(userTurn('user-1'))
     translator.handle({
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'assistant',
         uuid: 'assistant-1',
@@ -348,7 +348,7 @@ describe('claude journal translation — which agent produced a row', () => {
     translator.handle(announce('task-1', 'toolu_1'))
     translator.handle({
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'user',
         uuid: 'bash-result',
@@ -362,7 +362,7 @@ describe('claude journal translation — which agent produced a row', () => {
     })
 
     const row = items.find(
-      (entry) => orcaClientMessageId(entry.identity) === 'claude-tool:claude-session:toolu_bash'
+      (entry) => quirkyClientMessageId(entry.identity) === 'claude-tool:claude-session:toolu_bash'
     )
     expect(row?.body).toMatchObject({ kind: 'tool-call', state: 'completed' })
     expect(row?.options).toEqual({
@@ -376,7 +376,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function streamStart(uuid: string, parentToolUseId: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'stream_event',
         uuid,
@@ -390,7 +390,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function streamDelta(uuid: string, parentToolUseId: string, text: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'stream_event',
         uuid,
@@ -436,7 +436,7 @@ describe('claude journal translation — which agent produced a row', () => {
   function childToolResult(uuid: string, toolUseId: string) {
     return {
       type: 'message' as const,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'user',
         uuid,
@@ -459,7 +459,7 @@ describe('claude journal translation — which agent produced a row', () => {
     toolUseId: string
   ) =>
     items.filter(
-      (entry) => orcaClientMessageId(entry.identity) === `claude-tool:claude-session:${toolUseId}`
+      (entry) => quirkyClientMessageId(entry.identity) === `claude-tool:claude-session:${toolUseId}`
     )
 
   it('does not revert a completed nested tool row when its attribution is corrected', () => {
@@ -488,7 +488,7 @@ describe('claude journal translation — which agent produced a row', () => {
     translator.handle(childToolResult('child-result', 'toolu_2'))
 
     const idOf = (entry: { identity: AgentJournalItemIdentity }): string =>
-      orcaClientMessageId(entry.identity) ?? JSON.stringify(entry.identity)
+      quirkyClientMessageId(entry.identity) ?? JSON.stringify(entry.identity)
     const bodyBeforeAnnouncement = new Map<string, AgentJournalItemBody>()
     for (const entry of items) {
       bodyBeforeAnnouncement.set(idOf(entry), entry.body)
@@ -520,7 +520,7 @@ describe('claude journal translation — which agent produced a row', () => {
     }
 
     const nested = items.findLast(
-      (entry) => orcaClientMessageId(entry.identity) === 'claude-tool:claude-session:toolu_2'
+      (entry) => quirkyClientMessageId(entry.identity) === 'claude-tool:claude-session:toolu_2'
     )
     expect(nested?.body).toMatchObject({ kind: 'tool-call', state: 'completed' })
     expect(nested?.options?.agentId).toBe('task-1')

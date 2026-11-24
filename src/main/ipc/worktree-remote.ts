@@ -42,10 +42,10 @@ import type { ForgeProviderId } from '../source-control/forge-provider'
 import { validateGitPushTarget } from '../git/push-target-validation'
 import { gitExecFileAsync } from '../git/runner'
 import type {
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   RemoteFetchResult,
   RemoteTrackingBase
-} from '../runtime/orca-runtime'
+} from '../runtime/quirky-runtime'
 import { getProjectHostSetupWorktreeMeta } from '../../shared/project-host-setup-lookup'
 import { getEffectiveHooks, loadHooks } from '../hooks'
 import { createSetupRunnerScript, resolveSetupRunnerShell } from '../worktree-runner-script'
@@ -318,7 +318,7 @@ export function recordWorkspaceLineageForCreatedWorktree(
 }
 
 async function spawnLocalStartupAndSetupTerminals(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   worktree: Worktree
   startup: CreateWorktreeArgs['startup']
   setup: CreateWorktreeResult['setup']
@@ -774,7 +774,7 @@ async function adoptExistingForkRemoteForBranch(
     )
   }
   const restored = await restoreUpstreamAfterMaterialize(execGit, repoPath, target)
-  // Why: a remote another worktree minted is still Orca-owned. Without stamping ownership on
+  // Why: a remote another worktree minted is still Quirky-owned. Without stamping ownership on
   // the adopting worktree too, removing the minter leaves the survivor's metadata unowned and
   // #17842's sweep -- which gates solely on `remoteCreated` -- can never reclaim the remote.
   // Why derive: no caller supplies both -- IPC handlers pass a store with no repo id, runtime
@@ -821,7 +821,7 @@ function runForkRemoteAdoption<T>(
 // `setWorktreeMeta` write, so the store's `pushTarget.remoteCreated` flag stayed stale
 // forever for a lazily-minted remote -- invisible to #17842's orphan sweep
 // (`shouldReclaimPrRemote` gates solely on that flag) and to any SSH host whose relay
-// predates `markRemoteOrcaCreated` (no git-config marker either). `setWorktreeMeta` is
+// predates `markRemoteQuirkyCreated` (no git-config marker either). `setWorktreeMeta` is
 // optional on `WorktreePushTargetStore` so narrow test/reconciliation stores keep compiling.
 function persistMaterializedPushTargetIfCreated(
   store: WorktreePushTargetStore | null | undefined,
@@ -892,7 +892,7 @@ export async function cleanupUnusedWorktreePushTargetRemote(
     console.warn(`[worktrees] Failed to clean up fork PR remote for ${removedWorktreeId}`, error)
   }
   // Why: also catches remotes this specific removal couldn't reclaim (legacy metadata,
-  // a preserved branch since deleted, a worktree removed outside Orca) -- see
+  // a preserved branch since deleted, a worktree removed outside Quirky) -- see
   // worktree-push-target-reconciliation.ts. Rate-limited internally; safe to call every removal.
   // Not awaited: a repo with a large backlog (the scenario this exists for) can have dozens of
   // candidate remotes, each probed with a couple of git subprocesses -- that must never add
@@ -975,7 +975,7 @@ export function createLocalWorktree(
   repo: Repo,
   store: Store,
   mainWindow: BrowserWindow,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   timing: WorktreeCreateTimingRecorder = createWorktreeCreateTimingRecorder(),
   onWorkspaceCreated?: (worktreeId: string) => void
 ): Promise<CreateWorktreeResult> {
@@ -1010,7 +1010,7 @@ async function performLocalWorktreeCreate(
   mainWindow: BrowserWindow,
   rearm: PreparationRearmHolder,
   timing: WorktreeCreateTimingRecorder,
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   onWorkspaceCreated?: (worktreeId: string) => void
 ): Promise<CreateWorktreeResult> {
   const settings = store.getSettings()
@@ -1322,7 +1322,7 @@ async function performLocalWorktreeCreate(
         computeWorktreePath(effectiveSanitizedName, repo.path, worktreePathSettings, workspaceRoot),
         workspaceRoot
       )
-      // Why the pending check: Git may already have deleted the directory while Orca still owns
+      // Why the pending check: Git may already have deleted the directory while Quirky still owns
       // the path until its removal settles; take the next name instead of racing it.
       if (
         existsSync(worktreePath) ||
@@ -1560,10 +1560,10 @@ async function performLocalWorktreeCreate(
     lastActivityAt: now,
     // createdAt protects the new worktree from ambient PTY bumps for CREATE_GRACE_MS.
     createdAt: now,
-    orcaCreatedAt: now,
-    orcaCreationSource: 'desktop',
+    quirkyCreatedAt: now,
+    quirkyCreationSource: 'desktop',
     creatorProvenance: { kind: 'host' },
-    orcaCreationWorkspaceLayout: getWorktreeCreationLayout(repo, settings),
+    quirkyCreationWorkspaceLayout: getWorktreeCreationLayout(repo, settings),
     ...(args.automationProvenance ? { automationProvenance: args.automationProvenance } : {}),
     ...(args.cliProvenance ? { cliProvenance: args.cliProvenance } : {}),
     baseRef: metadataBaseRef,
@@ -1640,7 +1640,7 @@ async function performLocalWorktreeCreate(
     })
   }
 
-  // Why: project-level `orca.yaml` shared directories add to (never replace) the per-user
+  // Why: project-level `quirky.yaml` shared directories add to (never replace) the per-user
   // setting, so a repo's shared dirs reach every teammate (issue #10451).
   const [sharedDirectories, includePaths] = await Promise.all([
     timing.time('resolve_shared_directories', () =>
@@ -1673,7 +1673,7 @@ async function performLocalWorktreeCreate(
     })
   }
 
-  // Why: the worktree's base-branch `orca.yaml` is authoritative; we don't re-gate on content parity with the primary checkout since benign divergence silently disabled setup (#1280).
+  // Why: the worktree's base-branch `quirky.yaml` is authoritative; we don't re-gate on content parity with the primary checkout since benign divergence silently disabled setup (#1280).
   let setup: CreateWorktreeResult['setup']
   let defaultTabs: CreateWorktreeResult['defaultTabs']
   await timing.time('prepare_setup', async () => {

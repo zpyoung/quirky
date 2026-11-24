@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as runner from './runner'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   getGitRepoRoot,
   getGitRepoRootAsync,
@@ -22,7 +22,7 @@ async function git(cwd: string, args: string[]): Promise<void> {
 }
 
 beforeEach(() => {
-  fixture = mkdtempSync(join(tmpdir(), 'orca-repo-async-'))
+  fixture = mkdtempSync(join(tmpdir(), 'quirky-repo-async-'))
 })
 afterEach(() => {
   vi.restoreAllMocks()
@@ -45,9 +45,9 @@ describe('asynchronous repository detection with real Git', () => {
     await git(repo, ['init', '--quiet'])
     await git(repo, [
       '-c',
-      'user.name=Orca Test',
+      'user.name=Quirky Test',
       '-c',
-      'user.email=orca@example.invalid',
+      'user.email=quirky@example.invalid',
       'commit',
       '--allow-empty',
       '--quiet',
@@ -98,9 +98,9 @@ describe('asynchronous repository detection with real Git', () => {
       await git(repo, ['init', '--quiet'])
       await git(repo, [
         '-c',
-        'user.name=Orca Test',
+        'user.name=Quirky Test',
         '-c',
-        'user.email=orca@example.invalid',
+        'user.email=quirky@example.invalid',
         'commit',
         '--allow-empty',
         '--quiet',

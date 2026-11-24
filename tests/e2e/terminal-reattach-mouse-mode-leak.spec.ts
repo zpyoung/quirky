@@ -31,7 +31,7 @@
 
 import { existsSync, readFileSync } from 'node:fs'
 import type { ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   discoverActivePtyId,
@@ -43,7 +43,7 @@ import {
   waitForTerminalOutput
 } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 
 // Why: quit→relaunch against the same userDataDir relies on the daemon
 // surviving the first close; serial keeps the shared profile from competing
@@ -91,10 +91,10 @@ test.describe('reattach mouse-mode leak', () => {
       // the expression, not `42`). Some sandboxed CI/dev runners spawn a PTY
       // that echoes input but never execs a shell; skip there rather than fail,
       // matching the pane-manager guard above — there is nothing to arm.
-      await execInTerminal(firstLaunch.page, ptyId, 'echo ORCA_MOUSE_READY_$((21+21))')
+      await execInTerminal(firstLaunch.page, ptyId, 'echo QUIRKY_MOUSE_READY_$((21+21))')
       const shellExecutes = await waitForTerminalOutput(
         firstLaunch.page,
-        'ORCA_MOUSE_READY_42',
+        'QUIRKY_MOUSE_READY_42',
         15_000
       )
         .then(() => true)
@@ -182,8 +182,8 @@ test.describe('reattach mouse-mode leak', () => {
         .toBe('none')
 
       await sendToTerminal(secondLaunch.page, reattachedPtyId, '\x03')
-      await execInTerminal(secondLaunch.page, reattachedPtyId, 'echo ORCA_REATTACHED_$((21+21))')
-      await waitForTerminalOutput(secondLaunch.page, 'ORCA_REATTACHED_42', 15_000)
+      await execInTerminal(secondLaunch.page, reattachedPtyId, 'echo QUIRKY_REATTACHED_$((21+21))')
+      await waitForTerminalOutput(secondLaunch.page, 'QUIRKY_REATTACHED_42', 15_000)
 
       // Behavioral proof + positive control: real pointer motion must produce
       // no reports post-reattach, but the same probe DOES observe reports once

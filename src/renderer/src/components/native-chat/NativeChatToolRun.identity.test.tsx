@@ -258,7 +258,7 @@ it('filters untrusted persisted result URLs at the renderer boundary', () => {
           webSearchResults: [
             { title: 'Script', url: 'javascript:alert(1)' },
             { title: 'Local file', url: 'file:///tmp/secret' },
-            { title: 'App route', url: 'orca://open' },
+            { title: 'App route', url: 'quirky://open' },
             { title: 'Protocol relative', url: '//example.com' },
             { title: 'Data', url: 'data:text/html,hello' },
             { title: 'Docs', url: 'https://example.com/docs' }

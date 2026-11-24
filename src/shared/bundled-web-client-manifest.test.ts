@@ -7,7 +7,7 @@ import { findBundledWebClientRoot } from './bundled-web-client-root'
 
 const roots: string[] = []
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-shared-web-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-shared-web-'))
   roots.push(root)
   return root
 }

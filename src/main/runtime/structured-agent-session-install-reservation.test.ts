@@ -2,9 +2,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import * as profileStoragePaths from '../orca-profiles/profile-storage-paths'
+import * as profileStoragePaths from '../quirky-profiles/profile-storage-paths'
 import * as recordStoreSlot from './agent-session-record-store-slot'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { stopStructuredAgentSessionRuntime } from './structured-agent-session-runtime'
 
 it('reserves a requested host installation before shutdown can inspect it', async () => {
@@ -17,9 +17,9 @@ it('reserves a requested host installation before shutdown can inspect it', asyn
   vi.spyOn(recordStoreSlot, 'releaseAgentSessionRecordStore').mockResolvedValue(null)
   vi.spyOn(agentModelCatalogStore, 'flushPersistence').mockResolvedValue()
   vi.spyOn(profileStoragePaths, 'getProfileUserDataPath').mockReturnValue(
-    join(tmpdir(), 'orca-structured-install-never-opened')
+    join(tmpdir(), 'quirky-structured-install-never-opened')
   )
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   const ensuring = runtime.ensureStructuredAgentSessionHost().catch((error: unknown) => error)
   let stopped = false
   const stopping = stopStructuredAgentSessionRuntime().then(() => {

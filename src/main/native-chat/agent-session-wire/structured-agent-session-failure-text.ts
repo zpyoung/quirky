@@ -64,7 +64,7 @@ export function providerExitObserved(error: unknown): boolean {
 }
 
 /** A start that did not land. A refusal the adapter typed keeps its situation, and an exit the
- *  adapter observed says the provider stopped; anything else blames no one — it may be Orca's, or
+ *  adapter observed says the provider stopped; anything else blames no one — it may be Quirky's, or
  *  a spawn that failed. Either keeps the provider's diagnostic when the error carried one. */
 export function providerStartupFailureFact(cause?: unknown): SubmissionRejectionFact {
   const codexInstallation = codexInstallationProblemOf(cause)
@@ -97,7 +97,7 @@ export function providerStartupFailureFact(cause?: unknown): SubmissionRejection
 }
 
 /** A child that ended before it proved its start: an exit is a start that failed, keeping the
- *  provider's diagnostic; an Orca fault or a typed start refusal stays what it was. */
+ *  provider's diagnostic; an Quirky fault or a typed start refusal stays what it was. */
 function startupFailureFromExit(
   failure: SubmissionRejectionFact | undefined
 ): SubmissionRejectionFact {
@@ -151,7 +151,7 @@ export type StructuredAgentSessionStartFailureCause =
   /** The provider exited while starting; only its words are known, and the caller names their
    *  audience. */
   | { diagnostic: ProviderDiagnostic | undefined }
-  /** Orca's own fault; its error belongs in the log. */
+  /** Quirky's own fault; its error belongs in the log. */
   | { hostFault: true }
   /** Already typed where it was observed. */
   | { failure: SubmissionRejectionFact }

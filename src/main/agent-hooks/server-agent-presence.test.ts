@@ -254,7 +254,7 @@ describe('host-owned hook presence', () => {
   })
 
   it('checks each pane once after replaying its spooled hooks', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-spool-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-presence-spool-'))
     const first = new AgentHookServer()
     servers.push(first)
     await first.start({ env: 'production', userDataPath })
@@ -546,7 +546,7 @@ describe('retained agent exit', () => {
   })
 
   it('keeps a persisted exit through a spooled start written before it', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-spool-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-presence-exit-spool-'))
     const first = new AgentHookServer()
     servers.push(first)
     await first.start({ env: 'production', userDataPath })
@@ -581,7 +581,7 @@ describe('retained agent exit', () => {
   })
 
   it('lets a successor start spooled in the exit second clear the exit', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-same-second-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-presence-exit-same-second-'))
     const first = new AgentHookServer()
     servers.push(first)
     await first.start({ env: 'production', userDataPath })
@@ -619,7 +619,7 @@ describe('retained agent exit', () => {
   })
 
   it('keeps the exit readable after the hook store restarts', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-presence-exit-'))
     const first = new AgentHookServer()
     servers.push(first)
     await first.start({ env: 'production', userDataPath })
@@ -696,7 +696,7 @@ describe('retained agent exit lifetime', () => {
   it('prunes an exit older than the hydrate window when saving', async () => {
     const server = new AgentHookServer()
     servers.push(server)
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-prune-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-presence-exit-prune-'))
     await server.start({ env: 'production', userDataPath })
     await hook(server, 'SessionStart')
     await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')

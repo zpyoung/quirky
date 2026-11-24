@@ -214,7 +214,7 @@ describe('resolveWorkerEntryPath', () => {
   const WORKER_ENTRY_FILENAME = 'port-scan-command-worker-entry.js'
 
   it('resolves a packaged build under resourcesPath/app.asar/out/main', () => {
-    const resourcesPath = join(sep, 'Applications', 'Orca.app', 'Contents', 'Resources')
+    const resourcesPath = join(sep, 'Applications', 'Quirky.app', 'Contents', 'Resources')
 
     const resolved = resolveWorkerEntryPath({
       isPackaged: true,
@@ -236,7 +236,7 @@ describe('resolveWorkerEntryPath', () => {
 
     const resolved = resolveWorkerEntryPath({
       isPackaged: false,
-      resourcesPath: join(sep, 'Applications', 'Orca.app', 'Contents', 'Resources'),
+      resourcesPath: join(sep, 'Applications', 'Quirky.app', 'Contents', 'Resources'),
       moduleDir
     })
 
@@ -293,7 +293,7 @@ describe('PortScanCommandClient on a real worker thread', () => {
 })
 
 describe('resolveWorkerEntryPath on a non-Electron host', () => {
-  // Why: orcad reports isPackaged true (it is a production build), but
+  // Why: quirkyd reports isPackaged true (it is a production build), but
   // process.resourcesPath is Electron-only and undefined there. Joining undefined threw
   // a TypeError instead of failing as a missing worker — a crash where a clean
   // "worker unavailable" was the honest outcome.
@@ -302,7 +302,7 @@ describe('resolveWorkerEntryPath on a non-Electron host', () => {
       resolveWorkerEntryPath({
         isPackaged: true,
         resourcesPath: undefined,
-        moduleDir: '/opt/orcad'
+        moduleDir: '/opt/quirkyd'
       })
     ).not.toThrow()
   })
@@ -312,8 +312,8 @@ describe('resolveWorkerEntryPath on a non-Electron host', () => {
       resolveWorkerEntryPath({
         isPackaged: true,
         resourcesPath: undefined,
-        moduleDir: '/opt/orcad'
+        moduleDir: '/opt/quirkyd'
       })
-    ).toBe(join('/opt/orcad', 'port-scan-command-worker-entry.js'))
+    ).toBe(join('/opt/quirkyd', 'port-scan-command-worker-entry.js'))
   })
 })

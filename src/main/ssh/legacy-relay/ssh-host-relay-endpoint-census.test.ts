@@ -37,7 +37,7 @@ function hostAnswers(listing: string): void {
 // The census only hands the connection to the mocked exec and probe.
 const conn: SshConnection = Object.create(null)
 const linux = getRemoteHostPlatform('linux-x64')
-const sock = (n: number) => `/home/dev/.orca-remote/relay-1.4.${n}/relay-abc.sock`
+const sock = (n: number) => `/home/dev/.quirky-remote/relay-1.4.${n}/relay-abc.sock`
 
 const husk = { pid: 10, matchesRelayArgv: true, childCount: 0, unrecognizedChildCount: 0 }
 const working = { ...husk, childCount: 1, unrecognizedChildCount: 1 }
@@ -89,7 +89,7 @@ describe('the host-side relay endpoint census', () => {
   })
 
   it('reports live work any endpoint still runs, including another desktop\u2019s', async () => {
-    hostAnswers(`${sock(1)}\n/home/dev/.orca-remote/relay-1.4.1/relay-other.sock\n`)
+    hostAnswers(`${sock(1)}\n/home/dev/.quirky-remote/relay-1.4.1/relay-other.sock\n`)
     probeRelayEndpointIncumbent
       .mockResolvedValueOnce(incumbent({ verdict: 'exited', holders: [] }))
       .mockResolvedValueOnce(incumbent({ holders: [working] }))
@@ -159,7 +159,7 @@ describe('the host-side relay endpoint census', () => {
   })
 
   it('probes and asks each relay with its own pinned runtime on a host with no Node on PATH', async () => {
-    const pinned = '/home/dev/.orca-remote/node-runtimes/v24.21.0-linux-x64/bin/node'
+    const pinned = '/home/dev/.quirky-remote/node-runtimes/v24.21.0-linux-x64/bin/node'
     daemonArgv = `${pinned} relay.js --detached --grace-time 300 --sock-path ${sock(1)} --credential-file ${sock(1)}.credential\n`
     hostAnswers(`${sock(1)}\n`)
     probeRelayEndpointIncumbent.mockResolvedValue(incumbent({ holdersEnumerable: false }))
@@ -179,7 +179,7 @@ describe('readRelayEndpointProbe', () => {
   const probed = (lines: string[]) =>
     parseRelayEndpointIncumbentProbe(
       sock(1),
-      ['ORCA-INCUMBENT-BEGIN', ...lines, 'ORCA-INCUMBENT-END'].join('\n')
+      ['QUIRKY-INCUMBENT-BEGIN', ...lines, 'QUIRKY-INCUMBENT-END'].join('\n')
     )
 
   it('reads a live relay that still owns PTYs as holding work', () => {

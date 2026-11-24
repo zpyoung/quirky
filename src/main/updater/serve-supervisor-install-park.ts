@@ -90,7 +90,7 @@ async function readBundleIdentity(bundle: string): Promise<string> {
 }
 
 /**
- * Before a desktop install: ask registered `orca serve --supervise` services to stop their server
+ * Before a desktop install: ask registered `quirky serve --supervise` services to stop their server
  * and hold. Any blocker that is not such a server is refused exactly as before.
  */
 export async function parkServeSupervisorsForInstall(
@@ -186,12 +186,12 @@ export async function commitServeSupervisorPark(
   const blockers = await listBlockers().catch(() => null)
   if (blockers === null || blockers.length > 0) {
     await releaseServeSupervisorPark()
-    throw new Error('An Orca server started again before the install began.')
+    throw new Error('An Quirky server started again before the install began.')
   }
   if (now() + COMMIT_DEADLINE_MARGIN_MS >= activePark.record.parkDeadlineAt) {
     // Why throw: supervisors may already have restarted servers that would block ShipIt.
     await releaseServeSupervisorPark()
-    throw new Error('Paused Orca serve services resumed before the install began.')
+    throw new Error('Paused Quirky serve services resumed before the install began.')
   }
   const record: ServeParkRecord = {
     ...activePark.record,
@@ -221,10 +221,10 @@ export function serveInstallRefusalMessage(
 ): string {
   const pids = result.pids.slice(0, 10).join(', ')
   if (result.reason === 'unresponsive') {
-    return `Background orca serve services (process IDs: ${pids}) did not pause for the update in time. Orca remains open; retry the update, or stop those services first.`
+    return `Background quirky serve services (process IDs: ${pids}) did not pause for the update in time. Quirky remains open; retry the update, or stop those services first.`
   }
   if (result.reason === 'busy') {
-    return 'Another Orca window is already installing this update. Orca remains open; retry in a minute.'
+    return 'Another Quirky window is already installing this update. Quirky remains open; retry in a minute.'
   }
-  return `Close the other Orca instances (process IDs: ${pids}) before installing this update. Background orca serve instances also need to stop. Orca remains open; retry the update after closing them.`
+  return `Close the other Quirky instances (process IDs: ${pids}) before installing this update. Background quirky serve instances also need to stop. Quirky remains open; retry the update after closing them.`
 }

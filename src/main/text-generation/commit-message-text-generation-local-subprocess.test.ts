@@ -108,7 +108,7 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
       {
         agentId: 'custom',
         model: '',
-        customAgentCommand: 'orca-test-agent-nope'
+        customAgentCommand: 'quirky-test-agent-nope'
       },
       {
         kind: 'local',
@@ -125,7 +125,7 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
       message: 'Add README note'
     })
     expect(spawnMock).toHaveBeenCalledWith(
-      'orca-test-agent-nope',
+      'quirky-test-agent-nope',
       [],
       expect.objectContaining({
         env: expect.objectContaining({ CODEX_HOME: '/managed/codex-home' })
@@ -135,7 +135,7 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
 
   it('routes WSL local commit generation through the selected distro login shell', async () => {
     await withPlatform('win32', async () => {
-      process.env.ORCA_HOST_ONLY_SECRET = 'do-not-leak'
+      process.env.QUIRKY_HOST_ONLY_SECRET = 'do-not-leak'
       const listeners = new Map<string, (value: unknown) => void>()
       const child = {
         pid: 123,
@@ -178,7 +178,7 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
         ['-d', 'Ubuntu 24.04', '--exec', 'sh', '-lc', expect.any(String)],
         expect.objectContaining({
           // Why a concrete directory (#16463): `undefined` makes CreateProcessW inherit
-          // Orca's own cwd, a deletable WSL UNC path when it was launched from a
+          // Quirky's own cwd, a deletable WSL UNC path when it was launched from a
           // worktree. The Linux directory still rides inside the command (/mnt/c/repo,
           // asserted below), so the Windows-side cwd never decides where the agent runs.
           cwd: expect.any(String),
@@ -187,10 +187,10 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
         })
       )
       const spawnEnv = spawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv
-      expect(spawnEnv.ORCA_HOST_ONLY_SECRET).toBeUndefined()
+      expect(spawnEnv.QUIRKY_HOST_ONLY_SECRET).toBeUndefined()
       const shellCommand = spawnMock.mock.calls[0]?.[1]?.[5] as string
       expect(shellCommand).toContain('getent passwd')
-      expect(shellCommand).toContain('exec "$_orca_wsl_shell" -ilc')
+      expect(shellCommand).toContain('exec "$_quirky_wsl_shell" -ilc')
       expect(shellCommand).toContain('/mnt/c/repo')
       expect(shellCommand).toContain("'agent'")
       expect(shellCommand).toContain('--mode')
@@ -280,7 +280,7 @@ describe('generateCommitMessageFromContext on the Windows direct-child path', ()
       expect(result).toEqual({
         success: false,
         error:
-          "C:/tools/agent.cmd runs through a Windows batch script that cannot take the multi-line prompt as an argument. Point Settings at the agent's executable, or use a custom command without {prompt} so Orca sends the prompt on stdin."
+          "C:/tools/agent.cmd runs through a Windows batch script that cannot take the multi-line prompt as an argument. Point Settings at the agent's executable, or use a custom command without {prompt} so Quirky sends the prompt on stdin."
       })
       expect(spawnMock).not.toHaveBeenCalled()
     })

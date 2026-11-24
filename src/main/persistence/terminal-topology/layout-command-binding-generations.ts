@@ -3,7 +3,7 @@
 // move or drop a pane change no pane's terminal, so they raise nothing.
 
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { collectLayoutLeafIdsInOrder } from '../../../shared/workspace-layout/terminal-pane-tree'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { bumpPtyBindingGeneration } from '../loading-store/pty-binding-generations'
@@ -42,7 +42,7 @@ export function raisingBindingGenerations<T>(
   mutate: () => DurableProfileStateMutation<T>
 ): () => DurableProfileStateMutation<T> {
   // Switch point: only the layout-owner build publishes binding generations.
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return mutate
   }
   return () => {

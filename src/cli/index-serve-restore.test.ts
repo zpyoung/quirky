@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -43,18 +43,18 @@ vi.mock('child_process', async () => {
 import { main } from './index'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
-describe('orca serve restore resume', () => {
+describe('quirky serve restore resume', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
     spawnMock
   })
 
-  it('asks the local Orca to resume and never starts a server', async () => {
-    process.env.ORCA_ENVIRONMENT = 'paired-env'
+  it('asks the local Quirky to resume and never starts a server', async () => {
+    process.env.QUIRKY_ENVIRONMENT = 'paired-env'
     callMock.mockResolvedValue({
       id: 'rpc',
       ok: true,
@@ -71,7 +71,7 @@ describe('orca serve restore resume', () => {
 
     await main(['serve', 'restore', 'resume'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect(callMock).toHaveBeenCalledWith('runtime.automaticWork.resume')
     // Why null: `serve` commands always target this machine, never an ambient paired host.
     expect(runtimeClientConstructorMock).toHaveBeenLastCalledWith(null, null)

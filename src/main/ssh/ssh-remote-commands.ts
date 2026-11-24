@@ -108,10 +108,10 @@ export function probeRemoteInstallCompleteCommand(
 export const MAX_REMOTE_INSTALL_GC_LISTING_ENTRIES = 64
 
 /**
- * List one model's version dirs (and its own tombstones) under `~/.orca-remote/`.
+ * List one model's version dirs (and its own tombstones) under `~/.quirky-remote/`.
  *
  * The model scopes BOTH the `find`/`Get-ChildItem` glob and the validating regex. That
- * double filter is the on-the-wire half of the GC ownership rule: an orcad GC pass never
+ * double filter is the on-the-wire half of the GC ownership rule: an quirkyd GC pass never
  * even receives a relay directory name, so it cannot delete one through a later bug.
  */
 export function listRemoteInstallBaseDirsCommand(
@@ -121,7 +121,7 @@ export function listRemoteInstallBaseDirsCommand(
 ): string {
   const namePattern = remoteInstallListingRegexSource(model)
   if (!isWindowsRemoteHost(host)) {
-    const statusPrefix = '__ORCA_RELAY_GC_FIND_STATUS__'
+    const statusPrefix = '__QUIRKY_RELAY_GC_FIND_STATUS__'
     return [
       `base=${quotePosixShell(baseDir)}; [ -d "$base" ] || exit 0;`,
       `{ find "$base" -mindepth 1 -maxdepth 1 -type d -name '${model.dirPrefix}-*' -print; status=$?; printf '\n${statusPrefix}%s\n' "$status"; } |`,

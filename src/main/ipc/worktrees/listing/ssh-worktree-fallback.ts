@@ -14,7 +14,7 @@ import { readWorktreeMetaForRepo } from '../../../persistence/host-qualified-wor
 import { hostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { getRepoOwnedWorktreeMeta } from '../../../worktree-metadata-ownership'
 import {
-  buildKnownOrcaWorkspaceLayouts,
+  buildKnownQuirkyWorkspaceLayouts,
   isLegacyRepoForExternalWorktreeVisibility,
   toDetectedWorktree
 } from '../../../../shared/worktree/ownership'
@@ -143,7 +143,7 @@ export function buildDetectedGitWorktrees(
   allMetaOverride?: Record<string, WorktreeMeta>
 ): DetectedWorktree[] {
   const settings = store.getSettings()
-  const knownOrcaLayouts = buildKnownOrcaWorkspaceLayouts(settings, repo)
+  const knownQuirkyLayouts = buildKnownQuirkyWorkspaceLayouts(settings, repo)
   const isLegacyRepoForVisibility = isLegacyRepoForExternalWorktreeVisibility(repo)
   // Why: a prunable registration has no working directory (issue #8389); only this listing omits it — cleanup flows list separately.
   const liveWorktrees = dedupeWorktreesByPath(
@@ -172,7 +172,7 @@ export function buildDetectedGitWorktrees(
       worktree,
       meta,
       settings,
-      knownOrcaLayouts,
+      knownQuirkyLayouts,
       isLegacyRepoForVisibility,
       worktreeVisibilitySourceMatcher
     })
@@ -196,7 +196,7 @@ export function buildDetectedGitWorktrees(
       worktree: mergeWorktree(repo.id, gitWorktree, backfilledMeta, repo.displayName),
       meta: backfilledMeta,
       settings,
-      knownOrcaLayouts,
+      knownQuirkyLayouts,
       isLegacyRepoForVisibility,
       worktreeVisibilitySourceMatcher
     })

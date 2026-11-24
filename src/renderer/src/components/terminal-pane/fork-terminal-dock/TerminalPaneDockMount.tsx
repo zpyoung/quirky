@@ -171,7 +171,7 @@ export function TerminalPaneDockMount(props: TerminalPaneDockMountProps): React.
 
   // Why: xterm's own MouseService focuses its helper textarea on every mousedown — including
   // a click that's only selecting text — regardless of data-pane-prevent-terminal-focus, which
-  // only opts xterm out of Orca's own pane-level focus call. Reclaiming focus in the bubble
+  // only opts xterm out of Quirky's own pane-level focus call. Reclaiming focus in the bubble
   // phase runs after xterm's own handler, so selection (driven by its own mousedown/mousemove
   // listeners, not by focus) still works while the composer keeps keyboard focus.
   useEffect(() => {

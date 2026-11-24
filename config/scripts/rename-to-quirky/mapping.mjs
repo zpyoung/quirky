@@ -39,8 +39,10 @@ const EXPLICIT_RULES = [
 ]
 
 const isLetter = (char) => char !== undefined && /\p{L}/u.test(char)
-const isUpper = (char) => isLetter(char) && char === char.toUpperCase() && char !== char.toLowerCase()
-const isLower = (char) => isLetter(char) && char === char.toLowerCase() && char !== char.toUpperCase()
+const isUpper = (char) =>
+  isLetter(char) && char === char.toUpperCase() && char !== char.toLowerCase()
+const isLower = (char) =>
+  isLetter(char) && char === char.toLowerCase() && char !== char.toUpperCase()
 
 /**
  * True when the match at [start, start + length) sits on an identifier or

@@ -111,7 +111,7 @@ export function usableAgentChildLabel(value: string | undefined): string | undef
   return trimmed && !PLACEHOLDER_LABELS.has(trimmed.toLowerCase()) ? trimmed : undefined
 }
 
-// A live claim beneath a parent Orca no longer hears from asserts nothing; settled history stands.
+// A live claim beneath a parent Quirky no longer hears from asserts nothing; settled history stands.
 function withFreshness(
   displayState: AgentChildDisplayState,
   context: AgentChildRowContext

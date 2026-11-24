@@ -5,14 +5,14 @@ import { join } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { createHash } from 'node:crypto'
 import {
-  ORCA_PI_AGENT_STATUS_EXTENSION_FILE,
+  QUIRKY_PI_AGENT_STATUS_EXTENSION_FILE,
   getPiAgentStatusExtensionSource
 } from './agent-status-extension-source'
 import {
-  ORCA_PI_PREFILL_EXTENSION_FILE,
+  QUIRKY_PI_PREFILL_EXTENSION_FILE,
   getPiPrefillExtensionSource
 } from './prefill-extension-source'
-import { ORCA_PI_EXTENSION_FILE, getPiTitlebarExtensionSource } from './titlebar-extension-source'
+import { QUIRKY_PI_EXTENSION_FILE, getPiTitlebarExtensionSource } from './titlebar-extension-source'
 import {
   isSafeDescendCandidate as sharedIsSafeDescendCandidate,
   safeRemoveOverlay
@@ -27,7 +27,7 @@ import type { PiAgentKind } from '../../shared/pi-agent-kind'
 export const isSafeDescendCandidate = sharedIsSafeDescendCandidate
 
 const PI_AGENT_SUBDIR = 'agent'
-const ORCA_MANAGED_EXTENSION_MARKER = '@orca-managed-pi-extension'
+const QUIRKY_MANAGED_EXTENSION_MARKER = '@quirky-managed-pi-extension'
 const OMP_MANAGED_STATUS_EXTENSION_DIR = 'omp-managed-status-extension'
 
 type ManagedExtensionWriteResult = 'written' | 'skipped-user-owned' | 'failed'
@@ -40,7 +40,7 @@ type PiManagedExtensionEnv = {
 
 type LegacyOverlayAgentKind = Exclude<PiAgentKind, 'prime-agent'>
 
-// Why: old Orca versions used per-kind overlay roots. Keep the names so
+// Why: old Quirky versions used per-kind overlay roots. Keep the names so
 // upgrade-time cleanup can remove stale PTY-scoped Pi/OMP overlay dirs without
 // guessing which agent a terminated pane launched.
 const OVERLAY_ROOT_DIR_NAME: Record<LegacyOverlayAgentKind, string> = {
@@ -52,7 +52,7 @@ const OVERLAY_ROOT_DIR_NAME: Record<LegacyOverlayAgentKind, string> = {
 // by which `~/.<agent>/agent` dir happens to exist on disk first. A
 // cross-agent fallback (Pi -> OMP or vice versa) silently shadows the other
 // agent's user extensions when both are installed and the user picks the
-// shadowed one in Orca's per-launch agent picker.
+// shadowed one in Quirky's per-launch agent picker.
 const AGENT_HOME_DIR_NAME: Record<PiAgentKind, string> = {
   pi: '.pi',
   omp: '.omp',
@@ -68,10 +68,10 @@ function toSafeOverlayDirName(ptyId: string): string {
   return createHash('sha256').update(ptyId).digest('hex').slice(0, 32)
 }
 
-function withOrcaManagedExtensionMarker(source: string): string {
-  return source.includes(ORCA_MANAGED_EXTENSION_MARKER)
+function withQuirkyManagedExtensionMarker(source: string): string {
+  return source.includes(QUIRKY_MANAGED_EXTENSION_MARKER)
     ? source
-    : `// ${ORCA_MANAGED_EXTENSION_MARKER}\n${source}`
+    : `// ${QUIRKY_MANAGED_EXTENSION_MARKER}\n${source}`
 }
 
 export class PiTitlebarExtensionService {
@@ -86,7 +86,7 @@ export class PiTitlebarExtensionService {
   }
 
   private getPtyOverlayDir(ptyId: string, kind: LegacyOverlayAgentKind): string {
-    // Why: old Orca versions used PTY-scoped hashed overlays. Keep resolving
+    // Why: old Quirky versions used PTY-scoped hashed overlays. Keep resolving
     // that path so new spawns/teardowns can clean stale pre-migration dirs.
     return join(this.getOverlayRoot(kind), toSafeOverlayDirName(ptyId))
   }
@@ -104,7 +104,7 @@ export class PiTitlebarExtensionService {
 
   private canOverwriteManagedExtension(path: string): boolean {
     try {
-      return readFileSync(path, 'utf8').includes(ORCA_MANAGED_EXTENSION_MARKER)
+      return readFileSync(path, 'utf8').includes(QUIRKY_MANAGED_EXTENSION_MARKER)
     } catch {
       return true
     }
@@ -134,7 +134,7 @@ export class PiTitlebarExtensionService {
       return undefined
     }
 
-    const fallbackPath = join(fallbackDir, ORCA_PI_AGENT_STATUS_EXTENSION_FILE)
+    const fallbackPath = join(fallbackDir, QUIRKY_PI_AGENT_STATUS_EXTENSION_FILE)
     return this.writeManagedExtension(fallbackPath, source) === 'written' ? fallbackPath : undefined
   }
 
@@ -151,16 +151,16 @@ export class PiTitlebarExtensionService {
 
     if (kind !== 'prime-agent') {
       this.writeManagedExtension(
-        join(extensionsDir, ORCA_PI_EXTENSION_FILE),
-        withOrcaManagedExtensionMarker(getPiTitlebarExtensionSource(kind))
+        join(extensionsDir, QUIRKY_PI_EXTENSION_FILE),
+        withQuirkyManagedExtensionMarker(getPiTitlebarExtensionSource(kind))
       )
       this.writeManagedExtension(
-        join(extensionsDir, ORCA_PI_PREFILL_EXTENSION_FILE),
-        withOrcaManagedExtensionMarker(getPiPrefillExtensionSource(kind))
+        join(extensionsDir, QUIRKY_PI_PREFILL_EXTENSION_FILE),
+        withQuirkyManagedExtensionMarker(getPiPrefillExtensionSource(kind))
       )
     }
-    const statusExtensionPath = join(extensionsDir, ORCA_PI_AGENT_STATUS_EXTENSION_FILE)
-    const statusSource = withOrcaManagedExtensionMarker(getPiAgentStatusExtensionSource(kind))
+    const statusExtensionPath = join(extensionsDir, QUIRKY_PI_AGENT_STATUS_EXTENSION_FILE)
+    const statusSource = withQuirkyManagedExtensionMarker(getPiAgentStatusExtensionSource(kind))
     const statusResult = this.writeManagedExtension(statusExtensionPath, statusSource)
 
     return {
@@ -177,7 +177,7 @@ export class PiTitlebarExtensionService {
 
   buildFreshOmpEnv(): Record<string, string> {
     return {
-      ORCA_OMP_FRESH_CONFIG: materializeOmpFreshConfig(
+      QUIRKY_OMP_FRESH_CONFIG: materializeOmpFreshConfig(
         join(getAppEnvironment().getPath('userData'), OMP_MANAGED_STATUS_EXTENSION_DIR)
       )
     }
@@ -209,10 +209,10 @@ export class PiTitlebarExtensionService {
     const materializeDefaultHome = options?.materializeDefaultHome !== false
     if (!existsSync(sourceAgentDir) && !materializeDefaultHome) {
       if (kind === 'omp') {
-        const statusSource = withOrcaManagedExtensionMarker(getPiAgentStatusExtensionSource(kind))
+        const statusSource = withQuirkyManagedExtensionMarker(getPiAgentStatusExtensionSource(kind))
         const statusExtensionPath = this.writeOmpFallbackStatusExtension(statusSource)
         return statusExtensionPath
-          ? { ...freshConfigEnv, ORCA_OMP_STATUS_EXTENSION: statusExtensionPath }
+          ? { ...freshConfigEnv, QUIRKY_OMP_STATUS_EXTENSION: statusExtensionPath }
           : freshConfigEnv
       }
       return {}
@@ -225,14 +225,14 @@ export class PiTitlebarExtensionService {
     const installed = this.installManagedExtensions(sourceAgentDir, kind)
     const env: Record<string, string> = { ...freshConfigEnv }
     if (kind === 'omp') {
-      env.ORCA_OMP_SOURCE_AGENT_DIR = installed.sourceAgentDir
+      env.QUIRKY_OMP_SOURCE_AGENT_DIR = installed.sourceAgentDir
       if (installed.statusExtensionPath) {
-        env.ORCA_OMP_STATUS_EXTENSION = installed.statusExtensionPath
+        env.QUIRKY_OMP_STATUS_EXTENSION = installed.statusExtensionPath
       }
     } else if (kind === 'prime-agent') {
-      env.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR = installed.sourceAgentDir
+      env.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR = installed.sourceAgentDir
     } else {
-      env.ORCA_PI_SOURCE_AGENT_DIR = installed.sourceAgentDir
+      env.QUIRKY_PI_SOURCE_AGENT_DIR = installed.sourceAgentDir
     }
     return env
   }

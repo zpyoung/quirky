@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
 import { OrchestrationDb } from '../orchestration/db'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationError } from '../orchestration/orchestration-error'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -65,7 +65,7 @@ describe('orchestration commit-notify recovery', () => {
 
   async function throwAfterCommitAndReplay(
     dispatcher: RpcDispatcher,
-    runtime: OrcaRuntimeService,
+    runtime: QuirkyRuntimeService,
     first: RpcRequest,
     retryRpcId: string
   ) {
@@ -247,7 +247,7 @@ describe('orchestration commit-notify recovery', () => {
   })
 
   it('resumes an effect-free worker_done checkpoint after a runtime restart', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'orca-worker-done-restart-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-worker-done-restart-'))
     paths.push(dir)
     const dbPath = join(dir, 'orchestration.db')
     const db = new OrchestrationDb(dbPath)
@@ -256,7 +256,7 @@ describe('orchestration commit-notify recovery', () => {
       coordinatorHandle: 'term_coord',
       coordinatorPaneKey: harness.coordinatorPaneKey
     })
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     const workerPaneKey = 'tab_worker:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
     vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
@@ -306,7 +306,7 @@ describe('orchestration commit-notify recovery', () => {
     db.close()
 
     const restartedDb = new OrchestrationDb(dbPath)
-    const restartedRuntime = new OrcaRuntimeService()
+    const restartedRuntime = new QuirkyRuntimeService()
     restartedRuntime.setOrchestrationDb(restartedDb)
     vi.spyOn(restartedRuntime, 'getTerminalPaneKey').mockImplementation((handle) =>
       handle === 'term_worker'

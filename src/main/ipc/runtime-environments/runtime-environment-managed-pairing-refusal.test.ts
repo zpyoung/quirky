@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { OrcadManagedPairingRepairFailedError } from '../../managed-server/lifecycle/orcad-managed-pairing-repair-failure'
+import { QuirkydManagedPairingRepairFailedError } from '../../managed-server/lifecycle/quirkyd-managed-pairing-repair-failure'
 
 const mocks = vi.hoisted(() => ({
   resolveEnvironment: vi.fn(),
@@ -8,9 +8,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../shared/runtime-environment-store', () => ({
   resolveEnvironment: mocks.resolveEnvironment
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  recoverRefusedManagedOrcadPairing: vi.fn(),
-  managedOrcadPairingFailureStands: vi.fn()
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  recoverRefusedManagedQuirkydPairing: vi.fn(),
+  managedQuirkydPairingFailureStands: vi.fn()
 }))
 vi.mock('./runtime-environment-request-connections', () => ({
   getRuntimeEnvironmentStatusOwner: () => ({
@@ -22,7 +22,7 @@ import { handleManagedSharedControlRefusal } from './runtime-environment-managed
 
 const SSH_MANAGED = {
   id: 'env-1',
-  orcadDeployment: { sshTargetId: 'box', sshTargetGeneration: 1, localPort: 1, remotePort: 2 }
+  quirkydDeployment: { sshTargetId: 'box', sshTargetGeneration: 1, localPort: 1, remotePort: 2 }
 }
 
 describe('handleManagedSharedControlRefusal', () => {
@@ -33,7 +33,7 @@ describe('handleManagedSharedControlRefusal', () => {
 
   it.each([
     ['a user-paired server', { id: 'env-1' }],
-    ['a WSL server', { id: 'env-1', orcadDeployment: { kind: 'wsl', distro: 'Ubuntu' } }]
+    ['a WSL server', { id: 'env-1', quirkydDeployment: { kind: 'wsl', distro: 'Ubuntu' } }]
   ])('leaves %s to the usual reconnect', (_name, environment) => {
     mocks.resolveEnvironment.mockReturnValue(environment)
     const recover = vi.fn()
@@ -60,7 +60,7 @@ describe('handleManagedSharedControlRefusal', () => {
 
   it('stops with the reason on the server status when pairing again failed', async () => {
     mocks.resolveEnvironment.mockReturnValue(SSH_MANAGED)
-    const failure = new OrcadManagedPairingRepairFailedError(
+    const failure = new QuirkydManagedPairingRepairFailedError(
       'the server refused the new pairing too'
     )
     const recover = vi.fn().mockRejectedValue(failure)
@@ -75,7 +75,7 @@ describe('handleManagedSharedControlRefusal', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const recover = vi
       .fn()
-      .mockRejectedValue(new OrcadManagedPairingRepairFailedError('the server refused it'))
+      .mockRejectedValue(new QuirkydManagedPairingRepairFailedError('the server refused it'))
     // The failure stands for the old pairing only; an update stored a newer one meanwhile.
     await expect(
       handleManagedSharedControlRefusal('/profile', 'env-1', recover, () => false)
@@ -91,7 +91,7 @@ describe('handleManagedSharedControlRefusal', () => {
     })
     const recover = vi
       .fn()
-      .mockRejectedValue(new OrcadManagedPairingRepairFailedError('the server refused it'))
+      .mockRejectedValue(new QuirkydManagedPairingRepairFailedError('the server refused it'))
     await expect(
       handleManagedSharedControlRefusal('/profile', 'env-1', recover, () => true)
     ).resolves.toBe('stop')

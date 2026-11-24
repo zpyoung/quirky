@@ -44,7 +44,7 @@ describe('AtomicSnapshotWriter', () => {
   }
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-atomic-writer-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-atomic-writer-'))
     file = join(dir, 'nested', 'snapshot.json')
   })
 

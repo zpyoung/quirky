@@ -76,9 +76,9 @@ describe('a refusal the host threw', () => {
   })
 })
 
-describe('a write refused on a journal a newer Orca wrote', () => {
+describe('a write refused on a journal a newer Quirky wrote', () => {
   // As the host answers it (pinned in `journal-open-failure.test.ts`).
-  const newerOrcaClient = (): RpcClient => {
+  const newerQuirkyClient = (): RpcClient => {
     const sendRequest = async () => ({
       id: 'req-1',
       ok: true,
@@ -86,8 +86,8 @@ describe('a write refused on a journal a newer Orca wrote', () => {
         ok: false,
         refusal: {
           code: 'agent_session_journal_unreadable',
-          message: 'Chats were saved by a newer Orca. Update Orca to keep using them.',
-          details: { reason: 'journalWrittenByNewerOrca' }
+          message: 'Chats were saved by a newer Quirky. Update Quirky to keep using them.',
+          details: { reason: 'journalWrittenByNewerQuirky' }
         }
       }
     })
@@ -99,16 +99,16 @@ describe('a write refused on a journal a newer Orca wrote', () => {
     [
       'agentSession.send',
       { body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'hello' }] } },
-      'Chats were saved by a newer Orca. Your message was not sent. Update Orca to keep using them.'
+      'Chats were saved by a newer Quirky. Your message was not sent. Update Quirky to keep using them.'
     ],
     [
       'agentSession.cancel',
       { turnId: 'turn-1' },
-      "Chats were saved by a newer Orca. The agent wasn't stopped. Update Orca to keep using them."
+      "Chats were saved by a newer Quirky. The agent wasn't stopped. Update Quirky to keep using them."
     ]
-  ] as const)('says to update Orca for %s', async (method, fields, message) => {
+  ] as const)('says to update Quirky for %s', async (method, fields, message) => {
     const result = await requestStructuredAgentSessionMutation({
-      client: newerOrcaClient(),
+      client: newerQuirkyClient(),
       method,
       fingerprintMethod: method,
       sessionId: 'session-1',

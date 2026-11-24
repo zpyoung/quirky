@@ -99,7 +99,7 @@ describe('Claude profile history sharing on Windows', () => {
       expect.objectContaining({ surface: 'history.jsonl', code: 'retained-conflict' })
     )
     expect(
-      fs.readFileSync(join(f.profileHome, 'history.jsonl.orca-profile-conflict'), 'utf8')
+      fs.readFileSync(join(f.profileHome, 'history.jsonl.quirky-profile-conflict'), 'utf8')
     ).toBe('a\nSECRET\nb\n')
     expect(f.isHardlinked()).toBe(true)
     await f.share()
@@ -109,7 +109,7 @@ describe('Claude profile history sharing on Windows', () => {
     const f = fixture()
     fs.writeFileSync(join(f.defaultHome, 'history.jsonl'), 'a\nSECRET\nb\n')
     await f.share()
-    const record = join(f.profileHome, 'history.jsonl.orca-profile-link')
+    const record = join(f.profileHome, 'history.jsonl.quirky-profile-link')
     fs.rmSync(record)
     fs.mkdirSync(record)
     f.scrub('a\nb\n')
@@ -140,7 +140,7 @@ describe('Claude profile history sharing on Windows', () => {
   it('leaves a set-aside copy in place when the share is refused across volumes', async () => {
     const f = fixture()
     fs.writeFileSync(join(f.defaultHome, 'history.jsonl'), 'd1\n')
-    fs.writeFileSync(join(f.profileHome, 'history.jsonl.orca-profile-merge'), 'saved\n')
+    fs.writeFileSync(join(f.profileHome, 'history.jsonl.quirky-profile-merge'), 'saved\n')
     const actual = vi.mocked(fs.statSync).getMockImplementation()!
     vi.mocked(fs.statSync).mockImplementation((file, options) => {
       const stats = actual(file, options)
@@ -151,7 +151,7 @@ describe('Claude profile history sharing on Windows', () => {
       expect.objectContaining({ surface: 'history.jsonl', code: 'cross-filesystem' })
     )
     expect(f.history()).toBe('d1\n')
-    expect(fs.readFileSync(join(f.profileHome, 'history.jsonl.orca-profile-merge'), 'utf8')).toBe(
+    expect(fs.readFileSync(join(f.profileHome, 'history.jsonl.quirky-profile-merge'), 'utf8')).toBe(
       'saved\n'
     )
   })
@@ -184,9 +184,9 @@ describe('Claude profile history sharing on Windows', () => {
   it('finishes a share that was interrupted before the links were made', async () => {
     const f = fixture()
     fs.writeFileSync(join(f.defaultHome, 'history.jsonl'), 'd1\n')
-    fs.writeFileSync(join(f.profileHome, 'history.jsonl.orca-profile-merge'), 'd1\nsaved\n')
-    fs.mkdirSync(join(f.profileHome, 'todos.orca-profile-merge'))
-    fs.writeFileSync(join(f.profileHome, 'todos.orca-profile-merge/t.json'), 't')
+    fs.writeFileSync(join(f.profileHome, 'history.jsonl.quirky-profile-merge'), 'd1\nsaved\n')
+    fs.mkdirSync(join(f.profileHome, 'todos.quirky-profile-merge'))
+    fs.writeFileSync(join(f.profileHome, 'todos.quirky-profile-merge/t.json'), 't')
     const report = await f.share()
     expect(report.warnings).toEqual([])
     expect(f.history()).toBe('d1\nsaved\n')

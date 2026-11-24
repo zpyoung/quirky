@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
 import type { WatcherEnrollment } from '../../shared/fork-heimdall/watcher-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { HeimdallKernelHost } from './kernel-host'
 import { enrollmentInput, harness, kind } from './kernel-service-test-harness'
 import { HostRoutedLeaseStore } from './lease-store'
@@ -42,7 +42,7 @@ function leaseFor(
   runtimeStub: RuntimeTargetProbe
 ): HostRoutedLeaseStore {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the host only calls the runtime methods supplied by each test before target resolution throws.
-  const runtime = runtimeStub as unknown as OrcaRuntimeService
+  const runtime = runtimeStub as unknown as QuirkyRuntimeService
   const host = new HeimdallKernelHost(
     runtime,
     () => enrollment,
@@ -74,7 +74,7 @@ describe('Heimdall lease target absence evidence', () => {
     await world.service.stopForShutdown()
   })
 
-  it('ends a local watcher after its repo is removed from Orca', async () => {
+  it('ends a local watcher after its repo is removed from Quirky', async () => {
     const { world, enrollment } = await enrolledWorkspace()
     const store = leaseFor(enrollment, {
       resolveRuntimeGitTarget: async () => {

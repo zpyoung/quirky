@@ -9,7 +9,10 @@ import {
 } from '../../../shared/agent-startup-plan-inputs'
 import { hasExtraAgentArgs } from '../../../shared/automation-extra-agent-args'
 import { resolveTuiAgentLaunchArgs } from '../../../shared/tui-agent-launch-defaults'
-import { resolveStartupShell, type AgentStartupShell } from '../../../shared/tui-agent-startup-shell'
+import {
+  resolveStartupShell,
+  type AgentStartupShell
+} from '../../../shared/tui-agent-startup-shell'
 import { resolveLocalWindowsAgentStartupShell } from '../../../shared/windows-terminal-shell'
 
 /** Snapshot effective automation launch settings for a resolved execution host. */

@@ -4,7 +4,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 
 type RestoreHintSource = Pick<
   RuntimeStore,
-  'peekOrcadMigrationTerminalRestoreHint' | 'consumeOrcadMigrationTerminalRestoreHint'
+  'peekQuirkydMigrationTerminalRestoreHint' | 'consumeQuirkydMigrationTerminalRestoreHint'
 >
 
 /** Non-null `connectionId` is an SSH workspace, whose folders this host's filesystem cannot see. */
@@ -51,7 +51,7 @@ export async function peekMigratedPaneRestoreCwd(
   }
   let cwd: string | null
   try {
-    cwd = store?.peekOrcadMigrationTerminalRestoreHint?.(paneKey, workspace.id) ?? null
+    cwd = store?.peekQuirkydMigrationTerminalRestoreHint?.(paneKey, workspace.id) ?? null
   } catch (error) {
     // An unreadable hint store must not block opening the terminal.
     console.warn('[terminal-create] restore hint unavailable:', error)
@@ -69,7 +69,7 @@ export function consumeMigratedPaneRestoreHint(
   paneKey: string
 ): void {
   try {
-    store?.consumeOrcadMigrationTerminalRestoreHint?.(paneKey)
+    store?.consumeQuirkydMigrationTerminalRestoreHint?.(paneKey)
   } catch (error) {
     // The terminal already opened; a hint left behind is retried on the next spawn.
     console.warn('[terminal-create] restore hint not consumed:', error)

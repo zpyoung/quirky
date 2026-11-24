@@ -21,8 +21,8 @@ describe('normalizeMobileMarkdownPreviewHtml', () => {
   it('normalizes common README HTML into readable Markdown preview text', () => {
     const normalized = normalizeMobileMarkdownPreviewHtml(`
 <h1 align="center">
-  <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Orca" width="64" /></a>
-  Orca
+  <a href="https://onOrca.dev"><img src="resources/build/icon.png" alt="Quirky" width="64" /></a>
+  Quirky
 </h1>
 
 <p align="center">
@@ -32,7 +32,7 @@ describe('normalizeMobileMarkdownPreviewHtml', () => {
 </p>
 `)
 
-    expect(normalized).toContain('# [Orca](https://onOrca.dev)')
+    expect(normalized).toContain('# [Quirky](https://onOrca.dev)')
     expect(normalized).toContain('[GitHub stars](https://github.com/stablyai/orca/stargazers)')
     expect(normalized).toContain('**The AI Orchestrator**')
     expect(normalized).not.toContain('<h1')
@@ -86,8 +86,8 @@ describe('normalizeMobileMarkdownPreviewHtml', () => {
     expect(normalizeMobileMarkdownPreviewHtml('<T> is a type parameter')).toBe(
       '<T> is a type parameter'
     )
-    expect(normalizeMobileMarkdownPreviewHtml('<mailto:orca@example.com>')).toBe(
-      '<mailto:orca@example.com>'
+    expect(normalizeMobileMarkdownPreviewHtml('<mailto:quirky@example.com>')).toBe(
+      '<mailto:quirky@example.com>'
     )
     expect(normalizeMobileMarkdownPreviewHtml('<ftp://example.com/file>')).toBe(
       '<ftp://example.com/file>'
@@ -136,7 +136,7 @@ describe('normalizeMobileMarkdownPreviewHtml', () => {
   })
 
   it('does not replace literal code placeholder text in markdown prose', () => {
-    const literalPlaceholder = '\uE000ORCA_MD_CODE_0\uE000'
+    const literalPlaceholder = '\uE000QUIRKY_MD_CODE_0\uE000'
     expect(normalizeMobileMarkdownPreviewHtml(`${literalPlaceholder} and \`Array<string>\``)).toBe(
       `${literalPlaceholder} and \`Array<string>\``
     )

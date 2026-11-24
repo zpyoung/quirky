@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithCreateMobileSessionTerminal } from './mobile-terminal-create'
+import { QuirkyRuntimeWithCreateMobileSessionTerminal } from './mobile-terminal-create'
 import type { MobileTerminalCreateOptions } from './mobile-terminal-renderer-create'
 import type { OwnedMobileTerminalCreateOptions } from './mobile-terminal-owned-create'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
@@ -40,7 +40,7 @@ function resolveSavedChatForkAnchor(
   return group && tab ? { afterDesktopTabId: tab.id, targetGroupId: group.id } : {}
 }
 
-export abstract class OrcaRuntimeWithMobileChatForkCreate extends OrcaRuntimeWithCreateMobileSessionTerminal {
+export abstract class QuirkyRuntimeWithMobileChatForkCreate extends QuirkyRuntimeWithCreateMobileSessionTerminal {
   protected abstract captureReadyGraphEpoch(): number
   protected abstract assertStableReadyGraph(expectedGraphEpoch: number): void
   protected abstract createRuntimeOwnedMobileSessionTerminal(

@@ -126,7 +126,7 @@ export const browserGuestRegistrationAndDownloadsApi = {
     callback: (event: {
       browserPageId: string
       origin: string
-      action: 'opened-in-orca' | 'opened-external' | 'blocked'
+      action: 'opened-in-quirky' | 'opened-external' | 'blocked'
     }) => void
   ): (() => void) => {
     const listener = (
@@ -134,7 +134,7 @@ export const browserGuestRegistrationAndDownloadsApi = {
       data: {
         browserPageId: string
         origin: string
-        action: 'opened-in-orca' | 'opened-external' | 'blocked'
+        action: 'opened-in-quirky' | 'opened-external' | 'blocked'
       }
     ) => callback(data)
     ipcRenderer.on('browser:popup', listener)

@@ -13,7 +13,7 @@ type ClaudeLoginSessionDependencies = {
     options?: ClaudeCommandOptions
   ) => Promise<string>
   setCancel: (cancel: (() => boolean) | null) => void
-  /** Opens a WSL login's sign-in link on this computer; absent where Orca cannot open one. */
+  /** Opens a WSL login's sign-in link on this computer; absent where Quirky cannot open one. */
   openWslSignInLink?: ((signInLink: string) => void) | null
 }
 

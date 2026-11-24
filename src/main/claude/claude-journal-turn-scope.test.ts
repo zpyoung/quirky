@@ -35,7 +35,7 @@ function recorder() {
 function frame(message: Record<string, unknown>, startsTurn = false) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     ...(startsTurn ? { startsTurn: true as const } : {}),
     message: { session_id: 'claude-session', ...message }
   }

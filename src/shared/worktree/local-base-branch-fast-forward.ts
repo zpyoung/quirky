@@ -40,7 +40,7 @@ export type LocalBaseBranchFastForwardOutcome =
   | { status: 'nothing_to_do' }
   | { status: LocalBaseRefRefreshStatus; ownerWorktreePath?: string }
 
-// Why: an update Orca makes on the user's behalf must be a plain fast-forward whatever the user's
+// Why: an update Quirky makes on the user's behalf must be a plain fast-forward whatever the user's
 // merge settings say: no post-merge hooks (the create waits on it), auto-gc or autostash, no
 // branch-level mergeOptions (`-s ours` or `--squash` there would drop or stage upstream), no
 // signature refusal of the tip the workspace was created from, and no overwrite of an ignored file
@@ -145,7 +145,7 @@ export async function fastForwardLocalBaseBranch(
           [
             'update-ref',
             '-m',
-            `orca: fast-forward to ${remoteTrackingRef}`,
+            `quirky: fast-forward to ${remoteTrackingRef}`,
             fullRef,
             remoteOid,
             localOid
@@ -167,7 +167,7 @@ export async function fastForwardLocalBaseBranch(
     }
     return { status: 'updated', ...owner }
   } catch (error) {
-    // Why: a concurrent update (another Orca, the user's own pull) may already have moved local.
+    // Why: a concurrent update (another Quirky, the user's own pull) may already have moved local.
     if (await localContains(git, repoPath, fullRef, remoteOid)) {
       return { status: 'updated', ...owner }
     }

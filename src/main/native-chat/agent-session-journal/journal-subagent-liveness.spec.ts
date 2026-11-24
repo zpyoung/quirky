@@ -56,7 +56,7 @@ export function registerJournalSubagentLivenessTests(): void {
   /** A grouped row as an earlier build wrote it: the structured block plus its twin. */
   function rosterRow(agents: NativeChatSubagentEntry[]) {
     return {
-      identity: { provider: 'orca' as const, clientMessageId: `codex-subagents:${GROUP_ID}` },
+      identity: { provider: 'quirky' as const, clientMessageId: `codex-subagents:${GROUP_ID}` },
       body: {
         kind: 'message' as const,
         role: 'system' as const,
@@ -85,7 +85,7 @@ export function registerJournalSubagentLivenessTests(): void {
   function backgroundTaskRow(block = backgroundTaskBlock()) {
     return {
       identity: {
-        provider: 'orca' as const,
+        provider: 'quirky' as const,
         clientMessageId: `claude-background-task:${block.taskId}`
       },
       body: {
@@ -122,7 +122,7 @@ export function registerJournalSubagentLivenessTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-subagents-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-subagents-'))
     clock = 1_000
   })
 
@@ -203,7 +203,7 @@ export function registerJournalSubagentLivenessTests(): void {
       expect(
         staleSubagentRosterRevisions([
           {
-            itemId: 'orca:plain',
+            itemId: 'quirky:plain',
             revision: 1,
             body: { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'hi' }] },
             sequence: 2,

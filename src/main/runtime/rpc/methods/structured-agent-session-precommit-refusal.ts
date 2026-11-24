@@ -44,7 +44,7 @@ function wireRefusalCode(error: unknown): AgentSessionWireRefusalCode | null {
   return null
 }
 
-const PRECOMMIT_REFUSAL_MESSAGE = 'Orca cannot open a structured agent chat for this workspace.'
+const PRECOMMIT_REFUSAL_MESSAGE = 'Quirky cannot open a structured agent chat for this workspace.'
 
 function precommitRefusal(error: unknown): AgentSessionWireRefusal {
   // A refusal the host raised keeps its situation; a bare code names none.
@@ -61,7 +61,7 @@ function precommitRefusal(error: unknown): AgentSessionWireRefusal {
   console.warn('[agent-session] create refused before it committed anything', error)
   return refuseUnclassified(
     UNCODED_PRECOMMIT_REFUSAL_CODE,
-    `Orca could not prepare a structured agent chat for this workspace: ${message}`
+    `Quirky could not prepare a structured agent chat for this workspace: ${message}`
   )
 }
 

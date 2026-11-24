@@ -82,7 +82,7 @@ export function createAntigravityHostCredentialBackend(home: string): Antigravit
   async function read() {
     if (existsSync(marker)) {
       throw new Error(
-        'Antigravity has a keyring fallback marker; Orca cannot verify which credential store agy will use.'
+        'Antigravity has a keyring fallback marker; Quirky cannot verify which credential store agy will use.'
       )
     }
     return (await readAntigravityMacOSCredential()) ?? (await file.read())

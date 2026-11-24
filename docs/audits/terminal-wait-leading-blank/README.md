@@ -7,7 +7,7 @@ The fix ends the scan when the cursor reaches zero and returns the existing shor
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/terminal-wait-leading-blank/reproduce.mjs > /tmp/orca-terminal-wait-leading-blank.json
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/terminal-wait-leading-blank/reproduce.mjs > /tmp/quirky-terminal-wait-leading-blank.json
 ```
 
 The script bundles actual source and reverses only the two-line termination change for the baseline. Each case runs in an isolated child with a two-second deadline and 128 MiB heap limit. The parent confirms child termination; no app windows open. Five direct helper/detector cases time out before and return after. A sufficient-row control and actual headless terminal projection controls pass in both variants. Results include source hashes, platform, timing, and an explicit v1.4.198 helper comparison.

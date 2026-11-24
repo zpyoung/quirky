@@ -1,7 +1,7 @@
 import type { OrchestrationCliCommand } from './cli-command'
 import type { RuntimeAgentPromptWriteOptions } from '../runtime-terminal-contracts'
-import { ORCA_DISPATCH_PROMPT_LEAD_LINE } from '../../../shared/orca-dispatch-status-prompt'
-import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-address-prefix'
+import { QUIRKY_DISPATCH_PROMPT_LEAD_LINE } from '../../../shared/quirky-dispatch-status-prompt'
+import { QUIRKY_SESSION_ADDRESS_PREFIX } from '../../../shared/quirky-session-address-prefix'
 
 export type PreambleParams = {
   taskId: string
@@ -12,12 +12,12 @@ export type PreambleParams = {
   // or refreshing the retry.
   dispatchId: string
   taskSpec: string
-  /** A terminal handle, or a session's `orca_session_id:<id>`; each is labelled by its kind. */
+  /** A terminal handle, or a session's `quirky_session_id:<id>`; each is labelled by its kind. */
   coordinatorHandle: string
   workerHandle: string
   devMode?: boolean
-  // Why: packaged WSL panes install the scoped launcher as `orca-ide`;
-  // other execution hosts keep their existing bare `orca` bridge.
+  // Why: packaged WSL panes install the scoped launcher as `quirky-ide`;
+  // other execution hosts keep their existing bare `quirky` bridge.
   cliCommand?: OrchestrationCliCommand
   // Why: populated by the coordinator's dispatch pre-flight (§3.1) only
   // when the target worktree is behind its tracking remote. When absent
@@ -32,7 +32,7 @@ export type PreambleParams = {
     recentSubjects: string[]
   }
   // Why: prompt-returning agents should idle after worker_done, while bare
-  // shells have no agent prompt for Orca to reuse.
+  // shells have no agent prompt for Quirky to reuse.
   workerKind?: 'prompt-returning-agent' | 'bare-shell'
   // Why gated: advertising a verb the depth cap will reject just burns a turn.
   canDispatchSubWorkers?: boolean
@@ -46,32 +46,32 @@ const HEARTBEAT_INTERVAL_MIN = 5
 
 /** A session address names a chat worker; any other handle is a terminal. */
 function isSessionHandle(handle: string): boolean {
-  return handle.startsWith(ORCA_SESSION_ADDRESS_PREFIX)
+  return handle.startsWith(QUIRKY_SESSION_ADDRESS_PREFIX)
 }
 
-/** Terminal agents keep their handle's wording; only a session is named by its Orca session ID. */
+/** Terminal agents keep their handle's wording; only a session is named by its Quirky session ID. */
 function dispatchIdentityLines(params: PreambleParams): string {
   return [
     isSessionHandle(params.coordinatorHandle)
-      ? `Your coordinator's Orca session ID is: ${params.coordinatorHandle}`
+      ? `Your coordinator's Quirky session ID is: ${params.coordinatorHandle}`
       : `Your coordinator's terminal handle is: ${params.coordinatorHandle}`,
     `Your task ID is: ${params.taskId}`,
     ...(isSessionHandle(params.workerHandle)
-      ? [`Your Orca session ID is: ${params.workerHandle}`]
+      ? [`Your Quirky session ID is: ${params.workerHandle}`]
       : [])
   ].join('\n')
 }
 
-// Why: the dispatch preamble teaches agents about Orca's CLI commands for
+// Why: the dispatch preamble teaches agents about Quirky's CLI commands for
 // structured communication. Behavioral rules (body summary, heartbeat cadence,
 // no-AskUserQuestion) live as inline comments above the relevant CLI example,
 // not as a separate prose block — LLM readers anchor on examples and skim
 // trailing prose, so rules must land at the point of use.
 export function buildDispatchPreamble(params: PreambleParams): string {
-  // Why: in dev mode, agents must use orca-dev to connect to the dev runtime's
+  // Why: in dev mode, agents must use quirky-dev to connect to the dev runtime's
   // socket. Without this, agents inside the dev Electron app would call the
-  // production CLI and talk to the wrong Orca instance (Section 6.4).
-  const cli = params.devMode ? 'orca-dev' : (params.cliCommand ?? 'orca')
+  // production CLI and talk to the wrong Quirky instance (Section 6.4).
+  const cli = params.devMode ? 'quirky-dev' : (params.cliCommand ?? 'quirky')
   const chat = isSessionHandle(params.workerHandle)
   const surface = chat ? 'chat' : 'terminal'
   const postDoneInstructions = buildPostWorkerDoneInstructions({
@@ -84,7 +84,7 @@ export function buildDispatchPreamble(params: PreambleParams): string {
   // Why fenced: keeps the shell comments executable without rendering them as Chat UI headings.
   // Why plain-reason wording: Claude Code tells the model pasted text may carry instructions
   // the user did not write, and shouted rules read as prompt injection (STA-8200).
-  const header = `You are working inside Orca, a multi-agent IDE. You are a dispatched worker.
+  const header = `You are working inside Quirky, a multi-agent IDE. You are a dispatched worker.
 ${dispatchIdentityLines(params)}
 
 The coordinator cannot see this ${surface}, so reach it with the \`${cli} orchestration\`
@@ -172,7 +172,7 @@ export function dispatchPreambleSendOptions(requestId: string): DispatchPreamble
   // Why: a delayed provider hook must not revoke an accepted Dispatch.
   return {
     inputKind: 'driving',
-    leadLine: ORCA_DISPATCH_PROMPT_LEAD_LINE,
+    leadLine: QUIRKY_DISPATCH_PROMPT_LEAD_LINE,
     acceptQueued: true,
     observationTimeoutMs: 0,
     requestId
@@ -210,7 +210,7 @@ do NOT run a sleep/poll loop, and do NOT keep calling
 completion and expects no further output.
 
 Exit the shell after completion. Bare-shell workers have no idle agent
-prompt for Orca to reuse; if the coordinator has more for you it will
+prompt for Quirky to reuse; if the coordinator has more for you it will
 dispatch or prompt another worker with a fresh TASK block.`
   }
 

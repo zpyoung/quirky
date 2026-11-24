@@ -6,9 +6,9 @@
  */
 import type { AgentStatusState } from '../../../shared/agent-status-types'
 import {
-  MAX_ORCAD_MIGRATION_SCROLLBACK_SNAPSHOTS,
-  MAX_ORCAD_MIGRATION_SCROLLBACK_TOTAL_BYTES
-} from '../../../shared/orcad-migration/orcad-migration-scrollback'
+  MAX_QUIRKYD_MIGRATION_SCROLLBACK_SNAPSHOTS,
+  MAX_QUIRKYD_MIGRATION_SCROLLBACK_TOTAL_BYTES
+} from '../../../shared/quirkyd-migration/quirkyd-migration-scrollback'
 import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
 
 export type WslMovePaneFacts = {
@@ -98,8 +98,8 @@ export function assessWslMoveTerminals(inputs: WslMoveGateInputs): WslMoveGateVe
   // per-pane overage so clearing one pane never uncovers a second blocker.
   const total = [...scrollbackByPane.values()].reduce((sum, bytes) => sum + bytes, 0)
   if (
-    total > MAX_ORCAD_MIGRATION_SCROLLBACK_TOTAL_BYTES ||
-    scrollbackByPane.size > MAX_ORCAD_MIGRATION_SCROLLBACK_SNAPSHOTS
+    total > MAX_QUIRKYD_MIGRATION_SCROLLBACK_TOTAL_BYTES ||
+    scrollbackByPane.size > MAX_QUIRKYD_MIGRATION_SCROLLBACK_SNAPSHOTS
   ) {
     for (const paneKey of scrollbackByPane.keys()) {
       block('scrollback-too-large', paneKey, ['clear-scrollback'])

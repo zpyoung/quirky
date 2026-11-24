@@ -29,7 +29,7 @@ import {
   followRemoteSessionAfterPaneDetach
 } from './pane-remote-session-follow'
 import { pruneClosedTerminalTabTombstones } from '../../../shared/closed-terminal-tab-tombstones'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 /** A new tab, or a split of an existing pane, with the ids its terminal will run under. */
 export type TerminalPaneAdmission =
@@ -73,7 +73,7 @@ function touchedRecordsWrite(
   session: WorkspaceSessionState,
   loaded: LoadedWorkspaceLayout
 ): ((after: WorkspaceSessionState) => WorkspaceSessionState | null) | undefined {
-  return ORCA_LAYOUT_OWNER_IS_MAIN ? (after) => touchedRecords(session, loaded, after) : undefined
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN ? (after) => touchedRecords(session, loaded, after) : undefined
 }
 
 /** The stored partition with only the records the change touched rewritten; null when none. */
@@ -237,7 +237,7 @@ function takenTabId(
  * the closed-pane fence by design: a window may draw a pane main took back again.)
  */
 function closedCreate(layout: WorkspaceLayoutModel, tabId: string): LayoutApplyOutcome | null {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return null
   }
   const closed = Object.values(layout.workspaces).some((entry) => entry.closedTerminalTabs?.[tabId])

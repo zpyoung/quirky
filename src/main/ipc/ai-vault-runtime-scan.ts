@@ -27,7 +27,7 @@ export type RuntimeAiVaultScanner = (
 ) => Promise<AiVaultListResult>
 
 /**
- * Why: an unreachable Orca server must cost this host's row, not the whole
+ * Why: an unreachable Quirky server must cost this host's row, not the whole
  * multi-host list, so every failure except cancellation degrades to an issue.
  */
 export async function scanRuntimeAiVaultSessions(args: {
@@ -58,7 +58,7 @@ export async function scanRuntimeAiVaultSessions(args: {
     }
     return runtimeScanIssueResult(
       args.hostInfo,
-      error instanceof Error ? error.message : 'Remote Orca server is unavailable.'
+      error instanceof Error ? error.message : 'Remote Quirky server is unavailable.'
     )
   }
 }

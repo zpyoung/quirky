@@ -1,4 +1,4 @@
-import type { OrcaHooks } from '../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks } from '../../shared/quirky-yaml-hook-types'
 import type { WorktreeSetupLaunch } from '../../shared/worktree/launch-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { SetupScriptImportCandidate } from '../../shared/setup-script-imports'
@@ -7,7 +7,7 @@ export type HooksApi = {
   check: (args: { repoId: string; hostId?: ExecutionHostId }) => Promise<{
     status?: 'ok' | 'error'
     hasHooks: boolean
-    hooks: OrcaHooks | null
+    hooks: QuirkyHooks | null
     mayNeedUpdate: boolean
   }>
   inspectSetupScriptImports: (args: {

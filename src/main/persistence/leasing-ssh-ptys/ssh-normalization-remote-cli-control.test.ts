@@ -5,7 +5,7 @@ import { normalizeSshTarget } from './ssh-normalization'
 
 const base: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, username: 'me' }
 
-describe("loading a host's orca CLI control switch", () => {
+describe("loading a host's quirky CLI control switch", () => {
   it('keeps a saved true on load, with or without the retired consent stamp', () => {
     const plain = normalizeSshTarget({ ...base, allowRemoteCliControl: true })
     const stamped = normalizeSshTarget({

@@ -10,7 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { resolveCliCommand } from '../../src/shared/node-cli-command-resolution.ts'
 import { removeTreeSync } from '../../src/shared/windows-transient-lock-removal.ts'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
@@ -57,7 +57,7 @@ describe('patched dependencies', () => {
 
     // A copy, because a --frozen-lockfile run still rewrites parts of the
     // lockfile this repo does not track, and the real one must not move.
-    const scratch = mkdtempSync(join(tmpdir(), 'orca-frozen-install-'))
+    const scratch = mkdtempSync(join(tmpdir(), 'quirky-frozen-install-'))
     try {
       for (const file of [
         'package.json',
@@ -108,7 +108,7 @@ describe('patched dependencies', () => {
     const pnpm = resolvePnpmInvocation()
     expect(pnpm, 'pnpm must be installed; it is the only thing that can check this').not.toBeNull()
 
-    const scratch = mkdtempSync(join(tmpdir(), 'orca-patch-apply-'))
+    const scratch = mkdtempSync(join(tmpdir(), 'quirky-patch-apply-'))
     try {
       mkdirSync(join(scratch, 'config', 'patches'), { recursive: true })
       copyFileSync(
@@ -119,7 +119,7 @@ describe('patched dependencies', () => {
         join(scratch, 'package.json'),
         `${JSON.stringify(
           {
-            name: 'orca-patch-apply-probe',
+            name: 'quirky-patch-apply-probe',
             version: '1.0.0',
             dependencies: { '@vscode/windows-process-tree': '0.8.0' }
           },

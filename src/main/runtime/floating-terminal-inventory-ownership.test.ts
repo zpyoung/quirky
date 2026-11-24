@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../shared/constants'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const { createFolderWorkspaceRuntimeStore, makeFolderProjectGroup, makeFolderWorkspace, store } =
-  await import('./orca-runtime-test-fixtures.spec')
+  await import('./quirky-runtime-test-fixtures.spec')
 
 const HOME_FOLDER = '/tmp/platform'
 
@@ -25,7 +25,7 @@ function makeRuntime() {
     live.add(id)
     return { id }
   })
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   runtime.setPtyController({
     spawn,
     write: () => true,

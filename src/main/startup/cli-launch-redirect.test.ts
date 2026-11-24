@@ -11,15 +11,15 @@ vi.mock('electron', () => ({ app: { commandLine: { getSwitchValue: () => '' } } 
 const COMMAND_NAMES = ['project', 'serve', 'status', 'skills', 'worktree']
 
 const linux = {
-  resourcesPath: '/opt/Orca/resources',
-  execPath: '/opt/Orca/orca-ide',
+  resourcesPath: '/opt/Quirky/resources',
+  execPath: '/opt/Quirky/quirky-ide',
   get cliEntryPath(): string {
     return posix.join(this.resourcesPath, 'app.asar.unpacked', 'out', 'cli', 'index.js')
   }
 }
 const windows = {
-  resourcesPath: 'C:\\Users\\me\\AppData\\Local\\Programs\\Orca\\resources',
-  execPath: 'C:\\Users\\me\\AppData\\Local\\Programs\\Orca\\Orca.exe',
+  resourcesPath: 'C:\\Users\\me\\AppData\\Local\\Programs\\Quirky\\resources',
+  execPath: 'C:\\Users\\me\\AppData\\Local\\Programs\\Quirky\\Quirky.exe',
   get cliEntryPath(): string {
     return win32.join(this.resourcesPath, 'app.asar.unpacked', 'out', 'cli', 'index.js')
   }
@@ -118,7 +118,7 @@ describe('CLI launch redirect: command form', () => {
   it('redirects a direct binary launch with no AppImage env at all', () => {
     expect(
       getCliLaunchArgs(
-        ['/home/u/.config/orca-runtime/versions/1.4.158/orca-ide', 'skills', 'get', '--full'],
+        ['/home/u/.config/quirky-runtime/versions/1.4.158/quirky-ide', 'skills', 'get', '--full'],
         linux.cliEntryPath,
         linuxOptions
       )
@@ -294,9 +294,9 @@ describe('CLI launch redirect: spawning', () => {
         timeoutMs: null,
         env: expect.objectContaining({
           ELECTRON_RUN_AS_NODE: '1',
-          ORCA_CLI_LAUNCH_REDIRECTED: '1',
-          ORCA_NODE_OPTIONS: '--inspect',
-          ORCA_NODE_REPL_EXTERNAL_MODULE: 'external-loader'
+          QUIRKY_CLI_LAUNCH_REDIRECTED: '1',
+          QUIRKY_NODE_OPTIONS: '--inspect',
+          QUIRKY_NODE_REPL_EXTERNAL_MODULE: 'external-loader'
         })
       })
     )
@@ -310,7 +310,7 @@ describe('CLI launch redirect: spawning', () => {
 
     const result = maybeRedirectCliLaunch({
       argv: [linux.execPath, 'status'],
-      env: { ORCA_CLI_LAUNCH_REDIRECTED: '1' },
+      env: { QUIRKY_CLI_LAUNCH_REDIRECTED: '1' },
       platform: 'linux',
       isPackaged: true,
       resourcesPath: linux.resourcesPath,
@@ -359,7 +359,7 @@ describe('CLI launch redirect: spawning', () => {
         '6792',
         '--no-sandbox'
       ],
-      env: { NODE_OPTIONS: '--inspect', APPIMAGE: '/home/u/Orca.AppImage' },
+      env: { NODE_OPTIONS: '--inspect', APPIMAGE: '/home/u/Quirky.AppImage' },
       platform: 'linux',
       isPackaged: true,
       resourcesPath: linux.resourcesPath,
@@ -377,23 +377,23 @@ describe('CLI launch redirect: spawning', () => {
       [linux.execPath, linux.cliEntryPath, 'serve', '--supervise', '--port', '6792'],
       expect.objectContaining({
         ELECTRON_RUN_AS_NODE: '1',
-        ORCA_USER_DATA_PATH: '/home/u/profiles/b1',
-        ORCA_NODE_OPTIONS: '--inspect',
-        APPIMAGE: '/home/u/Orca.AppImage'
+        QUIRKY_USER_DATA_PATH: '/home/u/profiles/b1',
+        QUIRKY_NODE_OPTIONS: '--inspect',
+        APPIMAGE: '/home/u/Quirky.AppImage'
       })
     )
     const env = execve.mock.calls[0]?.[2]
     // Why: the CLI must still start its Electron server with the caller's --no-sandbox.
-    expect(env).toHaveProperty('ORCA_ELECTRON_NO_SANDBOX', '1')
-    expect(env).not.toHaveProperty('ORCA_CLI_LAUNCH_REDIRECTED')
+    expect(env).toHaveProperty('QUIRKY_ELECTRON_NO_SANDBOX', '1')
+    expect(env).not.toHaveProperty('QUIRKY_CLI_LAUNCH_REDIRECTED')
     expect(env).not.toHaveProperty('NODE_OPTIONS')
   })
 
-  it('keeps ORCA_USER_DATA_PATH for a direct serve without --user-data-dir', () => {
+  it('keeps QUIRKY_USER_DATA_PATH for a direct serve without --user-data-dir', () => {
     const execve = vi.fn<NonNullable<CliLaunchRedirectOptions['execve']>>()
     maybeRedirectCliLaunch({
       argv: [linux.execPath, 'serve', '--no-pairing'],
-      env: { ORCA_USER_DATA_PATH: '/home/u/profiles/b1' },
+      env: { QUIRKY_USER_DATA_PATH: '/home/u/profiles/b1' },
       platform: 'linux',
       isPackaged: true,
       resourcesPath: linux.resourcesPath,
@@ -405,9 +405,9 @@ describe('CLI launch redirect: spawning', () => {
     expect(execve).toHaveBeenCalledWith(
       linux.execPath,
       [linux.execPath, linux.cliEntryPath, 'serve', '--no-pairing'],
-      expect.objectContaining({ ORCA_USER_DATA_PATH: '/home/u/profiles/b1' })
+      expect.objectContaining({ QUIRKY_USER_DATA_PATH: '/home/u/profiles/b1' })
     )
-    expect(execve.mock.calls[0]?.[2]).not.toHaveProperty('ORCA_ELECTRON_NO_SANDBOX')
+    expect(execve.mock.calls[0]?.[2]).not.toHaveProperty('QUIRKY_ELECTRON_NO_SANDBOX')
   })
 
   it('serves in-process when this runtime cannot exec or the exec fails', () => {

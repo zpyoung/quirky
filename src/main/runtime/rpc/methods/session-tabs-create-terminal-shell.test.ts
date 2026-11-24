@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RUNTIME_CAPABILITIES } from '../../../../shared/protocol-version'
 import { SESSION_TABS_CREATE_TERMINAL_SHELL_RUNTIME_CAPABILITY } from '../../../../shared/session-tabs-runtime-capabilities'
 import { SESSION_TAB_METHODS } from './session-tabs'
@@ -11,7 +11,7 @@ function makeRequest(params: unknown): RpcRequest {
   return { id: 'req-1', authToken: 'tok', method: 'session.tabs.createTerminal', params }
 }
 
-function makeRuntime(): OrcaRuntimeService {
+function makeRuntime(): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler only calls these two members.
   return {
     getRuntimeId: () => 'test-runtime',
@@ -20,7 +20,7 @@ function makeRuntime(): OrcaRuntimeService {
       publicationEpoch: 'epoch-1',
       snapshotVersion: 1
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 describe('session.tabs.createTerminal shell selection', () => {

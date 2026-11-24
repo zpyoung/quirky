@@ -108,7 +108,7 @@ function capture() {
   })
 }
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-crashpad-limit-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-crashpad-limit-'))
   await mkdir(join(directory, 'new'))
   state.callbacks.afterStat = undefined
   state.callbacks.afterOpenStat = undefined

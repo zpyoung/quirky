@@ -18,7 +18,7 @@ const journals = createTrackedJournalOpener()
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-subagent-restart-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-subagent-restart-'))
 })
 
 afterEach(async () => {
@@ -30,7 +30,7 @@ afterEach(async () => {
 function frame(message: Record<string, unknown>, startsTurn = false) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     ...(startsTurn ? { startsTurn: true as const } : {}),
     message: { session_id: 'claude-session', parent_tool_use_id: null, ...message }
   }
@@ -93,7 +93,7 @@ const result = (uuid: string) =>
 async function openJournal(): Promise<AgentSessionJournal> {
   return journals.open({
     identity: {
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       workspaceId: 'workspace-1',
       hostId: 'local',
       agent: 'claude',
@@ -113,7 +113,7 @@ function acquire(journal: AgentSessionJournal) {
     await expect(deferred.drained()).resolves.toEqual({ ok: true })
   }
   const exit = async (): Promise<void> => {
-    translator.handle({ type: 'ended', sessionId: 'orca-session', reason: 'closed' })
+    translator.handle({ type: 'ended', sessionId: 'quirky-session', reason: 'closed' })
     await settle()
     translator.dispose()
     deferred.close()

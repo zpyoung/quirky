@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
   buildWindowsHostInteractiveLoginSpawn,

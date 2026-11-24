@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { build } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { z } from 'zod'
 import { expect, it } from 'vitest'
 
@@ -35,7 +35,7 @@ const measurement = z.object({
 
 it('isolates adverse CPU and retained-payload measurements under a hard child deadline', async () => {
   const root = process.cwd()
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'orca-check-normalization-'))
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'quirky-check-normalization-'))
   try {
     const bundle = await build({
       stdin: {
@@ -52,7 +52,7 @@ it('isolates adverse CPU and retained-payload measurements under a hard child de
     const entry = path.join(directory, 'measure.mjs')
     await writeFile(entry, bundle.outputFiles[0].text)
     const executable = process.versions.bun
-      ? (process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.env.npm_node_execpath)
+      ? (process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.env.npm_node_execpath)
       : process.execPath
     if (!executable || !path.isAbsolute(executable)) {
       throw new Error('Expected an absolute Node executable')
@@ -61,7 +61,7 @@ it('isolates adverse CPU and retained-payload measurements under a hard child de
       program: executable,
       args: ['--expose-gc', entry],
       cwd: root,
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 10_000,
       maxOutputBytes: 64 * 1024
     })

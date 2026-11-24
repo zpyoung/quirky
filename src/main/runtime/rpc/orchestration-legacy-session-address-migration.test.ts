@@ -47,7 +47,7 @@ function seedEarlierBuildRows(db: OrchestrationDb): { toX: string; fromX: string
   )
   remember.run('run_earlier', LEGACY_Y)
   remember.run('run_both', `session:${BOTH_SESSION}`)
-  remember.run('run_both', `orca_session_id:${BOTH_SESSION}`)
+  remember.run('run_both', `quirky_session_id:${BOTH_SESSION}`)
   const pointer = db.db.prepare(
     `INSERT INTO structured_pointer_operations
        (mailbox_handle, session_id, operation_id, batch_fingerprint, minted_at_ms)
@@ -158,7 +158,7 @@ describe('a database an earlier build wrote session:<id> addresses into', () => 
       /"(from_handle|to_handle|terminal_handle|mailbox_handle|coordinator_handle)":"session:/
     )
     expect(remembered).toEqual([
-      { run_id: 'run_both', terminal_handle: `orca_session_id:${BOTH_SESSION}` },
+      { run_id: 'run_both', terminal_handle: `quirky_session_id:${BOTH_SESSION}` },
       { run_id: 'run_earlier', terminal_handle: ADDRESS_Y }
     ])
     expect(pointers).toEqual([

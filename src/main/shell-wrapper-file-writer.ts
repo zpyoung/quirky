@@ -22,7 +22,7 @@ export function writeShellWrapperFiles(
       mkdirSync(dirname(path), { recursive: true })
       // Why temp+rename: a shell reading the wrapper concurrently sees either
       // the old file or the new one, never a truncated prefix of the new one.
-      const temporaryPath = `${path}.orca-tmp-${process.pid}`
+      const temporaryPath = `${path}.quirky-tmp-${process.pid}`
       try {
         writeFileSync(temporaryPath, content, 'utf8')
         chmodSync(temporaryPath, 0o644)

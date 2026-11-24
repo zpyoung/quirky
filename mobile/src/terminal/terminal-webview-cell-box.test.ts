@@ -175,7 +175,7 @@ describe('the cell box xterm laid out', () => {
   it('tells the document the app text scale before it builds its terminal', () => {
     const { webView } = mount(1.25)
     const html: string = webView().props.source.html
-    const start = html.indexOf('window.__orcaTerminalTextScale = 1.25;')
+    const start = html.indexOf('window.__quirkyTerminalTextScale = 1.25;')
     expect(start).toBeGreaterThan(-1)
     // Ahead of the document script, in the page itself, so no platform can run it late.
     expect(start).toBeLessThan(html.indexOf('startTerminalDocument'))
@@ -195,6 +195,6 @@ describe('the cell box xterm laid out', () => {
     })
     renderers.push(renderer!)
     const webView = renderer!.root.find((node) => typeof node.props.onMessage === 'function')
-    expect(webView.props.source.html).toContain('window.__orcaTerminalShown = false;')
+    expect(webView.props.source.html).toContain('window.__quirkyTerminalShown = false;')
   })
 })

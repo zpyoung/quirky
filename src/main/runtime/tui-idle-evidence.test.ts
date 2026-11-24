@@ -177,7 +177,7 @@ describe('evaluateTuiIdle ranking', () => {
     }
   })
 
-  // Why: a launched agent whose title Orca cannot classify has no other lane; closing this
+  // Why: a launched agent whose title Quirky cannot classify has no other lane; closing this
   // one for every known agent left `worker start` failing at agent_readiness (STA-7440).
   it('leaves the lane open for recognized dsb instead of reading a missing launch config', () => {
     expect(quietForegroundLaneForTerminalAgent('dsb')).toBe('open')

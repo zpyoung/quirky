@@ -11,7 +11,7 @@ import { sessionSearchSqliteAvailable } from './session-search-sqlite-support'
  *
  * The desktop puts the index in that child because the child is where the
  * transcript reader runs, so one read serves both the session list and the index.
- * Neither host gives that child the index: orcad's scanner child gets no search
+ * Neither host gives that child the index: quirkyd's scanner child gets no search
  * data root and only lists sessions, and the relay's AI Vault sidecar runs the remote
  * scanner, which reads through a filesystem provider and publishes nothing to the
  * transcript channel. On both, the process that would drive the index's reads is

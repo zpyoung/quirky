@@ -1,5 +1,5 @@
 /**
- * A closed tab stops the shells an older Orca's relay still runs for it, as closing any other
+ * A closed tab stops the shells an older Quirky's relay still runs for it, as closing any other
  * terminal tab ends its shell. COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
 import {

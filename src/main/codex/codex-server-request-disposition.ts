@@ -42,7 +42,7 @@ export function disposeCodexServerRequest(
       connection.respondWithError(
         request.id,
         -32001,
-        `Orca could not model ${request.method} as a durable prompt`
+        `Quirky could not model ${request.method} as a durable prompt`
       )
       break
     case CODEX_MCP_ELICITATION_METHOD:
@@ -59,16 +59,20 @@ export function disposeCodexServerRequest(
       connection.respond(request.id, { decision: 'abort' })
       break
     case CODEX_AUTH_TOKEN_REFRESH_METHOD:
-      connection.respondWithError(request.id, -32001, 'Orca cannot refresh app-server auth tokens')
+      connection.respondWithError(
+        request.id,
+        -32001,
+        'Quirky cannot refresh app-server auth tokens'
+      )
       break
     case CODEX_ATTESTATION_METHOD:
-      connection.respondWithError(request.id, -32001, 'Orca did not negotiate attestation')
+      connection.respondWithError(request.id, -32001, 'Quirky did not negotiate attestation')
       break
     default:
       connection.respondWithError(
         request.id,
         -32000,
-        `Orca rejected unrecognized blocking request ${request.method}`
+        `Quirky rejected unrecognized blocking request ${request.method}`
       )
   }
   return { kind: 'responded', method: request.method }

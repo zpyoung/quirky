@@ -390,7 +390,7 @@ it('waits for rival SSH HUB owners, then accepts the surviving runtime owner', (
 
 afterEach(() => vi.unstubAllGlobals())
 it.each([WT, FOLDER])('leaves local terminal ownership with the real paired web host: %s', (id) => {
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
   const state: WorkspaceTerminalHostAuthorityState = {
     settings: { activeRuntimeEnvironmentId: null },
     runtimeEnvironments: [{ id: 'paired-host' }],

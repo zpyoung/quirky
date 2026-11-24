@@ -1,13 +1,13 @@
 import { OrchestrationError } from '../../orchestration-error'
 import type { OrchestrationDb } from '../orchestration-db'
-import { dispatchAssigneeOrcaSessionId } from '../../dispatch-assignee-orca-session-id'
+import { dispatchAssigneeQuirkySessionId } from '../../dispatch-assignee-quirky-session-id'
 
 export function prepareStartingWorkerAuthority(
   this: OrchestrationDb,
   params: {
     dispatchId: string
     handle: string
-    /** Both null for a chat, which its Orca session ID identifies instead. */
+    /** Both null for a chat, which its Quirky session ID identifies instead. */
     paneKey: string | null
     processIncarnation: string | null
     launchTokenHash?: string
@@ -52,7 +52,7 @@ export function prepareStartingWorkerAuthority(
     const contextUpdate = this.db
       .prepare(
         `UPDATE dispatch_contexts
-         SET assignee_handle = ?, assignee_pane_key = ?, assignee_orca_session_id = ?,
+         SET assignee_handle = ?, assignee_pane_key = ?, assignee_quirky_session_id = ?,
              process_incarnation = ?, host_scope = ?,
              launch_token_hash = COALESCE(launch_token_hash, ?),
              capability_revoked_at = NULL,
@@ -62,7 +62,7 @@ export function prepareStartingWorkerAuthority(
       .run(
         params.handle,
         params.paneKey,
-        dispatchAssigneeOrcaSessionId({
+        dispatchAssigneeQuirkySessionId({
           handle: params.handle,
           processIncarnation: params.processIncarnation
         }),

@@ -39,7 +39,7 @@ const ENGINES = [
     // CI runs this against the runner's Google Chrome rather than paying for a browser download,
     // the same override shape as the render check next door.
     launch: () => {
-      const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+      const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
       return chromium.launch({
         headless: true,
         ...(executablePath ? { executablePath } : {})
@@ -68,7 +68,7 @@ beforeAll(async () => {
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
   backNames = await readBridgeBackNames()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-drawer-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-drawer-'))
   const { outDir } = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   const served = await createBundleServer({ outDir, cspHeader })
   server = served.server
@@ -184,7 +184,7 @@ describeDrawer('the bottom drawer on the page', () => {
           await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)
         ).toBe(false)
         await page.waitForFunction(
-          () => document.documentElement.dataset.orcaWebEntry === 'mounted',
+          () => document.documentElement.dataset.quirkyWebEntry === 'mounted',
           { timeout: 30_000, polling: 250 }
         )
         // The Workspace options sheet, not the row's action sheet: both are the same MountedBottomDrawer, and
@@ -276,7 +276,7 @@ describeDrawer('the bottom drawer on the page', () => {
 
 /** Every notify the page posted, by name, so a case can say what crossed and what did not. */
 function notifyNames() {
-  return globalThis.__orcaRenderCheckNotifies.map((frame) => frame.name)
+  return globalThis.__quirkyRenderCheckNotifies.map((frame) => frame.name)
 }
 
 /**
@@ -306,7 +306,7 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
       })
       await page.goto(`${origin}/`, { waitUntil: 'load' })
       await page.waitForFunction(
-        () => document.documentElement.dataset.orcaWebEntry === 'mounted',
+        () => document.documentElement.dataset.quirkyWebEntry === 'mounted',
         { timeout: 30_000, polling: 250 }
       )
       // Nothing is claimed by a page with no sheet open: the key stays the shell's, which is what
@@ -324,7 +324,7 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
       )
       const claimed = await page.waitForFunction(
         (name) =>
-          globalThis.__orcaRenderCheckNotifies.find(
+          globalThis.__quirkyRenderCheckNotifies.find(
             (frame) => frame.name === name && frame.claimed === true
           ) ?? null,
         backNames.claim,
@@ -333,7 +333,7 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
       expect(await claimed.jsonValue(), errors.join(' | ')).toMatchObject({ claimed: true })
 
       await page.evaluate(() => {
-        globalThis.__orcaRenderCheckSendBack()
+        globalThis.__quirkyRenderCheckSendBack()
       })
       const closed = await page
         .waitForFunction(() => document.querySelector('[aria-label="Dismiss drawer"]') === null, {
@@ -354,7 +354,7 @@ describeDrawer('the device Back key reaching a sheet on the page', () => {
       // And the key goes back to the shell with the sheet, so the next press leaves the screen.
       const claims = await page.evaluate(
         (name) =>
-          globalThis.__orcaRenderCheckNotifies
+          globalThis.__quirkyRenderCheckNotifies
             .filter((frame) => frame.name === name)
             .map((frame) => frame.claimed),
         backNames.claim

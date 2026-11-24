@@ -14,7 +14,7 @@ let directory: string
 let cacheModule: string
 
 beforeAll(async () => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-usage-worker-cleanup-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-usage-worker-cleanup-'))
   cacheModule = join(directory, 'source-cache.cjs')
   await build({
     entryPoints: [resolve(__dirname, 'usage-source-cache-file.ts')],

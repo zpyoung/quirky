@@ -59,7 +59,7 @@ describe('detectRepoFileIcon connection boundary', () => {
 
 describe('declared repo icons through production filesystem routes', () => {
   it.each([false, true])('preserves declared icon detection (no icon: %s)', async (noIcon) => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-icon-href-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-icon-href-'))
     const source = noIcon
       ? 'a'.repeat(256 * 1024)
       : `${'a'.repeat(32768)}{ rel: "icon", href: "/first.png", href: "/chosen.png" }`

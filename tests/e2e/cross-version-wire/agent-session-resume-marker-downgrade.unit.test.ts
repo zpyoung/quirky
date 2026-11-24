@@ -18,7 +18,7 @@ import { importReleaseCheckoutModule, materializeReleaseCheckout } from './relea
 const BASELINE_REF = 'v1.4.216-rc.0.zy03'
 
 test('an older build reads the restart offer this build records at quit', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-resume-marker-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-resume-marker-downgrade-'))
   try {
     // This build: the offer teardown takes for a chat whose turn was running.
     const marker = structuredAgentSessionWorkingAtStop({

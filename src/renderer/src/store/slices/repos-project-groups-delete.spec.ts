@@ -304,7 +304,7 @@ export function registerReposProjectGroupsDeleteTests(): void {
         failedProjectRemovals: [
           {
             projectId: 'nested',
-            reason: 'Project remained in Orca after removeProject completed.'
+            reason: 'Project remained in Quirky after removeProject completed.'
           }
         ]
       })

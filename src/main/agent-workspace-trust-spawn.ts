@@ -18,7 +18,7 @@ function isAgentWorkspaceTrustOn(settings: AgentWorkspaceTrustSetting): boolean 
 }
 
 /**
- * The one place Orca pre-trusts a workspace: every Orca-started agent PTY passes
+ * The one place Quirky pre-trusts a workspace: every Quirky-started agent PTY passes
  * through a spawn builder with its declared `launchAgent`, which survives setup-script
  * wrapping. Reattaches and restores are skipped so trust is never re-run for them.
  * Structured Codex chats have no PTY and enter below instead. Returns null when there is nothing to write, so other spawns take no extra tick:

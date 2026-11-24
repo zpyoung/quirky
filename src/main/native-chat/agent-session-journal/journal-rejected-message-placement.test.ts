@@ -79,7 +79,7 @@ function placed(state: ReturnType<typeof journal>['state'], clientMessageId: str
   return item && { sequence: item.sequence, observedAt: item.observedAt, scope: item.turnScope }
 }
 
-const IN_TURN: AgentJournalTurnScope = { kind: 'turn', turnItemId: 'orca:turn-1' }
+const IN_TURN: AgentJournalTurnScope = { kind: 'turn', turnItemId: 'quirky:turn-1' }
 
 describe('a rejected message', () => {
   it('sits at the rejection, in no turn, when it was queued', () => {

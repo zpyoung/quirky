@@ -15,7 +15,7 @@ describe('AutomaticWorkRunMarker', () => {
   const logger = { log: vi.fn() }
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-automatic-work-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-automatic-work-'))
     path = join(dir, 'automatic-work-run.json')
     logger.log.mockClear()
   })

@@ -10,7 +10,7 @@ export type SshTargetSummary = {
 }
 export type EnvironmentSummary = { id: string; name: string }
 
-/** The name `orca host list` prints for its own `--host local` row. */
+/** The name `quirky host list` prints for its own `--host local` row. */
 export const LOCAL_HOST_LIST_NAME = 'this machine'
 
 export type HostAlternatives = {
@@ -83,7 +83,7 @@ export function ambiguousEnvironments(
   return byName.length > 1 ? byName : []
 }
 
-// Why: a paired Orca server and an SSH target are different machines reached different ways, but
+// Why: a paired Quirky server and an SSH target are different machines reached different ways, but
 // a caller only knows "the machine called X". When X misses on one axis, the useful answer is
 // almost always that it exists on the other — so say which, and give the exact flag.
 export function crossKindNextSteps(
@@ -96,12 +96,12 @@ export function crossKindNextSteps(
   const environment = findEnvironmentByName(alternatives.environments, name)
   if (requested !== 'ssh' && ssh) {
     steps.push(
-      `"${name}" is an SSH target on this Orca host, not a paired server. Use --host ssh:${ssh.id}.`
+      `"${name}" is an SSH target on this Quirky host, not a paired server. Use --host ssh:${ssh.id}.`
     )
   }
   if (requested !== 'environment' && environment) {
     steps.push(
-      `"${name}" is a paired Orca server, not an SSH target. Use --environment ${environment.name}.`
+      `"${name}" is a paired Quirky server, not an SSH target. Use --environment ${environment.name}.`
     )
   }
   return steps
@@ -201,8 +201,8 @@ export async function resolveSshHostTargetId(
   throw new RuntimeClientError(
     'invalid_argument',
     bareName
-      ? `Unknown host in ${flagSpelling}: it is not this machine or a paired Orca server the command can use, and the connected Orca host has no SSH target named ${targetId}. Run \`orca host list\` to see every name.`
-      : `Unknown SSH target in ${flagSpelling}: this Orca host has no SSH target named or with id ${targetId}.`,
+      ? `Unknown host in ${flagSpelling}: it is not this machine or a paired Quirky server the command can use, and the connected Quirky host has no SSH target named ${targetId}. Run \`quirky host list\` to see every name.`
+      : `Unknown SSH target in ${flagSpelling}: this Quirky host has no SSH target named or with id ${targetId}.`,
     {
       knownSshTargets: targets,
       knownEnvironments: environments,
@@ -210,7 +210,7 @@ export async function resolveSshHostTargetId(
         ...crossKindNextSteps(targetId, { sshTargets: targets, environments }, 'ssh'),
         ...(targets.length > 0
           ? [`Known SSH targets: ${targets.map((target) => target.label).join(', ')}.`]
-          : ['This Orca host has no SSH targets registered.'])
+          : ['This Quirky host has no SSH targets registered.'])
       ]
     }
   )

@@ -31,7 +31,7 @@ import { installLayoutFrameApplyCheck } from './workspace-layout-frame-apply-che
 // Today's window acts with the switch off; the layout-owner window, with it on.
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
@@ -134,7 +134,7 @@ async function boot(session: WorkspaceSessionState): Promise<Store> {
   return store
 }
 
-const APP_FILE = '/Users/dev/orca/src/app.ts'
+const APP_FILE = '/Users/dev/quirky/src/app.ts'
 const PIN_PREVIEW: LayoutCommand = {
   type: 'setTabProps',
   workspace: GIT_KEY,

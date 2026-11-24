@@ -159,7 +159,7 @@ describe('SSH import count notices', () => {
         }
       }
       expect(importConfig).toHaveBeenCalledTimes(4)
-      // Sync must never lift the tombstones of hosts removed in Orca.
+      // Sync must never lift the tombstones of hosts removed in Quirky.
       expect(importConfig.mock.calls.slice(1)).toEqual([
         [{ reAdopt: false }],
         [{ reAdopt: false }],
@@ -172,7 +172,7 @@ describe('SSH import count notices', () => {
 
 // #28901: main refuses to remove a managed server's host, which surfaced as a raw IPC error.
 describe('removing a managed server host', () => {
-  it('points to the host’s Orca server row instead of a removal main refuses', async () => {
+  it('points to the host’s Quirky server row instead of a removal main refuses', async () => {
     const removeTarget = vi.fn()
     const managed: SshTarget = {
       id: 'box',
@@ -180,7 +180,7 @@ describe('removing a managed server host', () => {
       host: 'box.example.test',
       port: 22,
       username: 'dev',
-      orcadFence: { environmentId: 'env-box' }
+      quirkydFence: { environmentId: 'env-box' }
     }
     Object.defineProperty(window, 'api', {
       configurable: true,
@@ -211,9 +211,9 @@ describe('removing a managed server host', () => {
     })
     expect(mocks.requestRemove).not.toHaveBeenCalled()
     expect(removeTarget).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain('Orca runs on Build box')
+    expect(document.body.textContent).toContain('Quirky runs on Build box')
     const open = Array.from(document.body.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Open Remote Orca Servers'
+      (button) => button.textContent === 'Open Remote Quirky Servers'
     )
     await act(async () => {
       open?.click()
@@ -271,7 +271,7 @@ describe('bulk removal from SSH settings', () => {
     const pane = await renderPane([
       host('alpha'),
       host('beta'),
-      host('gamma', { orcadFence: { environmentId: 'env-gamma' } })
+      host('gamma', { quirkydFence: { environmentId: 'env-gamma' } })
     ])
     await act(async () => checkbox(pane, 'alpha').click())
     // Shift-click selects the range alpha..gamma.

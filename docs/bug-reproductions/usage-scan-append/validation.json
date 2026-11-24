@@ -42,7 +42,7 @@
     "tests/e2e/native-chat-tool-pairing.spec.ts": "053c667589d433b403f5d2a5758079f0edaf3d7598ee318c8d0c30652963bc2c"
   },
   "integrated": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/claude-usage src/main/codex-usage src/main/usage src/main/native-chat src/shared/native-chat src/renderer/src/components/native-chat",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/claude-usage src/main/codex-usage src/main/usage src/main/native-chat src/shared/native-chat src/renderer/src/components/native-chat",
     "filesPassed": 839,
     "testsPassed": 8278,
     "existingTodo": 5,
@@ -51,7 +51,7 @@
     "scope": "Relevant provider usage, shared usage, native chat host/shared/renderer suites; not the full repository test suite."
   },
   "performanceContracts": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test:perf:contracts",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm test:perf:contracts",
     "filesPassed": 14,
     "testsPassed": 118,
     "seconds": 4.68,
@@ -60,11 +60,11 @@
     "executedHere": "macOS"
   },
   "typecheck": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm tc",
     "exitCode": 0
   },
   "changedQuality": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 ORCA_CODE_QUALITY_BASE=51e7181850b022bae2d41091fe1229accef4bd50 pnpm run check:code-quality:changed",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_CODE_QUALITY_BASE=51e7181850b022bae2d41091fe1229accef4bd50 pnpm run check:code-quality:changed",
     "sourceFiles": 37,
     "newFindings": 0,
     "exitCode": 0
@@ -75,7 +75,7 @@
     "exitCode": 0
   },
   "sourceAudit": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm --silent audit:perf",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 pnpm --silent audit:perf",
     "productionFindings": 0,
     "existingTestFixtureFindings": 1,
     "fixture": "src/shared/relay-frame-buffer.test.ts",

@@ -4,15 +4,15 @@ import { collectComposerDropResult, type ComposerDropItemResult } from './compos
 describe('composer drop result', () => {
   it('separates imported files and folders while summarizing failures', () => {
     const results: ComposerDropItemResult[] = [
-      { status: 'imported', kind: 'file', destPath: '/repo/.orca/drops/file.txt' },
-      { status: 'imported', kind: 'directory', destPath: '/repo/.orca/drops/folder' },
+      { status: 'imported', kind: 'file', destPath: '/repo/.quirky/drops/file.txt' },
+      { status: 'imported', kind: 'directory', destPath: '/repo/.quirky/drops/folder' },
       { status: 'skipped', reason: 'permission-denied' },
       { status: 'failed', reason: 'disk full' }
     ]
 
     expect(collectComposerDropResult(results)).toEqual({
-      filePaths: ['/repo/.orca/drops/file.txt'],
-      folderPaths: ['/repo/.orca/drops/folder'],
+      filePaths: ['/repo/.quirky/drops/file.txt'],
+      folderPaths: ['/repo/.quirky/drops/folder'],
       failureCount: 2,
       commonFailure: undefined
     })
@@ -28,7 +28,7 @@ describe('composer drop result', () => {
 
     expect(
       collectComposerDropResult([
-        { status: 'imported', kind: 'file', destPath: '/repo/.orca/drops/file.txt' }
+        { status: 'imported', kind: 'file', destPath: '/repo/.quirky/drops/file.txt' }
       ]).commonFailure
     ).toBeUndefined()
   })

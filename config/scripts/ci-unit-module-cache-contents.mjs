@@ -4,7 +4,7 @@ import { lstat, open, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { checkModuleTrailer } from './ci-unit-module-cache-trailer.mjs'
 
-export const MODULE_CACHE_MANIFEST = '_orca_manifest.json'
+export const MODULE_CACHE_MANIFEST = '_quirky_manifest.json'
 export const MODULE_CACHE_LIMITS = Object.freeze({
   entries: 50_000,
   totalBytes: 2 ** 30,

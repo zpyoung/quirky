@@ -1,5 +1,5 @@
 import { normalizeBrowserNavigationUrl } from '../../shared/browser-url'
-import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../shared/constants'
 import type { WebContents } from 'electron'
 import {
   browserRoutePageKey,
@@ -85,7 +85,7 @@ export function isBrowserRouteGuestNavigationAllowed(
   try {
     const normalized = normalizeBrowserNavigationUrl(rawUrl)
     return (
-      (allowUnregisteredBlank && normalized === ORCA_BROWSER_BLANK_URL) ||
+      (allowUnregisteredBlank && normalized === QUIRKY_BROWSER_BLANK_URL) ||
       Boolean(
         normalized &&
         !normalized.startsWith('file:') &&

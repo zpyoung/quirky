@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { TerminalCursorContext } from '../../shared/terminal-composer-draft'
-import { projectTerminalTailLines } from './orca-runtime-terminal-projection'
+import { projectTerminalTailLines } from './quirky-runtime-terminal-projection'
 
 function rowsOf(lines: string[]) {
   return lines.map((text) => ({ text, metadata: { wrapped: false, trailingSpaces: 0 } }))

@@ -19,7 +19,7 @@ import {
 
 const layoutOwner = vi.hoisted(() => ({ isMain: true }))
 vi.mock('../layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))

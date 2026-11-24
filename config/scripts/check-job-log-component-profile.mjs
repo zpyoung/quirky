@@ -120,8 +120,8 @@ try {
     await measure(`collector-${family}`, () => module.stripAnsiEscapeSequences(input), 3, input)
     input = ''
   }
-  if (process.env.ORCA_CHECK_LOG_CAPTURE) {
-    let input = await readFile(process.env.ORCA_CHECK_LOG_CAPTURE, 'utf8')
+  if (process.env.QUIRKY_CHECK_LOG_CAPTURE) {
+    let input = await readFile(process.env.QUIRKY_CHECK_LOG_CAPTURE, 'utf8')
     await measure('extraction-actual', () => module.sliceCheckLogTail(input), 15, input)
     input = ''
   }
@@ -132,8 +132,8 @@ try {
     purpose: 'Targeted sampled diagnosis; instrumentation timings are not acceptance medians',
     records
   }
-  assert(process.env.ORCA_CHECK_LOG_PROFILE_REPORT)
-  await writeFile(process.env.ORCA_CHECK_LOG_PROFILE_REPORT, JSON.stringify(report, null, 2))
+  assert(process.env.QUIRKY_CHECK_LOG_PROFILE_REPORT)
+  await writeFile(process.env.QUIRKY_CHECK_LOG_PROFILE_REPORT, JSON.stringify(report, null, 2))
   console.log(
     JSON.stringify(
       records.map(({ name, wallMs, cpuMs, timings }) => ({ name, wallMs, cpuMs, timings }))

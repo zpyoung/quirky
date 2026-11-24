@@ -13,7 +13,7 @@ afterEach(async () => {
 })
 
 it('honors inherited ignores, opt-in links, cycles, and retargets in real processes', async () => {
-  const parent = await mkdtemp(join(tmpdir(), 'orca-quick-open-options-'))
+  const parent = await mkdtemp(join(tmpdir(), 'quirky-quick-open-options-'))
   fixtures.push(parent)
   await mkdir(join(parent, '.git'))
   const root = join(parent, 'project')
@@ -92,7 +92,7 @@ it('honors inherited ignores, opt-in links, cycles, and retargets in real proces
 }, 30_000)
 
 it('validates recent membership independently of top32, ignores, exclusions and a real inventory cap', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-quick-open-recents-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-quick-open-recents-'))
   fixtures.push(root)
   await mkdir(join(root, '.git'))
   await mkdir(join(root, 'src'))

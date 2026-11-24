@@ -10,7 +10,7 @@ import { useAppStore } from '../../store'
 import { useTabDragSplit, type TabDragItemData } from '../tab-group/useTabDragSplit'
 import { isFloatingTerminalDragTarget } from './floating-terminal-titlebar-drag-target'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -115,7 +115,7 @@ function dropTab(from: string, over: string, pointerX: number): void {
 /** The reorder the user sees: a layout-owner build sends it to main, whose frame draws it
  *  (tab-moves-drawn-from-frames.test.ts); otherwise the window reorders the group itself. */
 function expectReorder(tabId: string, order: string[]): void {
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     expect(layoutApplyTestTransport.sentOfType('moveTab')).toEqual([
       expect.objectContaining({ tabId, toGroupId: GROUP_ID, index: order.indexOf(tabId) })
     ])
@@ -188,7 +188,7 @@ describe('floating workspace tab reorder', () => {
   it('republishes sortOrder so the panel renders the committed order', async () => {
     dropTab('tab-a', 'tab-c', 290)
     await layoutApplyTestTransport.settle()
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       // Main's frame draws the order, sortOrder included.
       expectReorder('tab-a', ['tab-b', 'tab-c', 'tab-a'])
       return

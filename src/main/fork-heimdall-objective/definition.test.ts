@@ -16,7 +16,7 @@ import { authorizeKindEnrollment } from '../fork-heimdall/kernel-enrollment'
 import { type RegisteredWatcherKind, WatcherKindRegistry } from '../fork-heimdall/registry'
 import { enrollmentPayloadSchema } from '../fork-hosted-review-sitter/definition-store'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { authorizeObjectiveEnrollment, ObjectiveOwnerNotExecutableError } from './definition'
 import {
   createObjectiveKind,
@@ -77,13 +77,13 @@ function storeWithoutRepo(): Store {
 
 function fileRuntime(
   resolveRuntimeFileTarget: (selector: string) => Promise<unknown>
-): OrcaRuntimeService {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeFileTarget is exercised.
-  return { resolveRuntimeFileTarget } as unknown as OrcaRuntimeService
+): QuirkyRuntimeService {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeFileTarget is exercised.
+  return { resolveRuntimeFileTarget } as unknown as QuirkyRuntimeService
 }
 
 function gitRuntime(executionHostId: 'local' | `ssh:${string}` | `runtime:${string}`) {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeGitTarget is exercised.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only resolveRuntimeGitTarget is exercised.
   return {
     resolveRuntimeGitTarget: async () => ({
       executionHostId,
@@ -94,7 +94,7 @@ function gitRuntime(executionHostId: 'local' | `ssh:${string}` | `runtime:${stri
         git: { isBare: false, prunable: false }
       }
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 function forge(provider: 'github' | 'unsupported'): ObjectiveForgeAccess {
@@ -108,7 +108,7 @@ function forge(provider: 'github' | 'unsupported'): ObjectiveForgeAccess {
 }
 
 async function authorizeThroughKernel(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   repository: Store,
   enrollment: EnrollInput,
   objectiveForge: ObjectiveForgeAccess

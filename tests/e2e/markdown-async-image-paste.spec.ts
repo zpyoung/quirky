@@ -2,7 +2,7 @@ import { writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Editor } from '@tiptap/core'
 import type { Locator } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   cleanupMarkdownFixture,
   createMarkdownFixture,
@@ -62,14 +62,14 @@ async function pasteImage(editor: Locator) {
 }
 
 test('image paste replaces its selection after editing during clipboard import', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  const context = await getActiveWorktreeContext(orcaPage)
+  const context = await getActiveWorktreeContext(quirkyPage)
   const filePath = await createMarkdownFixture(
     context,
-    '.orca-e2e-markdown-image',
+    '.quirky-e2e-markdown-image',
     'async-image',
     testInfo.workerIndex,
     'hello world\n\nThe selected word should be replaced by this image.'
@@ -80,10 +80,10 @@ test('image paste replaces its selection after editing during clipboard import',
   registerPostElectronShutdownCleanup(() =>
     cleanupMarkdownFixture(path.join(path.dirname(filePath), path.basename(imagePath)))
   )
-  await openMarkdownFixture(orcaPage, context, filePath)
-  const editor = await waitForRichMarkdownEditor(orcaPage)
+  await openMarkdownFixture(quirkyPage, context, filePath)
+  const editor = await waitForRichMarkdownEditor(quirkyPage)
   await expect(editor.locator('p').first()).toHaveText('hello world')
-  await orcaPage.screenshot({ path: testInfo.outputPath('image-document-before-paste.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('image-document-before-paste.png') })
 
   // Substitute clipboard persistence without reading or writing the system clipboard.
   await electronApp.evaluate(({ ipcMain }, imagePath) => {
@@ -118,7 +118,7 @@ test('image paste replaces its selection after editing during clipboard import',
     }
     editorElement.editor.commands.setTextSelection(1)
   })
-  await orcaPage.keyboard.type('prefix ')
+  await quirkyPage.keyboard.type('prefix ')
   await expect(editor.locator('p').first()).toHaveText('prefix hello world')
   await electronApp.evaluate(() => {
     const release = globalThis.__markdownImagePasteRelease
@@ -138,8 +138,8 @@ test('image paste replaces its selection after editing during clipboard import',
       )
     )
     .toBe(true)
-  await orcaPage.keyboard.type('continued ')
-  await orcaPage.screenshot({ path: testInfo.outputPath('image-after-delayed-paste.png') })
+  await quirkyPage.keyboard.type('continued ')
+  await quirkyPage.screenshot({ path: testInfo.outputPath('image-after-delayed-paste.png') })
   await testInfo.attach('image-after-delayed-paste', {
     path: testInfo.outputPath('image-after-delayed-paste.png'),
     contentType: 'image/png'
@@ -165,14 +165,14 @@ test('image paste replaces its selection after editing during clipboard import',
 })
 
 test('image paste reports cancellation when the selected target changes before import', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  const context = await getActiveWorktreeContext(orcaPage)
+  const context = await getActiveWorktreeContext(quirkyPage)
   const filePath = await createMarkdownFixture(
     context,
-    '.orca-e2e-markdown-image',
+    '.quirky-e2e-markdown-image',
     'cancel-image',
     testInfo.workerIndex,
     'hello world'
@@ -180,8 +180,8 @@ test('image paste reports cancellation when the selected target changes before i
   const imagePath = testInfo.outputPath('pending-image.png')
   await writeFile(imagePath, Buffer.from(PNG, 'base64'))
   registerPostElectronShutdownCleanup(() => cleanupMarkdownFixture(filePath))
-  await openMarkdownFixture(orcaPage, context, filePath)
-  const editor = await waitForRichMarkdownEditor(orcaPage)
+  await openMarkdownFixture(quirkyPage, context, filePath)
+  const editor = await waitForRichMarkdownEditor(quirkyPage)
   await electronApp.evaluate(({ ipcMain }, imagePath) => {
     ipcMain.removeHandler('clipboard:saveImageAsTempFile')
     ipcMain.handle(
@@ -222,13 +222,13 @@ test('image paste reports cancellation when the selected target changes before i
   })
   await expect(editor.locator('p').first()).toHaveText('hello changed')
   await expect(editor.locator('img:not(.ProseMirror-separator)')).toHaveCount(0)
-  const cancellationMessage = orcaPage.getByText(
+  const cancellationMessage = quirkyPage.getByText(
     'Image insertion canceled because the destination changed. Try again.',
     { exact: true }
   )
   await expect(cancellationMessage).toBeVisible()
   const screenshot = testInfo.outputPath('image-cancellation-feedback.png')
-  await orcaPage.screenshot({ path: screenshot, animations: 'disabled' })
+  await quirkyPage.screenshot({ path: screenshot, animations: 'disabled' })
   await testInfo.attach('image-cancellation-feedback', {
     path: screenshot,
     contentType: 'image/png'

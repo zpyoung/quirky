@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-pre-migration-backup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-pre-migration-backup-'))
   directories.push(directory)
   const databasePath = join(directory, 'profile-state.db')
   const opened = openProfileStateDatabase(databasePath, PROFILE)

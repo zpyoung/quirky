@@ -61,7 +61,7 @@ export const OUT_OF_STORE_DISPOSITIONS: readonly (WslMoveFieldDisposition & {
     item: 59
   },
   { store: 'port forwards', disposition: 'not-applicable', item: 60 },
-  { store: '.orca/ and repo files', disposition: 'not-applicable', item: 61 },
+  { store: '.quirky/ and repo files', disposition: 'not-applicable', item: 61 },
   {
     store: 'renderer live maps (expandedDirs, git status)',
     disposition: 'rederive',

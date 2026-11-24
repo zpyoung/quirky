@@ -1,13 +1,13 @@
 <h1 align="center">
-  <a href="https://onOrca.dev"><img src="../../resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca
+  <a href="https://onOrca.dev"><img src="../../resources/build/icon.png" alt="Quirky" width="64" valign="middle" /></a> Quirky
 </h1>
 
 <p align="center">
   <a href="https://github.com/stablyai/orca"><img src="https://badgen.net/github/stars/stablyai/orca?label=%E2%98%85" alt="Étoiles GitHub" /></a>
   <a href="https://github.com/stablyai/orca/releases"><img src="../assets/readme-downloads.svg" alt="Téléchargements totaux sur toutes les versions" /></a>
   <img src="https://badgen.net/github/license/stablyai/orca" alt="Licence" />
-  <a href="https://discord.gg/fzjDKHxv8Q"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Rejoindre le Discord Orca" /></a>
-  <a href="https://x.com/orca_build"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="Suivre Orca sur X" /></a>
+  <a href="https://discord.gg/fzjDKHxv8Q"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Rejoindre le Discord Quirky" /></a>
+  <a href="https://x.com/quirky_build"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="Suivre Quirky sur X" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="Plateformes prises en charge : macOS, Windows et Linux" />
 </p>
 
@@ -20,14 +20,14 @@
   Lancez Codex, Claude Code, OpenCode ou Pi côte à côte — chacun dans son propre worktree, le tout suivi au même endroit.
 </p>
 
-<h3 align="center"><a href="https://onorca.dev/download"><ins>Télécharger Orca</ins></a></h3>
+<h3 align="center"><a href="https://onorca.dev/download"><ins>Télécharger Quirky</ins></a></h3>
 
 <p align="center">
   <sub>Sous Windows ? Prenez la <a href="https://github.com/stablyai/orca/releases#release-v1.4.147-rc.3">dernière RC</a> — elle inclut des correctifs Windows.</sub>
 </p>
 
 <p align="center">
-  <img src="../assets/readme-hero.jpg" alt="Application de bureau Orca exécutant des agents dans des worktrees parallèles, avec l'app companion mobile Orca dans le coin" width="960" />
+  <img src="../assets/readme-hero.jpg" alt="Application de bureau Quirky exécutant des agents dans des worktrees parallèles, avec l'app companion mobile Quirky dans le coin" width="960" />
 </p>
 
 ## Fonctionnalités
@@ -44,7 +44,7 @@ Surveillez et pilotez vos agents depuis votre téléphone — soyez notifié qua
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/mobile"><picture><source srcset="../assets/feature-wall/mobile-companion-app-showcase.gif" type="image/gif"><img src="../assets/feature-wall/mobile-companion-app-showcase.jpg" alt="Orca desktop avec l'app companion mobile" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/mobile"><picture><source srcset="../assets/feature-wall/mobile-companion-app-showcase.gif" type="image/gif"><img src="../assets/feature-wall/mobile-companion-app-showcase.jpg" alt="Quirky desktop avec l'app companion mobile" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -86,7 +86,7 @@ Cliquez sur n'importe quel élément d'UI dans une vraie fenêtre Chromium pour 
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/browser/design-mode"><picture><source srcset="../site/public/docs/orca-design-mode.gif" type="image/gif"><img src="../../resources/onboarding/feature-wall/tile-05.poster.jpg" alt="Navigateur intégré et Mode Design" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/browser/design-mode"><picture><source srcset="../site/public/docs/quirky-design-mode.gif" type="image/gif"><img src="../../resources/onboarding/feature-wall/tile-05.poster.jpg" alt="Navigateur intégré et Mode Design" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -100,7 +100,7 @@ Parcourez PRs, issues et boards de projet dans l'app — ouvrez un worktree depu
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/review/linear"><picture><source srcset="../../resources/onboarding/feature-wall/tile-03.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-03.poster.jpg" alt="Workflows GitHub et Linear dans Orca" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/review/linear"><picture><source srcset="../../resources/onboarding/feature-wall/tile-03.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-03.poster.jpg" alt="Workflows GitHub et Linear dans Quirky" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -122,7 +122,7 @@ Faites tourner des agents sur une machine distante costaude, avec édition de fi
 
 ### Annoter les diffs IA
 
-Posez des commentaires sur n'importe quelle ligne de diff et renvoyez-les à l'agent — review, édition et commit sans quitter Orca.
+Posez des commentaires sur n'importe quelle ligne de diff et renvoyez-les à l'agent — review, édition et commit sans quitter Quirky.
 
 [Docs →](https://www.onorca.dev/docs/review/annotate-ai-diff)
 
@@ -148,15 +148,15 @@ L'éditeur VS Code avec autosave partout — glissez fichiers ou images directem
 <tr>
 <td width="50%" valign="middle">
 
-### Orca CLI
+### Quirky CLI
 
-Les agents pilotent aussi Orca — scriptez n'importe quel workflow avec `orca worktree create`, `snapshot`, `click` et `fill`.
+Les agents pilotent aussi Quirky — scriptez n'importe quel workflow avec `quirky worktree create`, `snapshot`, `click` et `fill`.
 
 [Docs →](https://www.onorca.dev/docs/cli/overview)
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/cli/overview"><picture><source srcset="../../resources/onboarding/feature-wall/tile-09.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-09.poster.jpg" alt="Scripter Orca depuis la CLI" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/cli/overview"><picture><source srcset="../../resources/onboarding/feature-wall/tile-09.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-09.poster.jpg" alt="Scripter Quirky depuis la CLI" width="100%" /></picture></a>
 </td>
 </tr>
 </table>
@@ -174,7 +174,7 @@ Les agents pilotent aussi Orca — scriptez n'importe quel workflow avec `orca w
 
 ## Agents pris en charge
 
-Fonctionne avec **n'importe quel agent CLI** — s'il tourne dans un terminal, il tourne dans Orca.
+Fonctionne avec **n'importe quel agent CLI** — s'il tourne dans un terminal, il tourne dans Quirky.
 
 <p>
   <a href="https://docs.anthropic.com/claude/docs/claude-code"><kbd><img src="../assets/claude-logo.svg" alt="Logo Claude Code" width="16" valign="middle" /> Claude Code</kbd></a> &nbsp;
@@ -220,17 +220,17 @@ Fonctionne avec **n'importe quel agent CLI** — s'il tourne dans un terminal, i
 ### Desktop — macOS, Windows, Linux
 
 - **[Télécharger depuis onOrca.dev](https://onorca.dev/download)**
-- Ou récupérez un build directement : [macOS Apple Silicon](https://github.com/stablyai/orca/releases/latest/download/orca-macos-arm64.dmg) · [macOS Intel](https://github.com/stablyai/orca/releases/latest/download/orca-macos-x64.dmg) · [Windows (.exe)](https://github.com/stablyai/orca/releases/download/v1.4.147-rc.3/orca-windows-setup.exe) · [Linux AppImage](https://github.com/stablyai/orca/releases/latest/download/orca-linux.AppImage) · [Tous les builds](https://github.com/stablyai/orca/releases/latest)
+- Ou récupérez un build directement : [macOS Apple Silicon](https://github.com/stablyai/orca/releases/latest/download/quirky-macos-arm64.dmg) · [macOS Intel](https://github.com/stablyai/orca/releases/latest/download/quirky-macos-x64.dmg) · [Windows (.exe)](https://github.com/stablyai/orca/releases/download/v1.4.147-rc.3/quirky-windows-setup.exe) · [Linux AppImage](https://github.com/stablyai/orca/releases/latest/download/quirky-linux.AppImage) · [Tous les builds](https://github.com/stablyai/orca/releases/latest)
 - **Sous Windows :** utilisez la [dernière RC (`v1.4.147-rc.3`)](https://github.com/stablyai/orca/releases#release-v1.4.147-rc.3) — elle inclut des correctifs Windows absents de la stable.
 
 _Ou via un gestionnaire de paquets :_
 
 ```bash
 # macOS (Homebrew)
-brew install --cask stablyai/orca/orca
+brew install --cask stablyai/orca/quirky
 
-# Arch Linux (AUR) — ou stably-orca-git pour compiler depuis les sources
-yay -S stably-orca-bin
+# Arch Linux (AUR) — ou stably-quirky-git pour compiler depuis les sources
+yay -S stably-quirky-bin
 ```
 
 ### Companion mobile — iOS, Android
@@ -245,13 +245,13 @@ Associez-la à l'app de bureau pour surveiller et piloter vos agents depuis votr
 ## Communauté &amp; support
 
 - **Discord :** Rejoignez la communauté sur **[Discord](https://discord.gg/fzjDKHxv8Q)**.
-- **Twitter / X :** Suivez **[@orca_build](https://x.com/orca_build)** pour les news et annonces.
-- **WeChat :** Le groupe 11 est complet. Scannez pour rejoindre le groupe WeChat 12 de la communauté Orca.
+- **Twitter / X :** Suivez **[@quirky_build](https://x.com/quirky_build)** pour les news et annonces.
+- **WeChat :** Le groupe 11 est complet. Scannez pour rejoindre le groupe WeChat 12 de la communauté Quirky.
 
-  <img src="../assets/wechat-qr-group12.jpg" alt="QR code WeChat groupe 12 de la communauté Orca" width="160" />
+  <img src="../assets/wechat-qr-group12.jpg" alt="QR code WeChat groupe 12 de la communauté Quirky" width="160" />
 
 - **Feedback &amp; idées :** On ship vite. Il manque quelque chose ? [Demandez une feature](https://github.com/stablyai/orca/issues).
-- **Confidentialité :** Voir la [doc confidentialité &amp; télémétrie](https://www.onorca.dev/docs/telemetry) pour ce qu'Orca collecte en anonyme et comment désactiver la télémétrie.
+- **Confidentialité :** Voir la [doc confidentialité &amp; télémétrie](https://www.onorca.dev/docs/telemetry) pour ce qu'Quirky collecte en anonyme et comment désactiver la télémétrie.
 - **Soutenez-nous :** [Mettez une star](https://github.com/stablyai/orca) sur ce repo pour suivre nos ships quotidiens.
 
 ---
@@ -261,7 +261,7 @@ Associez-la à l'app de bureau pour surveiller et piloter vos agents depuis votr
 Envie de contribuer ou de lancer le projet en local ? Consultez notre guide [CONTRIBUTING.md](../../.github/CONTRIBUTING.md).
 
 <a href="https://github.com/stablyai/orca/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=stablyai/orca" alt="Contributeurs Orca" />
+  <img src="https://contrib.rocks/image?repo=stablyai/orca" alt="Contributeurs Quirky" />
 </a>
 
 <p align="center">
@@ -274,4 +274,4 @@ Signature de code Windows sponsorisée / fournie par [SignPath.io](https://signp
 
 ## Licence
 
-Orca est libre et open source sous la [licence MIT](../../LICENSE).
+Quirky est libre et open source sous la [licence MIT](../../LICENSE).

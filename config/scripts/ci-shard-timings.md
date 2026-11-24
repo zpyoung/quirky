@@ -10,7 +10,7 @@ no uniform overhead is added.
 
 Unit assignment runs inside Vitest's sequencer after discovery and CLI exclusions;
 Vitest's default sort, workers and isolation remain intact. It is enabled only by
-`ORCA_BALANCE_UNIT_SHARDS=1`; ordinary local runs and explicit file filters retain
+`QUIRKY_BALANCE_UNIT_SHARDS=1`; ordinary local runs and explicit file filters retain
 their existing behavior. E2E uses Playwright's native `--list` and `--test-list`,
 retaining project filters, skipped tests and complete serial groups within files.
 The workflow verifies selected test IDs against full discovery before executing.
@@ -158,7 +158,7 @@ allowance with the complete successful measurements described above.
 For E2E reproduction, check out the recorded source and pass the saved list to the
 existing command: `pnpm run test:e2e --test-list=/path/to/selected.txt` with the same
 CI environment/build inputs. For unit reproduction, use the unchanged workflow
-command and exclusions with `ORCA_BALANCE_UNIT_SHARDS=1` and the recorded
+command and exclusions with `QUIRKY_BALANCE_UNIT_SHARDS=1` and the recorded
 `--shard=INDEX/8`. Direct test-file reruns remain supported.
 
 To refresh unit weights, download all `unit-shard-node-*` artifacts from one
@@ -189,8 +189,8 @@ lanes or multiple attempts. Then run:
 node config/scripts/ci-shard-timing-import.mjs LOG_DIRECTORY UNIT_RUN_ID E2E_RUN_ID config/scripts/ci-shard-timings.json
 ```
 
-The initial source logs are in `/tmp/orca-ci-shard-logs`; two were reused from
-`/tmp/orca-ci-audit`, and the remaining twenty were fetched read-only. Reimporting
+The initial source logs are in `/tmp/quirky-ci-shard-logs`; two were reused from
+`/tmp/quirky-ci-audit`, and the remaining twenty were fetched read-only. Reimporting
 those logs reproduced the original baseline byte-for-byte. Review file-count and
 load projections before adopting a new baseline; no network access is needed to
 plan or run shards.
@@ -214,5 +214,5 @@ plan or run shards.
   importer/reporter and shard-assignment tests passed; importing the artifacts
   reproduced the refreshed JSON byte-for-byte.
 
-All local tests used `ORCA_BACKGROUND_LAUNCH=1` in background tool sessions. No app
+All local tests used `QUIRKY_BACKGROUND_LAUNCH=1` in background tool sessions. No app
 windows or full E2E test bodies were launched.

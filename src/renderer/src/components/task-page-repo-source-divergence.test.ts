@@ -27,7 +27,7 @@ describe('hasDivergentSources', () => {
       hasDivergentSources(
         state({
           issues: { owner: 'acme', repo: 'fork', host: 'github.com' },
-          prs: { owner: 'acme', repo: 'orca', host: 'github.com' }
+          prs: { owner: 'acme', repo: 'quirky', host: 'github.com' }
         })
       )
     ).toBe(true)
@@ -48,8 +48,8 @@ describe('hasDivergentSources', () => {
     expect(
       hasDivergentSources(
         state({
-          issues: { owner: 'acme', repo: 'orca', host: 'github.com' },
-          prs: { owner: 'acme', repo: 'orca', host: 'github.com' }
+          issues: { owner: 'acme', repo: 'quirky', host: 'github.com' },
+          prs: { owner: 'acme', repo: 'quirky', host: 'github.com' }
         })
       )
     ).toBe(false)
@@ -62,7 +62,7 @@ describe('hasUpstreamCandidateDivergence', () => {
       hasUpstreamCandidateDivergence(
         state({
           originCandidate: { owner: 'me', repo: 'fork', host: 'github.com' },
-          upstreamCandidate: { owner: 'acme', repo: 'orca', host: 'github.com' }
+          upstreamCandidate: { owner: 'acme', repo: 'quirky', host: 'github.com' }
         })
       )
     ).toBe(true)
@@ -83,8 +83,8 @@ describe('hasUpstreamCandidateDivergence', () => {
     expect(
       hasUpstreamCandidateDivergence(
         state({
-          originCandidate: { owner: 'acme', repo: 'orca', host: 'github.com' },
-          upstreamCandidate: { owner: 'acme', repo: 'orca', host: 'github.com' }
+          originCandidate: { owner: 'acme', repo: 'quirky', host: 'github.com' },
+          upstreamCandidate: { owner: 'acme', repo: 'quirky', host: 'github.com' }
         })
       )
     ).toBe(false)

@@ -1,11 +1,11 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
-import { ORCAD_FOREIGN_SQLITE_READER_ENTRY } from '../../src/shared/orcad-artifacts.ts'
+import { QUIRKYD_FOREIGN_SQLITE_READER_ENTRY } from '../../src/shared/quirkyd-artifacts.ts'
 
-// Why a child process: the read must run under the runtime orcad ships, which may not be
+// Why a child process: the read must run under the runtime quirkyd ships, which may not be
 // the Node running the build. The verdict is the exit code, never matched output.
 const PROBE = `
 const { Worker } = require('node:worker_threads')
@@ -50,11 +50,11 @@ worker.postMessage(steps[0].request)
 
 /**
  * Load the built foreign SQLite reader entry and run real reads through it.
- * @param outDir - orcad output directory holding the entry.
+ * @param outDir - quirkyd output directory holding the entry.
  * @param options.runtimePath - Node to run under; the build's own Node when omitted.
  */
 export function smokeForeignSqliteReaderWorker(outDir, { runtimePath, timeoutMs = 30_000 } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-foreign-sqlite-smoke-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-foreign-sqlite-smoke-'))
   try {
     const probe = join(directory, 'probe.cjs')
     writeFileSync(probe, PROBE)
@@ -62,11 +62,11 @@ export function smokeForeignSqliteReaderWorker(outDir, { runtimePath, timeoutMs 
       program: runtimePath ?? process.execPath,
       args: [
         probe,
-        resolve(outDir, ORCAD_FOREIGN_SQLITE_READER_ENTRY),
+        resolve(outDir, QUIRKYD_FOREIGN_SQLITE_READER_ENTRY),
         join(directory, 'opencode.db'),
         join(directory, 'missing.vscdb')
       ],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs,
       maxOutputBytes: 64 * 1024
     })

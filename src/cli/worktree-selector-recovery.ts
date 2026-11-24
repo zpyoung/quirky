@@ -46,10 +46,10 @@ export function worktreeSelectorRecovery(selector: string): WorktreeSelectorReco
     validSelectorForms: WORKTREE_SELECTOR_FORMS,
     suggestions,
     nextSteps: [
-      `No Orca workspace matched the worktree selector "${selector}".`,
+      `No Quirky workspace matched the worktree selector "${selector}".`,
       ...(suggestions.length > 0 ? [`Did you mean: ${suggestions.join(', ')}`] : []),
       `Valid selector forms: ${WORKTREE_SELECTOR_FORMS.join(', ')}.`,
-      'List the exact values with `orca worktree list --json`; a bare repository id is not a worktree id.'
+      'List the exact values with `quirky worktree list --json`; a bare repository id is not a worktree id.'
     ]
   }
 }

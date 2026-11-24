@@ -4,17 +4,17 @@ title: Rich markdown editor
 
 Markdown files open in a rich editor by default — slash menu, toolbar, inline previews for images and code, internal link autocomplete. Toggle to raw Monaco whenever you want with `Cmd-Shift-M`.
 
-For files larger than 300 KB, Orca opens the raw editor first to keep typing responsive. Choose **Open anyway** in the fallback banner when you want the rich editor for that file; the choice lasts until you close its tab. Files that use Markdown constructs the rich editor cannot safely preserve still stay in the raw editor.
+For files larger than 300 KB, Quirky opens the raw editor first to keep typing responsive. Choose **Open anyway** in the fallback banner when you want the rich editor for that file; the choice lasts until you close its tab. Files that use Markdown constructs the rich editor cannot safely preserve still stay in the raw editor.
 
 ## Slash menu
 
 Type `/` on an empty line to open the slash menu: headings, lists, code blocks, callouts, images, mermaid diagrams, and toggle blocks.
 
-Use `/toggle-text` for collapsible notes, or `/toggle-h1` … `/toggle-h5` when the toggle summary should read like a heading level. You can edit nested toggles in place. Orca saves toggles as portable `<details>` / `<summary>` markdown so the file still previews outside Orca.
+Use `/toggle-text` for collapsible notes, or `/toggle-h1` … `/toggle-h5` when the toggle summary should read like a heading level. You can edit nested toggles in place. Quirky saves toggles as portable `<details>` / `<summary>` markdown so the file still previews outside Quirky.
 
 ## Internal links
 
-Type `[[` to start a wiki-style link. Orca autocompletes file paths within the worktree and inserts a relative link.
+Type `[[` to start a wiki-style link. Quirky autocompletes file paths within the worktree and inserts a relative link.
 
 ## Search
 
@@ -22,7 +22,7 @@ In-editor markdown search respects rendered text, not raw markdown — so search
 
 ## Review annotations
 
-When you're reviewing markdown in Orca's rich editor, select rendered text to add an annotation without switching back to raw markdown. Orca keeps the note tied to the selected source range so it can show the comment while you continue editing the rendered document.
+When you're reviewing markdown in Quirky's rich editor, select rendered text to add an annotation without switching back to raw markdown. Quirky keeps the note tied to the selected source range so it can show the comment while you continue editing the rendered document.
 
 **Add Review Note** is a remappable shortcut (`Cmd+Shift+A` / `Ctrl+Shift+A` by default under [Settings → Shortcuts](/docs/settings)).
 

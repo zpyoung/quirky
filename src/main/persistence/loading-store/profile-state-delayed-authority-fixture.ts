@@ -112,7 +112,7 @@ afterEach(async () => {
 })
 
 export async function fixture(legacyOpenCodeGoApiKey?: string) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-worker-coordination-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-worker-coordination-'))
   const path = join(directory, 'profile-state.db')
   const inner = new ProfileStateSqliteAuthority(path, 'coordination-test')
   const initial = buildProfileStateCutoverFixture(directory)
@@ -129,7 +129,7 @@ export async function fixture(legacyOpenCodeGoApiKey?: string) {
   )
   const authority = new DelayedAuthority(inner)
   const store = new Store({
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     profileStateAuthority: authority
   })
   cleanups.push(async () => {

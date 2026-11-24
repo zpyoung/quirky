@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test as base, expect } from './helpers/orca-app'
+import { test as base, expect } from './helpers/quirky-app'
 import { waitForActivePaneHookDescriptor, waitForActivePanePtyId } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { RuntimeClient } from '../../src/cli/runtime-client'
@@ -15,7 +15,7 @@ import {
 import { FAKE_AGENT_PASTE_END_SCANNER_SOURCE } from './helpers/fake-agent-paste-end-scanner'
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './helpers/fake-codex-launch-probes'
 
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-settlement-release-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-settlement-release-'))
 const cliLedgerPath = path.join(fakeCliDir, 'cli.jsonl')
 const cliEntry = path.join(process.cwd(), 'out', 'cli', 'index.js')
 const fakeCodexCommand = buildFakeAgentCommandOverride(
@@ -43,12 +43,12 @@ process.stdin.on('data', (chunk) => {
       setTimeout(() => process.stdout.write('\\u001b]0;Codex Ready\\u0007'), 10)
     })
   }
-  const encoded = input.match(/ORCA_E2E_WORKER_DONE:([A-Za-z0-9+/=]+)/)?.[1]
+  const encoded = input.match(/QUIRKY_E2E_WORKER_DONE:([A-Za-z0-9+/=]+)/)?.[1]
   if (!encoded) return
   const request = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'))
   const args = [
     'orchestration', 'send',
-    '--from', request.mismatch ? 'term_foreign' : process.env.ORCA_TERMINAL_HANDLE,
+    '--from', request.mismatch ? 'term_foreign' : process.env.QUIRKY_TERMINAL_HANDLE,
     '--to', request.coordinator,
     '--type', 'worker_done',
     '--subject', request.mismatch ? 'wrong sender' : 'completed',
@@ -58,12 +58,12 @@ process.stdin.on('data', (chunk) => {
     '--outcome', 'succeeded',
     '--json'
   ]
-  const result = spawnSync(process.execPath, [process.env.ORCA_E2E_CLI_ENTRY, ...args], {
+  const result = spawnSync(process.execPath, [process.env.QUIRKY_E2E_CLI_ENTRY, ...args], {
     env: process.env,
     encoding: 'utf8'
   })
   appendFileSync(
-    process.env.ORCA_E2E_CLI_LEDGER,
+    process.env.QUIRKY_E2E_CLI_LEDGER,
     JSON.stringify({ mismatch: request.mismatch, args, status: result.status, stdout: result.stdout, stderr: result.stderr }) + '\\n'
   )
 })
@@ -88,8 +88,8 @@ const test = base.extend({
   launchEnv: [
     {
       PATH: `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-      ORCA_E2E_CLI_ENTRY: cliEntry,
-      ORCA_E2E_CLI_LEDGER: cliLedgerPath
+      QUIRKY_E2E_CLI_ENTRY: cliEntry,
+      QUIRKY_E2E_CLI_LEDGER: cliLedgerPath
     },
     { option: true }
   ]
@@ -114,7 +114,7 @@ function readCliLedger(): CliLedgerEntry[] {
 
 function invokeCompiledCli(userDataDir: string, args: string[]) {
   return spawnSync(process.execPath, [cliEntry, ...args], {
-    env: { ...process.env, ORCA_USER_DATA_PATH: userDataDir, ORCA_DEV_CLI_INVOCATION: '1' },
+    env: { ...process.env, QUIRKY_USER_DATA_PATH: userDataDir, QUIRKY_DEV_CLI_INVOCATION: '1' },
     encoding: 'utf8'
   })
 }
@@ -133,13 +133,13 @@ test.afterAll(() => {
 })
 
 test('compiled CLI rejects false completion then reconciles the dead retained worker', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
   test.setTimeout(180_000)
   rmSync(cliLedgerPath, { force: true })
-  await waitForSessionReady(orcaPage)
-  await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.evaluate(
     async ({ agentCommand, terminalWindowsShell }) => {
       await window.__store?.getState().updateSettings({
         agentCmdOverrides: { codex: agentCommand },
@@ -148,10 +148,10 @@ test('compiled CLI rejects false completion then reconciles the dead retained wo
     },
     { agentCommand: fakeCodexCommand, terminalWindowsShell: FAKE_AGENT_WINDOWS_SHELL }
   )
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActivePanePtyId(orcaPage)
-  const coordinatorPane = await waitForActivePaneHookDescriptor(orcaPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActivePanePtyId(quirkyPage)
+  const coordinatorPane = await waitForActivePaneHookDescriptor(quirkyPage)
   const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const client = new RuntimeClient(userDataDir, 30_000, null, null)
   const coordinator = await client.call<{ terminal: { handle: string } }>('terminal.resolvePane', {
@@ -222,7 +222,7 @@ test('compiled CLI rejects false completion then reconciles the dead retained wo
   }
   await client.call('terminal.send', {
     terminal: workerHandle,
-    text: `ORCA_E2E_WORKER_DONE:${encodeWorkerDone({ ...baseMarker, mismatch: true })}`,
+    text: `QUIRKY_E2E_WORKER_DONE:${encodeWorkerDone({ ...baseMarker, mismatch: true })}`,
     enter: true
   })
   await expect.poll(() => readCliLedger()).toHaveLength(1)
@@ -240,7 +240,7 @@ test('compiled CLI rejects false completion then reconciles the dead retained wo
 
   await client.call('terminal.send', {
     terminal: workerHandle,
-    text: `ORCA_E2E_WORKER_DONE:${encodeWorkerDone({ ...baseMarker, mismatch: false })}`,
+    text: `QUIRKY_E2E_WORKER_DONE:${encodeWorkerDone({ ...baseMarker, mismatch: false })}`,
     enter: true
   })
   await expect.poll(() => readCliLedger()).toHaveLength(2)

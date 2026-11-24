@@ -197,9 +197,9 @@ describe('a send the host rejected', () => {
   // never ran and fold the one row naming the cause behind a "Worked for 0s".
   it('leaves the row naming the cause on screen', () => {
     const messages = [
-      text('orca:first-start', DIAGNOSTIC, 'system'),
-      text('orca:dead', 'Reply with exactly: DEAD', 'user'),
-      text('orca:restart-exit', DIAGNOSTIC, 'system')
+      text('quirky:first-start', DIAGNOSTIC, 'system'),
+      text('quirky:dead', 'Reply with exactly: DEAD', 'user'),
+      text('quirky:restart-exit', DIAGNOSTIC, 'system')
     ]
     const settledByTurn = selectStructuredAgentSettledTurns(
       [],
@@ -217,16 +217,16 @@ describe('a send the host rejected', () => {
       ]
     )
     const turnStatuses = selectNativeChatTurnStatuses(
-      { 'orca:dead': { startedAt: 900, workedSeconds: 0 } },
-      { activeTurnKey: 'orca:dead', isWorking: false, thinking: false, settledByTurn }
+      { 'quirky:dead': { startedAt: 900, workedSeconds: 0 } },
+      { activeTurnKey: 'quirky:dead', isWorking: false, thinking: false, settledByTurn }
     )
 
     const slots = build(messages, { turnStatuses })
 
     expect(slots.map((slot) => [slot.message.id, slot.folded, slot.status])).toEqual([
-      ['orca:first-start', false, undefined],
-      ['orca:dead', false, undefined],
-      ['orca:restart-exit', false, undefined]
+      ['quirky:first-start', false, undefined],
+      ['quirky:dead', false, undefined],
+      ['quirky:restart-exit', false, undefined]
     ])
   })
 })
@@ -283,33 +283,33 @@ describe('a turn no message opened', () => {
     ])
   })
 
-  // Stored red for clients that predate it, but Orca stopped, not the agent: no failure, never folded.
-  it("keeps the row about Orca's stop on screen beside the reply it cut, which stays the answer", () => {
-    const orcaStop: NativeChatMessage = {
-      ...failure('orca-stop'),
+  // Stored red for clients that predate it, but Quirky stopped, not the agent: no failure, never folded.
+  it("keeps the row about Quirky's stop on screen beside the reply it cut, which stays the answer", () => {
+    const quirkyStop: NativeChatMessage = {
+      ...failure('quirky-stop'),
       blocks: [
         {
           type: 'text' as const,
           text: 'Codex stopped while this response was in progress.',
           tone: 'error',
-          presentation: 'orca-stop',
-          orcaStop: { cause: 'update' }
+          presentation: 'quirky-stop',
+          quirkyStop: { cause: 'update' }
         }
       ]
     }
-    const messages = [text('u1', 'go', 'user'), text('a1', 'Looking.'), toolRun('work'), orcaStop]
+    const messages = [text('u1', 'go', 'user'), text('a1', 'Looking.'), toolRun('work'), quirkyStop]
     const slots = build(messages, {
       turnStatuses: { active: settled(3), completedByTurn: { u1: settled(3) } }
     })
     expect(slots.map((slot) => [slot.message.id, slot.folded])).toEqual([
       ['u1', false],
       ['a1', false],
-      ['orca-stop', false]
+      ['quirky-stop', false]
     ])
     // The same, once a reader re-presented it neutral.
     const neutral: NativeChatMessage = {
-      ...orcaStop,
-      blocks: orcaStop.blocks.map((block) =>
+      ...quirkyStop,
+      blocks: quirkyStop.blocks.map((block) =>
         block.type === 'text' ? { ...block, tone: 'notice' } : block
       )
     }
@@ -320,7 +320,7 @@ describe('a turn no message opened', () => {
     ).toEqual([
       ['u1', false],
       ['a1', false],
-      ['orca-stop', false]
+      ['quirky-stop', false]
     ])
   })
 

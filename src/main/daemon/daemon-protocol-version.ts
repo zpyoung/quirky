@@ -1,5 +1,5 @@
 // Why: daemons survive app updates, so wire behavior must be version-gated.
-// v50 makes the `codex` function keep Orca's terminal identity under a filtering shell_environment_policy.
+// v50 makes the `codex` function keep Quirky's terminal identity under a filtering shell_environment_policy.
 // v49 makes the `claude` function follow the selection over the user's own CLAUDE_CONFIG_DIR.
 // v48 skips v47, which the 1.4.227 release (1.4.224 plus picks) took; its daemon is adopted as previous.
 // v46 starts each new Linux terminal in its own systemd scope beside the daemon's.
@@ -11,7 +11,7 @@
 export const PROTOCOL_VERSION = 50
 export const CLAUDE_ACCOUNT_FUNCTION_DAEMON_PROTOCOL_VERSION = 42
 export const CLAUDE_ACCOUNT_FUNCTION_REVERTED_DAEMON_PROTOCOL_VERSION = 43
-// v39 gives plain fish panes Orca's codex function through XDG_DATA_DIRS.
+// v39 gives plain fish panes Quirky's codex function through XDG_DATA_DIRS.
 export const CODEX_FISH_SHELL_FUNCTION_DAEMON_PROTOCOL_VERSION = 39
 // Why: older daemons reject `setColorQueryReplyColors` as an unknown request type.
 export const COLOR_QUERY_REPLY_COLORS_DAEMON_PROTOCOL_VERSION = 38

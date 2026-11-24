@@ -75,13 +75,13 @@ describe('shouldUploadRemoteEditorFileDrop', () => {
           worktreesByRepo: { 'repo-1': [{ id: 'wt-1', repoId: 'repo-1' }] }
         },
         'wt-1',
-        '/home/orca/repo-1',
+        '/home/quirky/repo-1',
         'ssh-1'
       )
     ).toEqual({
       target: { kind: 'local' as const },
       worktreeId: 'wt-1',
-      worktreePath: '/home/orca/repo-1',
+      worktreePath: '/home/quirky/repo-1',
       connectionId: 'ssh-1'
     })
   })

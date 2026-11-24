@@ -43,7 +43,7 @@ jobs:
         run: node config/scripts/install-electron-package-binary.mjs
       - name: Exercise native application registry and update shutdown
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
         run: >-
           pnpm exec vitest run --config config/vitest.config.ts
           config/scripts/macos-shipit-scheduling.test.mjs

@@ -93,7 +93,7 @@ describe('CdpWsProxy agent input focus guard', () => {
     await proxy.stop()
   })
 
-  it('forwards presses on pages outside an Orca window without a guard', async () => {
+  it('forwards presses on pages outside an Quirky window without a guard', async () => {
     const mock = createMockWebContents()
     const guardFocus = vi.fn(async () => () => {})
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock implements every WebContents member the proxy calls.

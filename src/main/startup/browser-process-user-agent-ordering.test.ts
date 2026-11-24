@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const events: string[] = []
-  // Why a two-word app token: this file sets the dev app name to "Orca Development", and Electron
+  // Why a two-word app token: this file sets the dev app name to "Quirky Development", and Electron
   // builds the app token from that name. A single-token fixture could not exhibit the multi-word
   // leak the cleaner exists to handle, so it disagreed with the scenario it set up.
   // Why the engine comment: a real app.userAgentFallback always carries it, and the cleaner only
   // touches identities that do — a fixture without it models a string Electron cannot produce.
   let userAgent =
-    'Mozilla/5.0 (Test) AppleWebKit/537.36 (KHTML, like Gecko) Orca Development/0.0.0 Chrome/150.0.0.0 Electron/43.0.0 Safari/537.36'
+    'Mozilla/5.0 (Test) AppleWebKit/537.36 (KHTML, like Gecko) Quirky Development/0.0.0 Chrome/150.0.0.0 Electron/43.0.0 Safari/537.36'
   const app = {
     isPackaged: false,
     exit: vi.fn(),
@@ -70,7 +70,7 @@ vi.mock('./serve-mode-argv', () => ({
 vi.mock('./configure-process', () => ({
   configureDevUserDataPath: vi.fn(),
   configureElectronNetworkCompatibility: vi.fn(),
-  configureOrcaUserDataPathEnv: vi.fn(),
+  configureQuirkyUserDataPathEnv: vi.fn(),
   disableUnsupportedChromiumFeatures: vi.fn(),
   enableMainProcessGpuFeatures: vi.fn(),
   installDevParentDisconnectQuit: vi.fn(),
@@ -96,8 +96,8 @@ vi.mock('../updater', () => ({
 vi.mock('./dev-instance-identity', () => ({
   getDevInstanceIdentity: () => ({
     isDev: true,
-    appName: 'Orca Development',
-    appUserModelId: 'com.orca.development'
+    appName: 'Quirky Development',
+    appUserModelId: 'com.quirky.development'
   }),
   shouldApplyPreReadyAppName: () => true
 }))
@@ -163,11 +163,11 @@ vi.mock('../persistence/profile-state/profile-state-access', () => ({
 }))
 vi.mock('../macos-press-and-hold-default')
 vi.mock('../ai-vault/session-parse-cache-persistence')
-vi.mock('../orca-profiles/profile-index-store', () => ({ initOrcaProfilePaths: vi.fn() }))
-vi.mock('../orca-profiles/profile-storage-paths', () => ({
+vi.mock('../quirky-profiles/profile-index-store', () => ({ initQuirkyProfilePaths: vi.fn() }))
+vi.mock('../quirky-profiles/profile-storage-paths', () => ({
   getProfileUserDataPath: () => '/canonical-user-data'
 }))
-vi.mock('../orca-profiles/profile-project-move-intent', () => ({
+vi.mock('../quirky-profiles/profile-project-move-intent', () => ({
   recoverPendingProfileProjectMoves: mocks.recoverMoves
 }))
 vi.mock('../persistence/profile-state/profile-state-active-location', () => ({
@@ -211,7 +211,7 @@ describe('browser process user-agent startup ordering', () => {
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     mocks.backgroundLaunch.mockReturnValueOnce(false)
     mocks.admission.mockImplementationOnce(() => {
-      throw new Error('Stop Orca and orcad before retrying profile recovery')
+      throw new Error('Stop Quirky and quirkyd before retrying profile recovery')
     })
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
@@ -219,8 +219,8 @@ describe('browser process user-agent startup ordering', () => {
         runMainProcessPreflight({ focusExistingWindow: vi.fn(), requestDesktopActivation: vi.fn() })
       ).toBe(false)
       expect(mocks.showErrorBox).toHaveBeenCalledWith(
-        'Orca could not start',
-        expect.stringContaining('Stop Orca and orcad before retrying profile recovery')
+        'Quirky could not start',
+        expect.stringContaining('Stop Quirky and quirkyd before retrying profile recovery')
       )
       expect(mocks.app.isReady).not.toHaveBeenCalled()
     } finally {
@@ -231,11 +231,11 @@ describe('browser process user-agent startup ordering', () => {
     }
   })
 
-  it('explains an orcad holding the profile instead of exiting silently', async () => {
+  it('explains an quirkyd holding the profile instead of exiting silently', async () => {
     const { runMainProcessPreflight } = await import('./main-process-preflight')
     const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     mocks.backgroundLaunch.mockReturnValueOnce(false)
-    mocks.profileLock.mockReturnValueOnce({ state: 'held', message: 'Another orcad (pid 7)' })
+    mocks.profileLock.mockReturnValueOnce({ state: 'held', message: 'Another quirkyd (pid 7)' })
     mocks.app.exit.mockClear()
     mocks.events.length = 0
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -244,8 +244,8 @@ describe('browser process user-agent startup ordering', () => {
         runMainProcessPreflight({ focusExistingWindow: vi.fn(), requestDesktopActivation: vi.fn() })
       ).toBe(false)
       expect(mocks.showErrorBox).toHaveBeenCalledWith(
-        'Orca could not start',
-        'Another orcad (pid 7)'
+        'Quirky could not start',
+        'Another quirkyd (pid 7)'
       )
       expect(mocks.app.exit.mock.calls).toEqual([[3]])
       expect(mocks.events).not.toContain('admission:/canonical-user-data')
@@ -283,7 +283,7 @@ describe('browser process user-agent startup ordering', () => {
       })
     ).toBe(false)
 
-    const nameIndex = mocks.events.indexOf('set-name:Orca Development')
+    const nameIndex = mocks.events.indexOf('set-name:Quirky Development')
     const modeIndex = mocks.events.indexOf('read-mode:/canonical-user-data')
     const writeIndex = mocks.events.indexOf('write-user-agent')
     const continuationIndex = mocks.events.indexOf('continued-after-browser-identity')
@@ -299,9 +299,9 @@ describe('browser process user-agent startup ordering', () => {
       mode: 'clean',
       userAgent: mocks.userAgent()
     })
-    // Both app-name words must be gone, not just the last: a single \S+ would have left "Orca".
+    // Both app-name words must be gone, not just the last: a single \S+ would have left "Quirky".
     expect(mocks.userAgent()).not.toMatch(/Electron/)
-    expect(mocks.userAgent()).not.toMatch(/Orca|Development/)
+    expect(mocks.userAgent()).not.toMatch(/Quirky|Development/)
   })
 
   it('exits without reading profile state or revealing a window when recovery holds admission', async () => {
@@ -318,7 +318,7 @@ describe('browser process user-agent startup ordering', () => {
       expect(mocks.app.exit).toHaveBeenCalledWith(1)
       expect(mocks.events).toEqual([
         'init-data-path',
-        'set-name:Orca Development',
+        'set-name:Quirky Development',
         'single-instance-lock',
         'admission:/canonical-user-data'
       ])
@@ -383,7 +383,7 @@ it('defers a Linux desktop startup failure until Electron is ready', async () =>
     await ready
     await Promise.resolve()
     expect(mocks.showErrorBox).toHaveBeenCalledWith(
-      'Orca could not start',
+      'Quirky could not start',
       expect.stringContaining('Linux pre-ready failure')
     )
     expect(mocks.app.exit).toHaveBeenCalledWith(1)

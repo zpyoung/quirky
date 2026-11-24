@@ -12,7 +12,7 @@ let root = ''
 let repo = ''
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-checkout-progress-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-checkout-progress-'))
   repo = join(root, 'repo')
   await gitExecFileAsync(['init', '--quiet', repo], { cwd: root })
   await gitExecFileAsync(['symbolic-ref', 'HEAD', 'refs/heads/main'], { cwd: repo })

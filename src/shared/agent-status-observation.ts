@@ -16,11 +16,11 @@ export const AGENT_STATUS_OBSERVATION_ORIGINS = [
   'hook',
   /** In-band status parsed out of PTY bytes: OSC 9999 payloads or OSC 7501 program status. */
   'osc',
-  /** Inferred from a terminal title. The weakest evidence Orca acts on. */
+  /** Inferred from a terminal title. The weakest evidence Quirky acts on. */
   'title',
   /** Derived from the pane's own process/output evidence (e.g. Command Code output seeds). */
   'process',
-  /** Seeded when Orca launched the agent itself, before any provider signal. */
+  /** Seeded when Quirky launched the agent itself, before any provider signal. */
   'launch',
   /** Stamped by orchestration dispatch rather than by the agent. */
   'orchestration',

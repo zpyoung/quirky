@@ -27,7 +27,7 @@ import {
 } from './config-toml-trust'
 
 // Why: the guest identity probe needs wsl.exe; a failed probe leaves the grant unstamped.
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcess: vi.fn(async () => ({
     code: 1,
     signal: null,
@@ -42,14 +42,14 @@ let runtimeHomeDir: string
 let previousUserDataPath: string | undefined
 
 beforeEach(() => {
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-trust-grant-userdata-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-trust-grant-userdata-'))
   runtimeHomeDir = join(userDataDir, 'codex-runtime-home', 'home')
   // Why: production writes hooks.json before granting trust; keeping that
   // ordering prevents test-only canonical-path drift during ledger setup.
   mkdirSync(runtimeHomeDir, { recursive: true })
   writeFileSync(join(runtimeHomeDir, 'hooks.json'), '{"hooks":{}}\n', 'utf-8')
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   codexAppServerCapabilityCache.clear()
   _internals.resetDiagnostics()
 })
@@ -59,15 +59,15 @@ afterEach(() => {
   _internals.setGrantSessionRunner(null)
   codexAppServerCapabilityCache.clear()
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
-  delete process.env.ORCA_DISABLE_CODEX_TRUST_RPC
+  delete process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC
   rmSync(userDataDir, { recursive: true, force: true })
 })
 
-const MANAGED_COMMAND = "/bin/sh '/tmp/orca/codex-hook.sh'"
+const MANAGED_COMMAND = "/bin/sh '/tmp/quirky/codex-hook.sh'"
 
 function managedEntry(eventLabel: CodexTrustEntry['eventLabel']): CodexTrustEntry {
   return {
@@ -353,14 +353,14 @@ describe('grantManagedCodexHookTrust', () => {
     _internals.setGrantSessionRunner(async () => grantedSessionResult(entries))
 
     expect(await grantManagedCodexHookTrust(buildPlan(entries))).toMatchObject({ lane: 'rpc' })
-    process.env.ORCA_DISABLE_CODEX_TRUST_RPC = '1'
+    process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC = '1'
     expect(await grantManagedCodexHookTrust(buildPlan(entries))).toMatchObject({
       lane: 'fallback',
       reason: 'disabled'
     })
   })
 
-  // Why no restore: the session writes trust only at Orca's own keys, and a
+  // Why no restore: the session writes trust only at Quirky's own keys, and a
   // snapshot restore would also undo a save that landed during it.
   it('keeps a config.toml save made during a failed session', async () => {
     const entries = [managedEntry('session_start')]
@@ -402,7 +402,7 @@ describe('grantManagedCodexHookTrust', () => {
   })
 
   it('honors the ops kill switch env flag', async () => {
-    process.env.ORCA_DISABLE_CODEX_TRUST_RPC = '1'
+    process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC = '1'
     const entries = [managedEntry('session_start')]
     const runner = vi.fn(async () => grantedSessionResult(entries))
     _internals.setGrantSessionRunner(runner)

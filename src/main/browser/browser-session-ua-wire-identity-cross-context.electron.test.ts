@@ -26,7 +26,7 @@ let processIdentityModulePath: string
 let exceptionModulePath: string
 
 beforeAll(async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-wire-identity-modules-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-wire-identity-modules-'))
   fixtureRoots.push(root)
   processIdentityModulePath = join(root, 'browser-process-user-agent.cjs')
   exceptionModulePath = join(root, 'browser-session-ua.cjs')
@@ -85,7 +85,7 @@ describe('browser session wire identity in cross-site frames and dedicated worke
 })
 
 async function runProbe(arm: ProbeArm): Promise<ProbeResult> {
-  const root = mkdtempSync(join(tmpdir(), `orca-wire-cross-context-${arm}-`))
+  const root = mkdtempSync(join(tmpdir(), `quirky-wire-cross-context-${arm}-`))
   fixtureRoots.push(root)
   const server = await startBrowserSessionUaWireProbeServer()
   const resultPath = join(root, 'result.json')
@@ -188,7 +188,7 @@ function launchFixture(fixturePath: string, root: string, cdpPort: number): Chil
     process.platform === 'linux' ? 'xvfb-run' : electronBinary,
     process.platform === 'linux' ? ['--auto-servernum', electronBinary, ...args] : args,
     {
-      env: { ...env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     }
   )
@@ -208,7 +208,7 @@ const { existsSync, writeFileSync } = require('node:fs')
 const processIdentity = require(${JSON.stringify(options.processIdentityModulePath)})
 const { cleanElectronUserAgent } = require(${JSON.stringify(options.exceptionModulePath)})
 const arm = ${JSON.stringify(options.arm)}
-app.setName('OrcaCrossContextFixture')
+app.setName('QuirkyCrossContextFixture')
 app.commandLine.appendSwitch('site-per-process')
 const rawUserAgent = app.userAgentFallback
 if (arm === 'clean') processIdentity.initializeBrowserProcessUserAgent('clean')
@@ -334,7 +334,7 @@ function clientHintIdentityIsClean(
   if (!secChUa || wireBrands.length === 0 || navigatorBrands.length === 0) {
     return false
   }
-  const token = /electron|orca/i
+  const token = /electron|quirky/i
   return (
     receipt.userAgent === cleanUserAgent &&
     !token.test(receipt.userAgent ?? '') &&

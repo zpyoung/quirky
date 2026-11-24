@@ -195,7 +195,7 @@ export type AttachedJournal = {
  * is read, and the window stays valid until the resume consumes it. Every other
  * settlement site — a proven child exit — runs while the host
  * may still start another child, and a read there could be overtaken before it
- * is acted on. Orca still never re-sends: this decides state only. A queued
+ * is acted on. Quirky still never re-sends: this decides state only. A queued
  * submission is left alone: it was never handed over, so history cannot hold it.
  */
 export async function attachJournal(input: {

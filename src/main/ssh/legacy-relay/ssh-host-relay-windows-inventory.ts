@@ -24,7 +24,7 @@ import { joinRemotePath, type RemoteHostPlatform } from '../ssh-remote-platform'
 export type WindowsRelayPipeOwner = { dir: string; credentialFile: string }
 
 export type WindowsRelayInventory = {
-  /** Every `orca-relay-*` pipe on the machine, as full `\\.\pipe\` paths. */
+  /** Every `quirky-relay-*` pipe on the machine, as full `\\.\pipe\` paths. */
   pipes: string[]
   /** Pipes this account's version directories account for, keyed by lower-cased path. */
   owners: Map<string, WindowsRelayPipeOwner>
@@ -38,7 +38,7 @@ export const WINDOWS_RELAY_INVENTORY_JS = [
   'var fs=require("fs"),path=require("path");var base=process.argv[1];',
   'var out={pipes:null,dirs:null};',
   'try{out.pipes=fs.readdirSync("\\\\\\\\.\\\\pipe\\\\").filter(function(n){',
-  'return /^orca-relay-[0-9a-f]{20}$/i.test(n)})}catch(e){}',
+  'return /^quirky-relay-[0-9a-f]{20}$/i.test(n)})}catch(e){}',
   'try{out.dirs={};fs.readdirSync(base).forEach(function(d){if(!/^relay-/.test(d))return;',
   'var entry={credentials:[],markers:{}};try{fs.readdirSync(path.join(base,d)).forEach(function(f){',
   `if(f.slice(-${CREDENTIAL_SUFFIX.length})===${JSON.stringify(CREDENTIAL_SUFFIX)})entry.credentials.push(f);`,

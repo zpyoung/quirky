@@ -2,7 +2,7 @@ import { translate } from '@/i18n/i18n'
 import type { ResumeFailure } from './native-chat-resume-on-restart-grouping'
 
 /**
- * What the user can do about a chat Orca could not resume, decided from the host's reason.
+ * What the user can do about a chat Quirky could not resume, decided from the host's reason.
  *
  * One sentence saying what to do and why, and the button that does it. Retry is the primary action
  * only where a second attempt can actually succeed — an ownership clash or a reconnect that never
@@ -48,7 +48,7 @@ export function resumeFailureGuidance(
 function manualContinuationText(): string {
   return translate(
     'auto.components.NativeChatResumeFailureGuidance.fallback',
-    'Orca couldn’t resume this chat. Open it to continue manually.'
+    'Quirky couldn’t resume this chat. Open it to continue manually.'
   )
 }
 
@@ -57,7 +57,7 @@ function reasonGuidance(failure: Pick<ResumeFailure, 'outcome' | 'reason'>): Res
     return {
       text: translate(
         'auto.components.NativeChatResumeFailureGuidance.unconfirmed',
-        'Orca couldn’t confirm the “continue” message was delivered. Open the chat and check before sending another.'
+        'Quirky couldn’t confirm the “continue” message was delivered. Open the chat and check before sending another.'
       ),
       primary: 'open',
       secondary: null
@@ -68,7 +68,7 @@ function reasonGuidance(failure: Pick<ResumeFailure, 'outcome' | 'reason'>): Res
     return {
       text: translate(
         'auto.components.NativeChatResumeFailureGuidance.superseded',
-        'Open the chat and reply. New work arrived in it right after the restart, so Orca didn’t send its “continue” message.'
+        'Open the chat and reply. New work arrived in it right after the restart, so Quirky didn’t send its “continue” message.'
       ),
       primary: 'open',
       secondary: null
@@ -78,7 +78,7 @@ function reasonGuidance(failure: Pick<ResumeFailure, 'outcome' | 'reason'>): Res
     return {
       text: translate(
         'auto.components.NativeChatResumeFailureGuidance.conflict',
-        'This chat is open in another Orca window or terminal. Close it there, then retry.'
+        'This chat is open in another Quirky window or terminal. Close it there, then retry.'
       ),
       primary: 'retry',
       secondary: 'open'
@@ -118,7 +118,7 @@ function reasonGuidance(failure: Pick<ResumeFailure, 'outcome' | 'reason'>): Res
     return {
       text: translate(
         'auto.components.NativeChatResumeFailureGuidance.unsupported',
-        'This chat can’t be resumed by Orca. Open it to see where it stopped.'
+        'This chat can’t be resumed by Quirky. Open it to see where it stopped.'
       ),
       primary: 'open',
       secondary: 'dismiss'

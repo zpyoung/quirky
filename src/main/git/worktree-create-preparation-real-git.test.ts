@@ -36,7 +36,7 @@ function git(cwd: string, args: string[]): string {
 }
 
 async function createRepo(): Promise<{ repoPath: string; root: string }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-prepared-worktree-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-prepared-worktree-'))
   tempRoots.push(root)
   const repoPath = join(root, 'repo')
   execFileSync('git', ['init', '--quiet', repoPath])
@@ -492,7 +492,7 @@ describe('prepared worktree creation with real Git', () => {
       repoPath,
       stalePath,
       'main',
-      'orca-create-preparation:v1:999999999:stale'
+      'quirky-create-preparation:v1:999999999:stale'
     )
     let releaseRemoval!: () => void
     const removalGate = new Promise<void>((resolve) => {
@@ -762,7 +762,7 @@ describe('prepared worktree creation with real Git', () => {
     expect(allBeforeSubmit).toHaveLength(2)
     expect(allBeforeSubmit.find(isWorktreeCreatePreparation)).toMatchObject({
       locked: true,
-      lockReason: expect.stringContaining('orca-create-preparation:v1:')
+      lockReason: expect.stringContaining('quirky-create-preparation:v1:')
     })
 
     await writeFile(join(repoPath, 'version.txt'), 'two\n')

@@ -56,7 +56,7 @@ async function runCommand(
   if (missingCapability !== undefined) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      `The running Orca runtime does not support ${CAPABILITY_DESCRIPTIONS[missingCapability]}. Update or restart Orca and try again.`
+      `The running Quirky runtime does not support ${CAPABILITY_DESCRIPTIONS[missingCapability]}. Update or restart Quirky and try again.`
     )
   }
 

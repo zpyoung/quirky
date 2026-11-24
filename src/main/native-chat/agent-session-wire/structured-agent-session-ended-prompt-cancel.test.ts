@@ -46,7 +46,7 @@ afterEach(async () => {
 /** Generation 1 raised a card and ended without its cleanup; generation 2 runs `turn-2`, with a
  *  message queued behind it. */
 async function endedCardAndLiveTurn(): Promise<{ journal: AgentSessionJournal; itemId: string }> {
-  root = await mkdtemp(join(tmpdir(), 'orca-ended-prompt-cancel-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-ended-prompt-cancel-'))
   const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
   const turn = (turnId: string, fence: number) =>
     journal.appendItem(

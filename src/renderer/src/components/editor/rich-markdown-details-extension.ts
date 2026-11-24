@@ -200,7 +200,7 @@ export function exitEmptyDetailsBody(editor: Editor): boolean {
   return true
 }
 
-const OrcaDetails = Details.extend({
+const QuirkyDetails = Details.extend({
   // Why: details summary Enter must run before StarterKit's generic paragraph
   // splitting so typing a toggle title then pressing Enter moves into the body.
   priority: 1000,
@@ -210,10 +210,11 @@ const OrcaDetails = Details.extend({
       ...this.parent?.(),
       variant: {
         default: null,
-        parseHTML: (element) => parseToggleHeadingVariant(element.getAttribute('data-orca-toggle')),
+        parseHTML: (element) =>
+          parseToggleHeadingVariant(element.getAttribute('data-quirky-toggle')),
         renderHTML: ({ variant }) => {
           const parsed = parseToggleHeadingVariant(variant)
-          return parsed ? { 'data-orca-toggle': parsed } : {}
+          return parsed ? { 'data-quirky-toggle': parsed } : {}
         }
       }
     }
@@ -288,7 +289,7 @@ const OrcaDetails = Details.extend({
   }
 })
 
-const OrcaDetailsSummary = DetailsSummary.extend({
+const QuirkyDetailsSummary = DetailsSummary.extend({
   markdownTokenizer: guardMarkdownDirectiveTokenizer(
     DetailsSummary.config.markdownTokenizer,
     'detailsSummary'
@@ -299,7 +300,7 @@ const OrcaDetailsSummary = DetailsSummary.extend({
   content: 'inline*'
 })
 
-const OrcaDetailsContent = DetailsContent.extend({
+const QuirkyDetailsContent = DetailsContent.extend({
   markdownTokenizer: guardMarkdownDirectiveTokenizer(
     DetailsContent.config.markdownTokenizer,
     'detailsContent'
@@ -323,15 +324,15 @@ const OrcaDetailsContent = DetailsContent.extend({
   }
 })
 
-export function createOrcaDetailsExtensions(): AnyExtension[] {
+export function createQuirkyDetailsExtensions(): AnyExtension[] {
   return [
-    OrcaDetails.configure({
+    QuirkyDetails.configure({
       persist: true,
       HTMLAttributes: {
-        class: 'orca-details'
+        class: 'quirky-details'
       }
     }),
-    OrcaDetailsSummary,
-    OrcaDetailsContent
+    QuirkyDetailsSummary,
+    QuirkyDetailsContent
   ]
 }

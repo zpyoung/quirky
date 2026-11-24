@@ -116,7 +116,7 @@ describe('registerWorktreeHandlers', () => {
         'fetch',
         '--no-tags',
         'origin',
-        `+refs/pull/1849/head:refs/orca/pull/${ORIGIN_HEAD_COMPONENT}/1849`
+        `+refs/pull/1849/head:refs/quirky/pull/${ORIGIN_HEAD_COMPONENT}/1849`
       ],
       { cwd: '/workspace/repo', timeout: REVIEW_HEAD_FETCH_TIMEOUT_MS }
     )
@@ -183,7 +183,7 @@ describe('registerWorktreeHandlers', () => {
         'fetch',
         '--no-tags',
         'origin',
-        `+refs/pull/1849/head:refs/orca/pull/${ORIGIN_HEAD_COMPONENT}/1849`
+        `+refs/pull/1849/head:refs/quirky/pull/${ORIGIN_HEAD_COMPONENT}/1849`
       ],
       { cwd: '/workspace/repo', timeout: REVIEW_HEAD_FETCH_TIMEOUT_MS }
     )

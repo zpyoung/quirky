@@ -255,8 +255,8 @@ describe('terminal close CLI', () => {
       printHelp(COMMAND_SPECS, ['terminal', verb])
 
       const help = String(log.mock.calls[0]?.[0])
-      expect(help).toMatch(/--environment <selector> .*paired Orca server/)
-      expect(help).toMatch(/--pairing-code <code> .*orca:\/\/pair/)
+      expect(help).toMatch(/--environment <selector> .*paired Quirky server/)
+      expect(help).toMatch(/--pairing-code <code> .*quirky:\/\/pair/)
       log.mockRestore()
     }
   )
@@ -344,7 +344,7 @@ describe('terminal send CLI', () => {
         enter: true,
         interrupt: false,
         agentPrompt: true,
-        client: { id: 'orca-cli', type: 'desktop' }
+        client: { id: 'quirky-cli', type: 'desktop' }
       },
       { terminalPromptPreflight: { runtimeId: 'runtime-current' } }
     )
@@ -455,14 +455,14 @@ describe('terminal send CLI', () => {
       text: 'x',
       enter: false,
       interrupt: false,
-      client: { id: 'orca-cli', type: 'desktop' }
+      client: { id: 'quirky-cli', type: 'desktop' }
     })
     expect(call).toHaveBeenNthCalledWith(2, 'terminal.send', {
       terminal: 'term-1',
       text: undefined,
       enter: true,
       interrupt: false,
-      client: { id: 'orca-cli', type: 'desktop' }
+      client: { id: 'quirky-cli', type: 'desktop' }
     })
   })
 

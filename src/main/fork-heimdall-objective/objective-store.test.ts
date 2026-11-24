@@ -439,7 +439,7 @@ describe('ObjectiveStore natural-key persistence', () => {
       completedAtMs: 400,
       terminalHandle: null,
       setupState: 'retained',
-      reportPath: '.orca/reports/task-a.json',
+      reportPath: '.quirky/reports/task-a.json',
       report: {
         taskKey: 'task-a',
         summary: 'Applied the second dispatch',

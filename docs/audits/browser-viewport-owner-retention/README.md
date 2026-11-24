@@ -32,13 +32,13 @@ The browsing activity in #19831 makes this path applicable in principle. The rep
 From the worktree, run the fixed regression suite:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config docs/audits/browser-viewport-owner-retention/vitest.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config docs/audits/browser-viewport-owner-retention/vitest.config.mjs
 ```
 
 Run the same tests with the exact baseline viewport implementation; exit status 1 and seven failed cases are expected:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ORCA_VIEWPORT_BASELINE=1 node node_modules/vitest/vitest.mjs run --config docs/audits/browser-viewport-owner-retention/vitest.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_VIEWPORT_BASELINE=1 node node_modules/vitest/vitest.mjs run --config docs/audits/browser-viewport-owner-retention/vitest.config.mjs
 ```
 
 The import overlay never rewrites product files. `baseline-source.txt` contains only the original viewport module; current support modules remain in use. `baseline-results.json`, `fixed-results.json`, and `validation.json` record the measured results and their scope.

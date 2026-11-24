@@ -11,7 +11,7 @@ import { TUI_AGENT_DISPLAY_NAMES } from './tui-agent-display-names'
 
 export const EXTRA_AGENT_ARGS_MAX_BYTES = 4096
 export const EXTRA_AGENT_ARGS_HOST_UPDATE_REQUIRED =
-  'Update Orca on this host to use extra arguments.'
+  'Update Quirky on this host to use extra arguments.'
 export const EXTRA_AGENT_ARGS_REQUIRE_FRESH_SESSION =
   'Extra arguments require a fresh session for every run.'
 
@@ -28,7 +28,7 @@ const MODEL_OPTION = { kind: 'model', aliases: ['--model'] } as const
 const MODEL_OR_M_OPTION = { kind: 'model', aliases: ['-m', '--model'] } as const
 
 // Why an allowlist: extras come from any paired client, so they must not reach the host's
-// permission posture or flags Orca owns (prompt, resume, cwd, print mode, config, MCP).
+// permission posture or flags Quirky owns (prompt, resume, cwd, print mode, config, MCP).
 const EXTRA_AGENT_ARG_OPTIONS: Partial<Record<TuiAgent, readonly ExtraAgentArgOption[]>> = {
   claude: [
     MODEL_OPTION,

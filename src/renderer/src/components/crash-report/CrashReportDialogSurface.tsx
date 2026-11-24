@@ -34,8 +34,8 @@ function getDialogTitle(report: CrashReportRecord | null): string {
     return 'Report a crash'
   }
   return report && isReactErrorBoundaryReport(report)
-    ? 'Orca hit a recoverable UI error'
-    : 'Orca closed unexpectedly'
+    ? 'Quirky hit a recoverable UI error'
+    : 'Quirky closed unexpectedly'
 }
 
 function getDialogDescription(report: CrashReportRecord | null): string {
@@ -53,7 +53,7 @@ function getNotesPlaceholder(report: CrashReportRecord | null): string {
   }
   return report && isReactErrorBoundaryReport(report)
     ? 'Optional: what were you doing before this UI error?'
-    : 'Optional: what were you doing before Orca closed?'
+    : 'Optional: what were you doing before Quirky closed?'
 }
 
 type CrashReportDialogSurfaceProps = {
@@ -129,7 +129,7 @@ export function CrashReportDialogSurface({
                 <div className="font-medium text-foreground">{formatSummary(report)}</div>
                 <div className="mt-1 text-muted-foreground">
                   {new Date(report.createdAt).toLocaleString()} · {report.platform} {report.arch} ·
-                  {translate('auto.components.crash.report.CrashReportDialog.835037edc9', 'Orca')}{' '}
+                  {translate('auto.components.crash.report.CrashReportDialog.835037edc9', 'Quirky')}{' '}
                   {report.appVersion}
                 </div>
               </div>

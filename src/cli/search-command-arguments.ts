@@ -107,7 +107,7 @@ function readQuery(flags: Map<string, string | boolean>): string {
   if (query === undefined) {
     throw new RuntimeClientError(
       'invalid_argument',
-      'Missing a search query. Pass it as `orca search "<query>"` or --query "<query>", or ask for the index report with --index-status.'
+      'Missing a search query. Pass it as `quirky search "<query>"` or --query "<query>", or ask for the index report with --index-status.'
     )
   }
   return query
@@ -129,7 +129,7 @@ function readFilters(
   return Object.keys(filters).length > 0 ? filters : undefined
 }
 
-/** Maps `orca search` flags onto the session-search contract; nothing it does not have. */
+/** Maps `quirky search` flags onto the session-search contract; nothing it does not have. */
 export function parseSearchCommand(flags: Map<string, string | boolean>): SearchCommand {
   if (flags.has('index-status')) {
     const conflicting = QUERY_ONLY_FLAGS.filter((flag) => flags.has(flag))

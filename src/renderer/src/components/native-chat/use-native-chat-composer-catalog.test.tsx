@@ -106,8 +106,8 @@ describe('composer catalog authority', () => {
       sessionSkills: []
     })
   })
-  // Orca's /resume takes an agent command's place, but a skill of that name stays the agent's.
-  it("puts Orca's /resume in place of an agent command and beside a namesake skill", () => {
+  // Quirky's /resume takes an agent command's place, but a skill of that name stays the agent's.
+  it("puts Quirky's /resume in place of an agent command and beside a namesake skill", () => {
     const reported = [
       { name: 'review', kind: 'command' as const },
       { name: 'resume', kind: 'command' as const, description: 'Resume a saved chat' },
@@ -126,7 +126,7 @@ describe('composer catalog authority', () => {
     ])
     expect(rows('r')[0]).toMatchObject({ name: 'review' })
     expect(rows('resume')[0]).toMatchObject({
-      orcaOwned: true,
+      quirkyOwned: true,
       description: 'Open Agent Session History',
       skillCollision: false
     })
@@ -192,7 +192,7 @@ it('Enter completes a known pre-init skill while still dispatching a built-in co
         setCaret: vi.fn()
       })
     },
-    // Commands lead: the host's /model and /effort, clear, Orca's /resume, then the skill.
+    // Commands lead: the host's /model and /effort, clear, Quirky's /resume, then the skill.
     { initialProps: { activeSuggestion: 4 } }
   )
   const enter = { key: 'Enter', nativeEvent: {}, preventDefault: vi.fn() } as unknown as Parameters<
@@ -237,7 +237,7 @@ describe('OpenCode chat skills', () => {
       reportMayListSkills: agent !== 'claude',
       isSendCommand: (name) => isStructuredAgentSessionComposerCommand(`/${name}`, agent)
     })
-    // Orca's own rows sit in every structured catalog; these cases are about the agent's.
+    // Quirky's own rows sit in every structured catalog; these cases are about the agent's.
     const hostRows = new Set(STRUCTURED_AGENT_SESSION_SLASH_COMMANDS.map(({ name }) => name))
     return buildNativeChatPickerItems(
       commands,
@@ -245,7 +245,7 @@ describe('OpenCode chat skills', () => {
       '',
       '/',
       result.current.sessionSkills
-    ).filter((item) => !(item.kind === 'command' && (item.orcaOwned || hostRows.has(item.name))))
+    ).filter((item) => !(item.kind === 'command' && (item.quirkyOwned || hostRows.has(item.name))))
   }
   const rows = (...args: Parameters<typeof items>) =>
     items(...args).map((item) => `${item.kind}:${item.name}`)

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { _resetClosedPaneFencesForTests } from '../terminal-topology/closed-pane-binding-fence'
 import { fixture } from './profile-state-delayed-authority-fixture'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-types'
 
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
@@ -21,7 +21,7 @@ const binding = {
 }
 const siblingLeafId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
-class CloseRuntime extends OrcaRuntimeService {
+class CloseRuntime extends QuirkyRuntimeService {
   async closeHeadlessTab(): Promise<void> {
     const snapshot = this.mobileSessionTabsByWorktree.get(binding.worktreeId)
     const tab = snapshot?.tabs[0]

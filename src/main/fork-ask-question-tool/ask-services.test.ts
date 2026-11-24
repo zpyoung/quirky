@@ -11,7 +11,7 @@ describe('askServicesFor', () => {
   let root: string
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'orca-ask-services-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-ask-services-'))
     // Why: the shared vitest userData would let register()'s requestId idempotency reach across tests.
     installFakeAppEnvironment({ getPath: () => root })
   })
@@ -73,7 +73,10 @@ describe('askServicesFor', () => {
 
     it('resolves unavailable once the roster reports the last capable owner detached and the grace window elapses', async () => {
       vi.useFakeTimers()
-      const { registry, roster, db } = askServicesFor({ getRuntimeId: () => 'runtime-under-test' }, () => false)
+      const { registry, roster, db } = askServicesFor(
+        { getRuntimeId: () => 'runtime-under-test' },
+        () => false
+      )
       roster.recordConnectionCapabilities('conn-1', [ASK_SURFACE_CLIENT_CAPABILITY])
       roster.trackPaneSubscription('conn-1', 'pane:1')
 
@@ -93,7 +96,10 @@ describe('askServicesFor', () => {
 
     it('cancels the grace timer when the roster reports the pane reattached inside the window', async () => {
       vi.useFakeTimers()
-      const { registry, roster, db } = askServicesFor({ getRuntimeId: () => 'runtime-under-test' }, () => false)
+      const { registry, roster, db } = askServicesFor(
+        { getRuntimeId: () => 'runtime-under-test' },
+        () => false
+      )
       roster.recordConnectionCapabilities('conn-1', [ASK_SURFACE_CLIENT_CAPABILITY])
       roster.trackPaneSubscription('conn-1', 'pane:1')
 

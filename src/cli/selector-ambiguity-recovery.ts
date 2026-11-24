@@ -12,14 +12,14 @@ const EXACT_FORMS = {
     // Why the --project route: a local and an SSH project can share both repo id and path.
     forms:
       'id:<repo-id> or path:<absolute-path>; if two hosts share that id or path, use --project <id> --host <host> where the command takes them',
-    list: 'orca repo list --json',
+    list: 'quirky repo list --json',
     noun: 'project'
   },
   worktree: {
     // Why identity first: a local and an SSH checkout can share both repo id and path.
     forms:
       'identity:<identity.key> (host-qualified), or id:<repo-id>::<absolute-path> when only one host has that checkout',
-    list: 'orca worktree list --json',
+    list: 'quirky worktree list --json',
     noun: 'workspace'
   }
 } as const

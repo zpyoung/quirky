@@ -47,7 +47,7 @@ export function parseNodePtyDiagnostic(message: string): NodePtyDiagnostic | nul
 
 export function getNodePtyRecoveryHint(diagnostic: NodePtyDiagnostic): string | null {
   if (diagnostic.step === 'posix_spawn' && diagnostic.errno === 2) {
-    return "Daemon's node-pty install is gone (worktree deleted?). Restart Orca."
+    return "Daemon's node-pty install is gone (worktree deleted?). Restart Quirky."
   }
   if (
     PTY_ALLOCATION_STEPS.has(diagnostic.step) &&

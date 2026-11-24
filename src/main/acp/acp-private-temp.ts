@@ -1,5 +1,5 @@
 // A temp folder of its own for each process of an agent whose temp files collide across processes,
-// under Orca's locked data root. ACP children talk over stdio, so one left by an earlier host run
+// under Quirky's locked data root. ACP children talk over stdio, so one left by an earlier host run
 // can never be reattached: the host's first start of the agent clears the whole root.
 
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'

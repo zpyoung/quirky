@@ -76,7 +76,7 @@ export type AgentSessionProcessIdentity = {
   pid: number
   processStartTimeMs: number | null
   spawnToken: string
-  /** The Orca runtime that started this process and holds its transport, stamped when the owner is
+  /** The Quirky runtime that started this process and holds its transport, stamped when the owner is
    *  recorded; absent on owners older builds recorded. */
   runtime?: string
 }
@@ -99,10 +99,10 @@ export type AgentSessionDeathEvidence = {
    *  proved it alive. Only a probe's proof records it: absent on a surface-release exit, a failed
    *  start, and evidence older builds wrote. */
   lastProvenAliveAt?: number
-  /** How the Orca runtime that held the owner ended, when the owner died with it: the quit or
-   *  update it had begun, else 'crash'. Absent when a provider died on its own while Orca ran, and
+  /** How the Quirky runtime that held the owner ended, when the owner died with it: the quit or
+   *  update it had begun, else 'crash'. Absent when a provider died on its own while Quirky ran, and
    *  whenever that cannot be told. A string, since a newer build may write a cause this one does
-   *  not know; read it with `isAgentSessionOrcaStopCause`. */
+   *  not know; read it with `isAgentSessionQuirkyStopCause`. */
   runtimeEnd?: string
 }
 
@@ -154,11 +154,11 @@ export type AgentSessionRecord = {
   launchDirectory?: string
   /** Provider options the user chose, replayed whenever a new owner starts the session. */
   options?: Record<string, string>
-  /** The permission mode the user chose; Orca's, so a provider's options answer never replaces it. */
+  /** The permission mode the user chose; Quirky's, so a provider's options answer never replaces it. */
   permissionMode?: string
   rewind?: AgentSessionRewindRecord
   conversationCommand?: AgentSessionConversationCommandRecord
-  /** The name Orca gave this conversation, so a later acquisition need not name it again. */
+  /** The name Quirky gave this conversation, so a later acquisition need not name it again. */
   conversationName?: string
   /** When the user's Sleep stopped this chat; the next admitted send clears it. */
   sleptAt?: number

@@ -4,8 +4,8 @@ import { createServer, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { PinnedPortUnavailableError } from './rpc/ws-transport'
 
 const holders: Server[] = []
@@ -27,11 +27,11 @@ afterEach(async () => {
   )
 })
 
-function serveServer(wsPort: number, requirePinnedWsPort: boolean): OrcaRuntimeRpcServer {
-  return new OrcaRuntimeRpcServer({
+function serveServer(wsPort: number, requirePinnedWsPort: boolean): QuirkyRuntimeRpcServer {
+  return new QuirkyRuntimeRpcServer({
     methods: [],
-    runtime: new OrcaRuntimeService(),
-    userDataPath: mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-pinned-')),
+    runtime: new QuirkyRuntimeService(),
+    userDataPath: mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-pinned-')),
     enableWebSocket: true,
     exposeNetworkByDefault: true,
     wsPort,
@@ -40,7 +40,7 @@ function serveServer(wsPort: number, requirePinnedWsPort: boolean): OrcaRuntimeR
   })
 }
 
-describe('orca serve --port', () => {
+describe('quirky serve --port', () => {
   it('fails startup when the requested port is taken instead of serving on another port', async () => {
     const port = await holdPort()
     const server = serveServer(port, true)

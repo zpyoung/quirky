@@ -6,7 +6,7 @@ import { isMobileMethodUnavailableError } from '../transport/mobile-method-unava
 import type { RpcResponse } from '../transport/types'
 
 // The host's sidebar feed (src/main/runtime/sidebar-inputs/), read only by a page built with
-// ORCA_SIDEBAR_INPUTS=main. A host without it answers method_not_found, or forbidden from an
+// QUIRKY_SIDEBAR_INPUTS=main. A host without it answers method_not_found, or forbidden from an
 // older mobile allowlist; either means this page is newer than the host.
 
 export const sidebarInputsRead = bindDeferredRpcOperation(

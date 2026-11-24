@@ -7,7 +7,7 @@ import {
 
 const wslHost = {
   name: 'Remote box',
-  orcadDeployment: {
+  quirkydDeployment: {
     kind: 'wsl' as const,
     distro: 'Ubuntu',
     localPort: 42000,
@@ -26,7 +26,7 @@ describe('the generic remote-server list', () => {
     expect(isListedRemoteServer({})).toBe(true)
     expect(
       isListedRemoteServer({
-        orcadDeployment: {
+        quirkydDeployment: {
           sshTargetId: 'box',
           sshTargetGeneration: 1,
           localPort: 41000,
@@ -38,10 +38,10 @@ describe('the generic remote-server list', () => {
 })
 
 describe('who pairs a server that refused this desktop', () => {
-  it('is SSH only for a server Orca manages over SSH, never WSL or a cloud VM', () => {
+  it('is SSH only for a server Quirky manages over SSH, never WSL or a cloud VM', () => {
     expect(
       runtimePairingRepairRoute({
-        orcadDeployment: {
+        quirkydDeployment: {
           sshTargetId: 'box',
           sshTargetGeneration: 1,
           localPort: 41000,

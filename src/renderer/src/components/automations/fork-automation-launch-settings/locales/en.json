@@ -3,7 +3,7 @@
     "components": {
       "automations": {
         "AutomationAgentLaunchFields": {
-          "launchSettingsUnsupported": "This automation's host doesn't support launch settings. Update the remote Orca server.",
+          "launchSettingsUnsupported": "This automation's host doesn't support launch settings. Update the remote Quirky server.",
           "launchSettingsNotSaved": "Launch settings can't be saved to this host and won't apply to runs."
         },
         "AutomationRunLaunchDisplay": {

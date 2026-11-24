@@ -4,7 +4,7 @@ import {
   AGENT_PROMPT_TEST_WORKTREE_PATH,
   createAgentPromptSubmissionRuntime
 } from './agent-prompt-submission-runtime-test-fixture'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 import { settledWriteStub } from '../providers/settled-pty-write-stub'
 import type { RuntimeTerminalWriter } from './runtime-terminal-writer'
@@ -353,7 +353,7 @@ describe('agent prompt submission runtime', () => {
     vi.setSystemTime(1_000)
     let handle = ''
     const writes: string[] = []
-    const runtime = new OrcaRuntimeService(makeStore() as never, undefined, {
+    const runtime = new QuirkyRuntimeService(makeStore() as never, undefined, {
       getAgentStatusSnapshot: () => [
         {
           paneKey: 'prompt-pane',
@@ -497,14 +497,14 @@ describe('agent prompt submission runtime', () => {
   })
 
   // Why: hook rows reach the runtime through this provider, which has no window and no OSC title —
-  // the same path a headless `orca serve` host and a minimized desktop window take.
+  // the same path a headless `quirky serve` host and a minimized desktop window take.
 })
 
 const PTY = 'pty-input-dispatch'
 const HANDLE = 'term_input_dispatch'
 
 function inputDispatchRuntime() {
-  const result = new OrcaRuntimeService()
+  const result = new QuirkyRuntimeService()
   const write = vi.fn(() => true)
   result.setPtyController({
     write,
@@ -532,7 +532,7 @@ describe('terminal input dispatch through the current runtime', () => {
       })
     }
     const writer = vi.fn(function (
-      this: OrcaRuntimeService,
+      this: QuirkyRuntimeService,
       ...args: Parameters<RuntimeTerminalWriter['writeAction']>
     ) {
       expect(this).toBe(target)
@@ -560,7 +560,7 @@ describe('terminal input dispatch through the current runtime', () => {
           isLeafPtyProvenAbsent: { value: async () => false }
         })
       }
-      const captured = function (this: OrcaRuntimeService, ...args: unknown[]) {
+      const captured = function (this: QuirkyRuntimeService, ...args: unknown[]) {
         expect(this).toBe(target)
         expect(args).toHaveLength(5)
         calls.push('captured')
@@ -615,7 +615,7 @@ describe('terminal input dispatch through the current runtime', () => {
       },
       assertAgentPromptPermissionSafe: {
         configurable: true,
-        value: function (this: OrcaRuntimeService) {
+        value: function (this: QuirkyRuntimeService) {
           expect(this).toBe(target)
           expect(arguments.length).toBe(2)
           if (activityReads === 2) {
@@ -637,7 +637,7 @@ describe('terminal input dispatch through the current runtime', () => {
   it('keeps the activity cache omitted in the baseline read', async () => {
     const target = inputDispatchRuntime()
     Object.defineProperty(target, 'assertAgentPromptGeneration', { value: () => {} })
-    const activity = vi.fn(function (this: OrcaRuntimeService) {
+    const activity = vi.fn(function (this: QuirkyRuntimeService) {
       expect(this).toBe(target)
       expect(arguments.length).toBe(2)
       throw new Error('baseline reached')
@@ -659,7 +659,7 @@ describe('input original queue, callback and private method contracts', () => {
 
   it('keeps the private retry lookup on the Root receiver before any delay', async () => {
     const target = inputDispatchRuntime()
-    const read = vi.fn(function (this: OrcaRuntimeService, ...args: unknown[]) {
+    const read = vi.fn(function (this: QuirkyRuntimeService, ...args: unknown[]) {
       expect(this).toBe(target)
       expect(args).toEqual([PTY])
       return null
@@ -704,7 +704,7 @@ describe('input original queue, callback and private method contracts', () => {
 
   it('keeps hook presence callback receivers and preserves invalidation failure', async () => {
     const target = inputDispatchRuntime()
-    const check = vi.fn(async function (this: OrcaRuntimeService, ...args: unknown[]) {
+    const check = vi.fn(async function (this: QuirkyRuntimeService, ...args: unknown[]) {
       expect(this).toBe(target)
       expect(args).toHaveLength(1)
       return 'live' as const

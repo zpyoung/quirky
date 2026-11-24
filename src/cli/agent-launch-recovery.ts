@@ -65,7 +65,7 @@ export async function withCliAgentLaunchRecovery<T>(
     // Replace transport restart-and-retry advice: the accepted launch may still be running.
     throw new RuntimeClientError(
       'agent_session_operation_unknown',
-      'Orca could not confirm the launch outcome; the agent may already be running and the prompt may already be submitted.',
+      'Quirky could not confirm the launch outcome; the agent may already be running and the prompt may already be submitted.',
       {
         launchOutcome: 'unknown',
         retrySafe: Boolean(recovery.operationId),
@@ -75,7 +75,7 @@ export async function withCliAgentLaunchRecovery<T>(
         nextSteps,
         cause:
           error instanceof Error
-            ? error.message.replace(/\bRestart Orca and try again\./g, '')
+            ? error.message.replace(/\bRestart Quirky and try again\./g, '')
             : String(error)
       }
     )

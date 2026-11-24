@@ -5,7 +5,7 @@ import { captureFullPageScreenshot } from './cdp-screenshot'
 import { acquireElectronDebugger } from './electron-debugger-lease'
 import { sendGuestCdpCommand } from './guest-cdp-command'
 import { AgentBrowserBridgeUtilityCommands } from './agent-browser-bridge-utility-commands'
-import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
+import { QUIRKY_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
 import { captureRemoteCliBrowserWorkBound } from '../runtime/desktop-browser-bridge/remote-cli-browser-scope'
 
 export abstract class AgentBrowserBridgeCaptureCommands extends AgentBrowserBridgeUtilityCommands {
@@ -113,7 +113,7 @@ export abstract class AgentBrowserBridgeCaptureCommands extends AgentBrowserBrid
           }
           if (!this.getWebContents(target.webContentsId)) {
             throw this.createPageUnavailableError(
-              `${ORCA_TAB_SESSION_PREFIX}${target.browserPageId}`
+              `${QUIRKY_TAB_SESSION_PREFIX}${target.browserPageId}`
             )
           }
           throw new BrowserError(

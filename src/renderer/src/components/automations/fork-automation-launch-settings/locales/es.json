@@ -3,7 +3,7 @@
     "components": {
       "automations": {
         "AutomationAgentLaunchFields": {
-          "launchSettingsUnsupported": "El host de esta automatización no admite la configuración de inicio. Actualiza el servidor remoto de Orca.",
+          "launchSettingsUnsupported": "El host de esta automatización no admite la configuración de inicio. Actualiza el servidor remoto de Quirky.",
           "launchSettingsNotSaved": "La configuración de inicio no se puede guardar en este host y no se aplicará a las ejecuciones."
         },
         "AutomationRunLaunchDisplay": {

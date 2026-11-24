@@ -4,14 +4,14 @@
  *
  * `ClaudeAgentTeamsService.createLaunchEnv` adds a team (with a nested panes Map)
  * per agent-team leader launch. The only eviction was `removeTeamForLeaderHandle`,
- * called solely from `OrcaRuntimeService.closeTerminal` (the explicit user-close IPC).
+ * called solely from `QuirkyRuntimeService.closeTerminal` (the explicit user-close IPC).
  * The natural-exit teardown paths — `onPtyExit` and `dropDisconnectedPtyRecord` —
  * tore down every other per-pty map but never evicted the team. teamId is a fresh
  * `team-${randomUUID()}`, so when a leader shell exits on its own (agent finishes,
  * process dies, renderer reload) the team + nested panes Map leaked permanently.
  */
 import { describe, it, expect } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { ClaudeAgentTeamsService } from './claude-agent-teams-service'
 
 export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
@@ -21,17 +21,17 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
     dropDisconnectedPtyRecord: (ptyId: string) => void
   }
 
-  function internals(runtime: OrcaRuntimeService): RuntimeInternals {
+  function internals(runtime: QuirkyRuntimeService): RuntimeInternals {
     return runtime as unknown as RuntimeInternals
   }
 
-  function registerTeam(runtime: OrcaRuntimeService, ptyId: string, leaderHandle: string): void {
+  function registerTeam(runtime: QuirkyRuntimeService, ptyId: string, leaderHandle: string): void {
     const { claudeAgentTeams, handleByPtyId } = internals(runtime)
     claudeAgentTeams.createLaunchEnv({
       leaderHandle,
       baseEnv: {},
-      shimDir: '/tmp/orca-shim',
-      shimBin: 'orca'
+      shimDir: '/tmp/quirky-shim',
+      shimBin: 'quirky'
     })
     // onPtyExit / dropDisconnectedPtyRecord resolve the leader handle via this map.
     handleByPtyId.set(ptyId, leaderHandle)
@@ -39,7 +39,7 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
 
   describe('ClaudeAgentTeams eviction on natural PTY exit (leak regression)', () => {
     it('evicts the team when its leader PTY exits naturally (onPtyExit)', () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       registerTeam(runtime, 'pty-leader', 'handle-leader')
       expect(internals(runtime).claudeAgentTeams.getActiveTeamCount()).toBe(1)
 
@@ -49,7 +49,7 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
     })
 
     it('evicts the team when the disconnected PTY record is pruned', () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       registerTeam(runtime, 'pty-leader', 'handle-leader')
       expect(internals(runtime).claudeAgentTeams.getActiveTeamCount()).toBe(1)
 
@@ -59,7 +59,7 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
     })
 
     it('does not accumulate teams across many natural leader exits', () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       for (let i = 0; i < 100; i++) {
         registerTeam(runtime, `pty-${i}`, `handle-${i}`)
         runtime.onPtyExit(`pty-${i}`, 0)
@@ -68,7 +68,7 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
     })
 
     it('leaves a concurrently-launched team intact when only one leader exits', () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       registerTeam(runtime, 'pty-a', 'handle-a')
       registerTeam(runtime, 'pty-b', 'handle-b')
       expect(internals(runtime).claudeAgentTeams.getActiveTeamCount()).toBe(2)
@@ -80,7 +80,7 @@ export function registerClaudeAgentTeamsPtyExitLeakTests(): void {
     })
 
     it('is a no-op for a PTY that never launched a team', () => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       const { handleByPtyId } = internals(runtime)
       handleByPtyId.set('pty-plain', 'handle-plain') // a normal terminal, no team
       expect(internals(runtime).claudeAgentTeams.getActiveTeamCount()).toBe(0)

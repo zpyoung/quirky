@@ -134,9 +134,9 @@ describe('Session History rows a paired client cannot open as a chat', () => {
   })
 })
 
-// Orca's own resume builders and the guard's parser must agree, or a builder change lets a resume
+// Quirky's own resume builders and the guard's parser must agree, or a builder change lets a resume
 // of a chat's conversation through. Mobile composes these same shared builders.
-describe('resume commands Orca builds for an owned row', () => {
+describe('resume commands Quirky builds for an owned row', () => {
   const shells: { platform: NodeJS.Platform; shell: AgentStartupShell }[] = [
     { platform: 'darwin', shell: 'posix' },
     { platform: 'win32', shell: 'powershell' },

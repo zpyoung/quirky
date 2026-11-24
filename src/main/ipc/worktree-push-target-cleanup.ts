@@ -187,16 +187,16 @@ function isBranchConfigSeparator(code: number): boolean {
 
 // Why: on-demand materialization (push/pull/fetch/fast-forward, #17828) never
 // updates the store's `pushTarget.remoteCreated` flag, so ownership must also be
-// readable from the repo-local `remote.<name>.orca-created` config Orca writes
+// readable from the repo-local `remote.<name>.quirky-created` config Quirky writes
 // when it creates the remote (see `worktree-push-target-setup.ts`).
-async function remoteHasOrcaProvenance(
+async function remoteHasQuirkyProvenance(
   execGit: GitRemoteExec,
   repoPath: string,
   remoteName: string
 ): Promise<boolean> {
   try {
     const { stdout } = await execGit(
-      ['config', '--get', `remote.${remoteName}.orca-created`],
+      ['config', '--get', `remote.${remoteName}.quirky-created`],
       repoPath
     )
     return stdout.trim() === 'true'
@@ -219,7 +219,7 @@ export async function cleanupUnusedWorktreePushTargetRemoteWithExec(
   }
   if (
     !target.remoteCreated &&
-    !(await remoteHasOrcaProvenance(execGit, repoPath, target.remoteName))
+    !(await remoteHasQuirkyProvenance(execGit, repoPath, target.remoteName))
   ) {
     return
   }

@@ -21,7 +21,7 @@ describe('filesystem watcher native ignores', () => {
   })
 
   it('drops root and nested generated-file storms while delivering source edits', async () => {
-    root = await realpath(await mkdtemp(join(tmpdir(), 'orca-watch-ignore-')))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-watch-ignore-')))
     const rootModules = join(root, 'node_modules')
     const nestedModules = join(root, 'packages', 'app', 'node_modules')
     const nestedSource = join(root, 'packages', 'app', 'src')

@@ -27,7 +27,7 @@ beforeEach(async () => {
   resetSessionParseCacheForTests()
   resetSessionParseCachePersistenceForTests()
   resetCursorChatMetaIndexCacheForTests()
-  root = await mkdtemp(join(tmpdir(), 'orca-cache-metadata-checkpoint-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-cache-metadata-checkpoint-'))
   cacheFile = join(root, 'cache.json')
   initSessionParseCachePersistence({ filePath: cacheFile, appVersion: 'test' })
   write = vi.spyOn(SessionParseCacheDatabase.prototype, 'write')

@@ -20,10 +20,10 @@ import {
 } from '../../shared/host-automatic-work-budget'
 
 // Why 256: half of macOS's machine-wide pty limit (kern.tty.ptmx_max = 511), so other terminal
-// programs and the ptys agents open inside Orca terminals keep room; five times the deleted SSH
+// programs and the ptys agents open inside Quirky terminals keep room; five times the deleted SSH
 // relay's 50, which users with many worktrees did reach.
 export const DEFAULT_MAX_HOST_TERMINALS = 256
-const MAX_HOST_TERMINALS_ENV_VAR = 'ORCA_DAEMON_MAX_HOST_TERMINALS'
+const MAX_HOST_TERMINALS_ENV_VAR = 'QUIRKY_DAEMON_MAX_HOST_TERMINALS'
 const MAX_OVERRIDE_TERMINALS = 4096
 
 const REFRESH_INTERVAL_MS = 60_000
@@ -45,7 +45,7 @@ export function defaultHostTerminalLedgerDir(
   uid: number | undefined = process.getuid?.()
 ): string | null {
   if (platform === 'win32') {
-    return join(tmpdir(), 'orca-daemon-host-terminals')
+    return join(tmpdir(), 'quirky-daemon-host-terminals')
   }
   // Why /tmp, not the data root: a home on a network share can be mounted by several machines.
   return uid === undefined

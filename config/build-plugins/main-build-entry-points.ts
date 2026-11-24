@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { ORCAD_LOCAL_SERVE_SELECTION_ENTRY } from '../../src/shared/orcad-local-serve-selection'
+import { QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY } from '../../src/shared/quirkyd-local-serve-selection'
 import { CLI_MAIN_ENTRY_NAMES } from './plain-node-entry-guard'
 
 /** Main-build Rollup inputs: output file name (without .js) to its source entry. */
@@ -46,9 +46,9 @@ export const MAIN_BUILD_ENTRY_POINTS: Record<string, string> = {
   // Why: forked with ELECTRON_RUN_AS_NODE so @parcel/watcher faults
   // can't take down the main process (issue #7547).
   'parcel-watcher-process-entry': resolve('src/main/ipc/parcel-watcher-process-entry.ts'),
-  // Why: `orca serve` runs it under ELECTRON_RUN_AS_NODE so the CLI never bundles orcad prep.
-  [ORCAD_LOCAL_SERVE_SELECTION_ENTRY]: resolve(
-    'src/main/orcad/orcad-local-serve-selection-entry.ts'
+  // Why: `quirky serve` runs it under ELECTRON_RUN_AS_NODE so the CLI never bundles quirkyd prep.
+  [QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY]: resolve(
+    'src/main/quirkyd/quirkyd-local-serve-selection-entry.ts'
   ),
   // Why: a worker thread survives the macOS 26 AppKit main-thread deadlock
   // without paying for another Electron process.

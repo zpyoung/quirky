@@ -59,8 +59,8 @@ function createServerHarness() {
   const subprocesses: MockSubprocess[] = []
   const unique = randomUUID()
   const server = new DaemonServer({
-    socketPath: join(tmpdir(), `orca-droppability-${unique}.sock`),
-    tokenPath: join(tmpdir(), `orca-droppability-${unique}.token`),
+    socketPath: join(tmpdir(), `quirky-droppability-${unique}.sock`),
+    tokenPath: join(tmpdir(), `quirky-droppability-${unique}.token`),
     spawnSubprocess: () => {
       const subprocess = createMockSubprocess()
       subprocesses.push(subprocess)

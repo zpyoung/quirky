@@ -424,7 +424,7 @@ describe('automation target availability', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-1',
-            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+            providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
           }
         }),
         repo: makeRepo(),
@@ -454,7 +454,7 @@ describe('automation target availability', () => {
               provider: 'gitlab',
               projectId: 'stablyai/orca',
               namespace: 'stablyai',
-              project: 'orca',
+              project: 'quirky',
               webUrl: 'https://gitlab.com/stablyai/orca'
             }
           }

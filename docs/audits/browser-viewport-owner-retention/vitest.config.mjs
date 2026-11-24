@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import base from '../../../config/vitest.config.ts'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Set ORCA_BACKGROUND_LAUNCH=1 for the viewport ownership replay')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Set QUIRKY_BACKGROUND_LAUNCH=1 for the viewport ownership replay')
 }
 
 const target = fileURLToPath(
@@ -17,7 +17,7 @@ export default {
     include: ['src/main/browser/browser-manager-viewport-ownership.test.ts']
   },
   plugins:
-    process.env.ORCA_VIEWPORT_BASELINE === '1'
+    process.env.QUIRKY_VIEWPORT_BASELINE === '1'
       ? [
           {
             name: 'viewport-owner-baseline',

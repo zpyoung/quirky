@@ -14,7 +14,7 @@ import {
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import type * as RuntimeImportLimits from '../ipc/runtime-import-limits'
 
 const fsFaults: {
@@ -77,11 +77,11 @@ function importedPath(result: { status: string; destPath?: string }): string {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-drag-temp-test-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-drag-temp-test-'))
   const sourceTempRoot = join(root, 'T')
   providerDir = join(sourceTempRoot, 'TemporaryItems', 'NSIRD_screencaptureui_abc123')
   await mkdir(providerDir, { recursive: true })
-  env = { platform: 'darwin', sourceTempRoot, copyRoot: join(root, 'app-temp', 'orca-drops') }
+  env = { platform: 'darwin', sourceTempRoot, copyRoot: join(root, 'app-temp', 'quirky-drops') }
 })
 
 afterEach(async () => {
@@ -99,7 +99,7 @@ describe('materializeDragTempPaths', () => {
 
     const dest = importedPath(result)
     expect(basename(dest)).toBe(SCREENSHOT_NAME)
-    expect(basename(dirname(dest))).toMatch(/^orca-drop-/)
+    expect(basename(dirname(dest))).toMatch(/^quirky-drop-/)
     expect(dirname(dirname(dest))).toBe(env.copyRoot)
     expect(await readFile(dest, 'utf8')).toBe('png-bytes')
   })
@@ -123,7 +123,7 @@ describe('materializeDragTempPaths', () => {
       for (const target of [source, providerDir]) {
         const set = await runProcess({
           program: '/usr/bin/xattr',
-          args: ['-w', 'com.orca.test-marker', '1', target]
+          args: ['-w', 'com.quirky.test-marker', '1', target]
         })
         expect(set.code).toBe(0)
       }
@@ -132,7 +132,7 @@ describe('materializeDragTempPaths', () => {
 
       for (const target of [dest, dirname(dest)]) {
         const listed = await runProcess({ program: '/usr/bin/xattr', args: [target] })
-        expect(listed.stdout).not.toContain('com.orca.test-marker')
+        expect(listed.stdout).not.toContain('com.quirky.test-marker')
       }
     }
   )

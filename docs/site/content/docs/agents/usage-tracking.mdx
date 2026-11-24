@@ -2,7 +2,7 @@
 title: Usage & rate-limit tracking
 ---
 
-Orca reads local usage state for Claude Code, Codex, Gemini, OpenCode, Kimi Code, and MiniMax and surfaces it in the status bar, so you know how close you are to a rate limit before an agent stalls.
+Quirky reads local usage state for Claude Code, Codex, Gemini, OpenCode, Kimi Code, and MiniMax and surfaces it in the status bar, so you know how close you are to a rate limit before an agent stalls.
 
 ## What's shown
 
@@ -12,7 +12,7 @@ Orca reads local usage state for Claude Code, Codex, Gemini, OpenCode, Kimi Code
 
 ## How it works
 
-Orca reads the local usage state each agent maintains on disk (under `~/.claude`, `~/.codex`, and the Gemini/OpenCode equivalents). No API calls, no extra auth. This means the readout is only as fresh as the agent's own bookkeeping — numbers update when the agent writes, not in real time.
+Quirky reads the local usage state each agent maintains on disk (under `~/.claude`, `~/.codex`, and the Gemini/OpenCode equivalents). No API calls, no extra auth. This means the readout is only as fresh as the agent's own bookkeeping — numbers update when the agent writes, not in real time.
 
 ## Multi-account accounting
 
@@ -35,4 +35,4 @@ On the companion app, open the host **Accounts** screen for the same switcher/us
 
 ## Estimated cost (Stats)
 
-The Stats breakdown may show **estimated cost** for known model families (including Claude 5-class and Codex GPT-5.6 rows). Rows marked **• inferred pricing** use Orca’s local price table, not a live bill from the provider. Prefer the provider console for authoritative spend.
+The Stats breakdown may show **estimated cost** for known model families (including Claude 5-class and Codex GPT-5.6 rows). Rows marked **• inferred pricing** use Quirky’s local price table, not a live bill from the provider. Prefer the provider console for authoritative spend.

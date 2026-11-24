@@ -15,12 +15,12 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-persisted-test-state-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-persisted-test-state-'))
   roots.push(root)
   const directory = join(root, 'profiles', 'local-default')
   mkdirSync(directory, { recursive: true })
   const databaseFile = join(directory, 'profile-state.db')
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const state = { settings: { sealed: 'ciphertext' }, unknown: { kept: null, output: '\ud800' } }
   const opened = openProfileStateDatabase(databaseFile, 'local-default')
   try {

@@ -43,8 +43,8 @@ this daemon; it does not explain what first stopped its asynchronous work.
 On macOS/Linux, with dependencies prepared for the Node runtime:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/ensure-native-runtime.mjs --runtime=node
-ORCA_BACKGROUND_LAUNCH=1 UV_THREADPOOL_SIZE=1 node config/scripts/repro-daemon-async-io-stall.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/ensure-native-runtime.mjs --runtime=node
+QUIRKY_BACKGROUND_LAUNCH=1 UV_THREADPOOL_SIZE=1 node config/scripts/repro-daemon-async-io-stall.mjs
 ```
 
 The script owns an isolated real PTY and blocks its one filesystem worker with a

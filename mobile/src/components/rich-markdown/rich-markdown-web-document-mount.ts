@@ -26,10 +26,10 @@ export type RichMarkdownWebDocumentHooks = {
   promptForUrl: (kind: RichMarkdownUrlPromptKind) => Promise<string | null>
 }
 
-const STYLE_ELEMENT_ID = 'orca-rich-markdown-document-style'
+const STYLE_ELEMENT_ID = 'quirky-rich-markdown-document-style'
 
 /** The class the host carries, and the prefix every injected rule is held under. */
-export const RICH_MARKDOWN_HOST_CLASS = 'orca-rich-markdown-document-host'
+export const RICH_MARKDOWN_HOST_CLASS = 'quirky-rich-markdown-document-host'
 
 /**
  * The stylesheet, planted in the head once per page and reaching only inside the host.

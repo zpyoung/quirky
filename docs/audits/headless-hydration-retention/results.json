@@ -1,19 +1,19 @@
 {
   "comparison": "Actual runtime tests; before reverses only fix.patch in a temporary Vite transform",
   "sourceHashes": {
-    "src/main/runtime/orca-runtime-capture-provider-terminal-buffer.ts": {
+    "src/main/runtime/quirky-runtime-capture-provider-terminal-buffer.ts": {
       "before": "53e8db1da23a2048abe498b4ea9911ad176460322c2cb6da2fcfd5472e6b4b2d",
       "after": "9df660b042323ad7e68e093add5b3fbdbfd47f80976710bc657ab16471f07a02"
     },
-    "src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts": {
+    "src/main/runtime/quirky-runtime-create-pty-headless-terminal-state.ts": {
       "before": "67222b470b133cb473acf85e10de970535cceacf06964a5afeb50d640a0fb0ac",
       "after": "21a9aef91c4debaf91aa2bd3a7d7b77bc46769cc7cead0609b8425350ea78636"
     },
-    "src/main/runtime/orca-runtime-maybe-hydrate-headless-from-renderer.ts": {
+    "src/main/runtime/quirky-runtime-maybe-hydrate-headless-from-renderer.ts": {
       "before": "dd0d060f53512c4f1cddd1f3dbe4cb86d11d2d90fecba41c01f936d2d2344aff",
       "after": "5ba68552f81a9dfba1e4f8756732b958a91ecf60b14a62c1c536cca61c5c55e7"
     },
-    "src/main/runtime/orca-runtime-serialize-main-terminal-buffer.ts": {
+    "src/main/runtime/quirky-runtime-serialize-main-terminal-buffer.ts": {
       "before": "c30adce84d951030366b5954a7ad59dcbc902f021f83906d7b58bd90eb7c5a1b",
       "after": "c5c533376402d7963360813aebf01299d4e3e950e4945852ddea20d88f3cdbfc"
     }

@@ -223,7 +223,7 @@ describe('openPopupWithOriginBar', () => {
   })
 
   it('loads a page-less GET itself only when asked and only after preparation passes', () => {
-    vi.stubEnv('ORCA_BACKGROUND_LAUNCH', undefined)
+    vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', undefined)
     const popup = openPopupWithOriginBar(
       { loadInitialUrl: true },
       'https://example.com/docs',
@@ -245,10 +245,10 @@ describe('openPopupWithOriginBar', () => {
   })
 
   it('honors explicit hidden windows and background launches', () => {
-    vi.stubEnv('ORCA_BACKGROUND_LAUNCH', undefined)
+    vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', undefined)
     openPopupWithOriginBar({ show: false, webContents: fakePopupContents() }, 'about:blank')
     expect(lastWindow().options.show).toBe(false)
-    vi.stubEnv('ORCA_BACKGROUND_LAUNCH', '1')
+    vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', '1')
     openPopupWithOriginBar({ show: true, webContents: fakePopupContents() }, 'about:blank')
     expect(lastWindow().options.show).toBe(false)
   })

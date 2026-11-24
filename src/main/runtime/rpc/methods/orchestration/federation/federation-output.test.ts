@@ -10,7 +10,7 @@ import {
   ORCHESTRATION_FEDERATION_RELEASE_ARCHIVE_RUNTIME_CAPABILITY,
   ORCHESTRATION_FEDERATION_STRUCTURED_READ_RUNTIME_CAPABILITY
 } from '../../../../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import type { OrchestrationEnvironmentTransport } from '../../../../orchestration/environment-transport'
 import type { RpcRequest } from '../../../core'
@@ -24,8 +24,8 @@ describe('orchestration federated worker output', () => {
   let workerDb: OrchestrationDb
   let workerDbDirectory: string
   let workerDbPath: string
-  let homeRuntime: OrcaRuntimeService
-  let workerRuntime: OrcaRuntimeService
+  let homeRuntime: QuirkyRuntimeService
+  let workerRuntime: QuirkyRuntimeService
   let homeDispatcher: RpcDispatcher
   let workerDispatcher: RpcDispatcher
   let workerSupportsStructuredRead: boolean
@@ -38,11 +38,11 @@ describe('orchestration federated worker output', () => {
 
   beforeEach(() => {
     homeDb = new OrchestrationDb(':memory:')
-    workerDbDirectory = mkdtempSync(join(tmpdir(), 'orca-federated-output-db-'))
+    workerDbDirectory = mkdtempSync(join(tmpdir(), 'quirky-federated-output-db-'))
     workerDbPath = join(workerDbDirectory, 'worker.db')
     workerDb = new OrchestrationDb(workerDbPath)
     databases.push(homeDb, workerDb)
-    workerRuntime = new OrcaRuntimeService()
+    workerRuntime = new QuirkyRuntimeService()
     workerRuntime.setOrchestrationDb(workerDb)
     workerDispatcher = new RpcDispatcher({
       runtime: workerRuntime,
@@ -129,7 +129,7 @@ describe('orchestration federated worker output', () => {
         })
       }
     }
-    homeRuntime = new OrcaRuntimeService(null, undefined, {
+    homeRuntime = new QuirkyRuntimeService(null, undefined, {
       orchestrationEnvironmentTransport: transport
     })
     homeRuntime.setOrchestrationDb(homeDb)
@@ -181,7 +181,7 @@ describe('orchestration federated worker output', () => {
     }
   }
 
-  function configureWorkerRuntime(runtime: OrcaRuntimeService): void {
+  function configureWorkerRuntime(runtime: QuirkyRuntimeService): void {
     vi.spyOn(runtime, 'validateOrchestrationAgentLauncher').mockImplementation(() => {})
     vi.spyOn(runtime, 'showRepo').mockResolvedValue({
       id: 'windows-repo',
@@ -213,7 +213,7 @@ describe('orchestration federated worker output', () => {
       'tab_worker:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
     )
     vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue('windows_runtime:pty:1')
-    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('orca')
+    vi.spyOn(runtime, 'getTerminalOrchestrationCliCommand').mockReturnValue('quirky')
     vi.spyOn(runtime, 'sendTerminalAgentPrompt').mockResolvedValue({
       handle: 'term_windows_worker',
       accepted: true,
@@ -260,7 +260,7 @@ describe('orchestration federated worker output', () => {
       workerDb = new OrchestrationDb(workerDbPath)
       databases.push(workerDb)
     }
-    workerRuntime = new OrcaRuntimeService()
+    workerRuntime = new QuirkyRuntimeService()
     workerRuntime.setOrchestrationDb(workerDb)
     configureWorkerRuntime(workerRuntime)
     workerDispatcher = new RpcDispatcher({
@@ -396,7 +396,7 @@ describe('orchestration federated worker output', () => {
 
   it('reads the exact transcript on the worker server without leaking its path home', async () => {
     const dispatchId = await startRemoteWorker()
-    const directory = await mkdtemp(join(tmpdir(), 'orca-federated-worker-output-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-federated-worker-output-'))
     const transcriptPath = join(directory, 'windows-session.jsonl')
     await writeFile(
       transcriptPath,

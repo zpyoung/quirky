@@ -6,7 +6,7 @@ import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
 } from '../../../shared/agent-session-record.test-fixture'
-import { testOrcaSessionId } from '../../../shared/orca-session-address-test-fixture'
+import { testQuirkySessionId } from '../../../shared/quirky-session-address-test-fixture'
 import { OrchestrationDb } from './db'
 import { createRootDispatch } from './db/root-dispatch-test-fixture'
 import { locateOrchestrationParty } from './orchestration-party-location'
@@ -23,7 +23,7 @@ vi.mock('./orchestration-party', async (importOriginal) => {
 })
 import type { AgentSessionRecordReader } from './structured-session-lineage'
 
-const ROOT = testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
+const ROOT = testQuirkySessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
 const LIVE = '7e3b9d15-2c4a-4f86-a0b1-5c9e2d7f3b64'
 const PANE = 'tab_worker:leaf'
 
@@ -84,10 +84,10 @@ function locate(
 
 describe('where a sender opens', () => {
   it("opens a chat at its `/clear` lineage's live session, in that session's worktree", () => {
-    expect(locate(`orca_session_id:${ROOT}`, { records: clearedChat() })).toEqual({
+    expect(locate(`quirky_session_id:${ROOT}`, { records: clearedChat() })).toEqual({
       location: { kind: 'chat', sessionId: LIVE, worktreeId: 'wt-chat' }
     })
-    expect(locate(`orca_session_id:${ROOT}`)).toEqual({ location: null, lost: 'chat' })
+    expect(locate(`quirky_session_id:${ROOT}`)).toEqual({ location: null, lost: 'chat' })
   })
 
   it('opens a terminal this run issued at its handle', () => {
@@ -150,10 +150,10 @@ describe('where a sender opens', () => {
     resolveParty.mockImplementationOnce(() => {
       throw new OrchestrationError(CODES.notLive, 'lost its identity')
     })
-    expect(locate(`orca_session_id:${ROOT}`)).toEqual({ location: null, lost: 'chat' })
+    expect(locate(`quirky_session_id:${ROOT}`)).toEqual({ location: null, lost: 'chat' })
     resolveParty.mockImplementationOnce(() => {
       throw new Error('database is locked')
     })
-    expect(() => locate(`orca_session_id:${ROOT}`)).toThrow('database is locked')
+    expect(() => locate(`quirky_session_id:${ROOT}`)).toThrow('database is locked')
   })
 })

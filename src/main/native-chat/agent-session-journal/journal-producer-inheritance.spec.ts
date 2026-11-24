@@ -179,7 +179,7 @@ export function registerJournalProducerInheritanceTests(): void {
       })
 
     beforeEach(async () => {
-      root = await mkdtemp(join(tmpdir(), 'orca-producer-inheritance-'))
+      root = await mkdtemp(join(tmpdir(), 'quirky-producer-inheritance-'))
     })
 
     afterEach(async () => {

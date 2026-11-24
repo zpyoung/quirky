@@ -18,7 +18,7 @@ afterEach(async () => {
 })
 
 async function writeTranscript(records: unknown[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-native-chat-attribution-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-native-chat-attribution-'))
   tempRoots.push(root)
   const filePath = join(root, 'transcript.jsonl')
   await writeFile(filePath, records.map((record) => JSON.stringify(record)).join('\n'))

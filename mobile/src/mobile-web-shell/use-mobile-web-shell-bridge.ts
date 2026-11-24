@@ -1,8 +1,8 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import type {
   MobileWebShellBridgeMessagePayload,
-  OrcaMobileWebShellViewHandle
-} from '../../modules/orca-mobile-web-shell/src'
+  QuirkyMobileWebShellViewHandle
+} from '../../modules/quirky-mobile-web-shell/src'
 import { useHostClient } from '../transport/host-client-hooks'
 import { createBridgeDiagnosticReporter } from './bridge-diagnostic-log'
 import { bridgeDiagnosticLine, frameWithoutHostLine } from './shell-bridge-log-lines'
@@ -33,7 +33,7 @@ class BridgeViewGoneError extends Error {
  * React swaps refs in the commit phase and runs the retiring effect's cleanup after it, so a host
  * disposing on a remount would otherwise post its teardown frames into the page that replaced it.
  */
-type MountedView = { sessionId: string; handle: OrcaMobileWebShellViewHandle }
+type MountedView = { sessionId: string; handle: QuirkyMobileWebShellViewHandle }
 type MountedHost = { sessionId: string; host: BridgeHost }
 /** What a retiring host established, and the session it established it for. */
 type EstablishedBack = { sessionId: string; back: BridgeSessionBack }
@@ -52,7 +52,7 @@ export type MobileWebShellBridgeView = {
    * time it is asked so the page can ask again.
    */
   readonly bridgeEnabled: boolean
-  readonly viewRef: (handle: OrcaMobileWebShellViewHandle | null) => void
+  readonly viewRef: (handle: QuirkyMobileWebShellViewHandle | null) => void
   readonly onBridgeMessage: (event: MobileWebShellBridgeMessageEvent) => void
   /**
    * Hands the mounted host a rewritten route for the screen it is already serving. Dropped when
@@ -259,7 +259,7 @@ export function useMobileWebShellBridge(args: MobileWebShellBridgeArgs): MobileW
   return {
     bridgeEnabled: ready !== null,
     viewRef: useCallback(
-      (handle: OrcaMobileWebShellViewHandle | null) => {
+      (handle: QuirkyMobileWebShellViewHandle | null) => {
         viewRef.current = handle === null || sessionId === null ? null : { sessionId, handle }
       },
       [sessionId]

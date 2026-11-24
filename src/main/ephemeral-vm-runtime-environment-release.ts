@@ -1,7 +1,7 @@
 import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
-import { removeManagedOrcadEnvironment } from '../shared/runtime-environment-managed-orcad-store'
+import { removeManagedQuirkydEnvironment } from '../shared/runtime-environment-managed-quirkyd-store'
 import { listEnvironments, removeEnvironment } from '../shared/runtime-environment-store'
-import { getOrcadSshDeployment } from '../shared/runtime-environments'
+import { getQuirkydSshDeployment } from '../shared/runtime-environments'
 
 /** Forgets the servers a destroyed VM ran; a managed one's tunnel would otherwise keep redialing. */
 export async function releaseEphemeralVmRuntimeEnvironments(
@@ -13,16 +13,16 @@ export async function releaseEphemeralVmRuntimeEnvironments(
     (entry) =>
       entry.id === runtime.runtimeEnvironmentId ||
       (runtime.sshTargetId !== undefined &&
-        getOrcadSshDeployment(entry)?.sshTargetId === runtime.sshTargetId)
+        getQuirkydSshDeployment(entry)?.sshTargetId === runtime.sshTargetId)
   )
   for (const environment of environments) {
-    if (!environment.orcadDeployment) {
+    if (!environment.quirkydDeployment) {
       removeEnvironment(userDataPath, environment.id)
       continue
     }
-    const { closeOrcadManagedTunnel } =
-      await import('./managed-server/lifecycle/orcad-managed-tunnel')
-    await closeOrcadManagedTunnel(environment.id).catch(() => undefined)
-    removeManagedOrcadEnvironment(userDataPath, environment.id)
+    const { closeQuirkydManagedTunnel } =
+      await import('./managed-server/lifecycle/quirkyd-managed-tunnel')
+    await closeQuirkydManagedTunnel(environment.id).catch(() => undefined)
+    removeManagedQuirkydEnvironment(userDataPath, environment.id)
   }
 }

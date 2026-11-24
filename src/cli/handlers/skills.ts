@@ -20,7 +20,7 @@ import {
   buildAgentFeatureSkillInstallArgs,
   SKILLS_CLI_ENV_OVERRIDES
 } from '../../shared/agent-feature-install-commands'
-import { readOrcaCliBuildCommit } from '../cli-version'
+import { readQuirkyCliBuildCommit } from '../cli-version'
 
 function resolveSelectedSkillNames(
   flags: Map<string, string | boolean>,
@@ -163,16 +163,16 @@ function resolveAgentKeys(verb: SkillMutationVerb, flags: Map<string, string | b
     'invalid_environment',
     'No coding agent detected on this host, so there is no install target. Pass ' +
       '--agent <name>[,<name>...] to choose targets explicitly — --agent universal ' +
-      'writes only the shared .agents/skills directory that Orca reads.'
+      'writes only the shared .agents/skills directory that Quirky reads.'
   )
 }
 
 function buildNpxSkillsArgs(skillNames: string[], global: boolean, agents: string[]): string[] {
-  const sourceCommit = readOrcaCliBuildCommit()
+  const sourceCommit = readQuirkyCliBuildCommit()
   if (!sourceCommit) {
     throw new RuntimeClientError(
       'invalid_environment',
-      'Could not read the commit this Orca CLI was built from, so there is no source to install skills from.'
+      'Could not read the commit this Quirky CLI was built from, so there is no source to install skills from.'
     )
   }
   // Why: a cold package cache makes bare `npx` prompt before it will fetch
@@ -193,8 +193,8 @@ function formatSkillSelectionHelp(verb: SkillMutationVerb, skillNames: string[])
     `Choose one or more skills to ${verb}:`,
     ...skillNames.map((name) => `  ${name}`),
     '',
-    `Usage: orca skills ${verb} --skill <name> [--skill <name> ...]`,
-    `   or: orca skills ${verb} --all`
+    `Usage: quirky skills ${verb} --skill <name> [--skill <name> ...]`,
+    `   or: quirky skills ${verb} --all`
   ].join('\n')
 }
 
@@ -216,11 +216,11 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
     // Why: this runs before target resolution because the answer belongs to the
     // other machine — agents detected here would be the wrong host's, and a host
     // that detects none would hide the forwarding problem behind that error.
-    if (process.env.ORCA_CLI_CWD) {
+    if (process.env.QUIRKY_CLI_CWD) {
       throw new RuntimeClientError(
         'invalid_environment',
-        `orca skills ${verb} writes to the machine that runs it, but this shell forwards ` +
-          `orca to the Orca host. Run the same orca skills ${verb} command on the machine ` +
+        `quirky skills ${verb} writes to the machine that runs it, but this shell forwards ` +
+          `quirky to the Quirky host. Run the same quirky skills ${verb} command on the machine ` +
           "you want it on, where it can detect that host's agents."
       )
     }
@@ -246,7 +246,7 @@ function createSkillMutationHandler(verb: SkillMutationVerb): CommandHandler {
       // that stream is not JSON, so --json can't be honored here.
       throw new RuntimeClientError(
         'invalid_argument',
-        `orca skills ${verb} --json only supports --dry-run. Real ${verb}s stream ` +
+        `quirky skills ${verb} --json only supports --dry-run. Real ${verb}s stream ` +
           "npx's own output, which isn't JSON."
       )
     }

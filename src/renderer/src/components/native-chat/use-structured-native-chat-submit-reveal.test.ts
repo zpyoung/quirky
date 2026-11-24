@@ -107,7 +107,7 @@ it('sends no queued card and retries no start on a host held for its permission 
   await vi.waitFor(() => expect(result.current.notices[0]?.action?.label).toBe('Check again'))
 
   expect(result.current.publishedNotices[0]).toMatchObject({
-    text: "Orca couldn't confirm the host's permissions for Claude.",
+    text: "Quirky couldn't confirm the host's permissions for Claude.",
     action: { label: 'Check again' }
   })
   await act(() => result.current.queuedMessages.resume())

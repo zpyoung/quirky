@@ -12,7 +12,7 @@ import {
 } from './unified-tab-host-ownership'
 import { isExecutionHostAliasForWorktree } from './worktree-execution-host-alias'
 import { folderWorkspaceToWorktree } from '../../../shared/folder-workspace-worktree'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { recordOpenedSimulatorTabInLayoutOwner } from './simulator-tab-layout-owner'
 
 type EnsureSimulatorTabOptions = {
@@ -137,7 +137,7 @@ export function ensureSimulatorTab(
         activate: true,
         ...(executionHostId ? { executionHostId } : {})
       })
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         recordOpenedSimulatorTab(tabId)
       }
       surfaceCreatedSimulatorTab(worktreeId, tabId)
@@ -160,7 +160,7 @@ export function ensureSimulatorTab(
       }
     )
     if (splitTab) {
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         recordOpenedSimulatorTab(splitTab.id)
       }
       return splitTab.id
@@ -175,7 +175,7 @@ export function ensureSimulatorTab(
     activate: shouldSurface,
     ...(executionHostId ? { executionHostId } : {})
   })
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     recordOpenedSimulatorTab(tabId)
   }
   if (shouldSurface) {

@@ -9,7 +9,7 @@ import {
   orchestrationMigrationData
 } from '../../shared/orchestration-rpc-contract'
 import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
-import { launchOrcaApp } from './launch'
+import { launchQuirkyApp } from './launch'
 import { getDefaultUserDataPath, readMetadata } from './metadata'
 import { getCliStatus, projectRemoteAppStatus } from './status'
 import { sendRequest } from './transport'
@@ -65,8 +65,10 @@ export class RuntimeClient {
   constructor(
     userDataPath = getDefaultUserDataPath(),
     requestTimeoutMs = 60_000,
-    remotePairingCode = process.env.ORCA_PAIRING_CODE ?? process.env.ORCA_REMOTE_PAIRING ?? null,
-    environmentSelector = process.env.ORCA_ENVIRONMENT ?? null,
+    remotePairingCode = process.env.QUIRKY_PAIRING_CODE ??
+      process.env.QUIRKY_REMOTE_PAIRING ??
+      null,
+    environmentSelector = process.env.QUIRKY_ENVIRONMENT ?? null,
     cliExecutable = resolveOrchestrationCliExecutable(),
     originalArgs?: readonly string[]
   ) {
@@ -276,13 +278,13 @@ export class RuntimeClient {
     if (!response.result.capabilities?.includes(ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY)) {
       throw new RuntimeClientError(
         'orchestration_migration_required',
-        'The connected Orca runtime does not support the current orchestration contract. No effects were applied.',
+        'The connected Quirky runtime does not support the current orchestration contract. No effects were applied.',
         orchestrationMigrationData('runtime_capability_missing')
       )
     }
   }
 
-  async openOrca(timeoutMs = 15_000): Promise<RuntimeRpcSuccess<CliStatusResult>> {
+  async openQuirky(timeoutMs = 15_000): Promise<RuntimeRpcSuccess<CliStatusResult>> {
     const initial = await this.getCliStatus()
     if (this.remote) {
       return initial
@@ -293,7 +295,7 @@ export class RuntimeClient {
     if (initial.result.app.desktopWindowStatus === 'blocked') {
       throwDesktopActivationBlocked()
     }
-    launchOrcaApp()
+    launchQuirkyApp()
     if (initial.result.app.desktopWindowStatus === 'available') {
       return initial
     }
@@ -312,7 +314,7 @@ export class RuntimeClient {
 
     throw new RuntimeClientError(
       'runtime_open_timeout',
-      'Timed out waiting for an Orca desktop window. The runtime may still be running headlessly.'
+      'Timed out waiting for an Quirky desktop window. The runtime may still be running headlessly.'
     )
   }
 }
@@ -320,7 +322,7 @@ export class RuntimeClient {
 function throwDesktopActivationBlocked(): never {
   throw new RuntimeClientError(
     'desktop_activation_blocked',
-    'Orca is running headlessly, but it cannot open a desktop window safely because the persistent terminal provider is unavailable. Quit Orca normally and start the app again; do not use open -n.'
+    'Quirky is running headlessly, but it cannot open a desktop window safely because the persistent terminal provider is unavailable. Quit Quirky normally and start the app again; do not use open -n.'
   )
 }
 

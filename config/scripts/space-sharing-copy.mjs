@@ -191,7 +191,7 @@ export async function shareTreeAsync(sourcePath, destinationPath, options = {}) 
 }
 
 async function runSharingCopy(program, args) {
-  const { runProcess } = await import('@orca/process-host')
+  const { runProcess } = await import('@quirky/process-host')
   const result = await runProcess({ program, args, timeoutMs: 45_000, terminationBarrier: true })
   if (result.code !== 0 || result.timedOut) {
     throw new Error(`${program} could not share source storage`)

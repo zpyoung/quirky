@@ -771,7 +771,7 @@ describe('objective pending report projection', () => {
           payload: {
             type: 'worker_done',
             subject: 'Blocked on missing environment variable',
-            body: 'ORCA_SANDBOX_DOCKER_HOST was unset so the sandbox never started.',
+            body: 'QUIRKY_SANDBOX_DOCKER_HOST was unset so the sandbox never started.',
             payload: {
               dispatchId: 'dispatch-core',
               taskId: 'task-core',
@@ -786,7 +786,7 @@ describe('objective pending report projection', () => {
     expect(reports).toHaveLength(1)
     expect(reports[0]).toMatchObject({
       subject: 'Blocked on missing environment variable',
-      body: 'ORCA_SANDBOX_DOCKER_HOST was unset so the sandbox never started.'
+      body: 'QUIRKY_SANDBOX_DOCKER_HOST was unset so the sandbox never started.'
     })
   })
 

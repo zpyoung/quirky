@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { PtyStartupIngress } from '../../src/shared/pty-startup-ingress.ts'
 
 assert.ok(process.argv[2], 'Pass the read-only OMP checkout')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-keyboard-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-keyboard-'))
 process.env.HOME = join(scratch, 'home')
 await mkdir(process.env.HOME)
 const { setTerminalHeadless } = await import(

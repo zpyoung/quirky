@@ -103,18 +103,18 @@ describe('useMobileNativeChatSessionOptions', () => {
     }
   )
 
-  it('switches an OMP session with /orca-model <selector>', async () => {
+  it('switches an OMP session with /quirky-model <selector>', async () => {
     mount({
       agent: 'omp',
       reportedModel: 'deepseek/deepseek-v4-pro',
-      modelSwitchCommand: 'orca-model'
+      modelSwitchCommand: 'quirky-model'
     })
     let applied: boolean | undefined
     await act(async () => {
       applied = await api!.setOption('model', 'minimax-cn/MiniMax-M3')
     })
     expect(applied).toBe(true)
-    expect(dispatchCommand).toHaveBeenCalledWith('/orca-model minimax-cn/MiniMax-M3')
+    expect(dispatchCommand).toHaveBeenCalledWith('/quirky-model minimax-cn/MiniMax-M3')
     const model = api!.snapshot[0]!
     expect(model).toMatchObject({ valueSource: 'dispatched' })
     expect(model.kind).toMatchObject({ currentValue: 'minimax-cn/MiniMax-M3' })
@@ -222,7 +222,7 @@ describe('useMobileNativeChatSessionOptions', () => {
     })
     expect(api!.snapshot[0]!.kind).toMatchObject({ currentValue: 'opus' })
     // Leaving the tab and returning re-delivers the SAME session-start report,
-    // which cannot have observed the `/orca-model opus` sent after it.
+    // which cannot have observed the `/quirky-model opus` sent after it.
     update({ scopeKey: 'host\0worktree\0other' })
     update({ scopeKey: 'host\0worktree\0tab' })
     expect(api!.snapshot[0]).toMatchObject({ valueSource: 'dispatched' })

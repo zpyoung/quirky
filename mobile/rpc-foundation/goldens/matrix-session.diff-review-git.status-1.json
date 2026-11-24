@@ -76,7 +76,7 @@
       "settledAt": 0,
       "value": {
         "kind": "unavailable",
-        "message": "Update Orca desktop to review changes on mobile."
+        "message": "Update Quirky desktop to review changes on mobile."
       }
     },
     "15f193a5a1c7": {
@@ -486,7 +486,7 @@
       "diff": "unloaded",
       "snapshot": {
         "kind": "unavailable",
-        "message": "Update Orca desktop to review changes on mobile."
+        "message": "Update Quirky desktop to review changes on mobile."
       }
     },
     "5a46fcc976ac": {

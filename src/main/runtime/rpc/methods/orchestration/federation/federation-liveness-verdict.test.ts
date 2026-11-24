@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../../../../shared/constants'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { eraseRpcMethods } from '../../../core'
@@ -44,11 +44,11 @@ function realRuntimeStore() {
 
 describe('federation host liveness verdicts', () => {
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
 
   beforeEach(() => {
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue(PANE_KEY)
     vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue(INCARNATION)
@@ -102,7 +102,7 @@ describe('federation host liveness verdicts', () => {
 
   async function createRealHost(connectionId: string | null = null) {
     const hostDb = new OrchestrationDb(':memory:')
-    const hostRuntime = new OrcaRuntimeService(realRuntimeStore() as never)
+    const hostRuntime = new QuirkyRuntimeService(realRuntimeStore() as never)
     hostRuntime.setOrchestrationDb(hostDb)
     hostRuntime.attachWindow(1)
     hostRuntime.syncWindowGraph(1, { tabs: [], leaves: [] })

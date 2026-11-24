@@ -51,7 +51,7 @@ export function NativeChatVisualFrame({
 }): React.JSX.Element {
   const frameRef = useRef<HTMLIFrameElement | null>(null)
   const theme = useNativeChatVisualTheme(themeScope)
-  // Why: a frame takes the pointer stream from Orca's document, so a tab dragged over it could not drop here.
+  // Why: a frame takes the pointer stream from Quirky's document, so a tab dragged over it could not drop here.
   const dragPassthrough = useWebviewDragPassthroughActive()
   // The latest theme for the next document build and the load-time post, without rebuilding on it.
   const themeRef = useRef(theme)
@@ -179,7 +179,7 @@ export function NativeChatVisualFrame({
         name={`${NATIVE_CHAT_VISUAL_FRAME_NAME_PREFIX}${built.channel}`}
         title={title}
         srcDoc={built.srcDoc}
-        // Never allow-same-origin: the opaque origin keeps the page away from Orca's own.
+        // Never allow-same-origin: the opaque origin keeps the page away from Quirky's own.
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
         className="block size-full border-0 bg-transparent"

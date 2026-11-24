@@ -47,7 +47,7 @@ afterEach(async () => {
 })
 
 it.each(['prefetch', 'read'] as const)('keeps an evicted parse from %s', async (boundary) => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-publication-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-publication-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   const path = join(roots.codexSessionsDir, 'rollout-published.jsonl')
@@ -141,11 +141,11 @@ async function writeRollout(sessionsDir: string, id: string, cwd: string, day: s
 
 describe('scanAiVaultSessions — scope before the recency cap', () => {
   it('lists an older in-scope Codex session once across hardlinked homes', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-scope-walk-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-scope-walk-'))
     tempRoots.push(root)
     const realHome = join(root, 'real-codex-home')
     const managedSessionsDir = join(root, 'codex-accounts', 'a1', 'home', 'sessions')
-    const workspace = '/Users/ada/orca/workspaces/orca/taimen-2'
+    const workspace = '/Users/ada/quirky/workspaces/quirky/taimen-2'
 
     const old = await writeRollout(managedSessionsDir, '01a14083-old', workspace, '11')
     await mkdir(join(realHome, 'sessions', '2026', '10', '11'), { recursive: true })
@@ -179,7 +179,7 @@ describe('scanAiVaultSessions — scope before the recency cap', () => {
 })
 
 it('keeps an older Antigravity session in scope across warm scans and changed history', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-history-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-history-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   await writeRollout(roots.codexSessionsDir, 'newer', '/other', '15')
@@ -204,7 +204,7 @@ it('keeps an older Antigravity session in scope across warm scans and changed hi
 })
 
 it('admits the newest scoped activity when copied Hermes files have newer mtimes', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-activity-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-activity-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   await writeRollout(roots.codexSessionsDir, 'newer', '/other', '15')
@@ -281,7 +281,7 @@ it('delivers cancellation while traversing unchanged cached candidates', async (
 })
 
 it('uses a cold parsed latest Codex cwd after its unlisted row is evicted', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-cold-cwd-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-cold-cwd-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   const path = join(roots.codexSessionsDir, 'rollout-cold-cwd.jsonl')
@@ -341,7 +341,7 @@ it('uses a cold parsed latest Codex cwd after its unlisted row is evicted', asyn
 })
 
 it('walks a history larger than the spread-argument limit', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scope-huge-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scope-huge-'))
   tempRoots.push(root)
   const sessionsDir = join(root, 'sessions')
   const path = await writeRollout(sessionsDir, 'huge-history', '/repo', '15')

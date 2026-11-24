@@ -67,12 +67,12 @@ function normalizePersistedState(state: ClaudeUsagePersistedState): ClaudeUsageP
 }
 
 export function initClaudeUsagePath(): void {
-  _claudeUsageFile = join(app.getPath('userData'), 'orca-claude-usage.json')
+  _claudeUsageFile = join(app.getPath('userData'), 'quirky-claude-usage.json')
 }
 
 function getClaudeUsageFile(): string {
   if (!_claudeUsageFile) {
-    _claudeUsageFile = join(app.getPath('userData'), 'orca-claude-usage.json')
+    _claudeUsageFile = join(app.getPath('userData'), 'quirky-claude-usage.json')
   }
   return _claudeUsageFile
 }

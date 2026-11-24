@@ -222,7 +222,7 @@ function holdProbes(answers: AgentSessionOwnerProbe[], heldAt: number): void {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-start-admission-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-start-admission-'))
   resetHostTestOperationIds()
   holds.clear()
   reached.clear()

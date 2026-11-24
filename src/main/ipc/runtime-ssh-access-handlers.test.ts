@@ -69,7 +69,7 @@ describe('existing paired server SSH access IPC', () => {
     { requestId: '../request' },
     { verifiedRuntimeId: 'renderer-supplied' },
     { userDataPath: '/other-profile' },
-    { owner: { type: 'orcad-runtime', environmentId: 'other' } }
+    { owner: { type: 'quirkyd-runtime', environmentId: 'other' } }
   ])('refuses invalid or authority-bearing link arguments: %j', async (change) => {
     await expect(
       handler('runtimeEnvironments:linkSshAccess')(null, { ...request, ...change })

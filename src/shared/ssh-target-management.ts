@@ -36,7 +36,7 @@ export type SshEditableTargetInput = Pick<SshTarget, 'label' | 'host' | 'port' |
 export type SshEditableTarget = SshTargetSummary &
   SshEditableTargetInput & {
     source?: SshTarget['source']
-    /** The host serves a managed Orca server; it can be edited but not removed from here. */
+    /** The host serves a managed Quirky server; it can be edited but not removed from here. */
     managedServer?: true
   }
 

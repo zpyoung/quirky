@@ -86,7 +86,7 @@ export function selectWorktreeIdOnHost(
   return match ? toHostScopedSelector(match, catalog) : undefined
 }
 
-/** Scopes a pane's forwarded bare `ORCA_WORKTREE_ID` to the caller's host before it is used. */
+/** Scopes a pane's forwarded bare `QUIRKY_WORKTREE_ID` to the caller's host before it is used. */
 export async function resolveCallerPaneWorktreeSelector(
   worktreeId: string,
   client: RuntimeClient

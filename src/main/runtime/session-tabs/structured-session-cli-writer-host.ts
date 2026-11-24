@@ -1,6 +1,6 @@
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
-import { OrcaRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
+import { QuirkyRuntimeWithGetWorktreePs } from '../workspaces/workspace-process-listing'
 import { getProviderForPty } from '../../ipc/pty/provider/registry'
 import { LocalPtyProvider } from '../../providers/local-pty-provider'
 import { inspectPtyProviderProcess } from '../../providers/pty-process-inspection'
@@ -17,7 +17,7 @@ import {
   cliWriterTopology
 } from '../../agent-hooks/server/cli-writer-observation'
 
-export abstract class OrcaRuntimeWithStructuredSessionCliWriterHost extends OrcaRuntimeWithGetWorktreePs {
+export abstract class QuirkyRuntimeWithStructuredSessionCliWriterHost extends QuirkyRuntimeWithGetWorktreePs {
   private cliWriterPtyPane(ptyId: string | null | undefined): CliWriterPane | null {
     const pty = ptyId ? this.ptysById.get(ptyId) : undefined
     return pty?.connected && !pty.connectionId && !pty.isWsl && pty.incarnationId

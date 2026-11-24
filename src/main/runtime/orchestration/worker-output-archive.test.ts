@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import * as workerTranscriptRead from './worker-transcript-read'
 import { captureWorkerOutputArchive, summarizeWorkerOutputArchive } from './worker-output-archive'
 
@@ -36,7 +36,7 @@ describe('worker output archive WSL routing', () => {
   let transcriptReadSpy: { mockRestore: () => void } | undefined
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-worker-archive-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-worker-archive-'))
     transcriptPath = join(directory, 'session.jsonl')
     await writeFile(transcriptPath, `${codexMessage('wsl', 'WSL archive output')}\n`)
   })
@@ -83,7 +83,7 @@ describe('worker output archive WSL routing', () => {
     const runtime = {
       getExactWorkerProviderSession: vi.fn(() => session),
       readTerminal: vi.fn()
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
 
     const result = await captureWorkerOutputArchive({
       runtime,
@@ -129,7 +129,7 @@ describe('worker output archive WSL routing', () => {
         truncated: false,
         status: 'live'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
 
     const result = await captureWorkerOutputArchive({
       runtime,
@@ -182,7 +182,7 @@ describe('worker output archive WSL routing', () => {
         truncated: false,
         status: 'running'
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
 
     const result = await captureWorkerOutputArchive({
       runtime,

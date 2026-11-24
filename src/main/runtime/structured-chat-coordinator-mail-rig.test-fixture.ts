@@ -15,7 +15,7 @@ import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-sessio
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../shared/protocol-version'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { activeProviderContext } from '../../shared/agent-session-provider-context'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { OrchestrationDb } from './orchestration/db'
 import { localOrchestrationCliCommand } from './orchestration/cli-command'
 import { formatMessagePointer } from './orchestration/formatter'
@@ -44,7 +44,7 @@ export const WORKER_2_PANE = 'tab_worker2:cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
 export let codex: ReturnType<typeof fakeCodex>
 export let root: string
-export let runtime: OrcaRuntimeService
+export let runtime: QuirkyRuntimeService
 export let db: OrchestrationDb
 export let host: StructuredAgentSessionHost
 export let dispatcher: RpcDispatcher
@@ -244,7 +244,7 @@ export async function startClearedContext(sessionId: string): Promise<void> {
 
 beforeEach(async () => {
   resetProviderFaults()
-  root = await mkdtemp(join(tmpdir(), 'orca-structured-coordinator-mail-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-structured-coordinator-mail-'))
   codex = fakeCodex()
   db = new OrchestrationDb(':memory:')
   runtime = startRuntime()
@@ -266,9 +266,9 @@ beforeEach(async () => {
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
 })
 
-/** The runtime over the shared database; a second call is what an Orca restart leaves behind. */
-export function startRuntime(): OrcaRuntimeService {
-  const started = new OrcaRuntimeService()
+/** The runtime over the shared database; a second call is what an Quirky restart leaves behind. */
+export function startRuntime(): QuirkyRuntimeService {
+  const started = new QuirkyRuntimeService()
   started.setOrchestrationDb(db)
   vi.spyOn(started, 'ensureStructuredAgentSessionHost').mockResolvedValue()
   vi.spyOn(started, 'getTerminalPaneKey').mockImplementation((handle) =>
@@ -297,7 +297,7 @@ afterEach(async () => {
 export const WAIT = { timeout: 10_000, interval: 10 }
 
 export const POINTER =
-  /You have 1 orchestration message\. Run `orca(-dev)? orchestration check --run run_\w+`\./
+  /You have 1 orchestration message\. Run `quirky(-dev)? orchestration check --run run_\w+`\./
 
 /** The text the PTY lane types into a local terminal for this mailbox, byte for byte. */
 export function ptyPointer(mailboxHandle: string): string {
@@ -312,7 +312,7 @@ export function turnText(turn: { text: string }): string {
     : ''
 }
 
-/** What an Orca restart leaves behind: a new runtime over the same database and host. */
+/** What an Quirky restart leaves behind: a new runtime over the same database and host. */
 export function restartRuntime(): void {
   runtime = startRuntime()
   dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })

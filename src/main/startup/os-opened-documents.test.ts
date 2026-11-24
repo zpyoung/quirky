@@ -11,9 +11,9 @@ describe('OsOpenedDocumentState', () => {
     const state = new OsOpenedDocumentState()
     const publish = vi.fn()
 
-    expect(state.capture(['/Applications/Orca.app/Contents/MacOS/Orca', '--serve'], publish)).toBe(
-      false
-    )
+    expect(
+      state.capture(['/Applications/Quirky.app/Contents/MacOS/Quirky', '--serve'], publish)
+    ).toBe(false)
     expect(publish).not.toHaveBeenCalled()
     expect(state.consume()).toEqual([])
   })
@@ -23,9 +23,9 @@ describe('OsOpenedDocumentState', () => {
     const publish = vi.fn()
     const filePath = hostPath('a.csv')
 
-    expect(state.capture(['/Applications/Orca.app/Contents/MacOS/Orca', filePath], publish)).toBe(
-      true
-    )
+    expect(
+      state.capture(['/Applications/Quirky.app/Contents/MacOS/Quirky', filePath], publish)
+    ).toBe(true)
     expect(publish).toHaveBeenCalledTimes(1)
     expect(state.consume()).toEqual([filePath])
   })
@@ -47,7 +47,7 @@ describe('OsOpenedDocumentState', () => {
 
     state.captureFilePaths([filePath])
     state.captureFilePaths([filePath])
-    state.capture(['orca', filePath])
+    state.capture(['quirky', filePath])
 
     expect(state.consume()).toEqual([filePath])
   })

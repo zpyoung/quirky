@@ -30,7 +30,7 @@ const scratchDirs: string[] = []
 
 async function makeScratchDir(): Promise<string> {
   // realpath first: macOS fronts the temp dir with a /var symlink of its own.
-  const scratch = await mkdtemp(join(await realpath(tmpdir()), 'orca-unicode-path-'))
+  const scratch = await mkdtemp(join(await realpath(tmpdir()), 'quirky-unicode-path-'))
   scratchDirs.push(scratch)
   return scratch
 }

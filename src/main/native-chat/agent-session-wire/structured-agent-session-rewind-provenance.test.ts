@@ -59,7 +59,7 @@ let root: string
 const journals = createTrackedJournalOpener()
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-rewind-provenance-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-rewind-provenance-'))
 })
 
 afterEach(async () => {

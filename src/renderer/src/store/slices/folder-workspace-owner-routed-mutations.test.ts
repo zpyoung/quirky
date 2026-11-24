@@ -85,7 +85,7 @@ describe('folder workspace owner-routed mutations', () => {
             type: 'issue' as const,
             number: 9,
             title: 'Existing task',
-            url: 'https://github.com/acme/orca/issues/9',
+            url: 'https://github.com/acme/quirky/issues/9',
             repoId: 'repo'
           }
         : null

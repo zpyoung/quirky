@@ -46,9 +46,9 @@ export class CodexManagedHomePath {
     if (!this.pathsEqual(account.managedHomePath, expectedPath)) {
       throw originalError
     }
-    // Why: re-auth may recreate a lost empty home, but only at the exact Orca-owned path persisted for this account.
+    // Why: re-auth may recreate a lost empty home, but only at the exact Quirky-owned path persisted for this account.
     mkdirSync(expectedPath, { recursive: true })
-    writeFileSync(join(expectedPath, '.orca-managed-home'), `${account.id}\n`, 'utf-8')
+    writeFileSync(join(expectedPath, '.quirky-managed-home'), `${account.id}\n`, 'utf-8')
     return this.assert(expectedPath, account.id)
   }
 

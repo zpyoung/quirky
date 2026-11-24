@@ -1,9 +1,9 @@
-import { OrcaRuntimeWithOnPtyData } from '../output/pty-output-ingestion'
+import { QuirkyRuntimeWithOnPtyData } from '../output/pty-output-ingestion'
 import {
   WAIT_BLOCKED_CHECK_MIN_INTERVAL_MS,
   WAIT_BLOCKED_KEYWORD_CARRY_CHARS,
   WAIT_BLOCKED_KEYWORD_PATTERN
-} from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-postlude'
 import {
   appendWaitBlockedCarry,
   createWaitBlockedCheckState,
@@ -20,28 +20,30 @@ import type { ProcessedAgentStatusChunk } from '../../../../shared/agent-status-
 import { createTerminalAgentStatusProcessor } from '../../../../shared/terminal-agent-status-processor'
 import type { RuntimePtyTitleTrackerEntry } from '../../runtime-terminal-state-records'
 
-import type { OrcaRuntimeWithRecordAgentPromptLifecycleState } from '../output/terminal-output-generation'
-import type { OrcaRuntimeWithEmitDaemonPtyTransientFact } from '../output/terminal-transient-facts'
-import type { OrcaRuntimeWithGetUnpersistedTrackedTitleForPty } from '../output/terminal-title-tracker'
+import type { QuirkyRuntimeWithRecordAgentPromptLifecycleState } from '../output/terminal-output-generation'
+import type { QuirkyRuntimeWithEmitDaemonPtyTransientFact } from '../output/terminal-transient-facts'
+import type { QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty } from '../output/terminal-title-tracker'
 
-export abstract class OrcaRuntimeWithScheduleWaitBlockedCheck extends OrcaRuntimeWithOnPtyData {
+export abstract class QuirkyRuntimeWithScheduleWaitBlockedCheck extends QuirkyRuntimeWithOnPtyData {
   protected abstract recordAgentPromptPermissionObservation(
     ...args: Parameters<
-      OrcaRuntimeWithRecordAgentPromptLifecycleState['recordAgentPromptPermissionObservation']
+      QuirkyRuntimeWithRecordAgentPromptLifecycleState['recordAgentPromptPermissionObservation']
     >
   ): ReturnType<
-    OrcaRuntimeWithRecordAgentPromptLifecycleState['recordAgentPromptPermissionObservation']
+    QuirkyRuntimeWithRecordAgentPromptLifecycleState['recordAgentPromptPermissionObservation']
   >
 
   protected abstract emitTerminalSideEffectBatch(
-    ...args: Parameters<OrcaRuntimeWithEmitDaemonPtyTransientFact['emitTerminalSideEffectBatch']>
-  ): ReturnType<OrcaRuntimeWithEmitDaemonPtyTransientFact['emitTerminalSideEffectBatch']>
+    ...args: Parameters<QuirkyRuntimeWithEmitDaemonPtyTransientFact['emitTerminalSideEffectBatch']>
+  ): ReturnType<QuirkyRuntimeWithEmitDaemonPtyTransientFact['emitTerminalSideEffectBatch']>
 
   protected abstract getOrCreatePtyTitleTrackerEntry(
     ...args: Parameters<
-      OrcaRuntimeWithGetUnpersistedTrackedTitleForPty['getOrCreatePtyTitleTrackerEntry']
+      QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty['getOrCreatePtyTitleTrackerEntry']
     >
-  ): ReturnType<OrcaRuntimeWithGetUnpersistedTrackedTitleForPty['getOrCreatePtyTitleTrackerEntry']>
+  ): ReturnType<
+    QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty['getOrCreatePtyTitleTrackerEntry']
+  >
 
   protected scheduleWaitBlockedCheck(ptyId: string, appendedText: string, at: number): void {
     let state = this.waitBlockedCheckStateByPtyId.get(ptyId)

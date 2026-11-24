@@ -1,12 +1,12 @@
 import { app, type BrowserWindow } from 'electron'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { placeUnshownLiveTerminalsBestEffort } from '../runtime/terminal/adoption/unshown-live-terminal-placement'
 import { is } from '@electron-toolkit/utils'
 import {
   getCanonicalUserDataPath,
   migrateMobilePairingDataToCanonicalUserDataPath
 } from '../persistence'
-import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
+import { QuirkyRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { registerMobileHandlers } from '../ipc/mobile'
 import { getLocalPtyProvider } from '../ipc/pty/provider/registry'
 import { registerHeadlessPtyRuntime } from '../ipc/pty/register-headless-runtime'
@@ -61,32 +61,32 @@ function settleDesktopActivation(): void {
 function installRuntimeRpc(
   runtime: RuntimeService,
   serveOptions: ReturnType<typeof getServeOptions> | null
-): OrcaRuntimeRpcServer {
+): QuirkyRuntimeRpcServer {
   // Why: existing installs may have pairing creds under the late app.getPath('userData'); copy them forward before switching to the canonical path.
   migrateMobilePairingDataToCanonicalUserDataPath(app.getPath('userData'))
   // Why: parallel E2E Electron instances would race the fixed port (EADDRINUSE); port 0 gives each a random OS-assigned port.
-  const isE2E = Boolean(process.env.ORCA_E2E_USER_DATA_DIR)
-  const requestedE2EWsPort = process.env.ORCA_E2E_RUNTIME_WS_PORT
+  const isE2E = Boolean(process.env.QUIRKY_E2E_USER_DATA_DIR)
+  const requestedE2EWsPort = process.env.QUIRKY_E2E_RUNTIME_WS_PORT
   const e2eWsPort = requestedE2EWsPort === undefined ? 0 : Number(requestedE2EWsPort)
   if (isE2E && (!Number.isInteger(e2eWsPort) || e2eWsPort < 0 || e2eWsPort > 65_535)) {
-    throw new Error(`Invalid ORCA_E2E_RUNTIME_WS_PORT value: ${requestedE2EWsPort}`)
+    throw new Error(`Invalid QUIRKY_E2E_RUNTIME_WS_PORT value: ${requestedE2EWsPort}`)
   }
-  // Why: pin dev to 6769 so `pnpm dev` doesn't race packaged Orca on 6768 and fall back to a random port, breaking deterministic mobile pairing/repro (STA-1511).
+  // Why: pin dev to 6769 so `pnpm dev` doesn't race packaged Quirky on 6768 and fall back to a random port, breaking deterministic mobile pairing/repro (STA-1511).
   const devWsPort = is.dev && !isE2E ? 6769 : undefined
-  const runtimeRpc = new OrcaRuntimeRpcServer({
+  const runtimeRpc = new QuirkyRuntimeRpcServer({
     runtime,
     // Why: mobile pairing needs the stable pre-setName() path (getCanonicalUserDataPath), not a late app.getPath('userData') that drops paired devices across restarts.
     userDataPath: getCanonicalUserDataPath(),
     enableWebSocket: true,
     // Why: STA-2370 — the desktop app binds the WS listener to loopback until the user pairs a device;
-    // `orca serve` is an explicit remote opt-in, and E2E keeps the wide bind its harness connects over.
+    // `quirky serve` is an explicit remote opt-in, and E2E keeps the wide bind its harness connects over.
     exposeNetworkByDefault: Boolean(serveOptions) || isE2E,
     ...(isE2E ? { wsPort: e2eWsPort } : {}),
     ...(devWsPort !== undefined ? { wsPort: devWsPort } : {}),
     ...(serveOptions?.wsPort !== undefined
       ? {
           wsPort: serveOptions.wsPort,
-          // Why: only explicit `orca serve --port` overrides a stale STA-1511 fallback (issue #8535); default/dev stay fallback-first for pairing stability.
+          // Why: only explicit `quirky serve --port` overrides a stale STA-1511 fallback (issue #8535); default/dev stay fallback-first for pairing stability.
           preferPinnedWsPort: true,
           requirePinnedWsPort: true
         }
@@ -121,7 +121,7 @@ function installRuntimeRpc(
 
 async function launchServeMode(
   runtime: RuntimeService,
-  runtimeRpc: OrcaRuntimeRpcServer,
+  runtimeRpc: QuirkyRuntimeRpcServer,
   serveOptions: NonNullable<ReturnType<typeof getServeOptions>>
 ): Promise<void> {
   // Why here: headless serve has no window to unblock, so keep the persisted proxy strictly
@@ -142,7 +142,7 @@ async function launchServeMode(
   await runtime.refreshRestoredOrchestrationAuthority()
   await runtime.reconcileLegacyWorkerTerminals()
   // Switch point: main shows live terminals no pane shows, before any client attaches.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     await placeUnshownLiveTerminalsBestEffort(runtime)
   }
   // Why: headless servers can't mount <webview> panes; use offscreen WebContents, gated on a real display so browser.headless.v1 stays honest.
@@ -185,7 +185,7 @@ async function launchServeMode(
 }
 
 async function launchDesktopMode(
-  runtimeRpc: OrcaRuntimeRpcServer,
+  runtimeRpc: QuirkyRuntimeRpcServer,
   shellPathReady: Promise<void>,
   openMainWindow: MainProcessRuntimeLaunchOptions['openMainWindow']
 ): Promise<void> {

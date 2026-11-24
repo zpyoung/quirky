@@ -5,7 +5,7 @@ export type SystemSshBuildArgsOptions = {
   configFile?: string
   resolvedConfig?: SystemSshResolvedConfig | null
   disableControlMaster?: boolean
-  suppressOrcaControlMaster?: boolean
+  suppressQuirkyControlMaster?: boolean
   gssapiOnly?: boolean
   nonInteractive?: boolean
   /** Keeps OpenSSH's channel-open failures on stderr even under a quieter configured LogLevel. */
@@ -33,7 +33,7 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
   }
   if (options?.gssapiOnly) {
     // Why: the probe must neither authenticate with a key nor open an OpenSSH
-    // credential prompt; failure belongs to Orca's existing ssh2 prompt path.
+    // credential prompt; failure belongs to Quirky's existing ssh2 prompt path.
     args.push('-o', 'GSSAPIAuthentication=yes')
     args.push('-o', 'PreferredAuthentications=gssapi-with-mic')
   }
@@ -43,7 +43,7 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
   // Why: ControlMaster multiplexes all SSH exec commands over a single connection,
   // eliminating the ~9s handshake overhead per command. Without this, each
   // spawnSystemSshCommand call opens a new TCP connection.
-  const controlPath = getOrcaControlSocketPath(target, options)
+  const controlPath = getQuirkyControlSocketPath(target, options)
   const forceDisableControlMaster =
     options?.disableControlMaster === true ||
     target.systemSshConnectionReuse === false ||
@@ -67,7 +67,7 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
 
   // Why: a wildcard `Host *` block supplies ProxyCommand/ProxyJump for every alias, so an alias
   // whose own Host block was renamed or deleted still looks config-backed and gets dialled bare —
-  // as the wildcard's user, at the wildcard's host, discarding the endpoint Orca stored. Keep the
+  // as the wildcard's user, at the wildcard's host, discarding the endpoint Quirky stored. Keep the
   // system transport (OpenSSH must still apply that proxy) but state the stored endpoint, and only
   // where the config proves no block claims the alias.
   if (useConfigHost && options?.aliasClaimedByConfig === false) {
@@ -114,11 +114,11 @@ export function buildSshArgs(target: SshTarget, options?: SystemSshBuildArgsOpti
 }
 
 /**
- * Args for an `ssh -N` forward process. Unmultiplexed: through any ControlMaster (Orca's or the
+ * Args for an `ssh -N` forward process. Unmultiplexed: through any ControlMaster (Quirky's or the
  * user's ssh_config) the master owns the listener and its refusals, so killing the child would
  * neither close the forward nor report why sshd refused it. So a forward logs in on its own, even
  * where a live master holds a login it cannot repeat: through that master its `-N` mux client
- * exits at once and the port stays on the master, out of Orca's reach. A managed tunnel whose
+ * exits at once and the port stays on the master, out of Quirky's reach. A managed tunnel whose
  * forward cannot log in takes the stdio bridge over the master's exec instead.
  */
 export function buildForwardProcessSshArgs(
@@ -127,16 +127,16 @@ export function buildForwardProcessSshArgs(
 ): string[] {
   return buildSshArgs(target, {
     ...options,
-    suppressOrcaControlMaster: true,
+    suppressQuirkyControlMaster: true,
     disableControlMaster: true
   })
 }
 
-export function getOrcaControlSocketPath(
+export function getQuirkyControlSocketPath(
   target: SshTarget,
   options?: SystemSshBuildArgsOptions
 ): string | null {
-  if (shouldDisableOrcaControlMaster(target, options)) {
+  if (shouldDisableQuirkyControlMaster(target, options)) {
     return null
   }
   return getControlSocketPath(target, options?.resolvedConfig, options?.gssapiOnly === true)
@@ -155,8 +155,8 @@ export function getSystemSshBuildArgsFromOperationOptions(
   if (options?.disableControlMaster === true) {
     buildArgsOptions.disableControlMaster = true
   }
-  if (options?.suppressOrcaControlMaster === true) {
-    buildArgsOptions.suppressOrcaControlMaster = true
+  if (options?.suppressQuirkyControlMaster === true) {
+    buildArgsOptions.suppressQuirkyControlMaster = true
   }
   if (options?.gssapiOnly === true) {
     buildArgsOptions.gssapiOnly = true
@@ -170,17 +170,17 @@ export function getSystemSshBuildArgsFromOperationOptions(
   return Object.keys(buildArgsOptions).length === 0 ? undefined : buildArgsOptions
 }
 
-function shouldDisableOrcaControlMaster(
+function shouldDisableQuirkyControlMaster(
   target: SshTarget,
   options?: SystemSshBuildArgsOptions
 ): boolean {
-  // Why: unresolved ssh_config aliases could otherwise share one Orca socket
+  // Why: unresolved ssh_config aliases could otherwise share one Quirky socket
   // while OpenSSH routes them through mutable HostName/ProxyJump settings.
   const unresolvedConfigBackedTarget =
     isOpenSshConfigBackedTarget(target) && options?.resolvedConfig == null
   return (
     options?.disableControlMaster === true ||
-    options?.suppressOrcaControlMaster === true ||
+    options?.suppressQuirkyControlMaster === true ||
     target.systemSshConnectionReuse === false ||
     unresolvedConfigBackedTarget ||
     (hasUserConfiguredControlMaster(options?.resolvedConfig) && options?.gssapiOnly !== true)
@@ -194,7 +194,7 @@ function hasUserConfiguredControlMaster(
     return false
   }
   // Why: ControlPersist/ControlPath alone can reuse a master someone else
-  // created, but they do not create the setup-burst master Orca needs.
+  // created, but they do not create the setup-burst master Quirky needs.
   return (
     hasEnabledControlMaster(resolvedConfig.controlMaster) &&
     hasEnabledControlPath(resolvedConfig.controlPath)

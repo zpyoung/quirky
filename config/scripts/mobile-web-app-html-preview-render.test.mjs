@@ -183,7 +183,7 @@ beforeAll(async () => {
   })
   leakyServer = leaky.server
   origins.leaky = leaky.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browsers.chromium = await chromium.launch({
     headless: true,
     ...(executablePath ? { executablePath } : {})
@@ -370,7 +370,7 @@ for (const engine of ['chromium', 'webkit']) {
         // Why the shell sends the header at all. Serve the same policy with a permissive
         // `Referrer-Policy` and WebKit puts the embedder's URL on the image request, despite
         // `referrerPolicy="no-referrer"` on the iframe element; on the phone that URL is
-        // `orca-mobile-web://<sessionId>/`, so the session id would reach the image host. Chromium
+        // `quirky-mobile-web://<sessionId>/`, so the session id would reach the image host. Chromium
         // sends none either way, which is worth pinning too: on that engine the reading above is
         // the browser's own behaviour and not evidence the header arrived.
         const leaky = await open(browser(), {

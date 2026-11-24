@@ -7,7 +7,7 @@ function from(names: (string | null)[]): AgentMessageSource {
   return {
     kind: 'agent',
     senders: names.map((name, index) => ({
-      party: { address: `term_${index}`, terminalHandle: `term_${index}`, orcaSessionId: null },
+      party: { address: `term_${index}`, terminalHandle: `term_${index}`, quirkySessionId: null },
       name
     })),
     orchestration: null

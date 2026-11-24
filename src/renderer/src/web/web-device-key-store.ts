@@ -20,7 +20,7 @@ export type WebDeviceKeyStore = {
   remove(id: string): Promise<void>
 }
 
-const DB_NAME = 'orca-web-device-keys'
+const DB_NAME = 'quirky-web-device-keys'
 const STORE_NAME = 'keys'
 
 export function webDeviceKeyId(hostPublicKeyB64: string, environmentId: string): string {

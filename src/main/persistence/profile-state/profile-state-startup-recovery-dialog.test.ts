@@ -11,7 +11,7 @@ describe('profile state startup recovery dialog', () => {
 
     await presentProfileStateStartupRecoveryDialog({
       message: 'SQLite state is unreadable.\nSQLite path: /tmp/profile-state.db',
-      recoveryCommand: 'orca profile state exports',
+      recoveryCommand: 'quirky profile state exports',
       showMessageBox,
       copyToClipboard
     })
@@ -21,12 +21,12 @@ describe('profile state startup recovery dialog', () => {
       buttons: ['Copy recovery command', 'Quit'],
       defaultId: 1,
       cancelId: 1,
-      title: 'Orca profile state cannot be opened',
-      message: 'Orca cannot safely open this profile.',
+      title: 'Quirky profile state cannot be opened',
+      message: 'Quirky cannot safely open this profile.',
       detail:
-        'SQLite state is unreadable.\nSQLite path: /tmp/profile-state.db\n\nCopy the recovery command, then run it after Orca closes.'
+        'SQLite state is unreadable.\nSQLite path: /tmp/profile-state.db\n\nCopy the recovery command, then run it after Quirky closes.'
     })
-    expect(copyToClipboard).toHaveBeenCalledWith('orca profile state exports')
+    expect(copyToClipboard).toHaveBeenCalledWith('quirky profile state exports')
   })
 
   it('leaves the clipboard untouched when the user quits', async () => {
@@ -35,7 +35,7 @@ describe('profile state startup recovery dialog', () => {
 
     await presentProfileStateStartupRecoveryDialog({
       message: 'ambiguous profile state',
-      recoveryCommand: 'orca profile state exports',
+      recoveryCommand: 'quirky profile state exports',
       showMessageBox,
       copyToClipboard
     })
@@ -59,7 +59,7 @@ describe('profile state startup recovery dialog', () => {
         defaultId: 0,
         cancelId: 0,
         detail:
-          'both profile authorities are present\n\nQuit Orca and resolve the profile-state authority before retrying.'
+          'both profile authorities are present\n\nQuit Quirky and resolve the profile-state authority before retrying.'
       })
     )
     expect(copyToClipboard).not.toHaveBeenCalled()

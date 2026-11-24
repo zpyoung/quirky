@@ -16,13 +16,13 @@ import {
 describe('daemonScopeUnitName', () => {
   it('prefixes the launch nonce so the unit is traceable back to a launch', () => {
     expect(daemonScopeUnitName('c0ffee12-3456-7890-abcd-ef0123456789')).toBe(
-      'orca-daemon-c0ffee12-3456-7890-abcd-ef0123456789.scope'
+      'quirky-daemon-c0ffee12-3456-7890-abcd-ef0123456789.scope'
     )
   })
 
   it('sanitizes characters systemd unit names reject', () => {
     expect(daemonScopeUnitName('weird nonce/with:stuff')).toBe(
-      'orca-daemon-weird-nonce-with:stuff.scope'
+      'quirky-daemon-weird-nonce-with:stuff.scope'
     )
   })
 })
@@ -155,7 +155,7 @@ describe('isDurableDaemonScopeSupported', () => {
   })
 
   it('is true when the process env XDG_RUNTIME_DIR is a hardened unit override, but the real per-UID dir has a reachable bus (mtl-02 regression)', () => {
-    // Simulates orca-serve@factory.service's RuntimeDirectory=factory hardening directive:
+    // Simulates quirky-serve@factory.service's RuntimeDirectory=factory hardening directive:
     // the process's own XDG_RUNTIME_DIR points at a private scratch dir that is NOT the user
     // session bus location, while the real per-UID runtime dir (injected here in place of the
     // real /run/user/<uid>) has a genuinely reachable bus the whole time.
@@ -209,7 +209,7 @@ describe('buildDurableDaemonScopeCommand', () => {
   it('wraps the daemon command in systemd-run --user --scope with a collected unit', () => {
     const result = buildDurableDaemonScopeCommand(
       '/usr/bin/node',
-      ['/opt/orca/daemon-entry.js', '--socket', '/tmp/x.sock'],
+      ['/opt/quirky/daemon-entry.js', '--socket', '/tmp/x.sock'],
       'nonce-1',
       { PATH: '/usr/bin' },
       null
@@ -218,13 +218,13 @@ describe('buildDurableDaemonScopeCommand', () => {
     expect(result.args).toEqual([
       '--user',
       '--scope',
-      '--unit=orca-daemon-nonce-1.scope',
+      '--unit=quirky-daemon-nonce-1.scope',
       '--property=TimeoutStopSec=5s',
       '--collect',
       '--quiet',
       '--',
       '/usr/bin/node',
-      '/opt/orca/daemon-entry.js',
+      '/opt/quirky/daemon-entry.js',
       '--socket',
       '/tmp/x.sock'
     ])
@@ -296,31 +296,31 @@ describe('detectOwnCgroupScopeUnit', () => {
     expect(detectOwnCgroupScopeUnit('linux', '/definitely/absent/cgroup')).toBeNull()
   })
 
-  it('parses a v2 unified-hierarchy line naming an orca-daemon scope', () => {
-    const path = writeCgroupFixture('0::/user.slice/user-1000.slice/orca-daemon-abc123.scope\n')
-    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('orca-daemon-abc123.scope')
+  it('parses a v2 unified-hierarchy line naming an quirky-daemon scope', () => {
+    const path = writeCgroupFixture('0::/user.slice/user-1000.slice/quirky-daemon-abc123.scope\n')
+    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('quirky-daemon-abc123.scope')
   })
 
-  it('parses a v1 systemd-controller line naming an orca-daemon scope', () => {
+  it('parses a v1 systemd-controller line naming an quirky-daemon scope', () => {
     const path = writeCgroupFixture(
-      '1:name=systemd:/user.slice/user-1000.slice/orca-daemon-def456.scope\n'
+      '1:name=systemd:/user.slice/user-1000.slice/quirky-daemon-def456.scope\n'
     )
-    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('orca-daemon-def456.scope')
+    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('quirky-daemon-def456.scope')
   })
 
   it('returns null for a plain service-unit cgroup — the un-isolated case this fix targets', () => {
-    const path = writeCgroupFixture('0::/system.slice/orca-serve@factory.service\n')
+    const path = writeCgroupFixture('0::/system.slice/quirky-serve@factory.service\n')
     expect(detectOwnCgroupScopeUnit('linux', path)).toBeNull()
   })
 
-  it('returns null for a scope unit that is not an orca-daemon one', () => {
+  it('returns null for a scope unit that is not an quirky-daemon one', () => {
     const path = writeCgroupFixture('0::/user.slice/user-1000.slice/some-other-app.scope\n')
     expect(detectOwnCgroupScopeUnit('linux', path)).toBeNull()
   })
 
-  it('recognizes a legacy app-orca scope so an adopted daemon can migrate it', () => {
-    const path = writeCgroupFixture('0::/user.slice/user-1000.slice/app-orca-1420296.scope\n')
-    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('app-orca-1420296.scope')
+  it('recognizes a legacy app-quirky scope so an adopted daemon can migrate it', () => {
+    const path = writeCgroupFixture('0::/user.slice/user-1000.slice/app-quirky-1420296.scope\n')
+    expect(detectOwnCgroupScopeUnit('linux', path)).toBe('app-quirky-1420296.scope')
   })
 })
 
@@ -328,13 +328,13 @@ describe('legacy daemon scope migration', () => {
   it('reads every process in the legacy scope, including detached descendants', () => {
     const root = mkdtempSync(join(tmpdir(), 'legacy-scope-migration-'))
     const procDir = join(root, 'proc', '321')
-    const cgroupDir = join(root, 'sys', 'user.slice', 'app-orca-1420296.scope')
+    const cgroupDir = join(root, 'sys', 'user.slice', 'app-quirky-1420296.scope')
     mkdirSync(join(procDir), { recursive: true })
     mkdirSync(cgroupDir, { recursive: true })
-    writeFileSync(join(procDir, 'cgroup'), '0::/user.slice/app-orca-1420296.scope\n')
+    writeFileSync(join(procDir, 'cgroup'), '0::/user.slice/app-quirky-1420296.scope\n')
     writeFileSync(join(cgroupDir, 'cgroup.procs'), '321\n400\n401\n')
     expect(readLegacyDaemonScopeProcesses(321, join(root, 'proc'), join(root, 'sys'))).toEqual({
-      unit: 'app-orca-1420296.scope',
+      unit: 'app-quirky-1420296.scope',
       pids: [321, 400, 401]
     })
     rmSync(root, { recursive: true, force: true })
@@ -357,7 +357,7 @@ describe('legacy daemon scope migration', () => {
         'org.freedesktop.systemd1.Manager',
         'StartTransientUnit',
         'ssa(sv)a(sa(sv))',
-        'orca-daemon-new-nonce.scope',
+        'quirky-daemon-new-nonce.scope',
         'fail',
         '1',
         'PIDs',
@@ -378,7 +378,7 @@ describe('legacy daemon scope migration', () => {
       'disabled-address',
       [321],
       {
-        XDG_RUNTIME_DIR: '/run/orca_serve/factory',
+        XDG_RUNTIME_DIR: '/run/quirky_serve/factory',
         DBUS_SESSION_BUS_ADDRESS: 'disabled:'
       },
       runtimeDir
@@ -394,7 +394,7 @@ describe('legacy daemon scope migration', () => {
       env: { XDG_RUNTIME_DIR: runtimeDir },
       platform: 'linux',
       canonicalRuntimeDir: runtimeDir,
-      readProcesses: () => ({ unit: 'app-orca-1420296.scope', pids: [321, 400] }),
+      readProcesses: () => ({ unit: 'app-quirky-1420296.scope', pids: [321, 400] }),
       systemdBootPath: fakeSystemdBootPath(),
       runVersionProbe: () => ({ code: 0, timedOut: false }),
       runMigration: runMigration,
@@ -407,7 +407,7 @@ describe('legacy daemon scope migration', () => {
         env: { XDG_RUNTIME_DIR: runtimeDir },
         platform: 'linux',
         canonicalRuntimeDir: runtimeDir,
-        readProcesses: () => ({ unit: 'app-orca-1420296.scope', pids: [321, 400] }),
+        readProcesses: () => ({ unit: 'app-quirky-1420296.scope', pids: [321, 400] }),
         systemdBootPath: fakeSystemdBootPath(),
         runVersionProbe: () => ({ code: 0, timedOut: false }),
         runMigration: () => ({ code: 1, timedOut: false }),
@@ -466,7 +466,7 @@ describe('durable scope launch environment and lifetime (#25580, #24201)', () =>
         env: { XDG_RUNTIME_DIR: runtimeDir },
         platform: 'linux',
         canonicalRuntimeDir: runtimeDir,
-        readProcesses: () => ({ unit: 'app-orca-1.scope', pids: [321] }),
+        readProcesses: () => ({ unit: 'app-quirky-1.scope', pids: [321] }),
         systemdBootPath: fakeSystemdBootPath(),
         runVersionProbe: () => ({ code: 0, timedOut: false }),
         runMigration: runMigration,

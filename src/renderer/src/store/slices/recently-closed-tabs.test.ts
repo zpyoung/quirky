@@ -52,7 +52,7 @@ import { loadMainLayoutModel } from '@/runtime/main-loaded-layout-frames.test-fi
 import { openWorkspaceLayoutFrameSync } from '@/runtime/workspace-layout-frame-sync'
 import { endLayoutFramePositions } from '@/runtime/layout-frame-position'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -86,7 +86,7 @@ beforeEach(() => {
 /** A layout-owner build's main, applying the window's commands, with its frames drawn into
  *  `store`; nothing to open otherwise. */
 async function mainWithFrames(store: ReturnType<typeof createTestStore>): Promise<() => void> {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return () => {}
   }
   layoutApplyTestTransport.reset()
@@ -398,7 +398,7 @@ describe('restoreRecentlyClosedTabPosition', () => {
     expect(reordered).toHaveBeenCalledWith(
       'captured-group',
       ['captured-tab', 'captured-sibling'],
-      ORCA_LAYOUT_OWNER_IS_MAIN
+      QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? { recordInteraction: false, layoutOwnerHandled: true }
         : { recordInteraction: false }
     )

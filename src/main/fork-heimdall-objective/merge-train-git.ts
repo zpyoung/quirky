@@ -17,7 +17,7 @@ import {
   type ObjectiveWorkspaceTarget
 } from './content-identity'
 
-const NODE_TASK_TRAILER = 'Orca-Heimdall-Task'
+const NODE_TASK_TRAILER = 'Quirky-Heimdall-Task'
 
 /**
  * Thrown when a node's ingested report fails a deterministic Git invariant — the dispatch baseline
@@ -210,7 +210,7 @@ async function readCherryPickHead(runGit: ObjectiveGitCommand): Promise<string |
 // random component so a worker cannot pre-plant a hook at a path it can predict
 async function normalizationCommitHooksPath(runGit: ObjectiveGitCommand): Promise<string> {
   const { stdout } = await runGit(['rev-parse', '--absolute-git-dir'])
-  return `${stdout.trim()}/orca-objective-empty-hooks-${randomUUID()}`
+  return `${stdout.trim()}/quirky-objective-empty-hooks-${randomUUID()}`
 }
 
 function withoutTaskTrailerLines(text: string): string {
@@ -277,7 +277,7 @@ async function abortCherryPick(
 
 /**
  * Replaces the dispatched node's commits and outstanding worktree changes with exactly one commit
- * whose parent is `baseCommit`. Watcher-owned `.orca` artifacts remain untouched and uncommitted.
+ * whose parent is `baseCommit`. Watcher-owned `.quirky` artifacts remain untouched and uncommitted.
  * A successful node with no file changes is represented by one empty commit.
  */
 export async function createObjectiveNodeCommit(

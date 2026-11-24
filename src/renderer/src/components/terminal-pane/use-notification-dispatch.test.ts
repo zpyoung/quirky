@@ -63,7 +63,7 @@ describe('dispatchTerminalNotification', () => {
         }),
         worktreeId: 'wt-primary',
         paneKey,
-        repoLabel: 'orca',
+        repoLabel: 'quirky',
         worktreeLabel: 'master',
         terminalTitle: 'codex',
         isActiveWorktree: false,
@@ -404,7 +404,7 @@ describe('dispatchTerminalNotification', () => {
     })
   })
 
-  it('marks the selected worktree unread when Orca is backgrounded', () => {
+  it('marks the selected worktree unread when Quirky is backgrounded', () => {
     mockState.settings.experimentalTerminalAttention = false
     mockState.activeWorktreeId = 'wt-primary'
     stubDocumentFocus({ visibilityState: 'hidden', focused: false })
@@ -733,7 +733,7 @@ describe('dispatchTerminalNotification', () => {
 
     dispatchTerminalNotification('wt-primary', {
       source: 'agent-task-complete',
-      terminalTitle: '/workspace/orca',
+      terminalTitle: '/workspace/quirky',
       paneKey
     })
 

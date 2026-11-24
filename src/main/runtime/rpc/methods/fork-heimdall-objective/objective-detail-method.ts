@@ -3,14 +3,14 @@ import { HEIMDALL_CHANNELS } from '../../../../../shared/fork-heimdall/api'
 import { WatcherTargetSchema } from '../../../../../shared/fork-heimdall/fleet-types'
 import { ObjectiveDetailSchema } from '../../../../../shared/fork-heimdall-objective/detail-types'
 import { ObjectiveEnrollmentPayloadSchema } from '../../../../../shared/fork-heimdall-objective/contract-types'
-import type { OrcaRuntimeService } from '../../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../runtime/quirky-runtime'
 import type { HeimdallFleetTransport } from '../../../../fork-heimdall/fleet-transport'
 import { requireHeimdallKernel, requireHeimdallTransport } from '../fork-heimdall/kernel-binding'
 import { requireHeimdallObjectiveStore } from './objective-binding'
 import { ObjectiveDetailReaderSchema } from './objective-detail-reader-schema'
 import { projectObjectiveDetailParallelForClient } from '../fork-heimdall/park-reason-wire'
 
-async function readLocalObjectiveDetail(runtime: OrcaRuntimeService, watcherId: string) {
+async function readLocalObjectiveDetail(runtime: QuirkyRuntimeService, watcherId: string) {
   const target = { watcherId, connectionId: null, pairingRevision: null } as const
   const detail = await requireHeimdallKernel(runtime).detail(target)
   if (detail.watcher.entry.enrollment.kind !== 'objective') {

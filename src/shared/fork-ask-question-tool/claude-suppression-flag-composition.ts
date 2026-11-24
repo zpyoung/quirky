@@ -78,7 +78,7 @@ export type ClaudeLaunchCommandFlagsInput = {
 }
 
 /**
- * Appends Orca's AskUserQuestion suppression flags to a Claude launch command.
+ * Appends Quirky's AskUserQuestion suppression flags to a Claude launch command.
  * Skips a flag already present in the effective command (the user's override,
  * else the resolved command) rather than duplicating or rewriting it, and is a
  * no-op for any agent but `claude` or for any verdict short of flags to inject —
@@ -114,10 +114,10 @@ export function appendClaudeSuppressionFlags(args: ClaudeLaunchCommandFlagsInput
  * re-evaluated gate verdict. A non-null verdict injects any suppression pair
  * the capture is missing (per-flag skip prevents duplicating one already
  * baked in from the original launch); a null verdict strips exactly the
- * token pairs Orca itself injected, matched against its own literal flag and
+ * token pairs Quirky itself injected, matched against its own literal flag and
  * value — a user-authored flag, even one with the same name, is left alone
- * unless its value is byte-identical to Orca's, so this can only remove what
- * Orca put there. A pending verdict leaves the capture exactly as it is.
+ * unless its value is byte-identical to Quirky's, so this can only remove what
+ * Quirky put there. A pending verdict leaves the capture exactly as it is.
  */
 export function applyClaudeSuppressionFlagsToResumeCommand(args: {
   agent: TuiAgent

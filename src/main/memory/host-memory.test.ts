@@ -6,7 +6,7 @@ const { runProcessMock, readFileMock } = vi.hoisted(() => ({
   readFileMock: vi.fn()
 }))
 
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcess: runProcessMock
 }))
 

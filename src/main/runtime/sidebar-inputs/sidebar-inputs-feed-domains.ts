@@ -5,7 +5,7 @@ import {
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { DesktopSidebarFacts } from '../../../shared/sidebar-list/desktop-sidebar-facts'
 import type { RuntimeStore } from '../runtime-store-contract'
-import type { OrcaRuntimeWithSidebarTemporal } from './orca-runtime-sidebar-temporal'
+import type { QuirkyRuntimeWithSidebarTemporal } from './quirky-runtime-sidebar-temporal'
 import type { WorkspaceCreationRegistry } from './workspace-creation-registry'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
 import type { RepoIconDataUrls } from './repo-icon-data-urls'
@@ -32,7 +32,7 @@ const CATALOG_EVENTS = new Set<RuntimeClientEvent['type']>([
 ])
 
 export type SidebarInputsFeedSources = {
-  facts: OrcaRuntimeWithSidebarTemporal
+  facts: QuirkyRuntimeWithSidebarTemporal
   workspaceCreations: WorkspaceCreationRegistry
   workspaceRows: WorkspaceRowsProducer
   repoIcons: Pick<RepoIconDataUrls, 'idsByRepo'>

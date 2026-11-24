@@ -101,7 +101,7 @@ function newId(f: ReturnType<typeof fixture>): string {
 
 // Why rename: the stand-in hands its link over whole; a direct write lets the poller read it empty.
 function handOverClaudeSignInLink(windowsPath: string, link: string): void {
-  const helperPath = join(windowsPath, '.orca-sign-in-browser')
+  const helperPath = join(windowsPath, '.quirky-sign-in-browser')
   writeFileSync(`${helperPath}.tmp`, link)
   renameSync(`${helperPath}.tmp`, `${helperPath}.link`)
 }
@@ -114,12 +114,12 @@ describe('ClaudeAccountService', () => {
       account('old-wsl', {
         managedAuthRuntime: 'wsl',
         wslDistro: 'Ubuntu',
-        wslLinuxAuthPath: '/home/u/.local/share/orca/claude-accounts/old-wsl/auth'
+        wslLinuxAuthPath: '/home/u/.local/share/quirky/claude-accounts/old-wsl/auth'
       }),
       account('new-wsl', {
         managedAuthRuntime: 'wsl',
         wslDistro: 'Ubuntu',
-        wslLinuxAuthPath: '/home/u/.local/share/orca/claude-profiles/new-wsl/home'
+        wslLinuxAuthPath: '/home/u/.local/share/quirky/claude-profiles/new-wsl/home'
       })
     ])
     f.signIn('a', 'now-a@example.test')
@@ -305,7 +305,7 @@ describe('ClaudeAccountService', () => {
     const f = fixture()
     f.runLogin.mockImplementationOnce(async (_args, config, _timeoutMs, options) => {
       expect(options?.browser).toBeUndefined()
-      expect(existsSync(join(config.windowsPath, '.orca-sign-in-browser'))).toBe(false)
+      expect(existsSync(join(config.windowsPath, '.quirky-sign-in-browser'))).toBe(false)
       f.signIn(newId(f), 'new@example.test')
       return ''
     })
@@ -330,7 +330,7 @@ describe('ClaudeAccountService', () => {
       const adding = f.service.addAccount({ runtime: 'host' }, true)
       copied = await f.service.waitForSignInLink()
       await adding
-      expect(existsSync(join(f.home(newId(f)), '.orca-sign-in-browser'))).toBe(false)
+      expect(existsSync(join(f.home(newId(f)), '.quirky-sign-in-browser'))).toBe(false)
       await expect(f.service.waitForSignInLink()).resolves.toBeNull()
     }
   )
@@ -387,7 +387,7 @@ describe('ClaudeAccountService', () => {
     })
     f.runLogin.mockImplementationOnce(async (_args, config, _timeoutMs, options) => {
       expect(options?.browser).toBe(
-        `/home/u/claude-profiles/${newId(f)}/home/.orca-sign-in-browser`
+        `/home/u/claude-profiles/${newId(f)}/home/.quirky-sign-in-browser`
       )
       handOverClaudeSignInLink(config.windowsPath, LINK)
       await vi.waitFor(() => expect(opened).toEqual([LINK]))

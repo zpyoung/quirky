@@ -46,7 +46,7 @@ describe('composeHandoffBrief', () => {
 
     expect(result.editableBody).toBe(
       [
-        'Continue work from the prior Orca session. No transcript context travelled with this handoff.',
+        'Continue work from the prior Quirky session. No transcript context travelled with this handoff.',
         '',
         'Source session:',
         '```text',
@@ -75,7 +75,7 @@ describe('composeHandoffBrief', () => {
     )
 
     expect(result.editableBody).toContain(
-      'Continue work from the prior Orca session using the context below.'
+      'Continue work from the prior Quirky session using the context below.'
     )
     expect(result.editableBody).toContain(
       'A saved session transcript was unavailable, so use this bounded recent terminal capture:'
@@ -241,7 +241,7 @@ describe('composeHandoffBrief', () => {
       })
     )
 
-    expect(result.editableBody).toContain('Latest Orca status hints:')
+    expect(result.editableBody).toContain('Latest Quirky status hints:')
     expect(result.editableBody).toContain('Finish the reducer.')
     expect(result.editableBody).toContain('The reducer is implemented.')
     expect(result.warnings).toEqual(['no-transcript-context'])

@@ -13,7 +13,7 @@ afterEach(async () => {
 
 describe('parseDevinSessionFile', () => {
   it('parses minimal ATIF transcript fixture', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-devin-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-devin-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'abc.json')
     const mtimeMs = Date.now()
@@ -50,7 +50,7 @@ describe('parseDevinSessionFile', () => {
   })
 
   it('parses current ATIF token and model fields', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-devin-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-devin-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'current.json')
     const mtimeMs = Date.now()
@@ -94,7 +94,7 @@ describe('parseDevinSessionFile', () => {
   })
 
   it('extracts text from an array-valued ATIF message', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-devin-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-devin-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'array-message.json')
     const mtimeMs = Date.now()
@@ -128,7 +128,7 @@ describe('parseDevinSessionFile', () => {
   })
 
   it('parses a real ATIF-v1.7 transcript', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-devin-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-devin-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'apricot-houseboat.json')
     const mtimeMs = Date.now()

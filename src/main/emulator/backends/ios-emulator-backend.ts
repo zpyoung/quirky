@@ -253,7 +253,7 @@ export class IosEmulatorBackend implements EmulatorBackend {
         )
       }
     }
-    // Why: serve-sim/CoreSimulator can surface Simulator.app while Orca embeds the stream.
+    // Why: serve-sim/CoreSimulator can surface Simulator.app while Quirky embeds the stream.
     await hideNativeSimulatorApp().catch(() => {})
     return { ...info, streamCodec: 'mjpeg', backend: 'ios' }
   }

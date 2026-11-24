@@ -147,7 +147,7 @@ export function HostSectionHeaderMenu({ row }: { row: HostHeaderRow }): React.JS
     // Why: drop any cached "compatible" verdict so the re-probe re-evaluates
     // version skew instead of trusting the prior pass.
     clearRuntimeCompatibilityCache(parsed.environmentId)
-    // Why connect: a refusal Orca can answer over SSH is retried, not just read back.
+    // Why connect: a refusal Quirky can answer over SSH is retried, not just read back.
     const retryPairing = row.blockedReason === 'access-revoked' && repairRoute === 'ssh'
     try {
       const response = await (

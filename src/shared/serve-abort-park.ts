@@ -1,10 +1,10 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/** How long a macOS startup abort keeps later `orca serve` runs from the same environment out. */
+/** How long a macOS startup abort keeps later `quirky serve` runs from the same environment out. */
 export const SERVE_ABORT_PARK_MS = 30 * 60_000
 
-/** The exit code a parked `orca serve` refuses with (EX_CONFIG): retrying cannot help. */
+/** The exit code a parked `quirky serve` refuses with (EX_CONFIG): retrying cannot help. */
 export const SERVE_ABORT_PARK_EXIT_CODE = 78
 
 export type ServeAbortPark = {

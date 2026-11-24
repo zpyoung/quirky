@@ -1,8 +1,8 @@
 // The glibc 2.17 lane builds and smokes native slots; it does not run the server tests.
 export const NATIVE_COMPAT_ENTRY_POINTS = [
-  'config/scripts/build-orcad-prebuilds.mjs',
-  'config/scripts/orcad-prebuild-smoke.mjs',
-  'config/scripts/orcad-prebuild-smoke-child.cjs',
+  'config/scripts/build-quirkyd-prebuilds.mjs',
+  'config/scripts/quirkyd-prebuild-smoke.mjs',
+  'config/scripts/quirkyd-prebuild-smoke-child.cjs',
   // createRequire and the smoke subprocess do not expose these edges to esbuild.
   'config/scripts/node-pty-job-ownership.cjs',
   'config/scripts/verify-linux-glibc-floor.cjs'
@@ -84,7 +84,7 @@ function isTestInput({ status, file }) {
   // Build policy and process-host fixtures can be read without a static import.
   if (
     file.startsWith('src/packages/') ||
-    /^config\/scripts\/[^/]*(?:orcad|node-server|node-pty|native|glibc|pinned-node|node-runtime|workspace-source-exports|script-module-dependencies)[^/]*$/.test(
+    /^config\/scripts\/[^/]*(?:quirkyd|node-server|node-pty|native|glibc|pinned-node|node-runtime|workspace-source-exports|script-module-dependencies)[^/]*$/.test(
       file
     )
   ) {

@@ -27,7 +27,7 @@ const WORKING_CHILD: AgentSubagentSnapshot = {
 let dir: string
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-restored-status-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-restored-status-'))
 })
 
 afterEach(() => {
@@ -44,7 +44,7 @@ type PersistedRow = {
   providerSessionOnly?: boolean
 }
 
-/** Start a server over the last-status.json an Orca that closed mid-turn leaves behind. */
+/** Start a server over the last-status.json an Quirky that closed mid-turn leaves behind. */
 async function restartWith(rows: PersistedRow[] = [{}]): Promise<AgentHookServer> {
   const now = Date.now()
   const entries = Object.fromEntries(

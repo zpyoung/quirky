@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithSerializeHeadlessTerminalBuffer } from '../../terminal/output/headless-buffer-snapshot'
+import { QuirkyRuntimeWithSerializeHeadlessTerminalBuffer } from '../../terminal/output/headless-buffer-snapshot'
 import type {
   OrchestrationCompatibilityEvidence,
   OrchestrationCompatibilityHostStamp
@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 
-export abstract class OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller extends OrcaRuntimeWithSerializeHeadlessTerminalBuffer {
+export abstract class QuirkyRuntimeWithVerifyOrchestrationCompatibilityCaller extends QuirkyRuntimeWithSerializeHeadlessTerminalBuffer {
   abstract getOrchestrationDispatchAuthority(
     handle: string
   ): OrchestrationCompatibilityTerminalAuthority | null

@@ -28,7 +28,7 @@ describe('Agent Dashboard open mode', () => {
 
   // #22218: a browser tab has no second window, so pop-out was a silent no-op.
   it('opens the in-window board in a web client even when the setting says pop-out', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = dashboardState()
     const openPopout = vi.fn()
     expect(resolveAgentDashboardMode(state.settings)).toBe('in-window')

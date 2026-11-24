@@ -128,14 +128,14 @@ describe('getActiveMarkdownExportPayload', () => {
     await mockPreviewOpenFile()
     const root = document.createElement('div')
     // Why: attr-only fixture (renamed class) proves the generic
-    // data-orca-export-hide rule scrubs even after a class rename.
+    // data-quirky-export-hide rule scrubs even after a class rename.
     root.innerHTML = `
       <div class="markdown-body">
         <ul>
           <li>
             <div class="markdown-annotation-list-block" data-source-line="2" data-source-end-line="2">
               <span class="markdown-annotation-list-content">List item</span>
-              <div class="markdown-annotation-controls-renamed" data-orca-export-hide="true">
+              <div class="markdown-annotation-controls-renamed" data-quirky-export-hide="true">
                 <button type="button" class="markdown-annotation-add" aria-label="Add note"><svg></svg></button>
               </div>
             </div>
@@ -148,9 +148,9 @@ describe('getActiveMarkdownExportPayload', () => {
     })
     const exported = parseExportedHtml(payload?.html)
     expect(exported.querySelector('li')?.textContent).toContain('List item')
-    expect(exported.querySelector('[data-orca-export-hide]')).toBeNull()
+    expect(exported.querySelector('[data-quirky-export-hide]')).toBeNull()
     expect(exported.querySelector('.markdown-annotation-add')).toBeNull()
-    expect(root.querySelector('[data-orca-export-hide]')).not.toBeNull()
+    expect(root.querySelector('[data-quirky-export-hide]')).not.toBeNull()
   })
 })
 

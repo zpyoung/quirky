@@ -1,4 +1,4 @@
-/** Pure rendering of the per-user service units `orca serve service install` writes. */
+/** Pure rendering of the per-user service units `quirky serve service install` writes. */
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 import { SERVE_LAUNCHD_LABEL_PREFIX } from '../../shared/serve-bundle-coordination'
@@ -17,7 +17,7 @@ export type ServeServiceSpec = {
 export type ServeServiceInput = {
   platform: NodeJS.Platform
   homeDir: string
-  /** Absolute path of the stable `orca` launcher, never a version-specific executable. */
+  /** Absolute path of the stable `quirky` launcher, never a version-specific executable. */
   command: string
   userDataPath: string
   /** The profile's userData when no override is set; that profile gets the plain name. */
@@ -57,11 +57,14 @@ export function renderServeService(input: ServeServiceInput): ServeServiceSpec {
   }
   const suffix = profileSuffix(input)
   // Why always pin: the manager's environment may resolve a different default profile.
-  const env: Record<string, string> = { PATH: input.path, ORCA_USER_DATA_PATH: input.userDataPath }
+  const env: Record<string, string> = {
+    PATH: input.path,
+    QUIRKY_USER_DATA_PATH: input.userDataPath
+  }
   const argv = [input.command, ...serveServiceArgs(input)]
   if (manager === 'launchd') {
     const name = suffix ? `${SERVE_LAUNCHD_LABEL_PREFIX}.${suffix}` : SERVE_LAUNCHD_LABEL_PREFIX
-    const logPath = join(input.homeDir, 'Library', 'Logs', 'Orca', `${name}.log`)
+    const logPath = join(input.homeDir, 'Library', 'Logs', 'Quirky', `${name}.log`)
     return {
       manager,
       name,
@@ -70,7 +73,7 @@ export function renderServeService(input: ServeServiceInput): ServeServiceSpec {
       content: renderLaunchAgent(name, argv, env, logPath)
     }
   }
-  const name = suffix ? `orca-serve-${suffix}.service` : 'orca-serve.service'
+  const name = suffix ? `quirky-serve-${suffix}.service` : 'quirky-serve.service'
   return {
     manager,
     name,
@@ -150,7 +153,7 @@ function renderSystemdUnit(argv: string[], env: Record<string, string>): string 
   // Why KillMode=process: stopping the service stops the supervisor, which stops its server; the
   // terminal daemon is designed to outlive the server, as it outlives the desktop app.
   return `[Unit]
-Description=Orca server (orca serve --supervise)
+Description=Quirky server (quirky serve --supervise)
 StartLimitIntervalSec=900
 StartLimitBurst=5
 

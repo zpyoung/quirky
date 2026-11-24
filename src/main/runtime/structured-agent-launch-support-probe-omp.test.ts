@@ -69,10 +69,10 @@ function launchWith(settings: Settings) {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-omp-probe-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-omp-probe-'))
   shellBin = await fakeOmp(join(root, 'shell-bin'), '16.2.0')
   privateBin = await fakeOmp(join(root, 'omp-prefix', 'bin'), '17.0.5')
-  // Orca's resolved login-shell PATH, with an OMP older than ACP support first.
+  // Quirky's resolved login-shell PATH, with an OMP older than ACP support first.
   loginShell.env = { PATH: `${shellBin}:/usr/bin:/bin`, HOME: root }
 })
 afterEach(async () => {

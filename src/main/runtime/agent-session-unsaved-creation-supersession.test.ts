@@ -83,7 +83,7 @@ async function restart(store: AgentSessionRecordStore) {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-agent-session-supersession-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-agent-session-supersession-'))
 })
 
 afterEach(async () => {

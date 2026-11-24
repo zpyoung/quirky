@@ -194,8 +194,8 @@ describe('createFrameReader', () => {
   })
 })
 
-// Needs an interpreter with ipykernel, e.g. ORCA_TEST_IPYKERNEL_PYTHON=/path/to/.venv/bin/python.
-const python = process.env.ORCA_TEST_IPYKERNEL_PYTHON
+// Needs an interpreter with ipykernel, e.g. QUIRKY_TEST_IPYKERNEL_PYTHON=/path/to/.venv/bin/python.
+const python = process.env.QUIRKY_TEST_IPYKERNEL_PYTHON
 
 describe.skipIf(!python)('notebook kernel against a real ipykernel', () => {
   it('keeps state across cells, returns the last expression, interrupts, and reports death', async () => {
@@ -242,7 +242,7 @@ describe.skipIf(!python)('notebook kernel against a real ipykernel', () => {
   }, 60_000)
 })
 
-const bare = process.env.ORCA_TEST_PYTHON_WITHOUT_IPYKERNEL
+const bare = process.env.QUIRKY_TEST_PYTHON_WITHOUT_IPYKERNEL
 
 describe.skipIf(!bare)('notebook kernel without ipykernel', () => {
   it('reports the missing package instead of starting', async () => {

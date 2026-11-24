@@ -173,7 +173,7 @@ describe('attach', () => {
     })
     const params = attachParams()
 
-    // Orca's own store fault: the child is gone, but nothing blames the provider.
+    // Quirky's own store fault: the child is gone, but nothing blames the provider.
     const refused = {
       ok: false,
       refusal: {
@@ -219,7 +219,7 @@ describe('attach', () => {
       return originalAppend(...args)
     })
     events?.appendItem(
-      { provider: 'orca', clientMessageId: 'old-journal-write' },
+      { provider: 'quirky', clientMessageId: 'old-journal-write' },
       { kind: 'status', text: 'old journal write' },
       { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
@@ -524,7 +524,7 @@ describe('respondToPrompt', () => {
     expect(result.ok).toBe(true)
     const page = await host.history({ sessionId: SESSION, direction: 'tail' })
     const statusId = agentJournalItemKey({
-      provider: 'orca',
+      provider: 'quirky',
       clientMessageId: `${prompt.itemId}#delivery`
     })
     expect(page.ok && page.page.items.some((entry) => entry.itemId === statusId)).toBe(true)

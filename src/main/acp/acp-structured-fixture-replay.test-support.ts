@@ -1,6 +1,6 @@
-// Plays a recorded Grok session back as the agent behind the real adapter. Orca's own frames
+// Plays a recorded Grok session back as the agent behind the real adapter. Quirky's own frames
 // advance the recording: the agent's lines after each one are sent until the recording waits on
-// Orca again. The recording's prompt ids and session id are rewritten to the ones this run uses,
+// Quirky again. The recording's prompt ids and session id are rewritten to the ones this run uses,
 // as the real agent echoes the prompt id it was sent.
 
 import { expect } from 'vitest'
@@ -36,11 +36,11 @@ export class GrokFixtureReplay {
 
   attach(agent: AcpScriptedAgent): void {
     this.agent = agent
-    agent.on('session/prompt', (frame) => this.orcaSent('session/prompt', frame))
-    agent.on('session/cancel', (frame) => this.orcaSent('session/cancel', frame))
+    agent.on('session/prompt', (frame) => this.quirkySent('session/prompt', frame))
+    agent.on('session/cancel', (frame) => this.quirkySent('session/cancel', frame))
   }
 
-  /** What the recording waits for Orca to send next; null once it has played to the end. */
+  /** What the recording waits for Quirky to send next; null once it has played to the end. */
   get awaiting(): string | null {
     const next = this.frames[this.cursor]
     if (!next) {
@@ -49,7 +49,7 @@ export class GrokFixtureReplay {
     return next.direction === 'out' ? (next.message.method ?? 'reply') : 'agent'
   }
 
-  private orcaSent(method: string, frame: FakeFrame): void {
+  private quirkySent(method: string, frame: FakeFrame): void {
     const recorded = this.frames[this.cursor]
     expect(recorded?.direction).toBe('out')
     expect(recorded?.message.method).toBe(method)
@@ -72,7 +72,7 @@ export class GrokFixtureReplay {
       this.cursor += 1
       const message = this.rewrite(recorded.message)
       if (message.method !== undefined && message.id !== undefined) {
-        // The agent asks Orca something; the recording resumes once Orca answers it.
+        // The agent asks Quirky something; the recording resumes once Quirky answers it.
         void agent.request(message.id, message.method, message.params).then(() => {
           expect(this.frames[this.cursor]?.direction).toBe('out')
           this.cursor += 1

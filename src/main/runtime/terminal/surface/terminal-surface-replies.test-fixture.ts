@@ -1,8 +1,8 @@
-// One desktop scenario and the replies CLI, paired desktops and orcad read about it, normalised so
+// One desktop scenario and the replies CLI, paired desktops and quirkyd read about it, normalised so
 // a switch-off capture and a switch-on run compare byte for byte.
 import { readFileSync } from 'node:fs'
 import { vi } from 'vitest'
-import { OrcaRuntimeService } from '../../orca-runtime-test-mocks.spec'
+import { QuirkyRuntimeService } from '../../quirky-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   HEADLESS_SECOND_LEAF_ID,
@@ -11,7 +11,7 @@ import {
   makeHeadlessTerminalLayout,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} from '../../orca-runtime-test-fixtures.spec'
+} from '../../quirky-runtime-test-fixtures.spec'
 import type { RuntimeSyncWindowGraph, RuntimeTerminalShow } from '../../../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
@@ -21,7 +21,7 @@ import { applyCommandToSession } from '../../../persistence/terminal-topology/te
 export const SURFACE_TAB_ID = '44444444-4444-4444-8444-444444444444'
 export const SURFACE_PTYS = { [HEADLESS_LEAF_ID]: 'pty-a', [HEADLESS_SECOND_LEAF_ID]: 'pty-b' }
 
-type Runtime = InstanceType<typeof OrcaRuntimeService>
+type Runtime = InstanceType<typeof QuirkyRuntimeService>
 
 /** A saved tab split in two, each pane bound to a live terminal. */
 export function surfaceRuntime(
@@ -101,7 +101,7 @@ export function surfaceRuntime(
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared runtime spec fixture store implements every method these paths call.
-  const runtime = new OrcaRuntimeService(runtimeStore as never)
+  const runtime = new QuirkyRuntimeService(runtimeStore as never)
   const killed: string[] = []
   runtime.setPtyController({
     write: () => true,

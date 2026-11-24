@@ -1,6 +1,6 @@
 import { writeStartupDiagnosticLine } from '../startup/startup-diagnostics'
 
-export const MAIN_THREAD_DIAGNOSTICS_ENV = 'ORCA_MAIN_THREAD_DIAGNOSTICS'
+export const MAIN_THREAD_DIAGNOSTICS_ENV = 'QUIRKY_MAIN_THREAD_DIAGNOSTICS'
 
 // Why: 25ms mirrors event-loop-stall-probe — a timer that fires late by N ms
 // proves the main thread was blocked for N ms, which is the direct in-process
@@ -38,8 +38,8 @@ export function classifySubprocessCommand(command: string, args: readonly string
   let binary = binaryName(command)
   const rest = [...args]
   if (binary === 'wsl') {
-    // Orca spawns guest commands with `--exec`; `--`/`-e` still appear on
-    // wsl.exe processes started outside Orca, so unwrap either separator.
+    // Quirky spawns guest commands with `--exec`; `--`/`-e` still appear on
+    // wsl.exe processes started outside Quirky, so unwrap either separator.
     while (rest.length > 0) {
       const arg = rest.shift()
       if (arg === '--' || arg === '--exec' || arg === '-e') {
@@ -87,7 +87,7 @@ const spawnStatsByCommand = new Map<string, SubprocessSpawnStats>()
 /**
  * Record one subprocess spawn from the main process. `blockMs` is how long
  * the spawn call held the main thread (until exit for synchronous launches).
- * No-op unless ORCA_MAIN_THREAD_DIAGNOSTICS=1.
+ * No-op unless QUIRKY_MAIN_THREAD_DIAGNOSTICS=1.
  */
 export function recordSubprocessSpawn(
   command: string,
@@ -125,7 +125,7 @@ export function drainSubprocessSpawnStats(): Record<string, SubprocessSpawnStats
  * Timestamped marker line for correlating a specific main-process activity
  * (e.g. an updater check) with the probe's stall windows and with macOS
  * Performance Diagnostics log entries in field captures. No-op unless
- * ORCA_MAIN_THREAD_DIAGNOSTICS=1.
+ * QUIRKY_MAIN_THREAD_DIAGNOSTICS=1.
  */
 export function writeMainThreadDiagnosticMarker(marker: string): void {
   if (!isMainThreadDiagnosticsEnabled()) {

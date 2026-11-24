@@ -14,7 +14,7 @@ import {
 } from '../../../../../../shared/sidebar-list/smart-sort-phase'
 import { useReusedArrayIdentity } from './use-reused-array-identity'
 import { useSidebarListSession } from '@/lib/sidebar-list-session'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../../shared/sidebar-inputs-switch'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 
 // ── Stable sort order ──────────────────────────────────────────
@@ -115,6 +115,6 @@ function useStampSidebarWorktreeSortOrder(args: {
   return sortedIds
 }
 
-export const useSidebarWorktreeSortOrder = ORCA_SIDEBAR_INPUTS_IS_MAIN
+export const useSidebarWorktreeSortOrder = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
   ? useStampSidebarWorktreeSortOrder
   : useSettledSidebarWorktreeSortOrder

@@ -35,7 +35,7 @@ import {
 } from '../../shared/structured-native-chat-launch-route'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { WorkspaceLaunchKind } from '../../shared/workspace-launch-kind'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { AgentLaunchSurface } from '../../shared/agent-launch-surface'
 import { formatAgentTypeLabel } from '../../shared/agent-type-label'
 import { AgentLaunchSurfaceUnavailableError } from './agent-launch-surface-refusal'
@@ -211,7 +211,7 @@ export function decideAgentLaunchMode(args: {
  * reject an explicit chat; a materialized workspace retains its terminal fallback.
  */
 export async function resolveAgentLaunchModeOnHost(
-  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
+  runtime: Pick<QuirkyRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
   receipt: AgentLaunchModeReceipt,
   worktreeId: string | undefined,
   agent: TuiAgent | undefined,
@@ -243,7 +243,7 @@ export async function resolveAgentLaunchModeOnHost(
 
 /** A host that cannot answer has not proved it can create one, so the launch stays a PTY agent. */
 async function readStructuredCreateSupport(
-  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
+  runtime: Pick<QuirkyRuntimeService, 'getStructuredAgentSessionCreateSupport'>,
   worktreeId: string,
   agent: TuiAgent | undefined
 ): Promise<{ supported: boolean; reason?: 'agent' | 'remote' | 'wsl' } | null> {

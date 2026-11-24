@@ -10,7 +10,7 @@ function hasVisibleText(normalizedText: string): boolean {
 }
 
 /**
- * Where the running command's own output begins. Orca's shell integration prints OSC 133;C
+ * Where the running command's own output begins. Quirky's shell integration prints OSC 133;C
  * after the prompt and the echoed command line, right before the command runs, so only
  * visible output after it can be the command's.
  */
@@ -58,7 +58,7 @@ export function observeTerminalCommandPaint(
 
 /**
  * Why no marker reads as painted: some launches get no command boundary (older fish, SSH relay
- * zsh, shells Orca could not wrap, and Windows launches that pass the command in shell args), so
+ * zsh, shells Quirky could not wrap, and Windows launches that pass the command in shell args), so
  * any output is all the evidence there is.
  */
 export function hasTerminalCommandPainted(record: TerminalCommandPaintRecord): boolean {

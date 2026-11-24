@@ -26,7 +26,7 @@ describe('orchestration mailbox cold-park idle continuation', () => {
 
   it('submits the deferred Enter on same-incarnation idle while the PTY stays parked', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-cold-park-idle-')
+    const db = createDatabase('quirky-mailbox-cold-park-idle-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Cold-park idle Run')
     insertDirectRunMessage(db, run.id, 'Resume retained Enter')
@@ -47,7 +47,7 @@ describe('orchestration mailbox cold-park idle continuation', () => {
 
   it('submits Enter when idle arrives before the delayed pointer write settles', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-delayed-pointer-idle-')
+    const db = createDatabase('quirky-mailbox-delayed-pointer-idle-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Delayed pointer idle Run')
     insertDirectRunMessage(db, run.id, 'Resume Enter after delayed pointer settlement')
@@ -87,7 +87,7 @@ describe('orchestration mailbox cold-park idle continuation', () => {
 
   it('releases a delayed pointer watermark after an explicit check claims the batch', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-delayed-pointer-check-')
+    const db = createDatabase('quirky-mailbox-delayed-pointer-check-')
     const harness = createRuntime(db)
     const run = createBoundRun(db, 'Delayed pointer check Run')
     insertDirectRunMessage(db, run.id, 'Claim before pointer settlement')

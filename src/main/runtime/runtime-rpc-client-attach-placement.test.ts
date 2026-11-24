@@ -2,11 +2,11 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import type { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { authenticateMobileWsSession } from './runtime-rpc-mobile-ws-test-harness'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 /** A runtime that answers the auth path and records the placement pass. */
 function runtimeRecordingPlacement() {
@@ -22,16 +22,16 @@ function runtimeRecordingPlacement() {
     cancelMobileDictationForConnection: () => {},
     onClientDisconnected: () => {},
     placeUnshownLiveTerminals
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return { runtime, placeUnshownLiveTerminals }
 }
 
 describe('a client attaching to a host, layout-owner build', () => {
   it('runs main’s pass that shows live terminals no pane shows', async () => {
     const { runtime, placeUnshownLiveTerminals } = runtimeRecordingPlacement()
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
-      userDataPath: mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-')),
+      userDataPath: mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-')),
       enableWebSocket: true,
       wsPort: 0
     })
@@ -53,9 +53,9 @@ describe('a client attaching to a host, layout-owner build', () => {
     const { runtime, placeUnshownLiveTerminals } = runtimeRecordingPlacement()
     placeUnshownLiveTerminals.mockRejectedValue(new Error('census unavailable'))
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
-      userDataPath: mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-')),
+      userDataPath: mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-')),
       enableWebSocket: true,
       wsPort: 0
     })

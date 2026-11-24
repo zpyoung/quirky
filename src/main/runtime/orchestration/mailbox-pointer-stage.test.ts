@@ -31,7 +31,7 @@ function pointerDeps(db: OrchestrationDb, writePty: () => WriteSettlement) {
     isAgentSettledForDelivery: () => true,
     getMessageWaiters: () => undefined,
     getTabTitle: () => null,
-    getCliCommand: () => 'orca' as const,
+    getCliCommand: () => 'quirky' as const,
     getTerminalHandleForLeafKey: () => 'term-1',
     resolveSubmitTarget: () => ({
       leaf: LEAF,

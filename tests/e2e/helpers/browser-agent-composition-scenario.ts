@@ -5,7 +5,7 @@
  */
 
 import type { Page } from '@stablyai/playwright-test'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import {
   evalInPage,
   openBackgroundProbeTab,

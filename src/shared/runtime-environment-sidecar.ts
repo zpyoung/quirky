@@ -16,9 +16,9 @@ import {
 } from './runtime-environments'
 import { hardenExistingSecureFile } from './secure-file'
 
-// Why a sidecar: shipped builds parse orca-environments.json with key-stripping schemas and rewrite
+// Why a sidecar: shipped builds parse quirky-environments.json with key-stripping schemas and rewrite
 // it on routine use, so T5 state stored there would vanish across a downgrade. They never touch this.
-const SIDECAR_FILE = 'orca-environment-sidecar.json'
+const SIDECAR_FILE = 'quirky-environment-sidecar.json'
 const MAX_SIDECAR_FILE_BYTES = 1024 * 1024
 
 const SidecarBindingSchema = z.object({
@@ -41,9 +41,9 @@ const SidecarEntrySchema = z.object({
   pendingSshAccessOperation: RuntimeSshAccessOperationSchema.optional(),
   // The managed SSH deployment's tunnel, without a `kind` so older builds read it unchanged.
   // WSL deployments live in wsl-host-deployment-store instead.
-  orcadDeployment: RuntimeSshTunnelLinkSchema.optional(),
+  quirkydDeployment: RuntimeSshTunnelLinkSchema.optional(),
   // A rollback to a snapshot older than this would discard the migrated catalog.
-  orcadMigratedAt: z.string().datetime().optional(),
+  quirkydMigratedAt: z.string().datetime().optional(),
   // Keeps the overlaid pairing revision monotonic after the access that raised it is removed.
   pairingRevisionFloor: z.number().finite().optional(),
   reconciliation: RuntimeEnvironmentReconciliationRecordSchema.optional()
@@ -71,8 +71,8 @@ export class RuntimeEnvironmentSidecarInvalidError extends Error {
   constructor(path: string, environmentId?: string) {
     super(
       environmentId === undefined
-        ? `Could not read Orca environment links at ${path}; the file is invalid.`
-        : `Could not read the Orca environment link for ${environmentId} at ${path}; it may need a newer version of Orca.`
+        ? `Could not read Quirky environment links at ${path}; the file is invalid.`
+        : `Could not read the Quirky environment link for ${environmentId} at ${path}; it may need a newer version of Quirky.`
     )
     this.name = 'RuntimeEnvironmentSidecarInvalidError'
   }
@@ -175,8 +175,8 @@ export function overlayRuntimeEnvironmentSidecar(
     ...(entry.pendingSshAccessOperation
       ? { pendingSshAccessOperation: entry.pendingSshAccessOperation }
       : {}),
-    ...(entry.orcadDeployment ? { orcadDeployment: entry.orcadDeployment } : {}),
-    ...(entry.orcadMigratedAt ? { orcadMigratedAt: entry.orcadMigratedAt } : {}),
+    ...(entry.quirkydDeployment ? { quirkydDeployment: entry.quirkydDeployment } : {}),
+    ...(entry.quirkydMigratedAt ? { quirkydMigratedAt: entry.quirkydMigratedAt } : {}),
     ...(entry.reconciliation ? { reconciliation: entry.reconciliation } : {})
   })
   return overlaid.success ? overlaid.data : base
@@ -222,8 +222,8 @@ export function writeRuntimeEnvironmentSidecarEntry(
     ((entry.runtimeId !== undefined && environment.runtimeId === null) ||
       entry.sshAccess !== undefined ||
       entry.pendingSshAccessOperation !== undefined ||
-      entry.orcadDeployment !== undefined ||
-      entry.orcadMigratedAt !== undefined ||
+      entry.quirkydDeployment !== undefined ||
+      entry.quirkydMigratedAt !== undefined ||
       entry.reconciliation !== undefined ||
       (entry.pairingRevisionFloor ?? basePairingRevision) > basePairingRevision)
   if (entry && hasState) {

@@ -8,10 +8,10 @@ import { resolveWorktreeLaunchHost } from './worktree-launch-host-repo'
 import { resolveSleepScope } from './terminal/stop/worktree-terminal-sleep-key'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } =
-  await import('./orca-runtime-test-fixtures.spec')
+  await import('./quirky-runtime-test-fixtures.spec')
 
 // A `runtime:` stamp with a nested SSH target: this process launches it with no connection.
 const nestedSshRepo = {
@@ -34,7 +34,7 @@ const twinPty = {
 }
 
 async function sleepLocalCopy(runtimeStore: typeof store = store, twinLive = false) {
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   const events: RuntimeClientEvent[] = []
   runtime.onClientEvent((event) => events.push(event))
   const twin = twinLive ? [twinPty] : []

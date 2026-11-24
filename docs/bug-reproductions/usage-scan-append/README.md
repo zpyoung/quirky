@@ -11,9 +11,9 @@ The regression is deterministic: the append test measures bytes returned by the 
 From the repository root:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/claude-usage src/main/usage/jsonl-line-offsets.test.ts
-ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/codex-usage
-ORCA_BACKGROUND_LAUNCH=1 ORCA_CLAUDE_USAGE_APPEND_BENCH_ROUNDS=8 ORCA_CLAUDE_USAGE_APPEND_BENCH_BASELINE=51e7181850b022bae2d41091fe1229accef4bd50 node config/scripts/claude-usage-append-benchmark.mjs --compare --verify
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/claude-usage src/main/usage/jsonl-line-offsets.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm test src/main/codex-usage
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_CLAUDE_USAGE_APPEND_BENCH_ROUNDS=8 QUIRKY_CLAUDE_USAGE_APPEND_BENCH_BASELINE=51e7181850b022bae2d41091fe1229accef4bd50 node config/scripts/claude-usage-append-benchmark.mjs --compare --verify
 ```
 
 Run the timing benchmark while builds, test suites and other benchmarks are idle. It uses temporary transcript directories and loads the actual scanner through an esbuild bundle. Account/profile discovery is isolated; transcript reads remain real. The I/O wrapper records stream bytes and descriptor window reads without counting descriptor stream internals twice. Its accounting smoke check verifies one complete file read plus an eleven-byte descriptor read. Unaccounted `readFile` and `readv` APIs fail the benchmark.
@@ -121,10 +121,10 @@ The [readiness diagnostic](./claude-readiness-cost-final.json) retains disabled 
 Reproduce final evidence while other builds, tests, apps and benchmarks are idle:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 16384 --maxima-pattern repeated --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 100000 --maxima-pattern unique --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-readiness-cost-benchmark.mjs --usage-keys 100000 --large-report-mib 13 --rounds 6
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persisted-bytes-check.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 16384 --maxima-pattern repeated --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persistence-cost-benchmark.mjs --usage-keys 100000 --maxima-pattern unique --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-readiness-cost-benchmark.mjs --usage-keys 100000 --large-report-mib 13 --rounds 6
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/claude-usage-persisted-bytes-check.mjs
 ```
 
 Each tool accepts `--output`; the timing tools also accept `--published-ref` and `--main-ref`. Default immutable refs and complete provenance appear in the artifacts. Equivalent environment-variable launchers work on Windows. These macOS measurements make no Windows or SSH latency claim.
@@ -136,7 +136,7 @@ Codex folds each owned event into the existing session/day accumulator while rea
 Run the separate memory comparison while other benchmarks and builds are idle:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node config/scripts/codex-usage-parser-memory-benchmark.mjs --baseline-ref 51e7181850b022bae2d41091fe1229accef4bd50 --events 100000 --pairs 2 --sample-ms 35 --output docs/bug-reproductions/usage-scan-append/codex-parser-memory.json
+QUIRKY_BACKGROUND_LAUNCH=1 node config/scripts/codex-usage-parser-memory-benchmark.mjs --baseline-ref 51e7181850b022bae2d41091fe1229accef4bd50 --events 100000 --pairs 2 --sample-ms 35 --output docs/bug-reproductions/usage-scan-append/codex-parser-memory.json
 ```
 
 The baseline bundles every project source dependency of the actual parser from the named commit; the current arm bundles and hashes the worktree dependency graph before starting workers. Each arm, scenario and round runs in a fresh Node process. Two rounds alternate baseline/current and current/baseline. The 100,000-record fixture has distinct timestamps and fixed token values. One scenario owns every record; the other defers 90% to a simulated prior owner. Both arms must preserve identical sessions, daily aggregates, owned keys and deferred state, with exact event and token totals.

@@ -46,8 +46,8 @@ describe('buildGuestOverlayScript', () => {
   it('arm script contains shadow DOM setup', () => {
     const script = buildGuestOverlayScript('arm')
     expect(script).toContain('attachShadow')
-    expect(script).toContain('__orca-grab-host')
-    expect(script).toContain('__orcaGrab')
+    expect(script).toContain('__quirky-grab-host')
+    expect(script).toContain('__quirkyGrab')
   })
 
   it('arm script contains budget constants matching shared types', () => {
@@ -107,13 +107,13 @@ describe('buildGuestOverlayScript', () => {
   it('teardown script cleans up the overlay', () => {
     const script = buildGuestOverlayScript('teardown')
     expect(script).toContain('cleanup')
-    expect(script).toContain('__orcaGrab')
+    expect(script).toContain('__quirkyGrab')
   })
 
   it('teardown script cancels pending awaitClick', () => {
     const script = buildGuestOverlayScript('teardown')
     expect(script).toContain('cancelAwait')
-    expect(buildGuestOverlayScript('awaitClick')).toContain('__orcaCancelled')
+    expect(buildGuestOverlayScript('awaitClick')).toContain('__quirkyCancelled')
   })
 
   it('arm script uses full-viewport overlay as click catcher', () => {
@@ -256,7 +256,7 @@ describe('awaitClick under a Zone.js-patched global Promise', () => {
     extractPayload?: () => unknown
     getCurrentElement?: () => unknown
   }): {
-    window: { __orcaGrab: Record<string, unknown> }
+    window: { __quirkyGrab: Record<string, unknown> }
     click: () => void
     contextmenu: () => void
     cancel: () => void
@@ -279,13 +279,13 @@ describe('awaitClick under a Zone.js-patched global Promise', () => {
       freezeHighlight(): void {},
       cleanup(): void {}
     }
-    const window = { __orcaGrab: grab }
+    const window = { __quirkyGrab: grab }
     return {
       window,
       click: () => handlers.click?.(noopEvent),
       contextmenu: () => handlers.contextmenu?.(noopEvent),
-      // cancelAwait is installed on __orcaGrab by the script itself at runtime.
-      cancel: () => (window.__orcaGrab.cancelAwait as (() => void) | undefined)?.()
+      // cancelAwait is installed on __quirkyGrab by the script itself at runtime.
+      cancel: () => (window.__quirkyGrab.cancelAwait as (() => void) | undefined)?.()
     }
   }
 
@@ -326,7 +326,7 @@ describe('awaitClick under a Zone.js-patched global Promise', () => {
     harness.contextmenu()
     const received = (await crossExecuteJavaScriptBoundary(completion)) as Record<string, unknown>
 
-    expect(received).toHaveProperty('__orcaContextMenu', true)
+    expect(received).toHaveProperty('__quirkyContextMenu', true)
     expect(received.payload).toHaveProperty('page')
     expect(clampGrabPayload(received.payload)).not.toBeNull()
   })
@@ -338,7 +338,7 @@ describe('awaitClick under a Zone.js-patched global Promise', () => {
     harness.cancel()
     const received = await crossExecuteJavaScriptBoundary(completion)
 
-    expect(received).toEqual({ __orcaCancelled: true })
+    expect(received).toEqual({ __quirkyCancelled: true })
   })
 
   it('rejects across the boundary when selection fails despite ZoneAwarePromise', async () => {

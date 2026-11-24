@@ -117,7 +117,7 @@ async function startHost(): Promise<void> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-accept-deliver-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-accept-deliver-'))
   resetHostTestOperationIds()
   adapterExtras = {}
   starts.clear()
@@ -370,7 +370,7 @@ describe('a start the chat needed and did not get', () => {
     await eventually(async () => expect((await submission(second))?.dispatchState).toBe('rejected'))
     const rows = await errorRows()
     expect(rows).toHaveLength(1)
-    // Orca's spawn error goes to the log; the row and every message say what failed, typed. The
+    // Quirky's spawn error goes to the log; the row and every message say what failed, typed. The
     // child is gone, but no exit was observed, so nothing blames the provider.
     expect(rows[0]).toBe("Codex couldn't restart. Send your message to try again.")
     const failure = {
@@ -517,7 +517,7 @@ describe('a start the chat needed and did not get', () => {
       expect(settled?.dispatchState).not.toBe('pending')
     })
     // The message names the start that failed, not a close or a restart it never met — and never
-    // the store's own error, which is Orca's and goes to the log.
+    // the store's own error, which is Quirky's and goes to the log.
     expect(settled).toMatchObject({
       dispatchState: 'rejected',
       rejection: (await errorFailures())[0]
@@ -858,7 +858,7 @@ describe('a rewind an earlier child left prepared', () => {
       persistRewindRecord(store, SESSION, fence, {
         operationId: 'rewind-op',
         callerKey: 'client-1',
-        itemId: 'orca:rewound',
+        itemId: 'quirky:rewound',
         providerItemId: `codex:${THREAD}:turn-1:0`,
         expectedEpoch: 'epoch-before',
         phase: 'provider-succeeded',

@@ -10,7 +10,7 @@
 import type { AgentLaunchPreferences } from '../../../../../../shared/agent-session-host-authority'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
 import { executeAgentLaunch } from '../../../../../agent-launch/agent-launch-executor'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { WORKER_START_VOCABULARY } from '../../orchestration-worker-start-mode'
 import type { WorkerSetupReceipt } from '../worker/worker-topology'
@@ -24,7 +24,7 @@ import type { FederationAttachStartInput } from './federation-start-schema'
 const TERMINAL_ONLY_MESSAGE = 'A federated worker starts a terminal agent only.'
 
 export async function launchFederatedWorkerAgent(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   params: FederationAttachStartInput
   agent: TuiAgent | undefined

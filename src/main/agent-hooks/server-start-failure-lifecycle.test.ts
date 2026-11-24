@@ -32,7 +32,7 @@ describe('AgentHookServer startup failure lifecycle', () => {
   it.each(['main'] as const)(
     'shares one %s listener across concurrent startup requests',
     async () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-concurrent-hook-start-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-concurrent-hook-start-'))
       const server = new AgentHookServer()
       try {
         await Promise.all([server.start(), server.start()])
@@ -52,7 +52,7 @@ describe('AgentHookServer startup failure lifecycle', () => {
   it.each(['main'] as const)(
     'does not revive a stopped %s startup and permits its replacement',
     async () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-stopped-hook-start-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-stopped-hook-start-'))
       const server = new AgentHookServer()
       try {
         const interrupted = server.start()
@@ -72,7 +72,7 @@ describe('AgentHookServer startup failure lifecycle', () => {
   )
 
   it('rolls back only transport on bind failure and preserves owner state through retry', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-hook-start-failure-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-hook-start-failure-'))
     const persisted = new AgentHookServer()
     await persisted.start({ env: 'production', userDataPath })
     persisted.ingestRemote(
@@ -160,10 +160,10 @@ describe('AgentHookServer startup failure lifecycle', () => {
         })
       ])
       expect(server.buildPtyEnv()).toMatchObject({
-        ORCA_AGENT_HOOK_ENV: 'production',
-        ORCA_AGENT_HOOK_PORT: expect.any(String),
-        ORCA_AGENT_HOOK_TOKEN: expect.any(String),
-        ORCA_AGENT_HOOK_ENDPOINT: server.endpointFilePath
+        QUIRKY_AGENT_HOOK_ENV: 'production',
+        QUIRKY_AGENT_HOOK_PORT: expect.any(String),
+        QUIRKY_AGENT_HOOK_TOKEN: expect.any(String),
+        QUIRKY_AGENT_HOOK_ENDPOINT: server.endpointFilePath
       })
       server.ingestTerminalStatus(duplicateOsc)
       expect(freshness).toHaveBeenCalledTimes(2)

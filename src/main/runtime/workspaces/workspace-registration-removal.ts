@@ -1,4 +1,4 @@
-import type { OrcaRuntimeWithRemoveManagedWorktree } from './workspace-removal'
+import type { QuirkyRuntimeWithRemoveManagedWorktree } from './workspace-removal'
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { RuntimeWorktreeRemovalTarget } from '../runtime-worktree-selection'
 import type { Repo } from '../../../shared/repo-types'
@@ -15,7 +15,7 @@ import { teardownStops } from '../owned-session-teardown-policy'
 
 type WorkspaceRegistrationRemovalRuntime = WorktreeTeardownRuntime &
   Pick<
-    OrcaRuntimeWithRemoveManagedWorktree,
+    QuirkyRuntimeWithRemoveManagedWorktree,
     | 'getLocalProvider'
     | 'onPtyStopped'
     | 'acquireFileWatcherRemoval'

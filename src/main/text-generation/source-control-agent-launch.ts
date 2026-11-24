@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { createProviderSpawnSpec } from '../provider-process/provider-process-supervisor'
 import { guardSupervisedProviderGroup } from '../provider-process/provider-group-orphan-guard'
@@ -19,7 +19,7 @@ export const spawnSourceControlAgent: SpawnSourceControlAgent = (input) => {
   return child
 }
 
-// Under the provider supervisor, an Orca that quits or dies mid-run still stops the agent's group.
+// Under the provider supervisor, an Quirky that quits or dies mid-run still stops the agent's group.
 function spawnSupervisedAgent(
   input: SourceControlAgentSpawnInput,
   spawnEnv: NodeJS.ProcessEnv

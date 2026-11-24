@@ -66,7 +66,9 @@ export function registerReposProjectRuntimeTests(): void {
   function expectInstalledSkillRefreshEvent(): void {
     expect(
       dispatchEventMock.mock.calls.some(([event]) => {
-        return event instanceof CustomEvent && event.type === 'orca:installed-agent-skills-changed'
+        return (
+          event instanceof CustomEvent && event.type === 'quirky:installed-agent-skills-changed'
+        )
       })
     ).toBe(true)
   }
@@ -333,7 +335,7 @@ export function registerReposProjectRuntimeTests(): void {
     it('prefers a known createdAt over an unknown 0 when merging the same project id', async () => {
       const project: Project = {
         id: 'github:stablyai/orca',
-        displayName: 'Orca',
+        displayName: 'Quirky',
         badgeColor: '#000',
         sourceRepoIds: ['remote-repo'],
         createdAt: 0,
@@ -364,7 +366,7 @@ export function registerReposProjectRuntimeTests(): void {
     it('preserves shared project source repos when updating local runtime preferences', async () => {
       const project: Project = {
         id: 'github:stablyai/orca',
-        displayName: 'Orca',
+        displayName: 'Quirky',
         badgeColor: '#000',
         sourceRepoIds: ['local-repo', 'remote-repo'],
         createdAt: 1,
@@ -396,7 +398,7 @@ export function registerReposProjectRuntimeTests(): void {
     it('clears local runtime preferences without dropping shared project source repos', async () => {
       const project: Project = {
         id: 'github:stablyai/orca',
-        displayName: 'Orca',
+        displayName: 'Quirky',
         badgeColor: '#000',
         sourceRepoIds: ['local-repo', 'remote-repo'],
         localWindowsRuntimePreference: { kind: 'windows-host' },

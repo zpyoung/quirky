@@ -7,7 +7,7 @@ import {
   taskNotFoundRefusal,
   taskNotStartableRefusal
 } from '../../../../shared/orchestration-dispatch-refusal-contract'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { OrchestrationDb } from '../../orchestration/db'
 import type { RpcFailure, RpcRequest, RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
@@ -18,7 +18,7 @@ const COORDINATOR_PANE = 'tab_coord:cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 const WORKER_HANDLE = 'term_codes_worker'
 const WORKER_PANE = 'tab_worker:dddddddd-dddd-4ddd-8ddd-dddddddddddd'
 
-type Harness = { db: OrchestrationDb; runtime: OrcaRuntimeService; dispatcher: RpcDispatcher }
+type Harness = { db: OrchestrationDb; runtime: QuirkyRuntimeService; dispatcher: RpcDispatcher }
 
 const harnesses: Harness[] = []
 let requestSequence = 0
@@ -190,7 +190,7 @@ function expectFailure(response: RpcResponse): RpcFailure {
 
 function createHarness(): Harness {
   const db = new OrchestrationDb(':memory:')
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
     handle === COORDINATOR_HANDLE ? COORDINATOR_PANE : handle === WORKER_HANDLE ? WORKER_PANE : null
@@ -214,7 +214,7 @@ function createHarness(): Harness {
   return harness
 }
 
-function mockWorkerStartTopology(runtime: OrcaRuntimeService): void {
+function mockWorkerStartTopology(runtime: QuirkyRuntimeService): void {
   vi.spyOn(runtime, 'validateOrchestrationAgentLauncher').mockImplementation(() => {})
   vi.spyOn(runtime, 'showTerminal').mockImplementation(
     async (handle) => ({ handle, worktreeId: 'repo::worktree', status: 'running' }) as never

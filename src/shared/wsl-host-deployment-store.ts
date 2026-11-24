@@ -10,15 +10,15 @@ import {
   type KnownRuntimeEnvironment
 } from './runtime-environments'
 import { hardenExistingSecureFile } from './secure-file'
-import { OrcadWslDeploymentLinkSchema } from './wsl-host-deployment-link'
+import { QuirkydWslDeploymentLinkSchema } from './wsl-host-deployment-link'
 
-// Why its own file: builds before the per-record store reject orca-environments.json whole on
+// Why its own file: builds before the per-record store reject quirky-environments.json whole on
 // any record they cannot parse, and never open this one.
-const WSL_HOST_DEPLOYMENTS_FILE = 'orca-wsl-host-deployments.json'
+const WSL_HOST_DEPLOYMENTS_FILE = 'quirky-wsl-host-deployments.json'
 const MAX_WSL_HOST_DEPLOYMENTS_FILE_BYTES = 256 * 1024
 
-/** A managed orcad in a WSL distro. The environment's name is its label; runtime state lives elsewhere. */
-export const WslHostDeploymentRecordSchema = OrcadWslDeploymentLinkSchema.extend({
+/** A managed quirkyd in a WSL distro. The environment's name is its label; runtime state lives elsewhere. */
+export const WslHostDeploymentRecordSchema = QuirkydWslDeploymentLinkSchema.extend({
   environmentId: z.string().min(1),
   createdAt: z.number().finite()
 })
@@ -47,8 +47,8 @@ export class WslHostDeploymentStoreInvalidError extends Error {
   constructor(path: string, environmentId?: string) {
     super(
       environmentId === undefined
-        ? `Could not read Orca WSL host deployments at ${path}; the file is invalid.`
-        : `Could not read the Orca WSL host deployment for ${environmentId} at ${path}; it may need a newer version of Orca.`
+        ? `Could not read Quirky WSL host deployments at ${path}; the file is invalid.`
+        : `Could not read the Quirky WSL host deployment for ${environmentId} at ${path}; it may need a newer version of Quirky.`
     )
     this.name = 'WslHostDeploymentStoreInvalidError'
   }
@@ -154,7 +154,7 @@ export function writeWslHostDeployment(
 
 function hasNonWslOwner(environment: KnownRuntimeEnvironment): boolean {
   return Boolean(
-    environment.orcadDeployment ||
+    environment.quirkydDeployment ||
     environment.sshAccess ||
     environment.pendingSshAccessOperation ||
     environment.connectionDependency
@@ -180,7 +180,7 @@ export function overlayWslHostDeployments(
   const hiddenIds = new Set(hidden.map((environment) => environment.id))
   if (hidden.length > 0) {
     warnUnreadableEnvironmentState(
-      `Hiding ${hidden.length} server(s) whose WSL deployment cannot be read (ids: ${hidden.map((environment) => environment.id).join(', ')}); they may need a newer version of Orca.`
+      `Hiding ${hidden.length} server(s) whose WSL deployment cannot be read (ids: ${hidden.map((environment) => environment.id).join(', ')}); they may need a newer version of Quirky.`
     )
   }
   return environments
@@ -193,7 +193,7 @@ export function overlayWslHostDeployments(
       const { environmentId: _environmentId, createdAt: _createdAt, ...link } = record
       const overlaid = hasNonWslOwner(environment)
         ? null
-        : KnownRuntimeEnvironmentSchema.safeParse({ ...environment, orcadDeployment: link })
+        : KnownRuntimeEnvironmentSchema.safeParse({ ...environment, quirkydDeployment: link })
       if (!overlaid?.success) {
         warnUnreadableEnvironmentState(
           `Ignoring the WSL deployment for server ${environment.id}; it conflicts with the server's pairing or SSH link.`

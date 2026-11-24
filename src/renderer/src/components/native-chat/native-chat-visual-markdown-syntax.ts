@@ -25,9 +25,9 @@ const HORIZONTAL_TAB = -2
 const VIRTUAL_SPACE = -1
 
 // Hast properties the placeholder carries through sanitize to the React component.
-const NONCE_PROPERTY = 'dataOrcaVisual'
-const FILE_PROPERTY = 'dataOrcaVisualFile'
-const TITLE_PROPERTY = 'dataOrcaVisualTitle'
+const NONCE_PROPERTY = 'dataQuirkyVisual'
+const FILE_PROPERTY = 'dataQuirkyVisualFile'
+const TITLE_PROPERTY = 'dataQuirkyVisualTitle'
 export const NATIVE_CHAT_VISUAL_PLACEHOLDER_PROPERTIES = [
   NONCE_PROPERTY,
   FILE_PROPERTY,

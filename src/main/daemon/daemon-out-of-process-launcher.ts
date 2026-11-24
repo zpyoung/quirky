@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { getAppEnvironment } from '../../shared/app-environment'
-import { childProcessHasExited } from '@orca/process-host/process-tree-termination'
+import { childProcessHasExited } from '@quirky/process-host/process-tree-termination'
 import { DaemonClient } from './client'
 import {
   DaemonEndpointOwnershipError,

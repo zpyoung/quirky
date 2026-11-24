@@ -3,8 +3,8 @@
  * in-page rather than being opened for one.
  *
  * The page must read and write them exactly as a session page opened for that workspace does:
- * `orca:nativeChatTabs:<host>:<worktree>` (which tabs show the chat) and
- * `orca:terminalLiveInputDisabled:<host>:<worktree>` (the handles typing goes around). They are the
+ * `quirky:nativeChatTabs:<host>:<worktree>` (which tabs show the chat) and
+ * `quirky:terminalLiveInputDisabled:<host>:<worktree>` (the handles typing goes around). They are the
  * only workspace-scoped keys in `page-storage-keys.ts`; `init` carries none of them for this page,
  * which reads each from the shell when it opens that workspace.
  */
@@ -47,11 +47,11 @@ import pageAsyncStorage, { publishPageStorage } from './bridge/page-async-storag
 import { MOBILE_WEB_SHELL_GRANTS } from './page-route-policy'
 import { hydrateMirroredStorage, writeMirroredStorage } from '../storage/mirrored-storage-keys'
 
-const CHAT_TABS = 'orca:nativeChatTabs:host-a:wt-1'
-const LIVE_INPUT = 'orca:terminalLiveInputDisabled:host-a:wt-1'
-const NEVER_STORED = 'orca:nativeChatTabs:host-a:wt-2'
-const OTHER_HOST = 'orca:nativeChatTabs:host-b:wt-1'
-const FRESH = 'orca:terminalLiveInputDisabled:host-a:wt-2'
+const CHAT_TABS = 'quirky:nativeChatTabs:host-a:wt-1'
+const LIVE_INPUT = 'quirky:terminalLiveInputDisabled:host-a:wt-1'
+const NEVER_STORED = 'quirky:nativeChatTabs:host-a:wt-2'
+const OTHER_HOST = 'quirky:nativeChatTabs:host-b:wt-1'
+const FRESH = 'quirky:terminalLiveInputDisabled:host-a:wt-2'
 
 function persisted(): void {
   for (const land of queued.splice(0)) {
@@ -171,18 +171,18 @@ describe('the per-workspace keys of a host-area page', () => {
 
   it('reads a stored key the mirror never held, though another mirrored write lands meanwhile', async () => {
     // A relaunch: the store has the key and the mirror has not seen it.
-    const relaunched = 'orca:terminalLiveInputDisabled:host-a:alpha'
+    const relaunched = 'quirky:terminalLiveInputDisabled:host-a:alpha'
     store.set(relaunched, '["handle-1"]')
     const view = await snapshotFor('/h/host-a', true)
     const read = view.readWorkspaceKey(relaunched)
-    writeMirroredStorage('orca:pins:host-a', '[]')
+    writeMirroredStorage('quirky:pins:host-a', '[]')
     expect(await read).toBe('["handle-1"]')
   })
 
   it('rejects, rather than reading as unset, when the store cannot be read', async () => {
     vi.spyOn(AsyncStorage, 'getItem').mockRejectedValueOnce(new Error('store unavailable'))
     const view = await snapshotFor('/h/host-a', true)
-    await expect(view.readWorkspaceKey('orca:nativeChatTabs:host-a:beta')).rejects.toThrow()
+    await expect(view.readWorkspaceKey('quirky:nativeChatTabs:host-a:beta')).rejects.toThrow()
   })
 
   it("refuses another host's key, to read or to write", async () => {

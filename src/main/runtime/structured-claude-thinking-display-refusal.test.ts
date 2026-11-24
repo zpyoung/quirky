@@ -32,7 +32,7 @@ async function startRefusing(stderr: string) {
   scratchDirs.push(dir)
   const scenarioPath = join(dir, 'scenario.json')
   writeFileSync(scenarioPath, JSON.stringify({ steps: [{ stderr }, { exit: 1 }] }))
-  const env = { PATH: process.env.PATH ?? '', ORCA_SDK_CONTRACT_SCENARIO_PATH: scenarioPath }
+  const env = { PATH: process.env.PATH ?? '', QUIRKY_SDK_CONTRACT_SCENARIO_PATH: scenarioPath }
   const probe = vi.fn(async () => '2.1.280')
   const support = createClaudeCliFlagSupport({
     probe,
@@ -78,7 +78,7 @@ describe('a Claude CLI that refuses the thinking-display flag', () => {
     expect(probe).toHaveBeenCalledTimes(1)
   })
 
-  it('hands the session whether its close was the one Orca began', async () => {
+  it('hands the session whether its close was the one Quirky began', async () => {
     const claude = fakeClaude()
     const support = createClaudeCliFlagSupport({
       probe: async () => '2.1.280',

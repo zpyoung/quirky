@@ -94,7 +94,7 @@ function renderMenu(overrides: Record<string, unknown> = {}): string {
     ],
     quickCommandHostLoadFailed: false,
     quickCommandHostOwnershipPending: false,
-    quickCommandRepoLabel: 'Orca',
+    quickCommandRepoLabel: 'Quirky',
     onQuickCommand: vi.fn(),
     onAddQuickCommand: vi.fn(),
     onToggleExpand: vi.fn(),
@@ -290,7 +290,7 @@ describe('TerminalContextMenu', () => {
       ]
     })
 
-    expect(rendered).toContain('Orca')
+    expect(rendered).toContain('Quirky')
     expect(rendered).toContain('Global')
     expect(rendered).not.toContain('Local Mac')
   })

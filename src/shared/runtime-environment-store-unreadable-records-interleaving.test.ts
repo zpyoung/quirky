@@ -82,7 +82,7 @@ function unreadableRecord(rand: () => number, id: string): unknown {
 describe('runtime environment store under interleaved writers and unreadable records', () => {
   let userDataPath: string
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-environment-interleaving-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-environment-interleaving-'))
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
   afterEach(() => {
@@ -157,7 +157,7 @@ describe('runtime environment store under interleaved writers and unreadable rec
           expect(
             () => writeEnvironmentStore(userDataPath, { version: 1, environments: next }),
             label
-          ).toThrow('newer version of Orca')
+          ).toThrow('newer version of Quirky')
           expect(readFileSync(storePath(), 'utf8'), label).toBe(before)
         } else {
           writeEnvironmentStore(userDataPath, { version: 1, environments: next })
@@ -211,11 +211,11 @@ describe('runtime environment store under interleaved writers and unreadable rec
           expect(
             () => writeRuntimeEnvironmentSidecarEntry(userDataPath, environments, target, null),
             label
-          ).toThrow('newer version of Orca')
+          ).toThrow('newer version of Quirky')
           expect(readFileSync(storePath(), 'utf8'), label).toBe(before)
         } else if (target) {
           writeRuntimeEnvironmentSidecarEntry(userDataPath, environments, target, {
-            orcadMigratedAt: new Date(clock).toISOString()
+            quirkydMigratedAt: new Date(clock).toISOString()
           })
         }
       }
@@ -248,7 +248,7 @@ describe('runtime environment store under interleaved writers and unreadable rec
           expect(
             () => readCurrentRuntimeEnvironmentSidecarEntry(userDataPath, environment),
             label
-          ).toThrow('newer version of Orca')
+          ).toThrow('newer version of Quirky')
         }
       }
     }

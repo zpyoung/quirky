@@ -62,16 +62,16 @@ No wire field, opcode, host execution verdict, stream cap, timeout, fallback, or
 Choose either graph (`worktree` or `main`) and variant (`before` or `fixed`):
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 ORCA_SSH_READER_GRAPH=main ORCA_SSH_READER_VARIANT=fixed pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/vitest.config.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 QUIRKY_SSH_READER_GRAPH=main QUIRKY_SSH_READER_VARIANT=fixed pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/vitest.config.mjs
 ```
 
-For Electron, invoke the installed Electron binary with `ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1`, passing `node_modules/vitest/vitest.mjs` and the same arguments. Reports are separate for every graph/variant/runtime. Set `ORCA_SSH_READER_OUTPUT` to an alternative file path to preserve captured reports.
+For Electron, invoke the installed Electron binary with `ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1`, passing `node_modules/vitest/vitest.mjs` and the same arguments. Reports are separate for every graph/variant/runtime. Set `QUIRKY_SSH_READER_OUTPUT` to an alternative file path to preserve captured reports.
 
 Permanent tests and the intentional baseline failure:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts src/main/providers/ssh-filesystem-provider.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/relay/fs-handler-stream.test.ts
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/before.config.mjs src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts src/main/providers/ssh-filesystem-provider.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/relay/fs-handler-stream.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/ssh-file-metadata-retention/before.config.mjs src/main/ssh/ssh-filesystem-stream-retention.test.ts src/main/providers/ssh-filesystem-provider-stream.test.ts
 ```
 
 The baseline keeps all 64 observed foreign frame objects while metadata remains pending, causing exactly the new lifetime assertion to fail; the other 22 tests pass. The initial four-suite run passed 70 tests. Detailed quality/typecheck results are in `validation.json`. Full-file casting diagnostics are the same 15 inherited assertions in the original reader and provider test, verified by exact diagnostic/source-span comparison; the changed-code gate reports no new findings. No lint rule was suppressed and no unrelated wire validation behavior was changed to satisfy that baseline cleanup.

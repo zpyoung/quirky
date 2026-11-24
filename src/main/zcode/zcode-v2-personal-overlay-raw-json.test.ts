@@ -16,7 +16,7 @@ let configPath: string
 let vaultPath: string
 
 beforeEach(() => {
-  home = fs.mkdtempSync(join(tmpdir(), 'orca-zcode-raw-json-'))
+  home = fs.mkdtempSync(join(tmpdir(), 'quirky-zcode-raw-json-'))
   fs.cpSync(
     join(import.meta.dirname, 'fixtures', 'v2-upstream', 'bigmodel'),
     join(home, '.zcode', 'v2'),
@@ -99,13 +99,13 @@ describe('raw persisted personal rule keys', () => {
       const saved = await fetchZcodeRateLimits({
         credentialHost: host,
         planCredential: {
-          apiKey: 'synthetic-orca-key',
+          apiKey: 'synthetic-quirky-key',
           baseUrl: 'https://api.z.ai'
         }
       })
       expect(saved.status).toBe('ok')
-      expect(saved.usageMetadata?.credentialSource).toBe('orca-plan')
-      expect(JSON.stringify(saved)).not.toContain('synthetic-orca-key')
+      expect(saved.usageMetadata?.credentialSource).toBe('quirky-plan')
+      expect(JSON.stringify(saved)).not.toContain('synthetic-quirky-key')
     }
   )
 

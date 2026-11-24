@@ -10,7 +10,7 @@ const request = {
 async function runtimeParams(switchedOn: boolean): Promise<Record<string, unknown>> {
   vi.resetModules()
   vi.doMock('../../../../../../shared/sidebar-inputs-switch', () => ({
-    ORCA_SIDEBAR_INPUTS_IS_MAIN: switchedOn
+    QUIRKY_SIDEBAR_INPUTS_IS_MAIN: switchedOn
   }))
   const { buildRuntimeWorktreeCreateParams } = await import('./worktree-create-payload')
   return buildRuntimeWorktreeCreateParams(request, { name: request.name })

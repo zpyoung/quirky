@@ -15,7 +15,7 @@ const MIN_GLIBC = Object.freeze([2, 31])
 // The symbol-version families this gate checks, each with the highest version
 // node stock Ubuntu 20.04 provides. glibc is the #9902 launch-crash axis;
 // libstdc++ (GLIBCXX_/CXXABI_) is the same crash class for C++ native modules
-// against the system libstdc++ (Orca does not bundle one).
+// against the system libstdc++ (Quirky does not bundle one).
 const VERSION_FLOORS = Object.freeze([
   Object.freeze({ prefix: 'GLIBC_', floor: MIN_GLIBC }),
   Object.freeze({ prefix: 'GLIBCXX_', floor: Object.freeze([3, 4, 28]) }),
@@ -37,7 +37,7 @@ function glibcFloorProfile(label, glibc, glibcxx, cxxabi) {
 /** The packaged desktop app's floor; the default for every check here. */
 const DESKTOP_GLIBC_FLOOR = Object.freeze({ label: FLOOR_LABEL, families: VERSION_FLOORS })
 
-// Why lower than the desktop: orcad's glibc slots ship to SSH hosts the pinned Node 24 already
+// Why lower than the desktop: quirkyd's glibc slots ship to SSH hosts the pinned Node 24 already
 // runs on (glibc 2.28), and a 2.31 slot left 2.28-2.30 hosts with a runtime but no terminal
 // (design D6). RHEL 8 / Debian 10 ship GCC 8's libstdc++.
 const SERVER_SLOT_GLIBC_FLOOR = glibcFloorProfile(
@@ -415,7 +415,7 @@ function readDynamicInfo(filePath, objdumpPath) {
 
 function isMuslTemplatePayload(filePath, neededLibraries, versionNeeds) {
   return (
-    /(?:^|[/\\])orcad-template[/\\]targets[/\\]linux-(?:x64|arm64)-musl[/\\]/.test(filePath) &&
+    /(?:^|[/\\])quirkyd-template[/\\]targets[/\\]linux-(?:x64|arm64)-musl[/\\]/.test(filePath) &&
     [...neededLibraries].some(
       (name) => name === 'libc.so' || /^libc\.musl-[\w-]+\.so\.1$/.test(name)
     ) &&

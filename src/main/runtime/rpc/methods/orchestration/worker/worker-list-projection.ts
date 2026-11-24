@@ -7,7 +7,7 @@ import {
 import { resolveFleetWorkerOutcome } from '../../../../../../shared/orchestration-fleet-outcome-resolution'
 import type { WorkerTerminalListState } from '../../../../orchestration/worker-terminal-ownership'
 import type { OrchestrationDb } from '../../../../orchestration/db'
-import type { OrcaSessionId } from '../../../../../../shared/orca-session-address'
+import type { QuirkySessionId } from '../../../../../../shared/quirky-session-address'
 import {
   chatAssigneeSessionId,
   type ChatAssigneeObservation
@@ -29,7 +29,7 @@ export function projectWorkerFleet(args: {
   now: number
   completeProjection?: boolean
   /** A chat assignee's verdict; no agent-status row names a chat, so its reach stands in. */
-  observeChat?: (sessionId: OrcaSessionId) => ChatAssigneeObservation
+  observeChat?: (sessionId: QuirkySessionId) => ChatAssigneeObservation
 }) {
   const workers: FleetDurableWorker[] = args.rows.map((row) => {
     return {
@@ -94,7 +94,7 @@ export function projectWorkerFleet(args: {
 /** Read off the session records, as worker-show and mail read it: at rest is live, closed exited. */
 function applyChatAssigneeLiveness(
   fleet: { workers: OrchestrationFleetWorker[]; durable: ReadonlyMap<string, FleetDurableWorker> },
-  observeChat: ((sessionId: OrcaSessionId) => ChatAssigneeObservation) | undefined,
+  observeChat: ((sessionId: QuirkySessionId) => ChatAssigneeObservation) | undefined,
   now: number
 ): void {
   for (const worker of observeChat ? fleet.workers : []) {

@@ -2,9 +2,9 @@ import type { RuntimeTerminalWriteOptions } from '../../runtime-terminal-writer'
 import type { WriteSettlement } from '../../../../shared/pty-write-settlement'
 import type { RuntimeLeafRecord } from '../../runtime-terminal-state-records'
 import type { RuntimeTerminalPromptDelivery } from '../../../../shared/runtime-terminal-send-contract'
-import { OrcaRuntimeWithResolveTerminalPane } from '../recovery/resolve-terminal-pane'
+import { QuirkyRuntimeWithResolveTerminalPane } from '../recovery/resolve-terminal-pane'
 import { wrapTerminalBracketedPasteText } from '../../../../shared/terminal-bracketed-paste-text'
-import { PROVEN_ABSENT_LEAF_PTY_TTL_MS } from '../../orca-runtime-core'
+import { PROVEN_ABSENT_LEAF_PTY_TTL_MS } from '../../quirky-runtime-core'
 import { pruneExpiredProvenAbsentLeafPtyVerdicts } from '../../proven-absent-leaf-pty-verdicts'
 import type { RuntimeTerminalSend } from '../../../../shared/runtime-types'
 import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
@@ -20,9 +20,9 @@ import {
   agentPromptTakesLeadLine,
   buildAgentPromptPasteBytes
 } from '../../../../shared/agent-prompt-injection'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
-export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntimeWithResolveTerminalPane {
+export abstract class QuirkyRuntimeWithControllerKnowsPtyIsLive extends QuirkyRuntimeWithResolveTerminalPane {
   protected abstract writeTerminalAction(
     ptyId: string,
     action: { text?: string; enter?: boolean; interrupt?: boolean },
@@ -141,7 +141,7 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
     }
   ): Promise<RuntimeTerminalSend> {
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    const starting = ORCA_LAYOUT_OWNER_IS_MAIN
+    const starting = QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? this.startRestoredHandlePane(handle, { signal: options.signal })
       : null
     if (starting) {
@@ -224,7 +224,7 @@ export abstract class OrcaRuntimeWithControllerKnowsPtyIsLive extends OrcaRuntim
       )
     }
     // Switch point: a saved pane main holds with no terminal yet starts first (once, shared).
-    const starting = ORCA_LAYOUT_OWNER_IS_MAIN
+    const starting = QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? this.startRestoredHandlePane(handle, { signal: options.signal })
       : null
     if (starting) {

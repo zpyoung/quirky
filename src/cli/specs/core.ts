@@ -11,64 +11,64 @@ import { TERMINAL_SET_PANE_TITLE_COMMAND_SPEC } from './terminal-set-pane-title'
 export const CORE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['open'],
-    summary: 'Launch Orca and wait for the runtime to be reachable',
-    usage: 'orca open [--json]',
+    summary: 'Launch Quirky and wait for the runtime to be reachable',
+    usage: 'quirky open [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
-    examples: ['orca open', 'orca open --json']
+    examples: ['quirky open', 'quirky open --json']
   },
   ...SERVE_COMMAND_SPECS,
   {
     path: ['status'],
     summary: 'Show app/runtime/graph readiness',
-    usage: 'orca status [--json]',
+    usage: 'quirky status [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
     notes: [
-      "caller.orcaSessionId is this agent's Orca session ID, as Orca resolved it, when the agent runs as an Orca session; otherwise caller is omitted."
+      "caller.quirkySessionId is this agent's Quirky session ID, as Quirky resolved it, when the agent runs as an Quirky session; otherwise caller is omitted."
     ],
-    examples: ['orca status', 'orca status --json']
+    examples: ['quirky status', 'quirky status --json']
   },
   {
     path: ['claude-teams'],
     argumentMode: 'passthrough',
-    summary: 'Start Claude Code Agent Teams in the current Orca terminal',
-    usage: 'orca claude-teams [claude args...]',
+    summary: 'Start Claude Code Agent Teams in the current Quirky terminal',
+    usage: 'quirky claude-teams [claude args...]',
     allowedFlags: [...GLOBAL_FLAGS],
     notes: [
       'Passes all following arguments through to Claude Code after enabling Agent Teams native panes.',
-      'Must be run from inside an Orca terminal. Starts Claude Code Agent Teams in the current pane and opens teammates as native Orca splits.'
+      'Must be run from inside an Quirky terminal. Starts Claude Code Agent Teams in the current pane and opens teammates as native Quirky splits.'
     ],
-    examples: ['orca claude-teams', 'orca claude-teams --resume <session-id>']
+    examples: ['quirky claude-teams', 'quirky claude-teams --resume <session-id>']
   },
   ...REPO_COMMAND_SPECS,
   {
     path: ['worktree', 'list'],
-    summary: 'List Orca-managed worktrees',
-    usage: 'orca worktree list [--repo <selector>] [--limit <n>] [--json]',
+    summary: 'List Quirky-managed worktrees',
+    usage: 'quirky worktree list [--repo <selector>] [--limit <n>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'repo', 'limit'],
     notes: [...WORKTREE_LISTING_SCOPE_NOTES]
   },
   {
     path: ['worktree', 'show'],
     summary: 'Show one worktree',
-    usage: 'orca worktree show --worktree <selector> [--json]',
+    usage: 'quirky worktree show --worktree <selector> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree']
   },
   {
     path: ['worktree', 'current'],
-    summary: 'Show the Orca-managed worktree for the current directory',
-    usage: 'orca worktree current [--json]',
+    summary: 'Show the Quirky-managed worktree for the current directory',
+    usage: 'quirky worktree current [--json]',
     allowedFlags: [...GLOBAL_FLAGS],
     notes: [
-      'Resolves the current shell directory to a path: selector so agents can target the enclosing Orca worktree without spelling out $PWD.'
+      'Resolves the current shell directory to a path: selector so agents can target the enclosing Quirky worktree without spelling out $PWD.'
     ],
-    examples: ['orca worktree current', 'orca worktree current --json']
+    examples: ['quirky worktree current', 'quirky worktree current --json']
   },
   {
     path: ['worktree', 'create'],
     repeatableFlags: ['reference'],
-    summary: 'Create a new Orca-managed worktree',
+    summary: 'Create a new Quirky-managed worktree',
     usage:
-      'orca worktree create --name <name> [--repo <selector>|--project <id-or-name> [--host <host>]|--project-host-setup <id>] [--agent <id>] [--prompt <text>] [--model <id>] [--effort <level>] [--surface chat|terminal] [--setup run|skip|inherit] [--base-branch <ref>] [--reference <url-or-jira-key>...] [--reference-site <id>] [--issue <number>] [--pr <number>] [--linear-issue <identifier-or-url>] [--gitlab-issue <number-or-url>] [--gitlab-mr <number-or-url>] [--comment <text>] [--parent-worktree <selector>] [--no-parent] [--run-hooks] [--activate] [--retry-launch <operationId>] [--json]',
+      'quirky worktree create --name <name> [--repo <selector>|--project <id-or-name> [--host <host>]|--project-host-setup <id>] [--agent <id>] [--prompt <text>] [--model <id>] [--effort <level>] [--surface chat|terminal] [--setup run|skip|inherit] [--base-branch <ref>] [--reference <url-or-jira-key>...] [--reference-site <id>] [--issue <number>] [--pr <number>] [--linear-issue <identifier-or-url>] [--gitlab-issue <number-or-url>] [--gitlab-mr <number-or-url>] [--comment <text>] [--parent-worktree <selector>] [--no-parent] [--run-hooks] [--activate] [--retry-launch <operationId>] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'repo',
@@ -99,34 +99,34 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     ],
     notes: [
       'Repeat --reference to attach full issue or review URLs, or Jira issue keys, before setup or agent startup. Use --reference-site to choose the Jira site for keys. Other providers require full URLs. Cannot combine with legacy link flags.',
-      'This creates a new checkout. For a fresh agent in an existing worktree, use `orca agent launch` instead.',
-      'By default, Orca records the new worktree as a child of the caller context when it can infer one from the Orca terminal or current directory.',
-      'If --repo is omitted, Orca infers the repo from the current Orca-managed worktree.',
-      'Use --project to create on a ready project host setup without spelling the backing repo id. --project takes the project id or the display name from `orca project list`.',
-      '--host is only needed when the project is set up on more than one host; with a single setup Orca uses it. When it is ambiguous the error names every host the project is set up on.',
-      '--host takes local, ssh:<target-id>, runtime:<environment-id>, or the bare host name `orca host list` prints for any of them.',
-      'For related work, use the inferred parent or pass --parent-worktree active, folder:<id>, or worktree:<worktreeId> to make the relationship explicit. Worktree ids are the full <repo-id>::<path> values returned by `orca worktree list --json`.',
+      'This creates a new checkout. For a fresh agent in an existing worktree, use `quirky agent launch` instead.',
+      'By default, Quirky records the new worktree as a child of the caller context when it can infer one from the Quirky terminal or current directory.',
+      'If --repo is omitted, Quirky infers the repo from the current Quirky-managed worktree.',
+      'Use --project to create on a ready project host setup without spelling the backing repo id. --project takes the project id or the display name from `quirky project list`.',
+      '--host is only needed when the project is set up on more than one host; with a single setup Quirky uses it. When it is ambiguous the error names every host the project is set up on.',
+      '--host takes local, ssh:<target-id>, runtime:<environment-id>, or the bare host name `quirky host list` prints for any of them.',
+      'For related work, use the inferred parent or pass --parent-worktree active, folder:<id>, or worktree:<worktreeId> to make the relationship explicit. Worktree ids are the full <repo-id>::<path> values returned by `quirky worktree list --json`.',
       'Use --no-parent when the new worktree should be independent of the current context.',
-      '--no-parent only affects Orca lineage; omit --base-branch to use the repo default base, or pass the default base ref explicitly for independent top-level work.',
-      'By default this creates the worktree and its first terminal without switching the active Orca view.',
+      '--no-parent only affects Quirky lineage; omit --base-branch to use the repo default base, or pass the default base ref explicitly for independent top-level work.',
+      'By default this creates the worktree and its first terminal without switching the active Quirky view.',
       'Pass --agent to start an agent with the worktree, as a chat or a terminal per your Chat UI setting, exactly as a new agent tab does; --prompt sends initial work to it. --model and --effort pick its model and reasoning effort, and --surface chat|terminal picks chat or terminal for this launch instead of your setting.',
       'After a lost agent launch reply, re-issue the same command from the same directory on the same host with --retry-launch <operationId> from the error. Never retry as a fresh launch; older hosts require inspecting the workspace first.',
-      'With --agent --json, result.launch says what started: launch.outcome.kind (structured chat or terminal), launch.outcome.handle, and launch.receipt.detail for why. An Orca host older than this returns the terminal agent handle in result.agentTerminalHandle instead.',
+      'With --agent --json, result.launch says what started: launch.outcome.kind (structured chat or terminal), launch.outcome.handle, and launch.receipt.detail for why. An Quirky host older than this returns the terminal agent handle in result.agentTerminalHandle instead.',
       'Repo-defined setup hooks follow the repository setup policy; pass --setup run to force them.',
       'Pass --activate when the CLI caller intentionally wants to reveal the new worktree in the app.',
       'Passing --run-hooks is kept as a legacy alias for --setup run and reveals the worktree.',
       'Use --pr for GitHub pull requests; --gitlab-issue and --gitlab-mr write separate GitLab links. GitLab URLs must match the stored source project or remote; they cannot select a foreign project.'
     ],
     examples: [
-      'orca worktree create --name agent-task --agent codex --prompt "hi" --json',
-      'orca worktree create --name design --no-parent --agent codex --model gpt-6-astra --effort high --prompt "Write the design doc" --json',
-      'orca worktree create --repo id:<repoId> --name related-task --json',
-      'orca worktree create --project github:stablyai/orca --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --name benchmark --json',
-      'orca worktree create --repo id:<repoId> --name linear-task --linear-issue https://linear.app/stably/issue/STA-335/test-issue --json',
-      'orca worktree create --repo id:<repoId> --name agent-task --agent codex --prompt "hi" --json',
-      'orca worktree create --repo id:<repoId> --name folder-child --parent-worktree folder:<folderId> --json',
-      'orca worktree create --repo id:<repoId> --name related-task --parent-worktree active --json',
-      'orca worktree create --repo id:<repoId> --name independent-task --no-parent --json'
+      'quirky worktree create --name agent-task --agent codex --prompt "hi" --json',
+      'quirky worktree create --name design --no-parent --agent codex --model gpt-6-astra --effort high --prompt "Write the design doc" --json',
+      'quirky worktree create --repo id:<repoId> --name related-task --json',
+      'quirky worktree create --project github:stablyai/orca --host runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3 --name benchmark --json',
+      'quirky worktree create --repo id:<repoId> --name linear-task --linear-issue https://linear.app/stably/issue/STA-335/test-issue --json',
+      'quirky worktree create --repo id:<repoId> --name agent-task --agent codex --prompt "hi" --json',
+      'quirky worktree create --repo id:<repoId> --name folder-child --parent-worktree folder:<folderId> --json',
+      'quirky worktree create --repo id:<repoId> --name related-task --parent-worktree active --json',
+      'quirky worktree create --repo id:<repoId> --name independent-task --no-parent --json'
     ]
   },
   WORKTREE_SET_COMMAND_SPEC,
@@ -139,29 +139,29 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       ['worktree', 'delete']
     ],
     destructive: true,
-    summary: 'Remove a worktree from Orca and git',
+    summary: 'Remove a worktree from Quirky and git',
     usage:
-      'orca worktree rm --worktree <selector> [--force] [--run-hooks] [--allow-failed-archive-hook] [--json]',
+      'quirky worktree rm --worktree <selector> [--force] [--run-hooks] [--allow-failed-archive-hook] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'force', 'run-hooks', 'allow-failed-archive-hook'],
     notes: [
-      'Repo-defined orca.yaml archive hooks are skipped unless --run-hooks is passed.',
+      'Repo-defined quirky.yaml archive hooks are skipped unless --run-hooks is passed.',
       'With --run-hooks, a failed archive hook blocks the removal: nothing is stopped, deleted or deregistered, and the command exits non-zero with error code worktree_archive_hook_failed. --force does not waive this.',
       'Pass --allow-failed-archive-hook to delete anyway after the hook has run and failed; the waived failure is reported back on result.archiveHookOverride. It requires --run-hooks and is rejected without it, because with no hook running there is no failure to waive.',
-      'For Git worktrees, removal also attempts to delete the checked-out local branch, with or without --force. Orca retains branches it knows predated the worktree and any branch whose changes it cannot prove are already merged.'
+      'For Git worktrees, removal also attempts to delete the checked-out local branch, with or without --force. Quirky retains branches it knows predated the worktree and any branch whose changes it cannot prove are already merged.'
     ]
   },
   {
     path: ['worktree', 'ps'],
     summary: 'Show a compact orchestration summary across worktrees',
-    usage: 'orca worktree ps [--limit <n>] [--json]',
+    usage: 'quirky worktree ps [--limit <n>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'limit'],
     notes: [...WORKTREE_LISTING_SCOPE_NOTES]
   },
   {
     path: ['terminal', 'list'],
-    summary: 'List live Orca-managed terminals',
+    summary: 'List live Quirky-managed terminals',
     usage:
-      'orca terminal list [--worktree <selector>] [--limit <n>] [--include-visual-layouts] [--json]',
+      'quirky terminal list [--worktree <selector>] [--limit <n>] [--include-visual-layouts] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'limit', 'include-visual-layouts'],
     notes: [
       'JSON omits visualLayouts by default; pass --include-visual-layouts when machine-readable tab and pane topology is required.'
@@ -170,14 +170,14 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['terminal', 'show'],
     summary: 'Show terminal metadata and preview',
-    usage: 'orca terminal show [--terminal <handle>] [--json]',
+    usage: 'quirky terminal show [--terminal <handle>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal']
   },
   {
     path: ['terminal', 'read'],
     summary: 'Read bounded terminal output',
     usage:
-      'orca terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--screen] [--json]',
+      'quirky terminal read [--terminal <handle>] [--cursor <n>] [--limit <n>] [--screen] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'cursor', 'limit', 'screen'],
     notes: [
       'Omit --terminal to target the active terminal in the current worktree.',
@@ -191,9 +191,9 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
       'Useful for capturing the response to a command: read before sending, then read --cursor <prev> after waiting.'
     ],
     examples: [
-      'orca terminal read --json',
-      'orca terminal read --terminal term_abc123 --cursor 42 --limit 1000 --json',
-      'orca terminal read --terminal term_abc123 --screen --json'
+      'quirky terminal read --json',
+      'quirky terminal read --terminal term_abc123 --cursor 42 --limit 1000 --json',
+      'quirky terminal read --terminal term_abc123 --screen --json'
     ]
   },
   TERMINAL_SEND_COMMAND_SPEC,
@@ -201,14 +201,14 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'wait'],
     summary: 'Wait for a terminal condition',
     usage:
-      'orca terminal wait [--terminal <handle>] --for exit|tui-idle [--timeout-ms <ms>] [--json]',
+      'quirky terminal wait [--terminal <handle>] --for exit|tui-idle [--timeout-ms <ms>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'for', 'timeout-ms']
   },
   {
     path: ['terminal', 'stop'],
     hidden: true,
     summary: 'Deprecated compatibility command for stopping terminal processes',
-    usage: 'orca terminal stop --worktree <selector> [--json]',
+    usage: 'quirky terminal stop --worktree <selector> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree'],
     notes: [
       'Deprecated: use terminal close --worktree <selector> --all to stop the processes and durably remove their terminal surfaces.'
@@ -218,20 +218,20 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'create'],
     summary: 'Create a terminal session in the current worktree',
     usage:
-      'orca terminal create [--worktree <selector>] [--title <name>] [--command <text>] [--shell <shell>] [--focus] [--json]',
+      'quirky terminal create [--worktree <selector>] [--title <name>] [--command <text>] [--shell <shell>] [--focus] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'command', 'shell', 'title', 'focus'],
     notes: [
       'Creates a visible terminal tab without switching focus when possible; falls back to a background handle if the UI cannot adopt it. Pass --focus to switch to it.',
-      'This creates a terminal and runs --command in it. To start an agent, use `orca agent launch` (or `orca worktree create --agent` for a new checkout), which follows your Chat UI setting.',
+      'This creates a terminal and runs --command in it. To start an agent, use `quirky agent launch` (or `quirky worktree create --agent` for a new checkout), which follows your Chat UI setting.',
       '--shell picks the shell the terminal IS on a Windows host (cmd.exe, powershell.exe, pwsh.exe, wsl.exe, bash.exe, git-bash); --command is typed into whatever shell the host started, so `--command cmd.exe` leaves a cmd running INSIDE the default shell and exiting it drops back to that shell.',
-      'A host that cannot apply --shell refuses the create rather than quietly spawning its default shell: macOS and Linux execution hosts spawn the login shell, terminals routed over SSH resolve their shell on the SSH host, a --shell that contradicts the project execution runtime (WSL vs Windows host) is refused, and an Orca host older than --shell is refused by the CLI.'
+      'A host that cannot apply --shell refuses the create rather than quietly spawning its default shell: macOS and Linux execution hosts spawn the login shell, terminals routed over SSH resolve their shell on the SSH host, a --shell that contradicts the project execution runtime (WSL vs Windows host) is refused, and an Quirky host older than --shell is refused by the CLI.'
     ],
     examples: [
-      'orca terminal create --json',
-      'orca terminal create --worktree active --command "pnpm dev" --json',
-      'orca terminal create --worktree path:/projects/myapp --title "RUNNER" --command "npm test"',
-      'orca terminal create --worktree path:/projects/myapp --command "pnpm dev" --focus',
-      'orca terminal create --worktree path:C:/src/app --shell cmd.exe --json'
+      'quirky terminal create --json',
+      'quirky terminal create --worktree active --command "pnpm dev" --json',
+      'quirky terminal create --worktree path:/projects/myapp --title "RUNNER" --command "npm test"',
+      'quirky terminal create --worktree path:/projects/myapp --command "pnpm dev" --focus',
+      'quirky terminal create --worktree path:C:/src/app --shell cmd.exe --json'
     ]
   },
   {
@@ -240,23 +240,23 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     // alias rather than a duplicate spec + handler registration.
     aliases: [['terminal', 'focus']],
     summary: 'Switch to a terminal tab in the UI',
-    usage: 'orca terminal switch [--terminal <handle>] [--json]',
+    usage: 'quirky terminal switch [--terminal <handle>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal'],
     notes: [
       "With --environment, the desktop app on this machine switches to that server's terminal; a server has no window of its own."
     ],
-    examples: ['orca terminal switch --terminal term_abc123']
+    examples: ['quirky terminal switch --terminal term_abc123']
   },
   TERMINAL_CLOSE_COMMAND_SPEC,
   {
     path: ['terminal', 'rename'],
     summary: 'Set or clear the title of a terminal tab',
-    usage: 'orca terminal rename [--terminal <handle>] [--title <text>] [--json]',
+    usage: 'quirky terminal rename [--terminal <handle>] [--title <text>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'title'],
     notes: ['Omit --title or pass an empty string to reset to the auto-generated title.'],
     examples: [
-      'orca terminal rename --terminal term_abc123 --title "RUNNER"',
-      'orca terminal rename --terminal term_abc123 --json'
+      'quirky terminal rename --terminal term_abc123 --title "RUNNER"',
+      'quirky terminal rename --terminal term_abc123 --json'
     ]
   },
   TERMINAL_SET_PANE_TITLE_COMMAND_SPEC,
@@ -264,11 +264,11 @@ export const CORE_COMMAND_SPECS: CommandSpec[] = [
     path: ['terminal', 'split'],
     summary: 'Split an existing terminal pane',
     usage:
-      'orca terminal split [--terminal <handle>] [--direction horizontal|vertical] [--command <text>] [--json]',
+      'quirky terminal split [--terminal <handle>] [--direction horizontal|vertical] [--command <text>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'direction', 'command'],
     examples: [
-      'orca terminal split --terminal term_abc123 --direction horizontal --json',
-      'orca terminal split --terminal term_abc123 --command "codex"'
+      'quirky terminal split --terminal term_abc123 --direction horizontal --json',
+      'quirky terminal split --terminal term_abc123 --command "codex"'
     ]
   }
 ]

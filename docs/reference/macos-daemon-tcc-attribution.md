@@ -6,7 +6,7 @@ up, or before treating a missing executable as a permission denial. Background: 
 
 ## Why a signed copy started by launchd
 
-A daemon forked from the app runs as `Orca Helper` and macOS charges its privacy access to the app
+A daemon forked from the app runs as `Quirky Helper` and macOS charges its privacy access to the app
 at its original path. While an update replaces that path, a daemon that first touches a protected
 file is denied, and the denial persists after the new bundle arrives even though System Settings
 still shows the grant. A missing executable alone does not cause it: a daemon that already read
@@ -14,13 +14,13 @@ protected files keeps working after its old executable is deleted.
 
 So a packaged macOS GUI app starts its daemon from a private copy that the updater never touches:
 
-- Each packaged macOS app ships a signed helper, `Contents/Helpers/Orca Terminal Host.app` (about
+- Each packaged macOS app ships a signed helper, `Contents/Helpers/Quirky Terminal Host.app` (about
   124 MiB): the pinned Node from `src/shared/node-runtime-pin.ts` as its main executable, the
   daemon's `out/main` JS and that slice's node-pty. `config/scripts/macos-terminal-host-bundle.cjs`
   builds and signs it in `afterPack`, boots it through one PTY round trip, and fails the build on any
   layout, Info.plist, OS floor, architecture or signature drift.
 - `macos-daemon-bundle.ts` keeps one copy per helper build, named by the helper's CDHash, at
-  `userData/daemon-host/macos/terminal-host-<cdhash>/app.noindex/Orca Terminal Host.app`. The helper
+  `userData/daemon-host/macos/terminal-host-<cdhash>/app.noindex/Quirky Terminal Host.app`. The helper
   is read from the bundle the running main process executes from, never the whole app. A present
   copy is reused as is. Otherwise the helper is cloned (APFS clone, regular copy otherwise) into a
   `.staging-<pid>-*` sibling, verified once with
@@ -28,15 +28,15 @@ So a packaged macOS GUI app starts its daemon from a private copy that the updat
   losing that rename to another publisher is fine. An app without the helper falls back to the
   fork.
 - `macos-daemon-launchd.ts` runs the copy's Node on the copy's `daemon-entry.js` as a
-  non-persistent launchd job, so the daemon has Orca's own identity rather than the UI process's
+  non-persistent launchd job, so the daemon has Quirky's own identity rather than the UI process's
   replaceable path. The label is fixed per profile and protocol
-  (`com.stablyai.orca.terminal.<profile hash>.v<protocol>`). Before bootstrap a stopped job with
+  (`com.zpyoung.quirky.terminal.<profile hash>.v<protocol>`). Before bootstrap a stopped job with
   that label is booted out. A running job gets a bounded wait for shutdown and launchd retirement;
   a job still running afterward gets the retired-service recovery below for this protocol's label
   only, and stays fatal unless that recovery releases it; an unreadable job is fatal. `--entry-path` stays the installed
   app's entry, which the replacement preflight compares. The job file is 0600 and deleted right
   after bootstrap, because the environment may hold credentials. It sets
-  `AssociatedBundleIdentifiers` to `com.stablyai.orca`, which is how a launchd job not installed
+  `AssociatedBundleIdentifiers` to `com.zpyoung.quirky`, which is how a launchd job not installed
   through SMAppService names the app it belongs to for Local Network access. Readiness is the
   normal authenticated handshake, fenced by the launch nonce.
 
@@ -47,9 +47,9 @@ Only Developer ID builds exercise the helper path in practice. A local ad hoc bu
 requirement is a cdhash, which the helper (a different binary) cannot match, so it falls back to the
 fork.
 
-## Why the helper is `com.stablyai.orca`
+## Why the helper is `com.zpyoung.quirky`
 
-TCC records grants against the designated requirement, which for Orca is the identifier plus team.
+TCC records grants against the designated requirement, which for Quirky is the identifier plus team.
 Signing the helper with the app's own identifier lets it inherit every existing grant, including Full
 Disk Access, which a user can only add by hand. A distinct identifier would be a new client: new
 folder prompts naming it, and a new Full Disk Access row for every user.
@@ -59,7 +59,7 @@ folder prompts naming it, and a new Full Disk Access row for every user.
 The helper's Node declares `LC_BUILD_VERSION minos 13.5`, which is also the helper's
 `LSMinimumSystemVersion` and `NODE_RUNTIME_DARWIN_MINIMUM_OS`. Packaging fails if a Node pin bump
 changes it. Below 13.5 the launcher returns before copying and the fork runs, so those Macs keep the
-pre-#25848 behaviour; Orca itself still supports macOS 12.0.
+pre-#25848 behaviour; Quirky itself still supports macOS 12.0.
 
 ## First launch
 
@@ -69,8 +69,8 @@ the daemon's `/usr/bin/login` preflight can time out, and that one shell is spaw
 
 ## Security
 
-The helper is a signed "run any JS as Orca" binary: it honours `NODE_OPTIONS` and any script path,
-and Electron's fuses do not apply to it. Orca's own binary already allows the same, because its
+The helper is a signed "run any JS as Quirky" binary: it honours `NODE_OPTIONS` and any script path,
+and Electron's fuses do not apply to it. Quirky's own binary already allows the same, because its
 RunAsNode fuse is enabled, so the helper adds no new exposure.
 
 ## Fallback states
@@ -104,14 +104,14 @@ may still be copying.
 
 The helper declares no links, documents or types, has a lower `CFBundleVersion` than the app and
 `LSUIElement`, and was not registered in the signed spike, nested or copied. Copies sit in a
-`.noindex` folder, which Spotlight skips, and Orca never registers them. Starting the daemon through
+`.noindex` folder, which Spotlight skips, and Quirky never registers them. Starting the daemon through
 launchd leaves no record, but another process running the copy's executable directly can make
 macOS register it, so retirement runs `lsregister -u` on the bundle before deleting it.
 
 The helper's main-executable UUID is Node's, shared by every official Node 24.21.0 binary of that
-architecture, so it is not unique to Orca. Local Network access still passed in the signed spike:
+architecture, so it is not unique to Quirky. Local Network access still passed in the signed spike:
 macOS matched the client by its code signature, and the job's `AssociatedBundleIdentifiers` ties it
-to Orca. Do not register copies explicitly (`lsregister -f` or `LSRegisterURL`).
+to Quirky. Do not register copies explicitly (`lsregister -f` or `LSRegisterURL`).
 
 ## Rollback
 
@@ -138,4 +138,4 @@ new terminal until a manual Restart. Node/SSH hosts do not perform GUI-service r
 Running old daemons keep their terminals; settings reports app and terminal-host Full Disk Access
 separately, and a denied terminal is recovered by closing it or restarting the daemon. The packaging
 hook also gives the main bundle and every Helper the Desktop, Documents and Downloads descriptions,
-because the fork fallback still hosts terminals in `Orca Helper`.
+because the fork fallback still hosts terminals in `Quirky Helper`.

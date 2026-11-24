@@ -171,7 +171,7 @@ export async function jiraListIssuesForTarget(
       await assertRuntimeEnvironmentCapability(
         target.environmentId,
         JIRA_CURRENT_SPRINT_RUNTIME_CAPABILITY,
-        'Update the remote Orca server to filter preset issues by current sprint.'
+        'Update the remote Quirky server to filter preset issues by current sprint.'
       )
     }
     if (filters?.statuses?.length) {

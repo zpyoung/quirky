@@ -8,12 +8,12 @@ import {
 import { resolveHooksJsonWritePath } from '../agent-hooks/hook-config-write-path'
 import { assertHooksJsonGeneration } from './codex-real-home-hooks-json'
 import { getCodexManagedScriptFileName } from './codex-hook-identity'
-import { getRealHomeCodexHookHome, type CodexHookHome } from './codex-hook-orca-approvals'
+import { getRealHomeCodexHookHome, type CodexHookHome } from './codex-hook-quirky-approvals'
 import { mutateRealHomeHooksPreservingUserTrust } from './codex-user-hook-trust-moves'
 
 /**
- * The opt-out's removal of every Orca entry from the real ~/.codex/hooks.json (or another
- * home Orca edits in place), moving user approvals that shift; the caller removes Orca's own approvals.
+ * The opt-out's removal of every Quirky entry from the real ~/.codex/hooks.json (or another
+ * home Quirky edits in place), moving user approvals that shift; the caller removes Quirky's own approvals.
  */
 export function sweepRealHomeCodexHook(
   home: CodexHookHome = getRealHomeCodexHookHome()

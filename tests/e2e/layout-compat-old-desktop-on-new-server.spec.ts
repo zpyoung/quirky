@@ -1,21 +1,21 @@
 /**
  * Layout rework P3 baselines: a pinned released desktop build, and its bundled CLI, against the
- * current `orca serve`. The old desktop splits a server pane (it sends `terminal.create` with the
+ * current `quirky serve`. The old desktop splits a server pane (it sends `terminal.create` with the
  * tab's id and a new leaf id), closes it, and rides out a server restart. Each step records what
  * the server publishes and what the old desktop draws; the shapes are compared with main's.
  *
- * Needs ORCA_CROSS_VERSION_PACKAGED_EXECUTABLE (CI: packaged-browser-e2e.yml, job layout-compat).
+ * Needs QUIRKY_CROSS_VERSION_PACKAGED_EXECUTABLE (CI: packaged-browser-e2e.yml, job layout-compat).
  */
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import {
   launchPackagedPairedClient,
   packagedExecutable,
   packagedExecutableMissing,
   PACKAGED_EXECUTABLE_ENV,
-  runPackagedOrcaCli
-} from './helpers/packaged-old-orca'
+  runPackagedQuirkyCli
+} from './helpers/packaged-old-quirky'
 import {
   expectLayoutCompatBaseline,
   expectReconnectedPaneEcho,
@@ -45,7 +45,7 @@ async function focusPane(page: Page, leafId: string): Promise<void> {
 }
 
 test.describe('layout compat: released desktop and CLI on the current server', () => {
-  test.skip(packagedExecutableMissing, `${PACKAGED_EXECUTABLE_ENV} must point at a released Orca`)
+  test.skip(packagedExecutableMissing, `${PACKAGED_EXECUTABLE_ENV} must point at a released Quirky`)
 
   test('old-desktop-on-new-server: split, close pane, server restart', async ({
     testRepoPath
@@ -121,7 +121,7 @@ test.describe('layout compat: released desktop and CLI on the current server', (
           leafId: firstLeaf!,
           host: host.client,
           worktree,
-          // The packaged client draws with the DOM renderer (packaged-old-orca.ts), so rows are text.
+          // The packaged client draws with the DOM renderer (packaged-old-quirky.ts), so rows are text.
           readDrawn: () =>
             client.page.locator(`${PANE}[data-leaf-id="${firstLeaf}"] .xterm-rows`).textContent()
         })
@@ -147,7 +147,7 @@ test.describe('layout compat: released desktop and CLI on the current server', (
     const host = await launchHeadlessPairedRuntimeHost()
     try {
       await host.client.call('repo.add', { path: testRepoPath, kind: 'git' })
-      const run = await runPackagedOrcaCli(packagedExecutable!, host.userDataDir, [
+      const run = await runPackagedQuirkyCli(packagedExecutable!, host.userDataDir, [
         'terminal',
         'create',
         '--worktree',

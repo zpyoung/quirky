@@ -4,7 +4,7 @@ import {
   testConnectionProbes
 } from './ssh-connect-attempt-registry'
 import { connectionManager, portForwardManager } from './ssh-ipc-context'
-import { shutdownOrcadManagedTunnels } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import { shutdownQuirkydManagedTunnels } from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
 
 // Why one budget for the whole sequence rather than one per phase: an invalidated connect only
 // observes its cancellation at the next checkpoint, and one blocked in the transport handshake can
@@ -66,10 +66,10 @@ function sshShutdownTasks(): SshShutdownTask[] {
       promise: connectionManager?.disconnectAll() ?? Promise.resolve()
     },
     {
-      // Why: a system-ssh forward is a separate `ssh -L` child that survives Orca's exit and keeps
+      // Why: a system-ssh forward is a separate `ssh -L` child that survives Quirky's exit and keeps
       // its local port, so the next launch cannot bind a managed tunnel's fixed port.
       targetId: '*forwards',
-      promise: Promise.all([portForwardManager?.closeAll(), shutdownOrcadManagedTunnels()])
+      promise: Promise.all([portForwardManager?.closeAll(), shutdownQuirkydManagedTunnels()])
     }
   ]
 }

@@ -14,7 +14,7 @@ import {
 // target session reaches it without moving the user's focus (measured; #20595 follow-up).
 // See docs/reference/agent-browser-focus-isolation.md.
 
-export { isOrcaFrameSessionTraffic, settleWithin } from './guest-frame-input-sessions'
+export { isQuirkyFrameSessionTraffic, settleWithin } from './guest-frame-input-sessions'
 export type { GuestSessionCdpSender } from './guest-frame-input-sessions'
 
 /** Where keys for the page's focused element should go. */
@@ -25,8 +25,8 @@ export type FocusedFrameRoute =
 
 // Why: bounds the walk through nested frames; deeper focus takes the fallback.
 const MAX_FRAME_DEPTH = 6
-const PROBE_OBJECT_GROUP = 'orca-focused-frame-probe'
-const PROBE_WORLD_NAME = 'orca-focused-frame-probe'
+const PROBE_OBJECT_GROUP = 'quirky-focused-frame-probe'
+const PROBE_WORLD_NAME = 'quirky-focused-frame-probe'
 
 // Why: returns the focused frame owner itself (through open shadow roots), or null when focus is
 // not on one, so its frame id can be read without a second evaluation.

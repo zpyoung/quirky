@@ -7,19 +7,19 @@ import { parsePaneKey } from '../../shared/stable-pane-id'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const { store, TEST_WORKTREE_ID, HEADLESS_LEAF_ID } =
-  await import('./orca-runtime-test-fixtures.spec')
+  await import('./quirky-runtime-test-fixtures.spec')
 const { makePendingAgentTabActivationRuntime } =
-  await import('./orca-runtime-test-scenario-builders.spec')
+  await import('./quirky-runtime-test-scenario-builders.spec')
 
 const WT = TEST_WORKTREE_ID
 
 function pairedRuntime() {
   let next = 0
   const spawn = vi.fn(async () => ({ id: `pty-${++next}` }))
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.setPtyController({
     spawn,
     write: () => true,
@@ -33,7 +33,7 @@ function pairedRuntime() {
   return { runtime, spawn, caller }
 }
 
-async function createPane(runtime: InstanceType<typeof OrcaRuntimeService>) {
+async function createPane(runtime: InstanceType<typeof QuirkyRuntimeService>) {
   const created = await runtime.createTerminal(`id:${WT}`)
   const pane = parsePaneKey(created.paneKey ?? '')
   if (!pane) {

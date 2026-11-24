@@ -31,7 +31,7 @@ import {
   seedWslLinkedWorktreeGitRoutingForTests
 } from './wsl-linked-worktree-git-routing'
 
-const reason = 'orca-create-preparation:v1:123:atomic'
+const reason = 'quirky-create-preparation:v1:123:atomic'
 const unsupported = Object.assign(new Error("error: unknown option 'reason'"), { code: 129 })
 const prepare = (path = '/prepared', options = {}) =>
   addLockedWorktreePreparation('/repo', path, 'refs/heads/main', reason, options)

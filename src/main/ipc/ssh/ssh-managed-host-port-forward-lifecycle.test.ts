@@ -8,9 +8,9 @@ const h = vi.hoisted(() => ({
   getState: vi.fn(() => ({ targetId: 't1', status: 'connected', error: null, reconnectAttempt: 0 }))
 }))
 
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  closeOrcadManagedTunnel: vi.fn(async () => {}),
-  closeOrcadManagedTunnelsForTarget: h.closeManagedTunnels
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  closeQuirkydManagedTunnel: vi.fn(async () => {}),
+  closeQuirkydManagedTunnelsForTarget: h.closeManagedTunnels
 }))
 vi.mock('./ssh-managed-port-forward-restore', () => ({ restoreManagedHostPortForwards: h.restore }))
 vi.mock('./ssh-ipc-context', () => ({

@@ -66,7 +66,7 @@ function buildController(options: SheetOptions) {
     displayWorktrees: [],
     sectionsResult: {
       uniqueRepos: [
-        { key: 'r1', id: 'r1', name: 'orca', color: '#fff' },
+        { key: 'r1', id: 'r1', name: 'quirky', color: '#fff' },
         { key: 'r2', id: 'r2', name: 'docs', color: '#000' }
       ]
     },
@@ -174,7 +174,7 @@ describe('the phone Workspace options sheet', () => {
     expect(shown).not.toContain('Show properties')
     expect(shown).not.toContain('Except default branch')
     press('Card display')
-    expect(texts()).toContain('Orca CLI')
+    expect(texts()).toContain('Quirky CLI')
     expect(texts()).toContain('Branch name')
     expect(texts()).not.toContain('Ports')
   })

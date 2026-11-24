@@ -94,7 +94,7 @@ function renderEditSection(props: Parameters<typeof GHEditSection>[0]): void {
 
 const registeredRepo: Repo = {
   id: 'repo-1',
-  path: join(tmpdir(), 'orca-opened-issue-repository-fixture'),
+  path: join(tmpdir(), 'quirky-opened-issue-repository-fixture'),
   displayName: 'widgets',
   badgeColor: 'primary',
   addedAt: 1,

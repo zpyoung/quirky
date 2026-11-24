@@ -1,5 +1,5 @@
 /**
- * How Windows reaches the paths of a resource's OWNER host (WSL-via-orcad D5). Only a WSL host
+ * How Windows reaches the paths of a resource's OWNER host (WSL-via-quirkyd D5). Only a WSL host
  * qualifies: its files are on `\\wsl.localhost\<distro>\...`. Every other host gets null, so SSH,
  * paired servers and this computer keep their behavior. Translation is pure string work on the
  * desktop side; nothing runs inside the distro.

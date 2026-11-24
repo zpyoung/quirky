@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { OMP_FRESH_CONFIG_SOURCE } from '../../src/shared/omp-fresh-launch.ts'
 
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout path')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-fresh-proof-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-fresh-proof-'))
 process.env.HOME = join(scratch, 'home')
 process.env.USERPROFILE = process.env.HOME
 process.env.XDG_CONFIG_HOME = join(scratch, 'xdg-config')

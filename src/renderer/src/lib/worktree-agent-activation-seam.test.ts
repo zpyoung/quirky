@@ -1,5 +1,5 @@
 import { getDefaultSettings } from '../../../shared/constants'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '@/store'
@@ -247,7 +247,7 @@ describe('worktree agent activation seam', () => {
       const tabs = useAppStore.getState().tabsByWorktree[worktree.id] ?? []
       expect(tabs).toHaveLength(1)
       // Switch-on, the pane binds to the terminal main's frame names; the row keeps no ptyId.
-      const shownPtyId = ORCA_LAYOUT_OWNER_IS_MAIN
+      const shownPtyId = QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? frames.terminalTab(worktree.id, tabs[0]!.id)?.terminal?.panes[0]?.ptyId
         : tabs[0]?.ptyId
       expect(shownPtyId).toBe(livePtyId)

@@ -6,10 +6,10 @@ import type { AgentSessionRefusalReference } from './agent-session-wire-refusals
  * A current host opens a conversation for any read, so a read meets this code only once quit began.
  * An older host resolves `agentSession.history` and `agentSession.subscribe` against the sessions it
  * has attached, and raises it when it holds none by that id. Either way it is never a transcript
- * Orca could not read: an older host's session is not attached YET (the surface's hold attaches
+ * Quirky could not read: an older host's session is not attached YET (the surface's hold attaches
  * one) or was just closed, and both windows end on their own.
  *
- * The genuinely latched lease — "Orca cannot prove the previous owner exited" — reaches the client
+ * The genuinely latched lease — "Quirky cannot prove the previous owner exited" — reaches the client
  * through the ACQUISITION path instead, so narrowing on the code costs a read no real diagnosis.
  * See `agent-session-lease-adjudication`.
  */
@@ -48,7 +48,7 @@ export function isUnattachedAgentSessionReadRefusal(error: unknown): boolean {
 
 /**
  * A read refusal no retry reads past: the chat's history is damaged, as SQLite or its rows show, or
- * a newer Orca saved it, which only an update gets past. Decided from the reason, never the
+ * a newer Quirky saved it, which only an update gets past. Decided from the reason, never the
  * message, which is the bare code for every journal refusal; a journal that failed to open for any
  * other reason can clear, so its read keeps reconnecting.
  */
@@ -58,6 +58,6 @@ export function isFinalAgentSessionReadRefusal(
   return (
     refusal?.code === 'agent_session_journal_unreadable' &&
     (refusal.details?.reason === 'journalCorrupt' ||
-      refusal.details?.reason === 'journalWrittenByNewerOrca')
+      refusal.details?.reason === 'journalWrittenByNewerQuirky')
   )
 }

@@ -559,7 +559,7 @@
         "View": 4
       },
       "labels": ["Back", "Refresh agent sessions"],
-      "text": ["Agent Session History", "orca-history"]
+      "text": ["Agent Session History", "quirky-history"]
     },
     "d3c3ce66625d": {
       "name": "aiVault.listSessions#1",

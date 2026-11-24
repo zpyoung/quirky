@@ -52,7 +52,7 @@ it('publishes idle provider reloads only when the actual command catalog changes
 })
 
 it('delivers catalog changes through existing frames without resending them on ordinary output', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-command-publication-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-command-publication-'))
   const journals = createTrackedJournalOpener()
   const events: AgentSessionSubscribeEvent[] = []
   let state = EMPTY_STRUCTURED_AGENT_SESSION

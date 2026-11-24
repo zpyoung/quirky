@@ -143,7 +143,7 @@
         "maxConcurrencyHelpLabel": "Max concurrency help",
         "maxConcurrencyHelpSummary": "Limits isolated implementer dispatches for this watcher.",
         "territoryHelpLabel": "Write territory help",
-        "territoryTooltipSummary": "Limits writes; protected .git and .orca paths are always excluded.",
+        "territoryTooltipSummary": "Limits writes; protected .git and .quirky paths are always excluded.",
         "territoryTooltip": {
           "allWorkspaceLabel": "Whole workspace (blank / **)",
           "allWorkspace": "Blank becomes ** and allows every other relative path.",
@@ -170,7 +170,7 @@
         "existingPlanFileTypeError": "Choose a .md, .markdown, .txt, or .json file.",
         "existingPlanFileSizeError": "Choose a file no larger than 256 KB.",
         "existingPlanLengthError": "Reduce the existing plan to 65,536 characters or fewer.",
-        "existingPlanReadError": "Orca could not read that file. Choose another file or paste the plan.",
+        "existingPlanReadError": "Quirky could not read that file. Choose another file or paste the plan.",
         "hideExistingPlan": "Hide plan",
         "editExistingPlan": "Edit plan",
         "addExistingPlan": "Add existing plan",
@@ -199,7 +199,7 @@
         "gates": "Gates",
         "gatesHelpLine": "Gates run on the integrated branch after every plan node has merged, before review and landing. Put the full test suite and other whole-tree checks here, not in plan nodes.",
         "addGate": "Add gate",
-        "gatesUnsupportedHost": "Gates are unavailable on this host's Orca version. Remove any gates below to continue.",
+        "gatesUnsupportedHost": "Gates are unavailable on this host's Quirky version. Remove any gates below to continue.",
         "newWorktreeInRepo": "New worktree in {{repo}}",
         "newWorktreeName": "New worktree name",
         "newWorktreeNameHelp": "Suggested from the objective. Edit it to choose another name.",
@@ -226,7 +226,7 @@
         "gateTimeoutInvalid": "Gate timeout must be a whole number of seconds from 10 to 14,400.",
         "gateNameDuplicate": "Gate names must be unique.",
         "gatesTooMany": "Objectives support at most 8 declared gates.",
-        "gatesUnsupportedHost": "Gates are unavailable on this host's Orca version. Remove all gates to continue.",
+        "gatesUnsupportedHost": "Gates are unavailable on this host's Quirky version. Remove all gates to continue.",
         "newWorktreeNameRequired": "Enter a name for the new worktree."
       },
       "detail": {

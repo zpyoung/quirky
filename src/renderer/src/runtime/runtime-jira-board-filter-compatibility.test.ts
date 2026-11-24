@@ -47,7 +47,7 @@ it.each([
 
     const combined: JiraIssueListFilters = { statuses: ['Blocked'], currentSprint: true }
     await expect(jiraListIssues(source, 'all', 50, 'site-a', combined)).rejects.toThrow(
-      /Update (the remote Orca server|the Jira host)/
+      /Update (the remote Quirky server|the Jira host)/
     )
     expect(call.mock.calls.filter(([args]) => args.method === 'jira.listIssues')).toHaveLength(1)
   }

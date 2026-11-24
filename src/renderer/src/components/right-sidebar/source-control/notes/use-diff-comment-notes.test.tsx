@@ -58,7 +58,7 @@ describe('diff-comment notes copy failures', () => {
   it('never shows "Copied" for a clipboard write that rejected', async () => {
     mocks.writeClipboardText.mockRejectedValue(
       new Error(
-        "Error invoking remote method 'ui:writeClipboardText': Error: NSPasteboard failed at /Users/someone/Library/Caches/orca"
+        "Error invoking remote method 'ui:writeClipboardText': Error: NSPasteboard failed at /Users/someone/Library/Caches/quirky"
       )
     )
     const { result } = renderNotes()

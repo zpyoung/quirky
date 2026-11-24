@@ -5,7 +5,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journa
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../shared/protocol-version'
 import { MAX_TIMER_DELAY_MS } from '../../../shared/timer-delay'
 import { codexItemBody } from '../../codex/codex-structured-item-translation'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { RpcDispatcher } from '../../runtime/rpc/dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from '../../runtime/rpc/methods/structured-agent-session'
 import { setStructuredAgentSessionHost } from './structured-agent-session-registry'
@@ -114,7 +114,7 @@ async function subscribeOverRpc(reader: ReturnType<typeof observer>): Promise<Ab
   const controller = new AbortController()
   controllers.push(controller)
   const dispatcher = new RpcDispatcher({
-    runtime: new OrcaRuntimeService(),
+    runtime: new QuirkyRuntimeService(),
     methods: STRUCTURED_AGENT_SESSION_METHODS
   })
   await dispatcher.dispatchStreaming(
@@ -180,7 +180,7 @@ async function publishAfterIdle(id: string): Promise<void> {
     throw new Error('History did not reopen the conversation')
   }
   await journal.appendItem(
-    { provider: 'orca', clientMessageId: id },
+    { provider: 'quirky', clientMessageId: id },
     { kind: 'status', text: 'after idle' },
     {
       fence: rig.store.getRecord(SESSION)?.lease.runtimeFence ?? 1,

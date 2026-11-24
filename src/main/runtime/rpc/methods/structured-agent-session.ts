@@ -73,7 +73,7 @@ import { getStructuredAgentSessionHost } from '../../../native-chat/agent-sessio
 import { structuredSessionNeverStarted } from '../../agent-session-record-founding'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { AGENT_SESSION_SNAPSHOT_CATCH_UP_CLIENT_CAPABILITY } from '../../../../shared/protocol-version'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
   noteStructuredAgentSessionClose,
   refusingStructuredAgentSessionCreatesClosedFirst
@@ -123,7 +123,7 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     name: 'agentSession.create',
     permission: 'workspace',
     params: CreateParams,
-    handler: ORCA_LAYOUT_OWNER_IS_MAIN
+    handler: QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? refusingStructuredAgentSessionCreatesClosedFirst(handleStructuredAgentSessionCreate)
       : handleStructuredAgentSessionCreate
   }),
@@ -154,7 +154,7 @@ export const STRUCTURED_AGENT_SESSION_METHODS = [
     params: OptionsParams,
     handler: async (params, ctx) => {
       const host = requireStructuredCleanupHost(ctx)
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         noteStructuredAgentSessionClose(
           params.sessionId,
           host.deps.store.getRecord(params.sessionId) !== null

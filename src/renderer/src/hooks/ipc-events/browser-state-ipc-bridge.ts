@@ -133,7 +133,7 @@ export function registerBrowserStateIpcBridge(
     })
   )
   unsubs.push(
-    window.api.browser.onOpenLinkInOrcaTab(({ browserPageId, url, activate }) => {
+    window.api.browser.onOpenLinkInQuirkyTab(({ browserPageId, url, activate }) => {
       const store = useAppStore.getState()
       const sourcePage = Object.values(store.browserPagesByWorkspace)
         .flat()

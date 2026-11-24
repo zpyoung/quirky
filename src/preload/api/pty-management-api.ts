@@ -15,16 +15,16 @@ export type PtyManagementSession = {
   protocolVersion: number
 }
 
-// 'severed': macOS can no longer attribute daemon terminals to Orca, so Accessibility/
+// 'severed': macOS can no longer attribute daemon terminals to Quirky, so Accessibility/
 // Automation grants silently stop applying until the daemon is restarted (STA-3491).
 export type PtyManagementMacTccAttributionHealth = 'intact' | 'severed' | 'unknown'
 
 export type PtyManagementDaemonCwdClass = DaemonPtyCwdClass
 
-// The daemon spawned a terminal into a folder it can't read while Orca can (STA-7948).
+// The daemon spawned a terminal into a folder it can't read while Quirky can (STA-7948).
 // `daemonScope` is an opaque per-daemon digest, never a path — it only latches the notice.
 // `freshDaemonAccess` is what a daemon forked now would get: 'allowed' means restarting is the
-// whole remedy, 'denied' means Orca must be re-allowed first, 'unknown' means main could not tell.
+// whole remedy, 'denied' means Quirky must be re-allowed first, 'unknown' means main could not tell.
 export type PtyManagementFreshDaemonAccess = 'allowed' | 'denied' | 'unknown'
 
 export type PtyManagementFolderAccessMismatch = {

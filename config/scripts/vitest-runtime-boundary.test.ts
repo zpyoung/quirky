@@ -1,10 +1,10 @@
 import { expect, it } from 'vitest'
 import { access } from 'node:fs/promises'
 import { getNodeRuntimeInclude } from './vitest-node-runtime-files.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 it('uses Bun for ordinary suites when the Bun project is selected', () => {
-  expect(Boolean(process.versions.bun)).toBe(process.env.ORCA_VITEST_RUNTIME === 'bun')
+  expect(Boolean(process.versions.bun)).toBe(process.env.QUIRKY_VITEST_RUNTIME === 'bun')
 })
 
 it('preserves Node access() success and missing-file rejection', async () => {

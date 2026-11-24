@@ -38,7 +38,7 @@ vi.mock('@/lib/connection-owner-resolution', () => ({
 const CHAT_IMAGE_ACCESS = { kind: 'chat-image' }
 
 beforeEach(() => {
-  loadLocalImageAbsolutePath.mockResolvedValue('blob:orca/attachment')
+  loadLocalImageAbsolutePath.mockResolvedValue('blob:quirky/attachment')
 })
 
 afterEach(() => {
@@ -59,7 +59,7 @@ describe('AgentComposerAttachmentThumbnail', () => {
     )
 
     const thumbnail = await screen.findByAltText('shot.png')
-    expect(thumbnail).toHaveAttribute('src', 'blob:orca/attachment')
+    expect(thumbnail).toHaveAttribute('src', 'blob:quirky/attachment')
     expect(loadLocalImageAbsolutePath).toHaveBeenCalledWith(
       '/local/shot.png',
       undefined,
@@ -91,14 +91,14 @@ describe('AgentComposerAttachmentThumbnail', () => {
     rememberUploadedAttachmentPreviewSources(
       { connectionId: 'conn-a' },
       ['/local/shot.png'],
-      ['/remote/.orca/drops/shot.png'],
+      ['/remote/.quirky/drops/shot.png'],
       [],
       []
     )
 
     render(
       <AgentComposerAttachmentThumbnail
-        path="/remote/.orca/drops/shot.png"
+        path="/remote/.quirky/drops/shot.png"
         label="shot.png"
         terminalTabId="tab-1"
       />
@@ -116,7 +116,7 @@ describe('AgentComposerAttachmentThumbnail', () => {
   it('never shows another host image for the same remote path', async () => {
     connectionIdByTab.set('tab-a', 'conn-a')
     connectionIdByTab.set('tab-b', 'conn-b')
-    const remotePath = '/home/user/project/.orca/drops/shot.png'
+    const remotePath = '/home/user/project/.quirky/drops/shot.png'
     rememberUploadedAttachmentPreviewSources(
       { connectionId: 'conn-a' },
       ['/local/a/secret.png'],

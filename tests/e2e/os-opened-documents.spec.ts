@@ -2,15 +2,15 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { test, expect } from './helpers/orca-app'
-import { createRestartSession } from './helpers/orca-restart'
+import { test, expect } from './helpers/quirky-app'
+import { createRestartSession } from './helpers/quirky-restart'
 
 for (const extension of ['md', 'csv', 'tsv'] as const) {
   test(`opens OS-requested ${extension} documents on cold and warm launches without duplicate tabs`, async ({
     seedTestRepo
   }, testInfo) => {
     void seedTestRepo
-    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-os-documents-')))
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-os-documents-')))
     const delimiter = extension === 'tsv' ? '\t' : ','
     const coldPath = path.join(root, `cold.${extension}`)
     const warmPath = path.join(root, `warm.${extension}`)
@@ -29,8 +29,8 @@ for (const extension of ['md', 'csv', 'tsv'] as const) {
     const unsupportedPath = path.join(root, 'unsupported.txt')
     writeFileSync(unsupportedPath, 'private content')
     const session = createRestartSession(testInfo, {
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1'
     })
     let launched: Awaited<ReturnType<typeof session.launch>> | undefined
     try {
@@ -55,7 +55,7 @@ for (const extension of ['md', 'csv', 'tsv'] as const) {
       await testInfo.attach('cold-open', { path: coldProof, contentType: 'image/png' })
 
       await app.evaluate(({ app }, fileUrl) => {
-        app.emit('second-instance', {}, ['orca', fileUrl], process.cwd())
+        app.emit('second-instance', {}, ['quirky', fileUrl], process.cwd())
       }, pathToFileURL(warmPath).href)
       await expect(warmResult).toBeVisible()
       await expect(page.getByText('84', { exact: true })).toBeVisible()

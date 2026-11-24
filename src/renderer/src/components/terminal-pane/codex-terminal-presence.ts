@@ -1,7 +1,7 @@
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 
-// Why three sources: Orca-launched tabs, hook-reported agents (SSH too), and a typed `codex` seen locally.
+// Why three sources: Quirky-launched tabs, hook-reported agents (SSH too), and a typed `codex` seen locally.
 function hasCodexTerminal(state: AppState): boolean {
   return (
     Object.values(state.tabsByWorktree).some((tabs) =>

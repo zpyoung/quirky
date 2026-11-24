@@ -1,8 +1,8 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { OrcadDeltaMovePreview } from '../../../../shared/orcad-managed-runtime'
+import type { QuirkydDeltaMovePreview } from '../../../../shared/quirkyd-managed-runtime'
 import type { SshTarget } from '../../../../shared/ssh-types'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
@@ -18,7 +18,7 @@ import { conversionBlockerLabel, managedServerOutcomeLabel } from './managed-ser
 import { deltaMoveRowLabel } from './ssh-host-delta-move-copy'
 
 type SshHostDeltaMoveDialogProps = {
-  api: ManagedOrcadPreloadApi
+  api: ManagedQuirkydPreloadApi
   target: SshTarget | null
   onClose: () => void
   onFinished: () => void
@@ -32,7 +32,7 @@ export function SshHostDeltaMoveDialog({
   onFinished
 }: SshHostDeltaMoveDialogProps): React.JSX.Element {
   const mountedRef = useMountedRef()
-  const [preview, setPreview] = useState<OrcadDeltaMovePreview | null>(null)
+  const [preview, setPreview] = useState<QuirkydDeltaMovePreview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   // Why the id: callers pass a fresh target object on every reload, which must not reset a run.
@@ -95,7 +95,7 @@ export function SshHostDeltaMoveDialog({
           <DialogDescription>
             {translate(
               'auto.components.settings.deltaMove.description',
-              'An older version of Orca changed this host after its projects moved to Orca on the host. This adds what it created to the server; it never merges over what the server already has.'
+              'An older version of Quirky changed this host after its projects moved to Quirky on the host. This adds what it created to the server; it never merges over what the server already has.'
             )}
           </DialogDescription>
         </DialogHeader>

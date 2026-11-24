@@ -39,15 +39,15 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-current-json-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-current-json-'))
   roots.push(root)
   const directory = join(root, 'profiles', profileId)
   mkdirSync(directory, { recursive: true })
   writeFileSync(
-    join(root, 'orca-profile-index.json'),
+    join(root, 'quirky-profile-index.json'),
     JSON.stringify({ activeProfileId: profileId, profiles: [{ id: profileId }] })
   )
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const databaseFile = join(directory, 'profile-state.db')
   const exportPath = profileStateJsonExportPath(dataFile, 1)
   const originalJson = JSON.stringify(originalState)

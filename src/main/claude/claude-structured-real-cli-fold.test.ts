@@ -1,5 +1,5 @@
 // The fold receipt against the real CLI: a message sent while a turn runs is
-// folded by the CLI into the running turn, and Orca must keep ONE turn row —
+// folded by the CLI into the running turn, and Quirky must keep ONE turn row —
 // no interrupted marking, no second bar. Runs only where a signed-in Claude CLI
 // exists, like the rest of the real-CLI suite. Live sessions prove the session
 // from a SessionStart hook frame BEFORE system/init arrives, which is exactly
@@ -65,7 +65,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI fold', () => {
     async () => {
       const providerSessionId = randomUUID()
       const { claudeConfigDir, env } = realClaudeLaunchHome()
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-real-fold-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-real-fold-'))
       const events: ClaudeStructuredSessionEvent[] = []
       const turnRows: NonNullable<ReturnType<typeof readAgentJournalTurn>>[] = []
       const sink: StructuredAgentSessionEventSink = {

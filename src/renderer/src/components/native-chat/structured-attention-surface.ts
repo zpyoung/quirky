@@ -89,7 +89,7 @@ export function createStructuredAttentionSurface(state: StoreSnapshot): AgentAtt
       const tab = findSubjectTab(state, subject.workspaceId, subject.surfaceKey)
       return tab !== null && isViewedStructuredTab(state, subject.workspaceId, tab)
     },
-    // Why: in-app selection alone is not viewing — a backgrounded Orca, Settings or an away user still need unread.
+    // Why: in-app selection alone is not viewing — a backgrounded Quirky, Settings or an away user still need unread.
     isWorkspaceViewed: (workspaceId) => isWorkspaceOnScreen(state, workspaceId),
     isWorkspaceActive: (workspaceId) => state.activeWorktreeId === workspaceId,
     isWorkspaceMuted: (workspaceId) =>

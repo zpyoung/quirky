@@ -35,12 +35,12 @@ describe('CliInstaller', () => {
     'creates a dev launcher and installs a macOS symlink in the requested path',
     async () => {
       const fixture = await makeFixture()
-      const installPath = join(fixture.root, 'bin', 'orca')
+      const installPath = join(fixture.root, 'bin', 'quirky')
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: false,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         commandPathOverride: installPath,
         processPathEnv: join(fixture.root, 'bin')
@@ -48,7 +48,7 @@ describe('CliInstaller', () => {
 
       const initial = await installer.getStatus()
       expect(initial.state).toBe('not_installed')
-      expect(initial.launcherPath).toContain(join('userData', 'cli', 'bin', 'orca'))
+      expect(initial.launcherPath).toContain(join('userData', 'cli', 'bin', 'quirky'))
 
       const installed = await installer.install()
       expect(installed.state).toBe('installed')
@@ -56,8 +56,8 @@ describe('CliInstaller', () => {
 
       const launcherContent = await readFile(installed.launcherPath as string, 'utf8')
       expect(launcherContent).toContain('ELECTRON_RUN_AS_NODE=1 exec "$ELECTRON" "$CLI" "$@"')
-      expect(launcherContent).toContain(`export ORCA_USER_DATA_PATH='${fixture.userDataPath}'`)
-      expect(launcherContent).toContain('export ORCA_APP_EXECUTABLE="$ELECTRON"')
+      expect(launcherContent).toContain(`export QUIRKY_USER_DATA_PATH='${fixture.userDataPath}'`)
+      expect(launcherContent).toContain('export QUIRKY_APP_EXECUTABLE="$ELECTRON"')
       expect(launcherContent).toContain(join(fixture.appPath, 'out', 'cli', 'index.js'))
 
       const removed = await installer.remove()
@@ -73,13 +73,13 @@ describe('CliInstaller', () => {
       await mkdir(protectedDir)
       await chmod(protectedDir, 0o500)
 
-      const installPath = join(protectedDir, 'bin', 'orca')
+      const installPath = join(protectedDir, 'bin', 'quirky')
       const privilegedCommands: string[] = []
       const installer = new CliInstaller({
         platform: 'darwin',
         isPackaged: false,
         userDataPath: fixture.userDataPath,
-        execPath: '/Applications/Orca.app/Contents/MacOS/Orca',
+        execPath: '/Applications/Quirky.app/Contents/MacOS/Quirky',
         appPath: fixture.appPath,
         commandPathOverride: installPath,
         privilegedRunner: async (command: string) => {

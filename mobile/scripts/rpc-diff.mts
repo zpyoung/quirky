@@ -11,7 +11,7 @@
  */
 import { appendFileSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { diffGoldenSets, formatChangeMarkdown, formatChangeText } from './rpc-diff-report.ts'
 import {
   decodeGoldenFile,

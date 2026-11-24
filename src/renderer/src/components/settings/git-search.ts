@@ -23,7 +23,7 @@ export const getGitPaneSearchEntries = createLocalizedCatalog(() => [
     ),
     description: translate(
       'auto.components.settings.git.search.jiraIssueKeyCasingDescription',
-      'Casing of the Jira issue key in the workspace and branch names Orca suggests for new Jira-linked workspaces, such as PROJ-123-fix-login instead of proj-123-fix-login. Existing workspaces and names you type are never changed.'
+      'Casing of the Jira issue key in the workspace and branch names Quirky suggests for new Jira-linked workspaces, such as PROJ-123-fix-login instead of proj-123-fix-login. Existing workspaces and names you type are never changed.'
     ),
     keywords: [
       ...translateSearchKeyword('auto.components.settings.git.search.jira', 'jira'),
@@ -40,7 +40,7 @@ export const getGitPaneSearchEntries = createLocalizedCatalog(() => [
     ),
     description: translate(
       'auto.components.settings.git.search.0e993bf00f',
-      'When you create a workspace, Orca refreshes the remote base and safely fast-forwards your matching local branch, such as main or master. This keeps commands like git diff main...HEAD from comparing against stale history. Orca skips the update if that branch has uncommitted changes or local-only commits.'
+      'When you create a workspace, Quirky refreshes the remote base and safely fast-forwards your matching local branch, such as main or master. This keeps commands like git diff main...HEAD from comparing against stale history. Quirky skips the update if that branch has uncommitted changes or local-only commits.'
     ),
     keywords: [
       ...translateSearchKeyword('auto.components.settings.git.search.e3e9adde59', 'main'),

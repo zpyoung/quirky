@@ -61,7 +61,7 @@ export function adoptEndpointProjectCatalog(
   }
   return {
     // Why projects too: the same wire response carries them, and a remote host on another
-    // Orca version can publish a row whose declared field types do not hold.
+    // Quirky version can publish a row whose declared field types do not hold.
     projects: normalizeProjectRows([...projects]),
     setups: setups.map((setup) => adoptEndpointProjectHostSetup(target, setup))
   }

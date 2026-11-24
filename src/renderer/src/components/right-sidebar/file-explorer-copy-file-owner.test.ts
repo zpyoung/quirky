@@ -67,6 +67,6 @@ it('retains direct SSH file materialization and excludes directories', async () 
 
 it('retains the single-file and desktop-client limits', () => {
   expect(shouldShowCopyFileAction(file, null, 2)).toBe(false)
-  vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+  vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
   expect(shouldShowCopyFileAction(file)).toBe(false)
 })

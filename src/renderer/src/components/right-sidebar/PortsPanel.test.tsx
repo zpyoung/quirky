@@ -29,7 +29,7 @@ import {
   mergeWorkspacePortScans,
   openWorkspacePortInBrowser,
   refreshWorkspacePortScanAfterStop,
-  resolvePortOpenInOrcaBrowser,
+  resolvePortOpenInQuirkyBrowser,
   scanWorkspacePortsForTarget
 } from '@/lib/workspace-port-actions'
 
@@ -121,7 +121,7 @@ describe('PortsPanel runtime routing', () => {
 
   it('maps macOS Shift+Cmd-click to system-browser port routing', () => {
     expect(
-      resolvePortOpenInOrcaBrowser({
+      resolvePortOpenInQuirkyBrowser({
         settings: { openLinksInApp: true },
         event: portOpenClick({ metaKey: true, shiftKey: true }),
         isMac: true
@@ -131,7 +131,7 @@ describe('PortsPanel runtime routing', () => {
 
   it('maps non-macOS Shift+Ctrl-click to system-browser port routing', () => {
     expect(
-      resolvePortOpenInOrcaBrowser({
+      resolvePortOpenInQuirkyBrowser({
         settings: { openLinksInApp: true },
         event: portOpenClick({ ctrlKey: true, shiftKey: true }),
         isMac: false
@@ -141,7 +141,7 @@ describe('PortsPanel runtime routing', () => {
 
   it('does not treat macOS Shift+Ctrl-click as a system-browser port override', () => {
     expect(
-      resolvePortOpenInOrcaBrowser({
+      resolvePortOpenInQuirkyBrowser({
         settings: { openLinksInApp: true },
         event: portOpenClick({ ctrlKey: true, shiftKey: true }),
         isMac: true
@@ -151,14 +151,14 @@ describe('PortsPanel runtime routing', () => {
 
   it('keeps plain and no-event port opens on the saved link-routing setting', () => {
     expect(
-      resolvePortOpenInOrcaBrowser({
+      resolvePortOpenInQuirkyBrowser({
         settings: { openLinksInApp: true },
         event: portOpenClick(),
         isMac: false
       })
     ).toBe(true)
     expect(
-      resolvePortOpenInOrcaBrowser({
+      resolvePortOpenInQuirkyBrowser({
         settings: { openLinksInApp: false },
         event: null,
         isMac: false
@@ -420,7 +420,7 @@ describe('PortsPanel runtime routing', () => {
         runtimeTarget: { kind: 'local' },
         createBrowserTab: createBrowserTab as never,
         setRemoteBrowserPageHandle: setRemoteBrowserPageHandle as never,
-        openInOrcaBrowser: false
+        openInQuirkyBrowser: false
       })
     ).resolves.toEqual({ ok: true })
 
@@ -594,7 +594,7 @@ describe('PortsPanel runtime routing', () => {
         runtimeTarget: { kind: 'environment', environmentId: 'env-1' },
         createBrowserTab: createBrowserTab as never,
         setRemoteBrowserPageHandle: setRemoteBrowserPageHandle as never,
-        openInOrcaBrowser: false
+        openInQuirkyBrowser: false
       })
     ).resolves.toEqual({ ok: true })
 

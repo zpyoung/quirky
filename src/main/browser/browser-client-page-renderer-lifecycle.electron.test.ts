@@ -43,7 +43,7 @@ async function buildFixtureBundle(options: {
         entry: options.entry,
         formats: [options.format],
         fileName: () => options.fileName,
-        name: 'OrcaBrowserClientPageFixture'
+        name: 'QuirkyBrowserClientPageFixture'
       },
       outDir: options.root,
       target: options.target,
@@ -219,7 +219,7 @@ run().catch((error) => {
 }
 
 async function runFixture(): Promise<FixtureResult> {
-  const root = mkdtempSync(join(tmpdir(), 'orca-client-page-renderer-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-client-page-renderer-'))
   fixtureRoots.push(root)
   const preloadSource = join(root, 'preload-entry.ts')
   const rendererSource = join(root, 'renderer-entry.ts')

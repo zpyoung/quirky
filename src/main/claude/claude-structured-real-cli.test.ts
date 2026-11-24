@@ -139,7 +139,7 @@ describe('real CLI fixture authentication isolation', () => {
       const providerSessionId = randomUUID()
       const adapter = realAdapter(
         providerSessionId,
-        join(tmpdir(), 'orca-synthetic-signed-out'),
+        join(tmpdir(), 'quirky-synthetic-signed-out'),
         [],
         process.cwd(),
         undefined,
@@ -175,10 +175,10 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const providerSessionId = randomUUID()
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
       const events: ClaudeStructuredSessionEvent[] = []
-      const cwd = await projectWithStartHook('orca-command-init-')
+      const cwd = await projectWithStartHook('quirky-command-init-')
       await mkdir(join(cwd, '.claude', 'commands'), { recursive: true })
       await writeFile(
-        join(cwd, '.claude', 'commands', 'orca-init-catalog-proof.md'),
+        join(cwd, '.claude', 'commands', 'quirky-init-catalog-proof.md'),
         '---\ndescription: Initialization catalog proof\n---\nReply with OK.\n'
       )
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events, cwd)
@@ -202,7 +202,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
         expect(observedSubtypes).toContain('hook_started')
         expect(adapter.readCommands('real-cli-handshake')).toContainEqual(
           expect.objectContaining({
-            name: 'orca-init-catalog-proof',
+            name: 'quirky-init-catalog-proof',
             kind: 'command',
             kindUnspecified: true
           })
@@ -228,7 +228,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
       const providerSessionId = randomUUID()
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
       const events: ClaudeStructuredSessionEvent[] = []
-      const cwd = await projectWithStartHook('orca-effort-readback-', { effortLevel: 'low' })
+      const cwd = await projectWithStartHook('quirky-effort-readback-', { effortLevel: 'low' })
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events, cwd)
 
       try {
@@ -263,7 +263,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
   // Mobile native chat never reads the structured journal — it reads the CLI's own
   // transcript through native-chat/session-file-resolver.ts. So this resolves the way
   // transcript-read-cache.ts:104 does, with NO root override, and checks the answer
-  // against the root the CLI itself reports. Deriving the expected root from Orca's own
+  // against the root the CLI itself reports. Deriving the expected root from Quirky's own
   // `CLAUDE_CONFIG_DIR || ~/.claude` expression — the same one the code under test uses —
   // would move both sides together and stay green in exactly the environment that
   // blacks mobile out.
@@ -312,7 +312,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
   // adoption evidence, and it arrives on the init frame that opens each turn. This
   // asserts that frame carries the resolved model against the live binary; it goes
   // red the day the CLI stops reporting it, which is the day the confirmation
-  // silently degrades to echoing back whatever Orca sent.
+  // silently degrades to echoing back whatever Quirky sent.
   it.skipIf(!realClaudeAuthenticated)(
     'reports the model it adopted on the init frame that opens each turn',
     async () => {
@@ -361,7 +361,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
 
         expect(frames).not.toHaveLength(0)
         // Both halves: the field exists, and it names the model the picker asked
-        // for in the catalog's resolved shape rather than the id Orca sent.
+        // for in the catalog's resolved shape rather than the id Quirky sent.
         expect(frames[0]?.model).toEqual(expect.any(String))
         expect(frames[0]?.model).toMatch(/^claude-haiku-/)
         await expect(
@@ -447,7 +447,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
     async (permissionMode, cliPermissionMode) => {
       const providerSessionId = randomUUID()
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-claude-permissions-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-claude-permissions-'))
       const events: ClaudeStructuredSessionEvent[] = []
       const adapter = realAdapter(
         providerSessionId,
@@ -495,7 +495,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
           await new Promise((resolve) => setTimeout(resolve, 250))
         }
 
-        // The echo of the message Orca wrote, then a turn that ended in success.
+        // The echo of the message Quirky wrote, then a turn that ended in success.
         expect(messages()).toContainEqual(expect.objectContaining({ type: 'user', isReplay: true }))
         expect(messages().find((m) => m.type === 'result')).toMatchObject({ is_error: false })
         // The turn's own init names what the child was launched with.
@@ -516,7 +516,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
     120_000
   )
 
-  // The window a Stop naming no turn exists for: Orca has written the message, and Claude has not
+  // The window a Stop naming no turn exists for: Quirky has written the message, and Claude has not
   // started its reply, so no turn id exists. Only the live binary can say the interrupt lands there.
   it.skipIf(!realClaudeAuthenticated)(
     'stops a message interrupted before its reply starts, and takes the next one',
@@ -593,14 +593,14 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
     150_000
   )
 
-  // Orca installs a SessionStart hook, so its frame proves most real starts before the turn's
+  // Quirky installs a SessionStart hook, so its frame proves most real starts before the turn's
   // system/init, the only frame that says this CLI can cancel what it queued.
   it.skipIf(!realClaudeAuthenticated)(
     'withdraws a follow-up queued behind a turn that is stopped, behind a SessionStart hook',
     async () => {
       const providerSessionId = randomUUID()
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
-      const cwd = await projectWithStartHook('orca-queued-stop-')
+      const cwd = await projectWithStartHook('quirky-queued-stop-')
       const events: ClaudeStructuredSessionEvent[] = []
       const settlements: unknown[] = []
       const adapter = realAdapter(providerSessionId, claudeConfigDir, events, cwd, (settlement) =>
@@ -668,14 +668,14 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
     150_000
   )
 
-  // With no SessionStart hook (Orca's status hooks off), the CLI names no session before the
+  // With no SessionStart hook (Quirky's status hooks off), the CLI names no session before the
   // first turn; the chat must start on the initialize answer and take the message.
   it.skipIf(!realClaudeAuthenticated)(
     'starts and answers with every hook disabled, so no start frame precedes the turn',
     async () => {
       const providerSessionId = randomUUID()
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-no-hooks-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-no-hooks-'))
       await mkdir(join(cwd, '.claude'), { recursive: true })
       await writeFile(
         join(cwd, '.claude', 'settings.json'),
@@ -718,7 +718,7 @@ describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
   )
 
   it('turns a real silent unauthenticated startup into sign-in guidance', async () => {
-    const claudeConfigDir = await mkdtemp(join(tmpdir(), 'orca-claude-no-auth-'))
+    const claudeConfigDir = await mkdtemp(join(tmpdir(), 'quirky-claude-no-auth-'))
     const providerSessionId = randomUUID()
     const events: ClaudeStructuredSessionEvent[] = []
     const adapter = realAdapter(

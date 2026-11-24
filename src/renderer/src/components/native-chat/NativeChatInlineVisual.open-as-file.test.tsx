@@ -29,7 +29,7 @@ import { NativeChatInlineVisual } from './NativeChatInlineVisual'
 import { readNativeChatVisual } from './native-chat-visual-read-client'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { openDocPreviewSource } from '@/components/browser-pane/workspace-doc/doc-preview-document-actions'
-import { ORCA_EDITOR_FILE_SAVED_EVENT } from '@/components/editor/editor-autosave'
+import { QUIRKY_EDITOR_FILE_SAVED_EVENT } from '@/components/editor/editor-autosave'
 import { buildDocPreviewGrantRequest } from '@/lib/doc-preview-grants'
 import { readRuntimeFileContent } from '@/runtime/runtime-file-read-client'
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
@@ -38,7 +38,7 @@ import { useAppStore } from '@/store'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 
-const ROOT = '/home/host/.config/orca/chat-scratch/0123456789abcdef0123456789abcdef'
+const ROOT = '/home/host/.config/quirky/chat-scratch/0123456789abcdef0123456789abcdef'
 const PATH = `${ROOT}/usage.html`
 const ADDRESS = { worktree: `path:${ROOT}`, relativePath: 'usage.html' }
 const target = { kind: 'environment' as const, environmentId: 'env-1' }
@@ -112,7 +112,7 @@ it('previews, edits and saves a paired chat visual on its host, then shows the s
   useAppStore.setState({ openFiles: [opened] })
   act(() => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_FILE_SAVED_EVENT, { detail: { fileId: 'f1', content: '' } })
+      new CustomEvent(QUIRKY_EDITOR_FILE_SAVED_EVENT, { detail: { fileId: 'f1', content: '' } })
     )
   })
   act(() => visualReads[1]({ ok: true, revision: 'r1', sizeBytes: 9, path: PATH, unchanged: true }))

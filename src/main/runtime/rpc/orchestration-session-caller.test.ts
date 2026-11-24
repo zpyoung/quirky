@@ -6,7 +6,7 @@ import { ZodObject } from 'zod'
 import type { OrchestrationCompatibilityEvidence } from '../../../shared/orchestration-compatibility-evidence'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../shared/orchestration-session-caller-codes'
 import { DeviceRegistry } from '../device-registry'
-import { OrcaRuntimeRpcServer } from '../runtime-rpc'
+import { QuirkyRuntimeRpcServer } from '../runtime-rpc'
 import { buildRegistry } from './core'
 import { ORCHESTRATION_METHODS } from './methods/orchestration'
 import {
@@ -168,8 +168,8 @@ describe('orchestration session callers at the dispatch entry', () => {
   )
 
   it('admits the session on the real Unix-socket route and refuses it on the real paired route', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-session-caller-'))
-    const server = new OrcaRuntimeRpcServer({
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-session-caller-'))
+    const server = new QuirkyRuntimeRpcServer({
       runtime: h.runtime,
       userDataPath,
       enableWebSocket: false
@@ -206,9 +206,9 @@ describe('orchestration session callers at the dispatch entry', () => {
       h.db.getCurrentRunForCoordinator({
         terminalHandle: null,
         paneKey: null,
-        orcaSessionId: SESSION_X
+        quirkySessionId: SESSION_X
       })
-    ).toMatchObject({ objective: 'o', coordinator_orca_session_id: SESSION_X })
+    ).toMatchObject({ objective: 'o', coordinator_quirky_session_id: SESSION_X })
   })
 
   describe('refuses a session that cannot act, before any destructive or consuming lookup', () => {
@@ -217,7 +217,7 @@ describe('orchestration session callers at the dispatch entry', () => {
         objective: 'x',
         coordinatorHandle: null,
         coordinatorPaneKey: null,
-        coordinatorOrcaSessionId: SESSION_X
+        coordinatorQuirkySessionId: SESSION_X
       })
       const message = h.db.insertMessage({
         from: 'term_worker',
@@ -251,19 +251,19 @@ describe('orchestration session callers at the dispatch entry', () => {
       expect(h.db.getMessageById(messageId)).toMatchObject({ read: 0 })
     }
 
-    it('an id that names no Orca session', async () => {
+    it('an id that names no Quirky session', async () => {
       await expectRefusedWithNoEffects(
         'ffffffff-0000-4000-8000-000000000000',
         CODES.unknown,
-        /No Orca agent session .* exists on this host/
+        /No Quirky agent session .* exists on this host/
       )
     })
 
     it('a terminal handle presented as a session id', async () => {
-      await expectRefusedWithNoEffects('term_4f2c9a0b', CODES.unknown, /not an Orca session ID/)
+      await expectRefusedWithNoEffects('term_4f2c9a0b', CODES.unknown, /not an Quirky session ID/)
     })
 
-    it("a provider's session id, with a hint naming the Orca id", async () => {
+    it("a provider's session id, with a hint naming the Quirky id", async () => {
       const response = await h.dispatch(
         orchestrationRequest('orchestration.runCurrent', {}, { sessionId: PROVIDER_ID_X })
       )
@@ -271,8 +271,8 @@ describe('orchestration session callers at the dispatch entry', () => {
         ok: false,
         error: {
           code: CODES.providerId,
-          message: `${PROVIDER_ID_X} is the provider's own session id, which changes on /clear. This session's Orca session ID is orca_session_id:${SESSION_X}; set ORCA_AGENT_SESSION_ID=${SESSION_X} instead. No effects were applied.`,
-          data: { orcaSessionId: SESSION_X, effectsApplied: false }
+          message: `${PROVIDER_ID_X} is the provider's own session id, which changes on /clear. This session's Quirky session ID is quirky_session_id:${SESSION_X}; set QUIRKY_AGENT_SESSION_ID=${SESSION_X} instead. No effects were applied.`,
+          data: { quirkySessionId: SESSION_X, effectsApplied: false }
         }
       })
       await expectRefusedWithNoEffects(PROVIDER_ID_X, CODES.providerId, /changes on \/clear/)
@@ -344,7 +344,7 @@ describe('orchestration session callers at the dispatch entry', () => {
         error: { code: CODES.notLive, message: expect.stringContaining('no longer has') }
       })
       expect(
-        h.db.listRuns().runs.filter((row) => row.coordinator_orca_session_id !== null)
+        h.db.listRuns().runs.filter((row) => row.coordinator_quirky_session_id !== null)
       ).toEqual([])
     })
 
@@ -406,9 +406,9 @@ describe('orchestration session callers at the dispatch entry', () => {
           )
         )
       ).run
-      expect(h.db.getRunRaw(idOf(run))?.coordinator_orca_session_id).toBe(SESSION_X)
+      expect(h.db.getRunRaw(idOf(run))?.coordinator_quirky_session_id).toBe(SESSION_X)
 
-      const stranger = 'orca_session_id:0b5e2d7c-9a41-4c3e-8f62-7d1a3e5b9c08'
+      const stranger = 'quirky_session_id:0b5e2d7c-9a41-4c3e-8f62-7d1a3e5b9c08'
       const refused = await h.dispatch(
         orchestrationRequest(
           'orchestration.runCreate',
@@ -450,7 +450,7 @@ describe('orchestration session callers at the dispatch entry', () => {
         )
         expect(resultOf(listed)).toMatchObject({ runId })
 
-        const stranger = 'orca_session_id:0b5e2d7c-9a41-4c3e-8f62-7d1a3e5b9c08'
+        const stranger = 'quirky_session_id:0b5e2d7c-9a41-4c3e-8f62-7d1a3e5b9c08'
         const refused = await h.dispatch(
           orchestrationRequest(method, { run: runId, [param]: stranger }, { sessionId: SESSION_Y })
         )
@@ -481,6 +481,6 @@ describe('orchestration session callers at the dispatch entry', () => {
 
     const run = resultOf(await h.dispatch(request)).run
     expect(run).toMatchObject({ coordinator_handle: 'term_worker' })
-    expect(h.db.getRunRaw(idOf(run))?.coordinator_orca_session_id).toBeNull()
+    expect(h.db.getRunRaw(idOf(run))?.coordinator_quirky_session_id).toBeNull()
   })
 })

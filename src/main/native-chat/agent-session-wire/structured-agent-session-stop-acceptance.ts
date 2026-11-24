@@ -15,7 +15,7 @@ import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { CommandReceiptExistsError } from '../agent-session-journal/command-receipt-transaction'
 import {
   classifyJournalOpenFailure,
-  isJournalWrittenByNewerOrca,
+  isJournalWrittenByNewerQuirky,
   journalOpenRefusal
 } from '../agent-session-journal/journal-open-failure'
 import type { JournalStopAcceptanceInput } from '../agent-session-journal/journal-stop-acceptance'
@@ -152,11 +152,11 @@ export function stopNotSaved(
     sessionId: ctx.sessionId,
     error
   })
-  // Damage SQLite proves, a newer Orca's chat or a refusal the journal classified: as an open says.
+  // Damage SQLite proves, a newer Quirky's chat or a refusal the journal classified: as an open says.
   if (
     isAgentSessionRefusalError(error) ||
     classifyJournalOpenFailure(error) === 'journalCorrupt' ||
-    isJournalWrittenByNewerOrca(error)
+    isJournalWrittenByNewerQuirky(error)
   ) {
     return { ok: false, refusal: journalOpenRefusal(error) }
   }

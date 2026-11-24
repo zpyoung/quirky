@@ -9,7 +9,7 @@ This is a separate source-level explanation for stale terminal ownership such as
 From a checkout with dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/stale-pty-inventory/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/stale-pty-inventory/reproduce.mjs
 ```
 
 The script runs the actual runtime inventory, registration, spawn, and exit methods with deferred provider responses. It uses temporary Vitest configuration to reverse only `fix.patch` for the baseline, leaves checkout files untouched, and removes its temporary files. It launches no app, enumerates no real processes, and installs nothing. Node subprocesses use the repository's portable `runProcess` implementation.

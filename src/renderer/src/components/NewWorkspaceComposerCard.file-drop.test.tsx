@@ -63,7 +63,7 @@ beforeEach(() => {
     results: [
       {
         status: 'imported',
-        destPath: '/folder/.orca/drops/a.txt',
+        destPath: '/folder/.quirky/drops/a.txt',
         kind: 'file'
       }
     ]
@@ -175,7 +175,7 @@ describe('new workspace card file drop ownership', () => {
         expect(uploads.importPaths).toHaveBeenCalledExactlyOnceWith(
           expect.objectContaining({ worktreePath: '/folder', connectionId: 'ssh-a' }),
           ['/drop/a.txt'],
-          '/folder/.orca/drops',
+          '/folder/.quirky/drops',
           expect.any(Object)
         )
         expect(attach).toHaveBeenCalledOnce()

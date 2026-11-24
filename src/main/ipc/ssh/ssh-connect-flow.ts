@@ -11,7 +11,7 @@ import {
   runAttributedToSshOwner
 } from '../../ssh/connection/ssh-connection-attribution'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
-import { getManagedOrcadFenceEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
+import { getManagedQuirkydFenceEnvironmentId } from '../../../shared/managed-quirkyd-ssh-owner'
 import { noteRuntimeEnvironmentConnectRequested } from '../runtime-environments/runtime-environment-pairing-refusal-registry'
 import {
   decideHostServer,
@@ -45,7 +45,7 @@ export async function connectTarget(
   targetId: string,
   options: { automatic?: boolean } = {}
 ): Promise<SshConnectionState> {
-  const e2eProbePath = process.env.ORCA_E2E_FORBID_LOCAL_SSH_CONNECT_PROBE
+  const e2eProbePath = process.env.QUIRKY_E2E_FORBID_LOCAL_SSH_CONNECT_PROBE
   if (e2eProbePath) {
     appendFileSync(e2eProbePath, `${JSON.stringify(targetId)}\n`)
     throw new Error('e2e_forbidden_local_ssh_connect')
@@ -60,7 +60,7 @@ export async function connectTarget(
   }
   clearSshCredentialDeclined(targetId)
   // Why explicit only: an automatic connect (startup restore) must not lift the re-pair cap.
-  const managedEnvironmentId = getManagedOrcadFenceEnvironmentId(
+  const managedEnvironmentId = getManagedQuirkydFenceEnvironmentId(
     getSshTargetRegistryStore()?.getTarget(targetId)
   )
   if (managedEnvironmentId) {

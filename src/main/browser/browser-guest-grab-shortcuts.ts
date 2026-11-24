@@ -12,7 +12,7 @@ export function setupGrabShortcutForwarding(args: {
 }): () => void {
   const { browserTabId, guest, resolveRenderer, hasActiveGrabOp, getKeybindings } = args
   const handler = (event: Electron.Event, input: Electron.Input): void => {
-    // Why: agent-injected keys must not run Orca shortcuts or grab actions (#20595).
+    // Why: agent-injected keys must not run Quirky shortcuts or grab actions (#20595).
     if (isAgentInjectingInput(guest)) {
       return
     }
@@ -32,7 +32,7 @@ export function setupGrabShortcutForwarding(args: {
       if (!renderer) {
         return
       }
-      // Why: a focused guest swallows bare keys; during an active grab pick, plain C/S are Orca's copy/screenshot, not page typing.
+      // Why: a focused guest swallows bare keys; during an active grab pick, plain C/S are Quirky's copy/screenshot, not page typing.
       event.preventDefault()
       renderer.send('browser:grabActionShortcut', { browserPageId: browserTabId, key: bareKey })
       return

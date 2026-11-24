@@ -133,7 +133,7 @@ describe("Stop's event", () => {
     await eventually(async () => expect(await rig.handoff(later)).toBeDefined())
   })
 
-  it("any accepted turn sent after it lifts it, Orca's own mail included; a later Stop supersedes", async () => {
+  it("any accepted turn sent after it lifts it, Quirky's own mail included; a later Stop supersedes", async () => {
     const working = await rig.workingSend()
     const first = await queuedDraft('first')
     await rig.stop()

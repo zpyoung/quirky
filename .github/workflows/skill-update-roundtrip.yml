@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
-        # Why: `pinned` runs the skills CLI version Orca ships (SKILLS_CLI_VERSION).
+        # Why: `pinned` runs the skills CLI version Quirky ships (SKILLS_CLI_VERSION).
         skills-cli: [pinned]
         include:
           - os: ubuntu-latest

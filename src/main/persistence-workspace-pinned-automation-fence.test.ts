@@ -115,7 +115,7 @@ function pinnedState(generation: number, overrides: Record<string, unknown> = {}
 async function createStoreFromState(state: Record<string, unknown>) {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
-    join(testState.dir, 'orca-data.json'),
+    join(testState.dir, 'quirky-data.json'),
     JSON.stringify({ ...getDefaultPersistedState(testState.dir), ...state }),
     'utf-8'
   )
@@ -127,7 +127,7 @@ async function createStoreFromState(state: Record<string, unknown>) {
   installFakeAppEnvironment({ getPath: () => testState.dir })
   const { Store, initDataPath } = await import('./persistence')
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 async function reloadStore() {
@@ -135,12 +135,12 @@ async function reloadStore() {
   installFakeAppEnvironment({ getPath: () => testState.dir })
   const { Store, initDataPath } = await import('./persistence')
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 /** The same target id now carries a different registration incarnation. */
 function replaceStoredTargetGeneration(generation: number): void {
-  const file = join(testState.dir, 'orca-data.json')
+  const file = join(testState.dir, 'quirky-data.json')
   const state = JSON.parse(readPersistedStateJson(file))
   state.sshTargets = [prodTarget(generation)]
   state.sshTargetGenerationCounter = generation
@@ -168,7 +168,7 @@ function createPinnedAutomation(store: {
 beforeEach(() => {
   hasCreatedStoreInCase = false
   resetRetirementCollisionKeyCacheForTests()
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-pinned-fence-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-pinned-fence-'))
 })
 
 afterEach(async () => {

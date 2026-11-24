@@ -1,19 +1,19 @@
 {
   "comparison": "Actual runtime inventory, spawn, registration, and exit methods with controlled provider responses; before reverses only fix.patch in a temporary Vite transform",
   "sourceHashes": {
-    "src/main/runtime/orca-runtime-invalidate-all-handles-for-pty.ts": {
+    "src/main/runtime/quirky-runtime-invalidate-all-handles-for-pty.ts": {
       "before": "5ee6ba0ae3407207ea7f894a83e3325851f8cd6b4b7b8b5adf0be0a6def7d244",
       "after": "0eeaf4f89324aea51c49fd4149d632635dbf327d5d91b251e65488bb3852e3ce"
     },
-    "src/main/runtime/orca-runtime-on-pty-exit.ts": {
+    "src/main/runtime/quirky-runtime-on-pty-exit.ts": {
       "before": "a6512283ac5ee9c45db21a96d1eb228d2c859f1fd0df16300a377fbc126a2557",
       "after": "1750058230590062eb0e6488faa39c4def121008d9a7fbb533b98e7d4e31f209"
     },
-    "src/main/runtime/orca-runtime-refresh-pty-worktree-records-with-controller-inventory.ts": {
+    "src/main/runtime/quirky-runtime-refresh-pty-worktree-records-with-controller-inventory.ts": {
       "before": "e64d819f6a3694168eca4ab99ce5d01d82f57ea8cb226b0aebe78201f74841ab",
       "after": "d0c8228127079e4a87ef5b6cc8e73982ee15eef34f19b0c59a7e224bde2f7fcd"
     },
-    "src/main/runtime/orca-runtime-register-pty.ts": {
+    "src/main/runtime/quirky-runtime-register-pty.ts": {
       "before": "1f10fb6b9ceefb192e1fde77056897d0b913e6ea21be7b30f60473c1876dc178",
       "after": "8855f7ea968e9a759377d4bc3a34c184398b9274d5793e7a1a13a61025c7cbcb"
     },

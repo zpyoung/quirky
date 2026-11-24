@@ -10,7 +10,7 @@ import type {
   RuntimeTerminalSplit,
   RuntimeTerminalSummary
 } from '../../src/shared/runtime-types'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   readPaneIdentitySnapshot,
   waitForActiveTerminalManager,
@@ -29,7 +29,7 @@ const PARKING_DELAY_MS = 500
 const HISTORICAL_SPLIT_TIMEOUT_MS = 10_000
 
 test.use({
-  orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
+  quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
 })
 
 type CliSplitResponse = {
@@ -120,7 +120,7 @@ async function runParkedSplitCli(
     const result = await execFileAsync(
       process.execPath,
       [
-        path.join(repoRoot, 'config', 'scripts', 'orca-dev.mjs'),
+        path.join(repoRoot, 'config', 'scripts', 'quirky-dev.mjs'),
         'terminal',
         'split',
         '--terminal',
@@ -129,7 +129,7 @@ async function runParkedSplitCli(
       ],
       {
         cwd: repoRoot,
-        env: { ...process.env, ORCA_DEV_USER_DATA_PATH: userDataDir },
+        env: { ...process.env, QUIRKY_DEV_USER_DATA_PATH: userDataDir },
         timeout: HISTORICAL_SPLIT_TIMEOUT_MS + 5_000
       }
     )
@@ -183,8 +183,8 @@ async function expectPaneKeyboardRoundTrip(
   label: string
 ): Promise<void> {
   const nonce = randomUUID().replaceAll('-', '')
-  const marker = `ORCA_PARKED_SPLIT_${label}_${nonce}`
-  const command = `node -e "console.log('ORCA_PARKED_' + 'SPLIT_${label}_${nonce}')"`
+  const marker = `QUIRKY_PARKED_SPLIT_${label}_${nonce}`
+  const command = `node -e "console.log('QUIRKY_PARKED_' + 'SPLIT_${label}_${nonce}')"`
   const pane = page.locator(
     `[data-terminal-tab-id=${JSON.stringify(tabId)}][data-terminal-layout-leaf-ids] .pane[data-leaf-id=${JSON.stringify(leafId)}]`
   )
@@ -198,17 +198,17 @@ async function expectPaneKeyboardRoundTrip(
 
 test('CLI splits an exact cold-parked tab without stealing the active tab or focus', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(180_000)
   const pageErrors: string[] = []
-  orcaPage.on('pageerror', (error) => pageErrors.push(String(error)))
+  quirkyPage.on('pageerror', (error) => pageErrors.push(String(error)))
 
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const initial = await waitForPaneIdentitySnapshot(orcaPage, 1)
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const initial = await waitForPaneIdentitySnapshot(quirkyPage, 1)
   const targetTabId = initial.tabId
   const sourcePane = initial.panes[0]
   if (!sourcePane?.ptyId) {
@@ -219,17 +219,17 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
   const client = new RuntimeClient(userDataDir, 30_000)
   const sourceTerminal = await resolveTerminal(client, worktreeId, targetTabId, sourcePane.leafId)
 
-  await parkHiddenTabBehindDecoy(orcaPage, worktreeId, targetTabId, {
+  await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, targetTabId, {
     parkDelayMs: PARKING_DELAY_MS
   })
-  const decoyTabId = await getActiveTabId(orcaPage)
+  const decoyTabId = await getActiveTabId(quirkyPage)
   if (!decoyTabId || decoyTabId === targetTabId) {
     throw new Error('Parking did not leave a distinct decoy tab active')
   }
-  await orcaPage
+  await quirkyPage
     .locator(`[data-terminal-tab-id=${JSON.stringify(decoyTabId)}] .xterm:visible`)
     .click({ force: true })
-  const contextBefore = await readActiveUiContext(orcaPage)
+  const contextBefore = await readActiveUiContext(quirkyPage)
   expect(contextBefore).toMatchObject({
     activeTabForWorktree: decoyTabId,
     activeTabId: decoyTabId,
@@ -238,7 +238,7 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
     domActiveTabId: decoyTabId,
     focusedTerminalTabId: decoyTabId
   })
-  const mountedBefore = await orcaPage.evaluate(() =>
+  const mountedBefore = await quirkyPage.evaluate(() =>
     Array.from(window.__paneManagers?.keys() ?? []).sort()
   )
   expect(mountedBefore).not.toContain(targetTabId)
@@ -248,7 +248,7 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
   await expect
     .poll(
       async () => {
-        mountedDuringSplit = await orcaPage.evaluate(() =>
+        mountedDuringSplit = await quirkyPage.evaluate(() =>
           Array.from(window.__paneManagers?.keys() ?? []).sort()
         )
         return mountedDuringSplit.includes(targetTabId)
@@ -273,14 +273,14 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
     }
   })
   expect(splitRun.response.result.split.handle).toMatch(/^term_/)
-  expect(await readActiveUiContext(orcaPage)).toEqual(contextBefore)
+  expect(await readActiveUiContext(quirkyPage)).toEqual(contextBefore)
 
-  await waitForTabParked(orcaPage, targetTabId, { parkDelayMs: PARKING_DELAY_MS })
-  expect(await readActiveUiContext(orcaPage)).toEqual(contextBefore)
+  await waitForTabParked(quirkyPage, targetTabId, { parkDelayMs: PARKING_DELAY_MS })
+  expect(await readActiveUiContext(quirkyPage)).toEqual(contextBefore)
 
-  await activateTerminalTab(orcaPage, worktreeId, targetTabId)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const revealed = await waitForPaneIdentitySnapshot(orcaPage, 2)
+  await activateTerminalTab(quirkyPage, worktreeId, targetTabId)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const revealed = await waitForPaneIdentitySnapshot(quirkyPage, 2)
   const restoredSource = revealed.panes.find((pane) => pane.leafId === sourcePane.leafId)
   const createdPane = revealed.panes.find((pane) => pane.leafId !== sourcePane.leafId)
   expect(restoredSource).toMatchObject({ ptyId: sourcePane.ptyId })
@@ -312,7 +312,7 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
     listedAfterReveal.find((terminal) => terminal.handle === splitRun.response.result.split.handle)
   ).toMatchObject({ leafId: createdPane.leafId, ptyId: createdPane.ptyId })
 
-  const targetSurface = orcaPage.locator(
+  const targetSurface = quirkyPage.locator(
     `[data-terminal-tab-id=${JSON.stringify(targetTabId)}][data-terminal-layout-leaf-ids]`
   )
   await expect(targetSurface).toBeVisible()
@@ -325,17 +325,17 @@ test('CLI splits an exact cold-parked tab without stealing the active tab or foc
     targetSurface.locator(`.pane[data-leaf-id=${JSON.stringify(createdPane.leafId)}]`)
   ).toBeVisible()
 
-  await enablePaneAccessibility(orcaPage, targetTabId)
+  await enablePaneAccessibility(quirkyPage, targetTabId)
   await expect(targetSurface.locator('.xterm-accessibility-tree')).toHaveCount(2)
-  await expectPaneKeyboardRoundTrip(orcaPage, targetTabId, sourcePane.leafId, 'SOURCE')
-  await expectPaneKeyboardRoundTrip(orcaPage, targetTabId, createdPane.leafId, 'CREATED')
+  await expectPaneKeyboardRoundTrip(quirkyPage, targetTabId, sourcePane.leafId, 'SOURCE')
+  await expectPaneKeyboardRoundTrip(quirkyPage, targetTabId, createdPane.leafId, 'CREATED')
 
   await testInfo.attach('parked-cli-split-final.png', {
-    body: await orcaPage.screenshot(),
+    body: await quirkyPage.screenshot(),
     contentType: 'image/png'
   })
   expect(pageErrors).toEqual([])
-  expect(await readPaneIdentitySnapshot(orcaPage)).toMatchObject({
+  expect(await readPaneIdentitySnapshot(quirkyPage)).toMatchObject({
     panes: revealed.panes,
     ptyIdsByLeafId: revealed.ptyIdsByLeafId,
     tabId: revealed.tabId

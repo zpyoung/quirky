@@ -1,11 +1,11 @@
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   type PublicKnownRuntimeEnvironment
 } from '../../../../shared/runtime-environments'
 
 type CatalogEnvironment = Pick<
   PublicKnownRuntimeEnvironment,
-  'id' | 'createdAt' | 'pairingRevision' | 'orcadDeployment' | 'hostKeyFingerprint'
+  'id' | 'createdAt' | 'pairingRevision' | 'quirkydDeployment' | 'hostKeyFingerprint'
 >
 
 /** Ids whose pairing rotated since the previous catalog. */
@@ -35,12 +35,12 @@ function sameRegistration(
 ): boolean {
   // Why a hand-paired server counts only with both keys: main replaces its pairing in place only for
   // the saved key, so the key check below is the whole proof; without one there is none.
-  if (before && after && !before.orcadDeployment && !after.orcadDeployment) {
+  if (before && after && !before.quirkydDeployment && !after.quirkydDeployment) {
     return Boolean(before.hostKeyFingerprint && after.hostKeyFingerprint)
   }
   // Why SSH only: a WSL deployment takes the stricter re-pair path until its host identity lands.
-  const left = before && getOrcadSshDeployment(before)
-  const right = after && getOrcadSshDeployment(after)
+  const left = before && getQuirkydSshDeployment(before)
+  const right = after && getQuirkydSshDeployment(after)
   return Boolean(
     left &&
     right &&

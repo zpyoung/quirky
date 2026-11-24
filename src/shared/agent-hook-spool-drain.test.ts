@@ -19,7 +19,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const endpointDir = mkdtempSync(join(tmpdir(), 'orca-spool-order-'))
+  const endpointDir = mkdtempSync(join(tmpdir(), 'quirky-spool-order-'))
   directories.push(endpointDir)
   mkdirSync(join(endpointDir, 'spool'))
   const path = join(endpointDir, 'spool', 'pane.jsonl')

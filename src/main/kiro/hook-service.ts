@@ -47,7 +47,7 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     return [
       '@echo off',
       'setlocal',
-      'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
+      'if defined QUIRKY_AGENT_HOOK_ENDPOINT if exist "%QUIRKY_AGENT_HOOK_ENDPOINT%" call "%QUIRKY_AGENT_HOOK_ENDPOINT%" 2>nul',
       ...buildWindowsHookEnvironmentGuardLines(),
       buildWindowsAgentHookCurlPostCommand('kiro'),
       'exit /b 0',
@@ -60,12 +60,12 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     '#!/bin/sh',
     ...buildPosixHookPayloadCapture(),
     ...buildPosixHookSpoolLines('kiro'),
-    // Why: the endpoint file holds the live port/token; a PTY that outlived an Orca
+    // Why: the endpoint file holds the live port/token; a PTY that outlived an Quirky
     // restart carries stale env, so source it to reach the new server.
-    'if [ -n "$ORCA_AGENT_HOOK_ENDPOINT" ] && [ -r "$ORCA_AGENT_HOOK_ENDPOINT" ]; then',
-    '  . "$ORCA_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
+    'if [ -n "$QUIRKY_AGENT_HOOK_ENDPOINT" ] && [ -r "$QUIRKY_AGENT_HOOK_ENDPOINT" ]; then',
+    '  . "$QUIRKY_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
     'fi',
-    'if [ -z "$ORCA_AGENT_HOOK_PORT" ] || [ -z "$ORCA_AGENT_HOOK_TOKEN" ] || [ -z "$ORCA_PANE_KEY" ]; then',
+    'if [ -z "$QUIRKY_AGENT_HOOK_PORT" ] || [ -z "$QUIRKY_AGENT_HOOK_TOKEN" ] || [ -z "$QUIRKY_PANE_KEY" ]; then',
     '  spool_hook_event',
     '  exit 0',
     'fi',
@@ -78,7 +78,7 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
 }
 
 function noAgentsDetail(agentsDir: string): string {
-  return `No custom Kiro agents in ${agentsDir}. Kiro's built-in default agent cannot carry hooks; create one with \`kiro-cli agent create\` and make it the default so Orca can track Kiro's status`
+  return `No custom Kiro agents in ${agentsDir}. Kiro's built-in default agent cannot carry hooks; create one with \`kiro-cli agent create\` and make it the default so Quirky can track Kiro's status`
 }
 
 type AgentFileRead =
@@ -147,7 +147,7 @@ function buildStatus(agentsDir: string, files: AgentFileRead[]): AgentHookInstal
     } else if (present.size > 0) {
       problems.push(`${file.fileName} is missing managed hooks for: ${missing.join(', ')}`)
     } else {
-      problems.push(`${file.fileName} has no Orca hooks`)
+      problems.push(`${file.fileName} has no Quirky hooks`)
     }
   }
   if (problems.length === 0) {
@@ -163,7 +163,7 @@ function buildStatus(agentsDir: string, files: AgentFileRead[]): AgentHookInstal
   return status(agentsDir, 'partial', problems.join('; '), managedHooksPresent)
 }
 
-/** Installs Orca's status hooks into every global Kiro agent config. */
+/** Installs Quirky's status hooks into every global Kiro agent config. */
 export class KiroHookService {
   async refreshManagedScripts(): Promise<void> {
     await refreshManagedScriptIfPresent(getKiroManagedScriptPath(), getManagedScript())
@@ -215,7 +215,7 @@ export class KiroHookService {
     kiroHomeDir?: string
   ): Promise<AgentHookInstallStatus> {
     const agentsDir = getKiroRemoteAgentsDir(remoteHome, kiroHomeDir)
-    const scriptPath = `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/kiro-hook.sh`
+    const scriptPath = `${remoteHome.replace(/\/$/, '')}/.quirky/agent-hooks/kiro-hook.sh`
     try {
       const fileNames = ((await listRemoteDirectory(sftp, agentsDir)) ?? [])
         .filter(isKiroAgentConfigFileName)

@@ -3,7 +3,7 @@
  * Volatile values become structural labels so two runs of one commit compare equal.
  */
 
-export const TERMINAL_LAYOUT_PARITY_OUT_ENV = 'ORCA_TERMINAL_LAYOUT_PARITY_OUT'
+export const TERMINAL_LAYOUT_PARITY_OUT_ENV = 'QUIRKY_TERMINAL_LAYOUT_PARITY_OUT'
 
 export type RawParityCheckpoint = {
   label: string

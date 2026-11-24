@@ -282,7 +282,7 @@ export abstract class BrowserManagerNavigation extends BrowserManagerVisibility 
     })
     this.forwardOrQueuePopupEvent(openerGuest.id, {
       origin: safeOrigin(targetUrl),
-      action: options.webContents || options.nativeWindow ? 'opened-in-orca' : 'blocked'
+      action: options.webContents || options.nativeWindow ? 'opened-in-quirky' : 'blocked'
     })
     // Why: match Electron's child-window lifecycle so closing the owning tab doesn't orphan session-bearing popups.
     const closePopupWithOpener = (): void => popup.close()

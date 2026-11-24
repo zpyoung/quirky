@@ -369,7 +369,7 @@ describe('NativeChatImageAttachments', () => {
   })
 
   it.each([
-    ['a pasted screenshot in the temp folder', '/tmp/orca-paste-1.png'],
+    ['a pasted screenshot in the temp folder', '/tmp/quirky-paste-1.png'],
     ['an agent image outside the project', '/Users/me/.codex/generated/plot.png']
   ])('reads %s as a chat image, whoever sent it', async (_label, path) => {
     const container = document.createElement('div')

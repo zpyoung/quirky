@@ -34,7 +34,7 @@ export function useMobileNativeChatVisualRenderer(
   )
 }
 
-/** A `::orca-visual{...}` line in a finished assistant reply, rendered from the chat's host. */
+/** A `::quirky-visual{...}` line in a finished assistant reply, rendered from the chat's host. */
 export const MobileNativeChatVisual = memo(function MobileNativeChatVisual({
   directive,
   source

@@ -26,7 +26,7 @@ function isLegacyPlaintextOpenCodeGoApiKey(value: string): boolean {
 
 /**
  * Moves the #22551 settings value out of settings and parks its ciphertext undecrypted, so every
- * Store consumer (orcad included) writes it back until the desktop migration gives it a new home.
+ * Store consumer (quirkyd included) writes it back until the desktop migration gives it a new home.
  */
 export function retainLegacyOpenCodeGoApiKey(
   settings: unknown,
@@ -45,7 +45,7 @@ export function retainLegacyOpenCodeGoApiKey(
     secrets.retainSealed(LEGACY_OPENCODE_GO_API_KEY_SLOT, sealed)
     return
   }
-  // Why: orcad-only profiles never migrate, so seal it now; without encryption #22551 kept it plaintext too.
+  // Why: quirkyd-only profiles never migrate, so seal it now; without encryption #22551 kept it plaintext too.
   const encrypted = secrets.encrypt(LEGACY_OPENCODE_GO_API_KEY_SLOT, sealed)
   secrets.retainSealed(
     LEGACY_OPENCODE_GO_API_KEY_SLOT,

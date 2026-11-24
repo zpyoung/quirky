@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { isWindowVisible } from '@/lib/window-visibility-interval'
 import {
-  ORCA_TERMINAL_COMMAND_FINISHED_EVENT,
+  QUIRKY_TERMINAL_COMMAND_FINISHED_EVENT,
   type TerminalCommandFinishedEventDetail
 } from '@/hooks/terminal-command-finished-event'
 import type { GitStatusMetadataChangedEvent } from '../../../../shared/worktree/types'
@@ -81,9 +81,9 @@ export function useGitStatusPushSignalRefresh({
       }
       fetchStatusRef.current()
     }
-    window.addEventListener(ORCA_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
+    window.addEventListener(QUIRKY_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
     return () => {
-      window.removeEventListener(ORCA_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
+      window.removeEventListener(QUIRKY_TERMINAL_COMMAND_FINISHED_EVENT, handleCommandFinished)
     }
   }, [enabled, activeWorktreeId])
 }

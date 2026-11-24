@@ -1,5 +1,5 @@
 /**
- * Help text for the flags that only `orca ledger` uses.
+ * Help text for the flags that only `quirky ledger` uses.
  *
  * Kept out of the shared flag table because several of these names (`--title`,
  * `--workspace`, `--status`) already describe unrelated things for terminal,

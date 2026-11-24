@@ -11,7 +11,7 @@ import {
   takeNextEditorFocusRequestToken
 } from '../focus/editor-focus-reveal'
 import { applyOpenFileToState, type OpenFileApplyScratch } from './open-file-apply'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { recordReopenedEditorFileInLayoutOwner } from '../tabs/editor-tab-layout-owner'
 
 export function createOpenFileAction(
@@ -30,7 +30,7 @@ export function createOpenFileAction(
       editorItemIsPreview: false,
       refused: false
     }
-    const before = ORCA_LAYOUT_OWNER_IS_MAIN ? get() : null
+    const before = QUIRKY_LAYOUT_OWNER_IS_MAIN ? get() : null
     set((s) => applyOpenFileToState(s, file, options, scratch, linkIntent))
     if (scratch.refused) {
       return { fileId: scratch.editorItemFileId, result: null }
@@ -53,7 +53,7 @@ export function createOpenFileAction(
       scratch.editorItemTargetGroupId,
       options?.selection
     )
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && before) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && before) {
       recordReopenedEditorFileInLayoutOwner(
         before,
         get(),

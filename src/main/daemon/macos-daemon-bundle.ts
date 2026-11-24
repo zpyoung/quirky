@@ -1,15 +1,15 @@
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, realpath, rename } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { cloneMacTree } from '../macos-tree-clone'
 import { rm } from '../asar-transparent-fs'
 import { ensurePrivateDir } from './daemon-private-file-modes'
 import { inspectMacProcessCodeIdentity } from './daemon-mac-code-identity'
 
 /** Packaged by config/scripts/macos-terminal-host-bundle.cjs; its main executable is plain Node. */
-export const MAC_TERMINAL_HOST_BUNDLE = 'Orca Terminal Host.app'
-export const MAC_TERMINAL_HOST_EXECUTABLE = 'orca-terminal-host'
+export const MAC_TERMINAL_HOST_BUNDLE = 'Quirky Terminal Host.app'
+export const MAC_TERMINAL_HOST_EXECUTABLE = 'quirky-terminal-host'
 /** One published copy per helper build: `terminal-host-<helper CDHash>`. */
 export const MAC_DAEMON_COPY_PREFIX = 'terminal-host-'
 
@@ -101,7 +101,7 @@ export async function materializeMacDaemonBundle(
     const stagedBundle = macDaemonCopyBundlePath(staging)
     await mkdir(dirname(stagedBundle))
     await cloneMacTree(source, stagedBundle, signal)
-    // The copy must satisfy the running app's requirement to inherit Orca's privacy grants.
+    // The copy must satisfy the running app's requirement to inherit Quirky's privacy grants.
     const requirement = await readCodesignField(
       ['--display', '-r-', appBundle],
       'designated => ',

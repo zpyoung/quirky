@@ -4,18 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MacosTccPromptWatch,
   type LogStreamChild,
-  isOrcaAttributedPrompt,
+  isQuirkyAttributedPrompt,
   parseTccPromptEvent
 } from './macos-tcc-prompt-watch'
 
 // Captured verbatim from `log stream --predicate 'subsystem == "com.apple.TCC"'`
 // on macOS 26.5 while a real consent dialog was displayed and denied.
 const REAL_PROMPT_LINE =
-  '2026-07-27 15:35:26.136 Df tccd[79149:c81551c] [com.apple.TCC:access] AUTHREQ_PROMPTING: msgID=80871.81, service=kTCCServiceSystemPolicyDocumentsFolder, subject=Sub:{com.orca.tccprobe.shapecapture}Resp:{TCCDProcess: identifier=com.orca.tccprobe.shapecapture, pid=74171, auid=501, euid=501, binary_path=/private/tmp/tccprobe/TccProbe.app/Contents/MacOS/TccProbe},'
+  '2026-07-27 15:35:26.136 Df tccd[79149:c81551c] [com.apple.TCC:access] AUTHREQ_PROMPTING: msgID=80871.81, service=kTCCServiceSystemPolicyDocumentsFolder, subject=Sub:{com.quirky.tccprobe.shapecapture}Resp:{TCCDProcess: identifier=com.quirky.tccprobe.shapecapture, pid=74171, auid=501, euid=501, binary_path=/private/tmp/tccprobe/TccProbe.app/Contents/MacOS/TccProbe},'
 
-// Same shape, but the #9756 case: an agent CLI accesses, Orca is held responsible.
-const ORCA_APPDATA_LINE =
-  '2026-07-27 15:40:02.001 Df tccd[79149:c81551c] [com.apple.TCC:access] AUTHREQ_PROMPTING: msgID=80871.99, service=kTCCServiceSystemPolicyAppData, subject=Sub:{node-5555494487fbc7467d473fd8b0a397018cbf954b}Resp:{TCCDProcess: identifier=com.zpyoung.orca, pid=47548, auid=501, euid=501, binary_path=/opt/homebrew/Cellar/node/26.5.0/bin/node},'
+// Same shape, but the #9756 case: an agent CLI accesses, Quirky is held responsible.
+const QUIRKY_APPDATA_LINE =
+  '2026-07-27 15:40:02.001 Df tccd[79149:c81551c] [com.apple.TCC:access] AUTHREQ_PROMPTING: msgID=80871.99, service=kTCCServiceSystemPolicyAppData, subject=Sub:{node-5555494487fbc7467d473fd8b0a397018cbf954b}Resp:{TCCDProcess: identifier=com.zpyoung.quirky, pid=47548, auid=501, euid=501, binary_path=/opt/homebrew/Cellar/node/26.5.0/bin/node},'
 
 // Preflight checks dominate the TCC subsystem and must never count as a dialog.
 const PREFLIGHT_LINE =
@@ -25,16 +25,16 @@ describe('parseTccPromptEvent', () => {
   it('parses a real captured AUTHREQ_PROMPTING line', () => {
     expect(parseTccPromptEvent(REAL_PROMPT_LINE)).toEqual({
       service: 'kTCCServiceSystemPolicyDocumentsFolder',
-      accessingIdentifier: 'com.orca.tccprobe.shapecapture',
-      responsibleIdentifier: 'com.orca.tccprobe.shapecapture',
+      accessingIdentifier: 'com.quirky.tccprobe.shapecapture',
+      responsibleIdentifier: 'com.quirky.tccprobe.shapecapture',
       binaryPath: '/private/tmp/tccprobe/TccProbe.app/Contents/MacOS/TccProbe'
     })
   })
 
   it('separates the accessing binary from the responsible app', () => {
-    const event = parseTccPromptEvent(ORCA_APPDATA_LINE)
-    // The whole point of #9756: the dialog says Orca, but node did the access.
-    expect(event?.responsibleIdentifier).toBe('com.zpyoung.orca')
+    const event = parseTccPromptEvent(QUIRKY_APPDATA_LINE)
+    // The whole point of #9756: the dialog says Quirky, but node did the access.
+    expect(event?.responsibleIdentifier).toBe('com.zpyoung.quirky')
     expect(event?.accessingIdentifier).toBe('node-5555494487fbc7467d473fd8b0a397018cbf954b')
     expect(event?.binaryPath).toBe('/opt/homebrew/Cellar/node/26.5.0/bin/node')
   })
@@ -48,18 +48,18 @@ describe('parseTccPromptEvent', () => {
   })
 })
 
-describe('isOrcaAttributedPrompt', () => {
-  it('accepts the app and detached terminal helper across Orca build identities', () => {
+describe('isQuirkyAttributedPrompt', () => {
+  it('accepts the app and detached terminal helper across Quirky build identities', () => {
     for (const id of [
-      'com.zpyoung.orca',
-      'com.zpyoung.orca.helper',
-      'com.zpyoung.orca.dev',
-      'com.zpyoung.orca.dev.helper',
-      'com.zpyoung.orca.local',
-      'com.zpyoung.orca.local.helper'
+      'com.zpyoung.quirky',
+      'com.zpyoung.quirky.helper',
+      'com.zpyoung.quirky.dev',
+      'com.zpyoung.quirky.dev.helper',
+      'com.zpyoung.quirky.local',
+      'com.zpyoung.quirky.local.helper'
     ]) {
       expect(
-        isOrcaAttributedPrompt({
+        isQuirkyAttributedPrompt({
           service: 'kTCCServiceSystemPolicyAppData',
           accessingIdentifier: 'find',
           responsibleIdentifier: id
@@ -70,7 +70,7 @@ describe('isOrcaAttributedPrompt', () => {
 
   it('rejects dialogs another app is responsible for', () => {
     expect(
-      isOrcaAttributedPrompt({
+      isQuirkyAttributedPrompt({
         service: 'kTCCServiceSystemPolicyAppData',
         accessingIdentifier: 'find',
         responsibleIdentifier: 'com.apple.Terminal'
@@ -78,12 +78,12 @@ describe('isOrcaAttributedPrompt', () => {
     ).toBe(false)
   })
 
-  it('rejects unrelated services even when Orca is responsible', () => {
+  it('rejects unrelated services even when Quirky is responsible', () => {
     expect(
-      isOrcaAttributedPrompt({
+      isQuirkyAttributedPrompt({
         service: 'kTCCServiceMicrophone',
-        accessingIdentifier: 'orca',
-        responsibleIdentifier: 'com.zpyoung.orca'
+        accessingIdentifier: 'quirky',
+        responsibleIdentifier: 'com.zpyoung.quirky'
       })
     ).toBe(false)
   })
@@ -139,7 +139,7 @@ describe('MacosTccPromptWatch', () => {
     expect(spawnLogStream).not.toHaveBeenCalled()
   })
 
-  it('reports only Orca-attributed dialogs from a live stream', async () => {
+  it('reports only Quirky-attributed dialogs from a live stream', async () => {
     const { child, stdout } = createFakeLogStream()
     const onPrompt = vi.fn()
     const watch = new MacosTccPromptWatch({ onPrompt, spawnLogStream: () => child })
@@ -148,7 +148,7 @@ describe('MacosTccPromptWatch', () => {
     stdout.write('Filtering the log data using "subsystem == ..."\n')
     stdout.write(`${PREFLIGHT_LINE}\n`)
     stdout.write(`${REAL_PROMPT_LINE}\n`) // another app is responsible
-    stdout.write(`${ORCA_APPDATA_LINE}\n`)
+    stdout.write(`${QUIRKY_APPDATA_LINE}\n`)
     await new Promise((resolve) => {
       setImmediate(resolve)
     })
@@ -156,7 +156,7 @@ describe('MacosTccPromptWatch', () => {
     expect(onPrompt).toHaveBeenCalledTimes(1)
     expect(onPrompt.mock.calls[0][0]).toMatchObject({
       service: 'kTCCServiceSystemPolicyAppData',
-      responsibleIdentifier: 'com.zpyoung.orca'
+      responsibleIdentifier: 'com.zpyoung.quirky'
     })
     watch.stop()
   })

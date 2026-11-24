@@ -70,7 +70,7 @@ export async function streamExternalFileSlices(
 ): Promise<{ byteLength: number }> {
   const sourcePath = resolveEntrySourcePath(args.sourceRootPath, args.entryRelativePath)
 
-  // Why: relativePath is the hidden .orca-upload-<nonce> temp destination, so a
+  // Why: relativePath is the hidden .quirky-upload-<nonce> temp destination, so a
   // dropped file names its source instead of a path the user never chose.
   const displayPath = args.entryRelativePath || basename(args.sourceRootPath)
   const lstatResult = await lstat(sourcePath)

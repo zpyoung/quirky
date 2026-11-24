@@ -162,12 +162,12 @@ function survivingDirs(): Set<string> {
 }
 
 beforeEach(() => {
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-history-gc-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-history-gc-'))
   historyRoot = join(userDataDir, 'terminal-history')
   mkdirSync(historyRoot, { recursive: true })
   installFakeAppEnvironment({ getPath: () => userDataDir })
   // Why: the fish sweep resolves a real user data dir otherwise, and would delete the
-  // developer's own orca fish history files while this suite runs.
+  // developer's own quirky fish history files while this suite runs.
   originalXdgDataHome = process.env.XDG_DATA_HOME
   process.env.XDG_DATA_HOME = userDataDir
   removeHostTreeMock.mockReset()

@@ -56,7 +56,7 @@ afterAll(async () => {
 
 /** Violations this page recorded that the control did not, which is the terminal's own account. */
 async function terminalCspViolations(page) {
-  const seen = await page.evaluate(() => globalThis.__orcaCspViolations)
+  const seen = await page.evaluate(() => globalThis.__quirkyCspViolations)
   const shared = new Set(controlCspViolations.map(stripAssetPath))
   return seen.map(stripAssetPath).filter((entry) => !shared.has(entry))
 }
@@ -74,11 +74,11 @@ describeRender(
       // account rather than the bundle's. A control that mounted nothing would report nothing for
       // the wrong reason, so the route's own marker is the precondition.
       const { page } = await openPage(CONTROL_ROUTE)
-      await page.waitForFunction(() => globalThis.__orcaTerminalControlMounted === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalControlMounted === true, {
         timeout: 60_000,
         polling: 100
       })
-      controlCspViolations = await page.evaluate(() => globalThis.__orcaCspViolations)
+      controlCspViolations = await page.evaluate(() => globalThis.__quirkyCspViolations)
       console.log('[c7.5][csp-control]', JSON.stringify(controlCspViolations.map(stripAssetPath)))
       // Nothing, which is a stronger fact than this case was built for. It first read
       // `script-src: eval` — Zod probing for a JIT with `new Function` and swallowing the throw,
@@ -93,24 +93,24 @@ describeRender(
       const { errors, page } = await openTerminal()
       await openProbeTerminal(page)
       const applied = await page.evaluate((data) => {
-        globalThis.__orcaTerminalProbe.write(data)
+        globalThis.__quirkyTerminalProbe.write(data)
         return data.length
       }, stream)
       expect(applied).toBeGreaterThanOrEqual(MIN_STREAM_BYTES)
 
       // Read back through the document's own path: select all, then the overlay's Copy button,
       // which posts the buffer text to the component's onSelectionCopy prop.
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.selectAll())
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.selectAll())
       await page.waitForFunction(
         () => document.getElementById('selection-overlay')?.classList.contains('active') === true,
         { timeout: 30_000, polling: 100 }
       )
       await page.evaluate(() => document.getElementById('sel-menu-copy').click())
-      await page.waitForFunction(() => typeof globalThis.__orcaTerminalCopied === 'string', {
+      await page.waitForFunction(() => typeof globalThis.__quirkyTerminalCopied === 'string', {
         timeout: 30_000,
         polling: 100
       })
-      const copied = await page.evaluate(() => globalThis.__orcaTerminalCopied)
+      const copied = await page.evaluate(() => globalThis.__quirkyTerminalCopied)
       console.log(
         '[c7.5][stream]',
         JSON.stringify({ appliedBytes: applied, readBackChars: copied.length })
@@ -122,7 +122,7 @@ describeRender(
       expect(copied).not.toContain('[31;1m')
 
       expect(await terminalCspViolations(page)).toEqual([])
-      expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors)).toEqual([])
+      expect(await page.evaluate(() => globalThis.__quirkyTerminalEngineErrors)).toEqual([])
       expect(errors).toEqual([])
       await page.close()
     }, 300_000)
@@ -132,48 +132,48 @@ describeRender(
       // not its to take. Identity is checked in the page: the same function object at all three
       // points, not merely a non-null one and not merely the same shape.
       const { page } = await openTerminal({ errorSentinel: true })
-      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
+      expect(await page.evaluate(() => window.onerror === globalThis.__quirkySentinel)).toBe(true)
       await openProbeTerminal(page)
-      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
+      expect(await page.evaluate(() => window.onerror === globalThis.__quirkySentinel)).toBe(true)
 
       // Both reporters see the same uncaught error: the page keeps the one it installed, and the
       // terminal's own listener still works. Without the second half the readings above would
       // pass on a terminal that had simply stopped reporting.
       await page.evaluate(() => {
         setTimeout(() => {
-          throw new Error('orca-terminal-render-uncaught')
+          throw new Error('quirky-terminal-render-uncaught')
         }, 0)
       })
       const sawIt = (entries) =>
-        entries.some((entry) => entry.includes('orca-terminal-render-uncaught'))
+        entries.some((entry) => entry.includes('quirky-terminal-render-uncaught'))
       await page.waitForFunction(
         () =>
-          globalThis.__orcaTerminalEngineErrors.some((entry) =>
-            entry.includes('orca-terminal-render-uncaught')
+          globalThis.__quirkyTerminalEngineErrors.some((entry) =>
+            entry.includes('quirky-terminal-render-uncaught')
           ),
         { timeout: 30_000, polling: 100 }
       )
-      expect(sawIt(await page.evaluate(() => globalThis.__orcaSentinelCalls))).toBe(true)
+      expect(sawIt(await page.evaluate(() => globalThis.__quirkySentinelCalls))).toBe(true)
 
       // Dispose takes the terminal's listener off and leaves the page's handler where it was.
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-      expect(await page.evaluate(() => window.onerror === globalThis.__orcaSentinel)).toBe(true)
+      expect(await page.evaluate(() => window.onerror === globalThis.__quirkySentinel)).toBe(true)
       const before = await page.evaluate(() => {
         setTimeout(() => {
-          throw new Error('orca-terminal-render-after-dispose')
+          throw new Error('quirky-terminal-render-after-dispose')
         }, 0)
-        return globalThis.__orcaTerminalEngineErrors.length
+        return globalThis.__quirkyTerminalEngineErrors.length
       })
       await page.waitForFunction(
         () =>
-          globalThis.__orcaSentinelCalls.some((entry) =>
-            entry.includes('orca-terminal-render-after-dispose')
+          globalThis.__quirkySentinelCalls.some((entry) =>
+            entry.includes('quirky-terminal-render-after-dispose')
           ),
         { timeout: 30_000, polling: 100 }
       )
       // The page's handler saw it and the terminal's did not, which is what dispose has to mean.
-      expect(await page.evaluate(() => globalThis.__orcaTerminalEngineErrors.length)).toBe(before)
+      expect(await page.evaluate(() => globalThis.__quirkyTerminalEngineErrors.length)).toBe(before)
       await page.close()
     }, 300_000)
 
@@ -184,7 +184,7 @@ describeRender(
       expect(await page.evaluate(() => window.onerror)).toBe(null)
       await openProbeTerminal(page)
       expect(await page.evaluate(() => window.onerror)).toBe(null)
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       expect(await page.evaluate(() => window.onerror)).toBe(null)
       await page.close()
@@ -203,9 +203,9 @@ describeRender(
      */
     /** The listeners the page holds with no terminal on it, which is what two mounts can differ by. */
     async function listenersWithNoTerminal(page) {
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-      return page.evaluate(() => globalThis.__orcaListeners.snapshot())
+      return page.evaluate(() => globalThis.__quirkyListeners.snapshot())
     }
 
     async function assertLiveTerminal(page, label) {
@@ -217,22 +217,22 @@ describeRender(
 
       // The selection overlay is the document's own element, reached through the handle: it only
       // activates if `handleMsg` is talking to the elements that are actually on the page.
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.selectAll())
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.selectAll())
       await page.waitForFunction(
         () => document.getElementById('selection-overlay')?.classList.contains('active') === true,
         { timeout: 30_000, polling: 100 }
       )
 
       // And the reporter, which is the seam that is installed once per mount.
-      const marker = `orca-remount-${label}`
+      const marker = `quirky-remount-${label}`
       await page.evaluate((thrown) => {
-        globalThis.__orcaTerminalEngineErrors = []
+        globalThis.__quirkyTerminalEngineErrors = []
         setTimeout(() => {
           throw new Error(thrown)
         }, 0)
       }, marker)
       await page.waitForFunction(
-        (thrown) => globalThis.__orcaTerminalEngineErrors.some((entry) => entry.includes(thrown)),
+        (thrown) => globalThis.__quirkyTerminalEngineErrors.some((entry) => entry.includes(thrown)),
         marker,
         { timeout: 30_000, polling: 100 }
       )
@@ -243,13 +243,13 @@ describeRender(
       await openProbeTerminal(page)
       await assertLiveTerminal(page, 'first-mount')
 
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       await page.evaluate(() => {
-        globalThis.__orcaTerminalReady = false
-        globalThis.__orcaTerminalProbe.setMounted(true)
+        globalThis.__quirkyTerminalReady = false
+        globalThis.__quirkyTerminalProbe.setMounted(true)
       })
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
@@ -268,17 +268,17 @@ describeRender(
       await page.locator('#terminal-container').waitFor({ state: 'attached', timeout: 30_000 })
       await page.evaluate(() => {
         setTimeout(() => {
-          throw new Error('orca-terminal-render-fatal')
+          throw new Error('quirky-terminal-render-fatal')
         }, 0)
       })
       const reload = page.getByText('Reload')
       await reload.waitFor({ timeout: 30_000 })
 
       await page.evaluate(() => {
-        globalThis.__orcaTerminalReady = false
+        globalThis.__quirkyTerminalReady = false
       })
       await reload.click()
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
@@ -302,15 +302,15 @@ describeRender(
       await openProbeTerminal(page)
       const before = await listenersWithNoTerminal(page)
       await page.evaluate(() => {
-        globalThis.__orcaTerminalReady = false
-        globalThis.__orcaTerminalProbe.setMounted(true)
+        globalThis.__quirkyTerminalReady = false
+        globalThis.__quirkyTerminalProbe.setMounted(true)
       })
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
       await openProbeTerminal(page)
-      const whileLive = await page.evaluate(() => globalThis.__orcaListeners.snapshot())
+      const whileLive = await page.evaluate(() => globalThis.__quirkyListeners.snapshot())
       const after = await listenersWithNoTerminal(page)
 
       // The precondition: a mount that installed nothing would satisfy the equality below for
@@ -332,40 +332,40 @@ describeRender(
       await page.evaluate(() => {
         for (let index = 0; index < 6; index++) {
           setTimeout(() => {
-            throw new Error(`orca-budget-burn-${String(index)}`)
+            throw new Error(`quirky-budget-burn-${String(index)}`)
           }, 0)
         }
       })
       await page.waitForFunction(
         () =>
-          globalThis.__orcaTerminalEngineErrors.filter((entry) =>
-            entry.includes('orca-budget-burn')
+          globalThis.__quirkyTerminalEngineErrors.filter((entry) =>
+            entry.includes('quirky-budget-burn')
           ).length >= 5,
         { timeout: 30_000, polling: 100 }
       )
 
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       await page.evaluate(() => {
-        globalThis.__orcaTerminalReady = false
-        globalThis.__orcaTerminalProbe.setMounted(true)
+        globalThis.__quirkyTerminalReady = false
+        globalThis.__quirkyTerminalProbe.setMounted(true)
       })
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
       await openProbeTerminal(page)
 
       await page.evaluate(() => {
-        globalThis.__orcaTerminalEngineErrors = []
+        globalThis.__quirkyTerminalEngineErrors = []
         setTimeout(() => {
-          throw new Error('orca-second-mount-error')
+          throw new Error('quirky-second-mount-error')
         }, 0)
       })
       await page.waitForFunction(
         () =>
-          globalThis.__orcaTerminalEngineErrors.some((entry) =>
-            entry.includes('orca-second-mount-error')
+          globalThis.__quirkyTerminalEngineErrors.some((entry) =>
+            entry.includes('quirky-second-mount-error')
           ),
         { timeout: 30_000, polling: 100 }
       )
@@ -395,7 +395,7 @@ describeRender(
           })
         }
       })
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
@@ -409,7 +409,7 @@ describeRender(
       // by `stopTapDispatch`. It is the document's own timer and it needs nothing rendered, so
       // the provocation cannot race the engine — the precondition below says whether it landed.
       await page.evaluate(() => {
-        globalThis.__orcaScheduler.watching = true
+        globalThis.__quirkyScheduler.watching = true
         const surface = document.getElementById('terminal-surface')
         surface.dispatchEvent(
           new TouchEvent('touchstart', {
@@ -421,21 +421,21 @@ describeRender(
             ]
           })
         )
-        globalThis.__orcaTerminalProbe.setMounted(false)
+        globalThis.__quirkyTerminalProbe.setMounted(false)
       })
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       await page.evaluate(() => {
-        globalThis.__orcaTerminalReady = false
-        globalThis.__orcaTerminalProbe.setMounted(true)
+        globalThis.__quirkyTerminalReady = false
+        globalThis.__quirkyTerminalProbe.setMounted(true)
       })
-      await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
         timeout: 60_000,
         polling: 100
       })
       await openProbeTerminal(page)
       // Long enough for the slowest timer of the first mount to have fired if it survived.
       await page.evaluate(() => new Promise((resolve) => globalThis.setTimeout(resolve, 3000)))
-      const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
+      const scheduler = await page.evaluate(() => globalThis.__quirkyScheduler)
       // The precondition: there was something to leak. A wheel that reached nothing would agree
       // with the empty list below for the wrong reason.
       expect(
@@ -474,7 +474,7 @@ describeRender(
           }
         })
         try {
-          await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+          await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
             timeout: 60_000,
             polling: 100
           })
@@ -490,16 +490,16 @@ describeRender(
           )
 
           await page.evaluate((chunk) => {
-            const state = globalThis.__orcaScheduler
+            const state = globalThis.__quirkyScheduler
             state.disposed = null
             state.watching = true
             state.holdFramesFrom = chunk
-            const host = document.querySelector('.orca-terminal-document-host')
+            const host = document.querySelector('.quirky-terminal-document-host')
             // Dispose drops this class after cancelling frames; DOM detachment precedes cleanup.
             const observer = new MutationObserver(() => {
               if (
                 state.disposed !== null ||
-                host.classList.contains('orca-terminal-document-host')
+                host.classList.contains('quirky-terminal-document-host')
               ) {
                 return
               }
@@ -514,26 +514,26 @@ describeRender(
             observer.observe(host, { attributes: true, attributeFilter: ['class'] })
             host.style.width = '80%'
           }, documentChunk)
-          await page.waitForFunction(() => globalThis.__orcaScheduler.heldFrames > 0, undefined, {
+          await page.waitForFunction(() => globalThis.__quirkyScheduler.heldFrames > 0, undefined, {
             timeout: 30_000
           })
           await page.evaluate((cancelFrames) => {
-            globalThis.__orcaRestoreFrameCancellation = globalThis.cancelAnimationFrame
+            globalThis.__quirkyRestoreFrameCancellation = globalThis.cancelAnimationFrame
             if (!cancelFrames) {
               // The negative control must expose held callbacks after the real document disposes.
               globalThis.cancelAnimationFrame = () => {}
             }
-            globalThis.__orcaTerminalProbe.setMounted(false)
+            globalThis.__quirkyTerminalProbe.setMounted(false)
           }, cancelFrames)
           await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
-          await page.waitForFunction(() => globalThis.__orcaScheduler.disposed !== null)
+          await page.waitForFunction(() => globalThis.__quirkyScheduler.disposed !== null)
           await page.evaluate(() => {
-            globalThis.cancelAnimationFrame = globalThis.__orcaRestoreFrameCancellation
-            globalThis.__orcaScheduler.holdFramesFrom = null
-            globalThis.__orcaTerminalReady = false
-            globalThis.__orcaTerminalProbe.setMounted(true)
+            globalThis.cancelAnimationFrame = globalThis.__quirkyRestoreFrameCancellation
+            globalThis.__quirkyScheduler.holdFramesFrom = null
+            globalThis.__quirkyTerminalReady = false
+            globalThis.__quirkyTerminalProbe.setMounted(true)
           })
-          await page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+          await page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
             timeout: 60_000,
             polling: 100
           })
@@ -542,12 +542,12 @@ describeRender(
           await page.evaluate(
             () =>
               new Promise((resolve) => {
-                globalThis.__orcaReleaseFrames()
+                globalThis.__quirkyReleaseFrames()
                 requestAnimationFrame(() => requestAnimationFrame(resolve))
               })
           )
 
-          const scheduler = await page.evaluate(() => globalThis.__orcaScheduler)
+          const scheduler = await page.evaluate(() => globalThis.__quirkyScheduler)
           expect(
             scheduler.disposed?.owed,
             'the document owed a frame at the moment dispose returned'
@@ -602,7 +602,7 @@ describeRender(
       // live elements rather than off the stylesheet text.
       expect(
         await page.evaluate(() => {
-          const host = document.querySelector('.orca-terminal-document-host')
+          const host = document.querySelector('.quirky-terminal-document-host')
           const xterm = host.querySelector('.xterm')
           const viewport = host.querySelector('.xterm-viewport')
           const overlay = host.querySelector('#selection-overlay')
@@ -625,7 +625,7 @@ describeRender(
         overlayPosition: 'absolute'
       })
 
-      await page.evaluate(() => globalThis.__orcaTerminalProbe.setMounted(false))
+      await page.evaluate(() => globalThis.__quirkyTerminalProbe.setMounted(false))
       await page.locator('#terminal-container').waitFor({ state: 'detached', timeout: 30_000 })
       expect(await readRootComputedStyles(page), 'roots after dispose').toEqual(expected)
       // The sheet stays in the head for the next mount, and matches nothing until there is one.
@@ -642,7 +642,7 @@ describeRender(
       // The fit is the app's own, from the cell box the document put in web-ready, against the
       // frame React Native laid out, as the session's is. Null would mean the ready carried no box,
       // or a grid too small to fit.
-      const fit = await page.evaluate(() => globalThis.__orcaTerminalProbe.fit())
+      const fit = await page.evaluate(() => globalThis.__quirkyTerminalProbe.fit())
       expect(fit).not.toBeNull()
       expect(fit.cols).toBeGreaterThanOrEqual(20)
       expect(fit.rows).toBeGreaterThanOrEqual(8)
@@ -668,11 +668,11 @@ describeRender(
       // soft keyboard is the device step, which this does not claim to answer.
       await page.getByTestId('terminal-live-input').focus()
       await page.keyboard.type('ab')
-      await page.waitForFunction(() => globalThis.__orcaTerminalBeforeInput.length >= 2, {
+      await page.waitForFunction(() => globalThis.__quirkyTerminalBeforeInput.length >= 2, {
         timeout: 30_000,
         polling: 100
       })
-      const beforeInput = await page.evaluate(() => globalThis.__orcaTerminalBeforeInput)
+      const beforeInput = await page.evaluate(() => globalThis.__quirkyTerminalBeforeInput)
       console.log('[c7.5][beforeinput]', JSON.stringify(beforeInput.slice(0, 4)))
       expect(beforeInput.map((entry) => entry.inputType)).toContain('insertText')
       expect(beforeInput.map((entry) => entry.data)).toContain('a')

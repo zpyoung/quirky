@@ -3,14 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 const { applyWorktreeSleepResumeRecords, captureWorktreeSleepResumeRecords } =
   await import('./terminal/stop/worktree-sleep-resume-records')
 
@@ -45,7 +45,7 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
   } as AgentStatusIpcPayload
   let rows: AgentStatusIpcPayload[] = []
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-  const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+  const runtime = new QuirkyRuntimeService(runtimeStore as never, undefined, {
     getAgentProviderSessionSnapshot: () => rows,
     checkHookAgentPresence: async (paneKey: string) =>
       paneKey === HOLDER_PANE_KEY ? holderVerdict : verdict
@@ -78,7 +78,7 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
   return { runtime, spawn, reportAgent, reportHolder, setVerdict }
 }
 
-function userActivate(runtime: InstanceType<typeof OrcaRuntimeService>) {
+function userActivate(runtime: InstanceType<typeof QuirkyRuntimeService>) {
   return runtime.activateMobileSessionTab(`id:${TEST_WORKTREE_ID}`, 'host-tab', HEADLESS_LEAF_ID, {
     notifyClients: false,
     navigation: 'caller',
@@ -113,7 +113,7 @@ describe('host-driven worktree sleep keeps the slept agent resumable', () => {
     expect(spawnCommand(spawn, 1)).not.toContain('--dangerously-skip-permissions')
   })
 
-  it('resumes an Orca-launched session with the recipe its launch recorded', async () => {
+  it('resumes an Quirky-launched session with the recipe its launch recorded', async () => {
     const { runtime, spawn, reportAgent } = makeRuntime(null)
     await userActivate(runtime)
     reportAgent()

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { layoutApplyTestDouble } from '@/runtime/layout-apply-test-double'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
@@ -233,7 +233,7 @@ describe('terminal tab title batches', () => {
       'Final live title',
       'Second visible'
     ])
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       // Main takes the generated title for the tab's first row; its frame draws it, so the window
       // writes none of its own.
       await vi.waitFor(() =>
@@ -344,16 +344,16 @@ describe('terminal tab title batches', () => {
     // is its one store write, so the window writes none.
     await vi.waitFor(() =>
       expect(main.commands.map((command) => command.type)).toEqual(
-        ORCA_LAYOUT_OWNER_IS_MAIN ? ['renameTabs'] : []
+        QUIRKY_LAYOUT_OWNER_IS_MAIN ? ['renameTabs'] : []
       )
     )
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
     unsubscribe()
-    expect(publications).toBe(ORCA_LAYOUT_OWNER_IS_MAIN ? 0 : 1)
+    expect(publications).toBe(QUIRKY_LAYOUT_OWNER_IS_MAIN ? 0 : 1)
     // A layout-owner build adds a second linear pass: the dry run that picks main's renames.
-    expect(fixture.getIdReads()).toBeLessThanOrEqual(ORCA_LAYOUT_OWNER_IS_MAIN ? 710 : 305)
+    expect(fixture.getIdReads()).toBeLessThanOrEqual(QUIRKY_LAYOUT_OWNER_IS_MAIN ? 710 : 305)
     const titleOf = (worktreeId: string): string | null | undefined =>
-      ORCA_LAYOUT_OWNER_IS_MAIN
+      QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? titlesSentToMain()[store.getState().unifiedTabsByWorktree[worktreeId]![0]!.id]
         : store.getState().tabsByWorktree[worktreeId]?.[0]?.generatedTitle
     expect(titleOf('wt-0')).toBe('Replacement title for a newer dispatch')

@@ -19,7 +19,7 @@ function doneEntry(outcome: Verdict): AgentStatusEntry {
   }
 }
 
-// A crash nobody asked for and an end Orca cannot prove are news the user has not seen; only the
+// A crash nobody asked for and an end Quirky cannot prove are news the user has not seen; only the
 // user's own stop is demoted.
 describe('attention for a turn end the host observed', () => {
   it.each(['interruption', 'unconfirmed'] as const)(

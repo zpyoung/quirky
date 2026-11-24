@@ -7,7 +7,7 @@ import {
   canAutoSaveOpenFile,
   isAutosaveSuspendedForFile,
   normalizeAutoSaveDelayMs,
-  ORCA_EDITOR_FILE_SAVED_EVENT,
+  QUIRKY_EDITOR_FILE_SAVED_EVENT,
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor-pending-flush'
@@ -225,7 +225,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         }
 
         window.dispatchEvent(
-          new CustomEvent<EditorFileSavedDetail>(ORCA_EDITOR_FILE_SAVED_EVENT, {
+          new CustomEvent<EditorFileSavedDetail>(QUIRKY_EDITOR_FILE_SAVED_EVENT, {
             detail: { fileId: file.id, content: contentToSave }
           })
         )

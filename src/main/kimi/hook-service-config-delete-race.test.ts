@@ -41,7 +41,7 @@ let originalUserProfile: string | undefined
 const configPath = (): string => join(home, '.kimi-code', 'config.toml')
 
 beforeEach(() => {
-  home = fs.mkdtempSync(join(tmpdir(), 'orca-kimi-hook-delete-race-'))
+  home = fs.mkdtempSync(join(tmpdir(), 'quirky-kimi-hook-delete-race-'))
   originalHome = process.env.HOME
   originalKimiHome = process.env.KIMI_CODE_HOME
   originalUserProfile = process.env.USERPROFILE

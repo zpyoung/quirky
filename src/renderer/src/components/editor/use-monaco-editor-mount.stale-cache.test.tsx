@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { editor } from 'monaco-editor'
 import type { OnMount } from '@monaco-editor/react'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
-import { ORCA_EDITOR_FILE_CACHE_STALE_EVENT } from './editor-autosave'
+import { QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT } from './editor-autosave'
 import type { MonacoEditorMountParams } from './monaco-editor-mount-params'
 import { useMonacoEditorMount } from './use-monaco-editor-mount'
 
@@ -134,7 +134,7 @@ it('mounts the live model over a stale retained cache, editable, and reloads a m
       dropped.push(event.detail.fileId)
     }
   }
-  window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+  window.addEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
   try {
     const view = renderHook(() => useMonacoEditorMount(params))
     view.result.current(editorInstance, monaco)
@@ -154,7 +154,7 @@ it('mounts the live model over a stale retained cache, editable, and reloads a m
     expect(dropped).toEqual(['tab-b'])
     expect(updateOptions).not.toHaveBeenCalledWith({ readOnly: true })
   } finally {
-    window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+    window.removeEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
   }
 })
 
@@ -166,7 +166,7 @@ it('reloads the same stale text again once the baseline moves or a fresh mount s
       dropped.push(event.detail.fileId)
     }
   }
-  window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+  window.addEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
   const view = renderHook(() => useMonacoEditorMount(params))
   const mountWith = (text: string): void => {
     params.contentSync.contentRef.current = text
@@ -189,6 +189,6 @@ it('reloads the same stale text again once the baseline moves or a fresh mount s
     mountWith('A2 (stale cache)')
     expect(dropped).toHaveLength(3)
   } finally {
-    window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+    window.removeEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
   }
 })

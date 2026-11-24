@@ -1,9 +1,9 @@
 import { mkdirSync, mkdtempSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 test.use({ seedTestRepo: false })
 
@@ -13,10 +13,10 @@ async function runFixtureGit(spec: Parameters<typeof runProcess>[0]): Promise<vo
 }
 
 test('concurrent registration keeps one identity, including nested and linked paths', async ({
-  orcaPage,
+  quirkyPage,
   registerPostElectronShutdownCleanup
 }) => {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-registration-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-registration-')))
   const repoPath = join(root, 'repo')
   const nestedPath = join(repoPath, 'nested')
   const linkedPath = join(root, 'linked')
@@ -45,8 +45,8 @@ test('concurrent registration keeps one identity, including nested and linked pa
     args: ['worktree', 'add', '-b', 'linked', linkedPath],
     cwd: repoPath
   })
-  await waitForSessionReady(orcaPage)
-  const result = await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  const result = await quirkyPage.evaluate(
     async ({ repoPath, nestedPath }) => {
       const results = await Promise.all(
         Array.from({ length: 6 }, (_, index) =>
@@ -71,16 +71,19 @@ test('concurrent registration keeps one identity, including nested and linked pa
   expect(result.persistedIds).toEqual([result.ids[0]])
   // A repos:changed refresh can supersede the explicitly awaited catalog fetch.
   await expect
-    .poll(() => orcaPage.evaluate(() => window.__store!.getState().repos.map((repo) => repo.id)))
+    .poll(() => quirkyPage.evaluate(() => window.__store!.getState().repos.map((repo) => repo.id)))
     .toEqual(result.persistedIds)
-  const linked = await orcaPage.evaluate(async (path) => window.api.repos.add({ path }), linkedPath)
+  const linked = await quirkyPage.evaluate(
+    async (path) => window.api.repos.add({ path }),
+    linkedPath
+  )
   expect('repo' in linked && linked.repo.id).toBe(result.ids[0])
-  const missing = await orcaPage.evaluate(
+  const missing = await quirkyPage.evaluate(
     async (path) => window.api.repos.add({ path }),
     join(root, 'missing')
   )
   expect('error' in missing).toBe(true)
   expect(
-    await orcaPage.evaluate(async () => (await window.api.repos.list()).map((repo) => repo.id))
+    await quirkyPage.evaluate(async () => (await window.api.repos.list()).map((repo) => repo.id))
   ).toEqual(result.persistedIds)
 })

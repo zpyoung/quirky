@@ -6,17 +6,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { smokeSessionScannerService } from './session-scanner-service-smoke.mjs'
 import {
   externalNativeAddons,
-  ORCAD_CHILD_ENTRY_POINTS,
-  ORCAD_EXTERNAL_MODULES,
-  orcadChildOutputFilename
-} from './orcad-entry-build.mjs'
+  QUIRKYD_CHILD_ENTRY_POINTS,
+  QUIRKYD_EXTERNAL_MODULES,
+  quirkydChildOutputFilename
+} from './quirkyd-entry-build.mjs'
 
-const ENTRY = orcadChildOutputFilename(ORCAD_CHILD_ENTRY_POINTS.sessionScanner)
+const ENTRY = quirkydChildOutputFilename(QUIRKYD_CHILD_ENTRY_POINTS.sessionScanner)
 const directories = []
 let builtDirectory
 
 function fixtureDirectory() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-session-scanner-smoke-test-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-session-scanner-smoke-test-'))
   directories.push(directory)
   return directory
 }
@@ -24,13 +24,13 @@ function fixtureDirectory() {
 beforeAll(async () => {
   builtDirectory = fixtureDirectory()
   await build({
-    entryPoints: [resolve(ORCAD_CHILD_ENTRY_POINTS.sessionScanner)],
+    entryPoints: [resolve(QUIRKYD_CHILD_ENTRY_POINTS.sessionScanner)],
     outfile: join(builtDirectory, ENTRY),
     bundle: true,
     platform: 'node',
     target: 'node18',
     format: 'cjs',
-    external: ORCAD_EXTERNAL_MODULES,
+    external: QUIRKYD_EXTERNAL_MODULES,
     plugins: [externalNativeAddons],
     logLevel: 'silent'
   })

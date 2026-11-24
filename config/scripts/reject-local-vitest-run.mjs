@@ -8,13 +8,13 @@
  * walks straight past it and saturates the machine. This runs as the first
  * step of the `test` script instead, where every caller has to go through it.
  *
- * Allowed through: an explicit `ORCA_ALLOW_LOCAL_TESTS=1`, a run already
+ * Allowed through: an explicit `QUIRKY_ALLOW_LOCAL_TESTS=1`, a run already
  * inside a container (the sandbox shards are the point of the rule), and CI.
  */
 
 import { existsSync } from 'node:fs'
 
-const OVERRIDE_ENV = 'ORCA_ALLOW_LOCAL_TESTS'
+const OVERRIDE_ENV = 'QUIRKY_ALLOW_LOCAL_TESTS'
 
 if (process.env[OVERRIDE_ENV] === '1' || isContainer() || process.env.CI) {
   process.exit(0)

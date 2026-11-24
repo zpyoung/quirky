@@ -14,7 +14,7 @@ function repo(id: string, overrides: Partial<Repo> = {}): Repo {
     displayName: id,
     badgeColor: '#111111',
     addedAt: 1,
-    upstream: { owner: 'stablyai', repo: 'orca' },
+    upstream: { owner: 'stablyai', repo: 'quirky' },
     ...overrides
   }
 }
@@ -22,9 +22,9 @@ function repo(id: string, overrides: Partial<Repo> = {}): Repo {
 function project(overrides: Partial<Project> = {}): Project {
   return {
     id: 'github:stablyai/orca',
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#111111',
-    providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' },
+    providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' },
     sourceRepoIds: ['local-repo', 'ssh-repo'],
     createdAt: 1,
     updatedAt: 1,
@@ -38,8 +38,8 @@ function setup(overrides: Partial<ProjectHostSetup>): ProjectHostSetup {
     projectId: overrides.projectId ?? 'github:stablyai/orca',
     hostId: overrides.hostId ?? 'local',
     repoId: overrides.repoId ?? 'local-repo',
-    path: overrides.path ?? '/tmp/orca',
-    displayName: overrides.displayName ?? 'orca',
+    path: overrides.path ?? '/tmp/quirky',
+    displayName: overrides.displayName ?? 'quirky',
     setupState: overrides.setupState ?? 'ready',
     setupMethod: overrides.setupMethod ?? 'legacy-repo',
     createdAt: 1,
@@ -80,7 +80,7 @@ describe('buildNewWorkspaceProjectOptions', () => {
         id: 'github:stablyai/orca',
         kind: 'project',
         projectId: 'github:stablyai/orca',
-        displayName: 'orca',
+        displayName: 'quirky',
         badgeColor: '#111111',
         detail: 'stablyai/orca'
       }

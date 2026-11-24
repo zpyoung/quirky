@@ -63,7 +63,7 @@ export function SshForwardedPortsSection({
               entry={entry}
               onEdit={() => setDialogState({ mode: 'edit', entry })}
               // Why the system browser: the forward listens on this machine, while the workspace's
-              // Orca browser may be the server's or routed through the SSH host.
+              // Quirky browser may be the server's or routed through the SSH host.
               onOpenInBrowser={() =>
                 void window.api.shell.openUrl(browserUrlForPortForwardEntry(entry))
               }

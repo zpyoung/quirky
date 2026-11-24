@@ -7,7 +7,7 @@ const fileViolation = (sddl: string) => findSecureDaclViolation(daclFromSddl(sdd
 const directoryViolation = (sddl: string) => findSecureDaclViolation(daclFromSddl(sddl), USER, true)
 
 describe('findSecureDaclViolation', () => {
-  it('accepts what Orca writes, for files and directories', () => {
+  it('accepts what Quirky writes, for files and directories', () => {
     expect(fileViolation(hardenedDaclSddl(USER, false))).toBeNull()
     expect(directoryViolation(hardenedDaclSddl(USER, true))).toBeNull()
   })
@@ -62,7 +62,7 @@ describe('findSecureDaclViolation', () => {
     )
   })
 
-  // An inherit-only rule grants the directory itself nothing, so Orca could not write into it.
+  // An inherit-only rule grants the directory itself nothing, so Quirky could not write into it.
   it('rejects a path the user cannot actually use', () => {
     const missing = `missing full control for ${USER}`
     expect(directoryViolation(`D:P(A;OICIIO;FA;;;${USER})(A;OICI;FA;;;SY)`)).toBe(missing)

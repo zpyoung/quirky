@@ -5,7 +5,7 @@ import { delimiter, join } from 'node:path'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
-import { stripElectronRunAsNode } from '../runtime/orca-app-executable'
+import { stripElectronRunAsNode } from '../runtime/quirky-app-executable'
 import { rejectRemoteSelectionFlags } from '../remote-selection-flag-rejection'
 import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
@@ -63,7 +63,7 @@ function addAgentNodePaths(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 /**
  * Runs the real agent login attached to the user's terminal so the OAuth
  * URL/device-code prompt is visible and the code can be pasted back — the desktop
- * GUI flow drives this via a browser Orca can't reach on a headless host.
+ * GUI flow drives this via a browser Quirky can't reach on a headless host.
  */
 async function runAgentLoginInTerminal(
   command: string,
@@ -154,7 +154,7 @@ async function addClaudeAccount({ client, json }: HandlerContext): Promise<void>
   const result = await withInteractiveLoginCleanup(
     session,
     // Why always: the host keeps a folder that became an account, and deletes an abandoned one.
-    // Never thrown: an older running Orca lacks the method, and the add itself already finished.
+    // Never thrown: an older running Quirky lacks the method, and the add itself already finished.
     async () => {
       const { accountId, runtime, wslDistro } = signIn
       await client
@@ -193,7 +193,7 @@ async function addClaudeAccount({ client, json }: HandlerContext): Promise<void>
 
 /** Logs into a Codex account in a temp CODEX_HOME, then registers it with the local runtime. */
 async function addCodexAccount({ client, json }: HandlerContext): Promise<void> {
-  const codexHome = mkdtempSync(join(tmpdir(), 'orca-account-add-codex-'))
+  const codexHome = mkdtempSync(join(tmpdir(), 'quirky-account-add-codex-'))
   const session: InteractiveLoginSession = {
     child: null,
     registering: false,
@@ -247,7 +247,7 @@ async function assertAccountImportSupported(
   if (!status.result.capabilities?.includes(capability)) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The running Orca runtime is too old to add accounts from the CLI. Update or restart Orca and try again.'
+      'The running Quirky runtime is too old to add accounts from the CLI. Update or restart Quirky and try again.'
     )
   }
 }
@@ -271,7 +271,7 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
         `Unsupported --agent "${agent}". Use "claude", "codex", "opencode", or "devin".`
       )
     }
-    rejectAccountRemoteSelectionFlags(ctx, 'orca account add')
+    rejectAccountRemoteSelectionFlags(ctx, 'quirky account add')
     if (agent === 'opencode' || agent === 'devin') {
       await addDataAccount(ctx, agent, runAgentLoginInTerminal)
       return
@@ -282,7 +282,7 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
     await (agent === 'claude' ? addClaudeAccount(ctx) : addCodexAccount(ctx))
   },
   'account list': async (ctx) => {
-    rejectAccountRemoteSelectionFlags(ctx, 'orca account list')
+    rejectAccountRemoteSelectionFlags(ctx, 'quirky account list')
     const provider = ctx.flags.get('agent')
     if (provider !== undefined) {
       await listDataAccounts(ctx, provider)
@@ -304,11 +304,11 @@ export const ACCOUNT_HANDLERS: Record<string, CommandHandler> = {
     )
   },
   'account select': async (ctx) => {
-    rejectAccountRemoteSelectionFlags(ctx, 'orca account select')
+    rejectAccountRemoteSelectionFlags(ctx, 'quirky account select')
     await mutateDataAccount(ctx, 'select')
   },
   'account rm': async (ctx) => {
-    rejectAccountRemoteSelectionFlags(ctx, 'orca account rm')
+    rejectAccountRemoteSelectionFlags(ctx, 'quirky account rm')
     await mutateDataAccount(ctx, 'remove')
   }
 }

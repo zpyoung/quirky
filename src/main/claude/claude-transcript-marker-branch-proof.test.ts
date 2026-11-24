@@ -36,7 +36,7 @@ async function proveMarkerLeafUuid(
 
 describe('Claude transcript marker branch proof', () => {
   it('reads Claude last-prompt leaf metadata as the durable branch marker', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-leaf-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-leaf-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(
       transcript,
@@ -61,7 +61,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('fails closed when a Claude transcript has no branch marker', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-no-leaf-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-no-leaf-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(
       transcript,
@@ -75,7 +75,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('distinguishes an incomplete final Claude JSONL record from durable malformed content', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-torn-tail-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-torn-tail-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(transcript, '{"type":"last-prompt"', 'utf8')
 
@@ -90,7 +90,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('refuses a Claude marker on a sibling branch', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-sibling-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-sibling-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(
       transcript,
@@ -111,7 +111,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('refuses missing and cyclic Claude parent chains', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-invalid-ancestry-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-invalid-ancestry-')
     const missing = join(root, 'missing.jsonl')
     const cycle = join(root, 'cycle.jsonl')
     await writeFile(
@@ -147,7 +147,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('rejects non-transcript and sidechain UUIDs as the durable leaf', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-leaf-filter-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-leaf-filter-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(
       transcript,
@@ -182,7 +182,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('rejects a main leaf whose ancestry crosses a subagent sidechain', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-sidechain-ancestry-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-sidechain-ancestry-')
     const transcript = join(root, 'session.jsonl')
     await writeFile(
       transcript,
@@ -214,7 +214,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('rejects a main leaf whose ancestry crosses a parent-tool-use sidechain', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-parent-tool-ancestry-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-parent-tool-ancestry-')
     const transcript = join(root, 'transcript.jsonl')
     await writeFile(
       transcript,
@@ -246,7 +246,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('rejects a previous cursor descended from a parent-tool-use sidechain', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-parent-tool-cursor-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-parent-tool-cursor-')
     const transcript = join(root, 'transcript.jsonl')
     await writeFile(
       transcript,
@@ -278,7 +278,7 @@ describe('Claude transcript marker branch proof', () => {
   })
 
   it('rejects a post-snapshot descendant whose parent row was observed later', async () => {
-    const root = await makeRoot('orca-native-chat-resolve-claude-post-snapshot-')
+    const root = await makeRoot('quirky-native-chat-resolve-claude-post-snapshot-')
     const transcript = join(root, 'transcript.jsonl')
     await writeFile(
       transcript,

@@ -6,7 +6,7 @@ import { closeTestStores, createStore, testState } from './persistence-test-harn
 import { normalizeJiraSavedFilterState } from '../shared/jira-saved-filters'
 vi.mock('electron', () => ({ app: { getPath: () => testState.dir } }))
 beforeEach(() => {
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-jira-saved-filters-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-jira-saved-filters-'))
 })
 afterEach(async () => {
   await closeTestStores()

@@ -6,10 +6,10 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { build } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 const piCli = process.argv[2] && resolve(process.argv[2])
 assert.ok(piCli, 'Pass the installed Pi CLI entrypoint')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-pi-provider-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-pi-provider-'))
 const requests = []
 const server = createServer(async (req, res) => {
   let body = ''
@@ -42,7 +42,7 @@ const server = createServer(async (req, res) => {
   res.end('data: [DONE]\n\n')
 })
 try {
-  const bundle = join(scratch, 'orca.cjs')
+  const bundle = join(scratch, 'quirky.cjs')
   await build({
     stdin: {
       contents: "export {planCommitMessageGeneration} from './src/shared/commit-message-plan';",
@@ -61,14 +61,14 @@ try {
   await mkdir(join(dir, 'extensions'), { recursive: true })
   await writeFile(
     join(dir, 'extensions', 'provider.ts'),
-    `export default function(pi){pi.registerProvider('orca-proof',{name:'Proof',baseUrl:'http://127.0.0.1:${server.address().port}/v1',apiKey:'fixture-only',api:'openai-completions',models:[{id:'local',name:'Proof',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:8192,maxTokens:256}]})}`
+    `export default function(pi){pi.registerProvider('quirky-proof',{name:'Proof',baseUrl:'http://127.0.0.1:${server.address().port}/v1',apiKey:'fixture-only',api:'openai-completions',models:[{id:'local',name:'Proof',reasoning:false,input:['text'],cost:{input:0,output:0,cacheRead:0,cacheWrite:0},contextWindow:8192,maxTokens:256}]})}`
   )
   await writeFile(
     join(dir, 'settings.json'),
-    JSON.stringify({ defaultProvider: 'orca-proof', defaultModel: 'local' })
+    JSON.stringify({ defaultProvider: 'quirky-proof', defaultModel: 'local' })
   )
   const planned = planCommitMessageGeneration(
-    { agentId: 'pi', model: 'orca-proof/local' },
+    { agentId: 'pi', model: 'quirky-proof/local' },
     'Generate one short commit message.'
   )
   assert.equal(planned.ok, true)
@@ -91,7 +91,7 @@ try {
         WINDIR: process.env.WINDIR,
         HOME: scratch,
         USERPROFILE: scratch,
-        ORCA_BACKGROUND_LAUNCH: '1',
+        QUIRKY_BACKGROUND_LAUNCH: '1',
         PI_CODING_AGENT_DIR: dir
       },
       input: planned.plan.stdinPayload,

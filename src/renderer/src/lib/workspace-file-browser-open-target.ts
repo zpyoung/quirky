@@ -7,9 +7,9 @@ import { useAppStore } from '@/store'
 
 /** Still the answer for flows that need a real `file://` URL (e.g. dropping a file on a browser pane). */
 export const REMOTE_FILE_BROWSER_UNSUPPORTED_MESSAGE =
-  'Open in Orca Browser is only available for local files.'
+  'Open in Quirky Browser is only available for local files.'
 export const TWIN_FILE_BROWSER_UNSUPPORTED_MESSAGE =
-  'This project is on more than one host, so Orca cannot tell which copy to open.'
+  'This project is on more than one host, so Quirky cannot tell which copy to open.'
 
 export type WorkspaceFileBrowserOpenTarget =
   | {
@@ -42,7 +42,7 @@ export function getWorkspaceFileBrowserOpenTarget(params: {
     runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, params.worktreeId)
   ) {
     // Why: Chromium resolves file:// URLs on the local machine. Remote files
-    // need an Orca-served URL before the browser can render them correctly.
+    // need an Quirky-served URL before the browser can render them correctly.
     return {
       status: 'unsupported',
       reason: 'remote-worktree',

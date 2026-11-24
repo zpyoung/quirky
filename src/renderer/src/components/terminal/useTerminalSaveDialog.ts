@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { OpenFile } from '@/store/slices/editor'
-import { ORCA_EDITOR_SAVE_AND_CLOSE_EVENT } from '@/components/editor/editor-autosave'
+import { QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT } from '@/components/editor/editor-autosave'
 import { discardEditorFileChangesAndClose } from '@/components/editor/discard-editor-file-changes'
 
 type UseTerminalSaveDialogParams = {
@@ -45,7 +45,7 @@ export function useTerminalSaveDialog({
     }
 
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: saveDialogFileId } })
+      new CustomEvent(QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT, { detail: { fileId: saveDialogFileId } })
     )
     setSaveDialogFileId(null)
   }, [saveDialogFileId])

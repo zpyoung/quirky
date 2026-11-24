@@ -4,7 +4,7 @@ import type { AppState } from '@/store'
 import { useAppStore } from '@/store'
 import { registerTerminalPresentationIpcBridge } from '@/hooks/ipc-events/terminal-presentation-ipc-bridge'
 import { getDefaultSettings } from '../../../shared/constants'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { RuntimeTerminalSummary } from '../../../shared/runtime-types'
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import { activateAndRevealWorktree } from './worktree-activation'
@@ -266,7 +266,7 @@ describe('old-host split of an unmounted tab, then first activation', () => {
   })
 
   // The window alone, as above; the odd runs mint the duplicate. Main owning the create fixes it.
-  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it : it.fails)(
+  ;(QUIRKY_LAYOUT_OWNER_IS_MAIN ? it : it.fails)(
     'stays duplicate-free across 8 create-then-activate cycles, with or without the reveal',
     async () => {
       let duplicates = 0

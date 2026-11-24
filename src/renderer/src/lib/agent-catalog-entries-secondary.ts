@@ -35,7 +35,7 @@ export function secondaryAgentCatalogEntries(): AgentCatalogEntry[] {
       label: translate('auto.lib.agent.catalog.e0247254f2', 'Kiro'),
       // Why: the Kiro installer (https://cli.kiro.dev/install) ships a binary
       // named `kiro-cli`, not `kiro`. Match TUI_AGENT_CONFIG.kiro.detectCmd so
-      // the settings pane's "default command" hint aligns with what Orca
+      // the settings pane's "default command" hint aligns with what Quirky
       // actually looks for on PATH.
       cmd: 'kiro-cli',
       faviconDomain: 'kiro.dev',
@@ -89,7 +89,7 @@ export function secondaryAgentCatalogEntries(): AgentCatalogEntry[] {
       // Why: `npm i -g command-code` installs both `command-code` and the
       // shorter alias `cmd`. Show the full name in the settings hint so it
       // matches TUI_AGENT_CONFIG['command-code'].detectCmd and avoids any
-      // suggestion that Orca is looking for Windows' built-in `cmd.exe`.
+      // suggestion that Quirky is looking for Windows' built-in `cmd.exe`.
       cmd: 'command-code',
       faviconDomain: 'commandcode.ai',
       homepageUrl: 'https://commandcode.ai/docs/quickstart'

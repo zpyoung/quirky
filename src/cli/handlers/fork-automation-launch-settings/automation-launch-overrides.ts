@@ -165,7 +165,7 @@ export async function assertAutomationLaunchOverridesRuntimeSupported(
   if (!status.result.capabilities?.includes(AGENT_LAUNCH_OVERRIDES_RUNTIME_CAPABILITY)) {
     throw new RuntimeClientError(
       'capability_unsupported',
-      'Connected Orca runtime does not support automation launch settings. Update the Orca runtime and try again.'
+      'Connected Quirky runtime does not support automation launch settings. Update the Quirky runtime and try again.'
     )
   }
 }

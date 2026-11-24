@@ -19,7 +19,7 @@ import {
  * The rewrite's own contract — which selectors read as the document's, and the sheet shapes it
  * refuses — is held beside it in `style-scoping/document-style-scoping.test.ts`.
  */
-const PREFIX = '.orca-terminal-document-host'
+const PREFIX = '.quirky-terminal-document-host'
 
 function selectorsOf(css: string): string[] {
   return [...css.matchAll(/(?:^|\})\s*([^{}]+)\{/g)].flatMap((match) =>

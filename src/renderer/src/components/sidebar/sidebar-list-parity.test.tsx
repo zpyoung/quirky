@@ -50,7 +50,7 @@ import {
 } from './sidebar-list-parity.test-fixture'
 
 const SWITCH = '../../../../shared/sidebar-inputs-switch'
-vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
 // The feed the window would install from main; set per list.
 let windowFeed: DesktopSidebarFeed | null = null
@@ -69,7 +69,7 @@ beforeAll(async () => {
   vi.resetModules()
   vi.doUnmock(SWITCH)
   expect(
-    (await import('../../../../shared/sidebar-inputs-switch')).ORCA_SIDEBAR_INPUTS_IS_MAIN
+    (await import('../../../../shared/sidebar-inputs-switch')).QUIRKY_SIDEBAR_INPUTS_IS_MAIN
   ).toBe(false)
   phoneAdapter = {
     ...(await import('../../../../shared/sidebar-list/sidebar-feed-domains')),
@@ -146,7 +146,7 @@ function worldState(view: GoldenView, extra: Partial<AppState> = {}): Partial<Ap
   return { ...base, ...parityWorldOverrides(base), ...extra }
 }
 
-/** The window's list built from main's feed, as an ORCA_SIDEBAR_INPUTS=main window draws it. */
+/** The window's list built from main's feed, as an QUIRKY_SIDEBAR_INPUTS=main window draws it. */
 async function windowFeedList(state: Partial<AppState>): Promise<string[]> {
   const { installed } = await installFeed(state)
   windowFeed = { domains: readFeedDomainsSwitchedOn(installed), readId: 1 }
@@ -216,7 +216,7 @@ describe('sidebar list parity: desktop window and feed reader', () => {
               collapsedGroups: new Set()
             }
             // Bare id: every occurrence highlights, a pinned duplicate included.
-            const active = parityActiveState(GOLDEN_WORKTREE_IDS.orcaFeatA, null)
+            const active = parityActiveState(GOLDEN_WORKTREE_IDS.quirkyFeatA, null)
             const expanded = await expectAdaptersAgree(worldState(view, active))
             expect(expanded.filter((line) => line.endsWith(' ACTIVE')).length).toBe(
               pinnedInGroups ? 2 : 1
@@ -238,10 +238,10 @@ describe('sidebar list parity: desktop window and feed reader', () => {
     ],
     'single host scope': [{ workspaceHostScope: 'ssh:gpu-vm' }, /^ITEM .*ssh:gpu-vm\|/],
     'paired server scope': [{ workspaceHostScope: 'runtime:env-1' }, /^ITEM .*runtime:env-1\|/],
-    'repo filter': [{ filterRepoIds: ['orca', 'lab'] }, /^ITEM .*\|lab::/],
+    'repo filter': [{ filterRepoIds: ['quirky', 'lab'] }, /^ITEM .*\|lab::/],
     'hide sleeping': [
       { showSleepingWorkspaces: false, ...goldenLiveTerminalState() },
-      /^ITEM .*\|orca::\/w\/feat-a /
+      /^ITEM .*\|quirky::\/w\/feat-a /
     ],
     // The server reports the desktop's terminal; only the desktop knows its browser tab.
     'hide sleeping with a paired server terminal': [

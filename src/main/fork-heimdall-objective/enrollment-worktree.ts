@@ -1,10 +1,10 @@
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import type { ObjectiveNewWorktreeRequest } from '../../shared/fork-heimdall-objective/contract-types'
 import type { Repo } from '../../shared/repo-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 
 async function listNamedWorktreeIds(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   repo: Repo,
   name: string
 ): Promise<string[]> {
@@ -17,7 +17,7 @@ async function listNamedWorktreeIds(
 }
 
 async function removeStrandedWorktrees(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   repo: Repo,
   name: string,
   preexisting: ReadonlySet<string>
@@ -39,7 +39,7 @@ async function removeStrandedWorktrees(
  * A create that fails after its checkout exists removes that checkout before rethrowing.
  */
 export async function createObjectiveEnrollmentWorktree(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   repo: Repo,
   request: ObjectiveNewWorktreeRequest
 ) {
@@ -65,7 +65,7 @@ export async function createObjectiveEnrollmentWorktree(
  * host. The removal runs at most once and never throws, so every failure path may invoke it.
  */
 export function objectiveEnrollmentWorktreeRollback(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   worktreeId: string,
   hostId: ExecutionHostId
 ): () => Promise<void> {

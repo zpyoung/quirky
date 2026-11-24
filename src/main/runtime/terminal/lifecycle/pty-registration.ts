@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithInvalidateAllHandlesForPty } from './pty-handle-invalidation'
+import { QuirkyRuntimeWithInvalidateAllHandlesForPty } from './pty-handle-invalidation'
 import type { PtyIncarnationId } from '../../../../shared/pty-incarnation'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
@@ -11,10 +11,10 @@ import type {
 } from '../../runtime-terminal-state-records'
 import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-terminal-contracts'
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
 
-export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
+export abstract class QuirkyRuntimeWithRegisterPty extends QuirkyRuntimeWithInvalidateAllHandlesForPty {
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
     worktreeId: string,
     tabId: string
@@ -166,7 +166,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       }
     }
     // Switch point: a pane main binds lists its terminal now, in the same push as the flip below.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       startedMainTerminalSurfaces(this)?.terminalRegistered(ptyId)
     }
     // Why: a listed surface's pending-handle → ready flip must not wait on a later renderer graph change.

@@ -1,11 +1,11 @@
-// Continue, pressed in a chat whose reply an Orca stop cut off: the restart continuation, bound to
+// Continue, pressed in a chat whose reply an Quirky stop cut off: the restart continuation, bound to
 // that cut turn rather than to a restart offer. An offer, when one survives, only picks the words;
 // none is needed, so a crash or a paired server's restart continues the same way.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { withTimeout } from '../../../shared/promise-timeout-fallback'
 import type { AgentSessionResumeMarker } from '../../../shared/agent-session-resume-marker'
-import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat-orca-stop-cut'
+import { latestNativeChatQuirkyStopCut } from '../../../shared/native-chat-quirky-stop-cut'
 import {
   continuationDeps,
   RestartContinuationSupersededError,
@@ -37,7 +37,7 @@ function interruptedContinuationId(
 
 /**
  * Sends the continuation when, at acceptance inside the session lock, the chat's latest turn is
- * still `turnItemId`, cut by an Orca stop with nothing sent since. A second Continue (another
+ * still `turnItemId`, cut by an Quirky stop with nothing sent since. A second Continue (another
  * client, a retry after a lost answer) finds the first one's message there and sends nothing.
  */
 export async function continueInterruptedStructuredAgentSessionTurn(
@@ -55,7 +55,7 @@ export async function continueInterruptedStructuredAgentSessionTurn(
     const journal = host.sessions.get(sessionId)?.journal
     return (
       journal !== undefined &&
-      latestNativeChatOrcaStopCut(journal.snapshot().items, journal.submissions())?.turnItemId ===
+      latestNativeChatQuirkyStopCut(journal.snapshot().items, journal.submissions())?.turnItemId ===
         turnItemId
     )
   }

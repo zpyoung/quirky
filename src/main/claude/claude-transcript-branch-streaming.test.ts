@@ -100,7 +100,7 @@ const replay = (anchorUuid = 'root') =>
 const read = async (anchorUuid?: string) => (await replay(anchorUuid)).proof
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-branch-streaming-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-branch-streaming-'))
   replayed = []
   Object.assign(state, {
     path: join(directory, 'transcript.jsonl'),

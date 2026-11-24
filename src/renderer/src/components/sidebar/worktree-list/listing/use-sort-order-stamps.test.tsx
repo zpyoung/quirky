@@ -9,7 +9,7 @@ import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-
 import { useSidebarWorktreeSortOrder } from './use-sort-order'
 
 vi.mock('../../../../../../shared/sidebar-inputs-switch', () => ({
-  ORCA_SIDEBAR_INPUTS_IS_MAIN: true
+  QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true
 }))
 vi.mock('@/lib/sidebar-list-session', () => ({ useSidebarListSession: () => {} }))
 const persistOrder = vi.hoisted(() => vi.fn())

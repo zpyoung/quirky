@@ -68,7 +68,7 @@ export function registerJournalStoreTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-'))
     clock = 1_000
   })
 
@@ -394,7 +394,7 @@ export function registerJournalStoreTests(): void {
           },
           {
             kind: 'item',
-            identity: { provider: 'orca', clientMessageId: 'exit-status' },
+            identity: { provider: 'quirky', clientMessageId: 'exit-status' },
             body: { kind: 'status', text: 'Provider exited' },
             turnScope: AGENT_JOURNAL_THREAD_SCOPE
           },

@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { normalizeHostAppVersion } from './host-app-version'
 
-const STORAGE_KEY_PREFIX = 'orca:host-app-version:v1:'
+const STORAGE_KEY_PREFIX = 'quirky:host-app-version:v1:'
 
 export async function loadHostAppVersion(hostId: string): Promise<string | null> {
   try {

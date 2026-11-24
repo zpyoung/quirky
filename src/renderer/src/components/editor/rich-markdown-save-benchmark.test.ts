@@ -11,8 +11,8 @@ function create(source: string) {
     contentType: 'markdown'
   })
 }
-// Run with ORCA_MARKDOWN_SAVE_BENCHMARK=1; timings are evidence, not a machine-dependent CI gate.
-it.skipIf(process.env.ORCA_MARKDOWN_SAVE_BENCHMARK !== '1')(
+// Run with QUIRKY_MARKDOWN_SAVE_BENCHMARK=1; timings are evidence, not a machine-dependent CI gate.
+it.skipIf(process.env.QUIRKY_MARKDOWN_SAVE_BENCHMARK !== '1')(
   'measures source preservation at supported document sizes',
   () => {
     for (const count of [100, 500, 1500, 6000]) {

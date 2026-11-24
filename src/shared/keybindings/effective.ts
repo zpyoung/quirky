@@ -70,7 +70,7 @@ export function getEffectiveKeybindingsForDefinition(
 export function normalizeTerminalShortcutPolicy(
   policy: TerminalShortcutPolicy | null | undefined
 ): TerminalShortcutPolicy {
-  return policy === 'terminal-first' ? 'terminal-first' : 'orca-first'
+  return policy === 'terminal-first' ? 'terminal-first' : 'quirky-first'
 }
 
 const TUI_CONFLICT_ACTIONS = new Set<KeybindingActionId>([
@@ -103,8 +103,8 @@ export function keybindingIsActiveInContext(
   if (options.context !== 'terminal') {
     return true
   }
-  // Why: Orca-first keeps app shortcuts inside terminals; terminal-first is the escape hatch for shells and TUIs.
-  if (normalizeTerminalShortcutPolicy(options.terminalShortcutPolicy) === 'orca-first') {
+  // Why: Quirky-first keeps app shortcuts inside terminals; terminal-first is the escape hatch for shells and TUIs.
+  if (normalizeTerminalShortcutPolicy(options.terminalShortcutPolicy) === 'quirky-first') {
     return true
   }
   return isKeybindingAllowedInTerminal(definition)

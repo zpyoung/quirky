@@ -331,7 +331,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
           </div>
         ) : null}
 
-        {/* Why: folders, not skills — a plugin path Orca could not read says nothing
+        {/* Why: folders, not skills — a plugin path Quirky could not read says nothing
             about which skill lives there, so it cannot be a row above. */}
         {scanIssues.length > 0 ? (
           <div className="min-w-0 border-t border-border/60 pt-3">
@@ -386,7 +386,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
         <DialogFooter className="sm:justify-between">
           {isRunning ? (
             // The terminal used to be the escape hatch for a stalled update;
-            // without it a wedged npx would leave restarting Orca as the only way out.
+            // without it a wedged npx would leave restarting Quirky as the only way out.
             <Button
               type="button"
               variant="ghost"

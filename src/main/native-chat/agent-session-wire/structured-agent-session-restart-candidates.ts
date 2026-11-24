@@ -33,8 +33,8 @@ export function createStructuredAgentSessionRestartCandidateReader(deps: {
   agents: Pick<StructuredAgentRegistry, 'definition'>
   /** Whether the chat moved on since the offer was taken; see the offer withdrawal. */
   movedOn: (marker: AgentSessionResumeMarker) => boolean
-  /** Whether the chat was saved by a newer Orca: its whole database, or its journal's open. */
-  savedByNewerOrca: (sessionId: string) => boolean
+  /** Whether the chat was saved by a newer Quirky: its whole database, or its journal's open. */
+  savedByNewerQuirky: (sessionId: string) => boolean
 }): StructuredAgentSessionRestartCandidateReader {
   return (markers, leaseState) =>
     structuredAgentSessionResumableSet({
@@ -42,7 +42,7 @@ export function createStructuredAgentSessionRestartCandidateReader(deps: {
       getRecord: deps.getRecord,
       supportsRecord: (record) => hostCanStartRecord(deps, record),
       movedOn: deps.movedOn,
-      savedByNewerOrca: deps.savedByNewerOrca,
+      savedByNewerQuirky: deps.savedByNewerQuirky,
       latestPrompt: (sessionId) =>
         latestStructuredAgentSessionPrompt(
           deps.sessions.get(sessionId)?.journal.snapshot().items ?? []
@@ -51,7 +51,7 @@ export function createStructuredAgentSessionRestartCandidateReader(deps: {
     })
 }
 
-/** The listing's reader, which skips a newer Orca's chats, and the one right before sending, which
+/** The listing's reader, which skips a newer Quirky's chats, and the one right before sending, which
  *  skips nothing for them: turning one away there would spend its offer, so its send is refused
  *  instead and settling keeps the offer. */
 export function createStructuredAgentSessionRestartCandidateReaders(
@@ -64,19 +64,19 @@ export function createStructuredAgentSessionRestartCandidateReaders(
     derive: createStructuredAgentSessionRestartCandidateReader(deps),
     deriveAtSend: createStructuredAgentSessionRestartCandidateReader({
       ...deps,
-      savedByNewerOrca: () => false
+      savedByNewerQuirky: () => false
     })
   }
 }
 
-/** Chats the latest reveal found saved by a newer Orca: listing skips them and never spends their
+/** Chats the latest reveal found saved by a newer Quirky: listing skips them and never spends their
  *  offers. Each reveal re-derives its chat's entry; nothing is stored. */
-export function createNewerOrcaChats(databaseIsNewer: () => boolean) {
+export function createNewerQuirkyChats(databaseIsNewer: () => boolean) {
   const chats = new Set<string>()
   return {
     has: (sessionId: string): boolean => databaseIsNewer() || chats.has(sessionId),
     note: (sessionId: string, revealed: { openRefusal?: AgentSessionWireRefusal } | null): void => {
-      if (revealed?.openRefusal?.details?.reason === 'journalWrittenByNewerOrca') {
+      if (revealed?.openRefusal?.details?.reason === 'journalWrittenByNewerQuirky') {
         chats.add(sessionId)
       } else {
         chats.delete(sessionId)

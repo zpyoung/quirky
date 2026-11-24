@@ -8,5 +8,5 @@ export function macDaemonJobLabel(
   protocolVersion = PROTOCOL_VERSION
 ): string {
   const profileKey = createHash('sha256').update(resolve(userDataPath)).digest('hex').slice(0, 16)
-  return `com.stablyai.orca.terminal.${profileKey}.v${protocolVersion}`
+  return `com.zpyoung.quirky.terminal.${profileKey}.v${protocolVersion}`
 }

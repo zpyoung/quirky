@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
-import type { OrcadMigrationCatalogPayload } from '../../../shared/orcad-migration/orcad-migration-manifest'
+import type { QuirkydMigrationCatalogPayload } from '../../../shared/quirkyd-migration/quirkyd-migration-manifest'
 import type { Repo } from '../../../shared/repo-types'
-import { rewriteOrcadMigrationPayloadPaths } from '../../ssh/orcad-migration-path-rewrite'
+import { rewriteQuirkydMigrationPayloadPaths } from '../../ssh/quirkyd-migration-path-rewrite'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
 import { collectWslMoveScope } from './wsl-move-scope'
 
@@ -180,7 +180,7 @@ describe('createUncToLinuxPathRewriter', () => {
   it('rewrites a whole catalog, including worktree ids and owner keys', () => {
     const repoPath = unc('/home/dev/app')
     const worktreeId = `repo-a::${repoPath}`
-    const payload: OrcadMigrationCatalogPayload = {
+    const payload: QuirkydMigrationCatalogPayload = {
       repositories: [repo('repo-a', repoPath)],
       projectGroups: [],
       folderWorkspaces: [],
@@ -211,7 +211,7 @@ describe('createUncToLinuxPathRewriter', () => {
         retiredWorktreeNamespaces: []
       }
     }
-    const rewritten = rewriteOrcadMigrationPayloadPaths(payload, rewriter)
+    const rewritten = rewriteQuirkydMigrationPayloadPaths(payload, rewriter)
     expect(rewritten.repositories[0].path).toBe('/home/dev/app')
     // The source key stays in its source form: subtraction matches source rows by it.
     expect(rewritten.dormantState?.worktreeMeta[0]).toMatchObject({

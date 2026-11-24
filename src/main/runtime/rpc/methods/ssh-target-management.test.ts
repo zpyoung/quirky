@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
 import type { RpcCallerScope } from '../rpc-caller-scope'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import { SSH_EDITABLE_TARGET_FIELDS } from '../../../../shared/ssh-target-management'
 import { SSH_METHODS } from './ssh'
 
@@ -52,7 +52,7 @@ const storedTarget = {
 
 const validInput = { label: 'Build', host: 'build.internal', port: 22, username: 'ci' }
 
-const runtime = new OrcaRuntimeService()
+const runtime = new QuirkyRuntimeService()
 
 function dispatch(method: string, params?: unknown, callerScope?: RpcCallerScope) {
   const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS, callerScope })
@@ -129,13 +129,13 @@ describe('server SSH target management RPC', () => {
 
   it('marks a managed-server host so the client does not offer removal', async () => {
     mocks.listRegisteredSshTargets.mockReturnValue([
-      { ...validInput, id: 'ssh-2', orcadFence: { environmentId: 'env-1' } }
+      { ...validInput, id: 'ssh-2', quirkydFence: { environmentId: 'env-1' } }
     ])
 
     const response = await dispatch('ssh.listEditableTargets')
 
     expect(response).toMatchObject({ ok: true, result: { targets: [{ managedServer: true }] } })
-    expect(JSON.stringify(response)).not.toContain('orcadFence')
+    expect(JSON.stringify(response)).not.toContain('quirkydFence')
   })
 
   it.each([
@@ -157,7 +157,7 @@ describe('server SSH target management RPC', () => {
 
   it('refuses main-owned fields a client must not forge', async () => {
     const response = await dispatch('ssh.addTarget', {
-      target: { ...validInput, generation: 99, orcadFence: { environmentId: 'env-1' } }
+      target: { ...validInput, generation: 99, quirkydFence: { environmentId: 'env-1' } }
     })
 
     expect(response).toMatchObject({ ok: false })
@@ -243,7 +243,9 @@ describe('server SSH target management RPC', () => {
       ok: true,
       result: { removed: true }
     })
-    mocks.mutations.remove.mockRejectedValueOnce(new Error('This host runs a managed Orca server.'))
+    mocks.mutations.remove.mockRejectedValueOnce(
+      new Error('This host runs a managed Quirky server.')
+    )
     await expect(dispatch('ssh.removeTarget', { targetId: 'ssh-2' })).resolves.toMatchObject({
       ok: false
     })

@@ -104,8 +104,8 @@ export function codexProviderFrameActivity(
  * Claude does not narrate its own turn, so the activity line stays the generic fallback.
  *
  * Codex names each item it starts, which is what makes its line worth reading. Claude's only
- * turn-wide frame is `system/status`, whose payload is a bare token — every sentence Orca ever
- * put on this line for it was Orca's own wording for `requesting`, which is true for nearly the
+ * turn-wide frame is `system/status`, whose payload is a bare token — every sentence Quirky ever
+ * put on this line for it was Quirky's own wording for `requesting`, which is true for nearly the
  * whole turn and says no more than the fallback does. Its `task_*` frames do carry prose, but
  * they are keyed by task id and subagent type: they describe a spawned task, not this turn, and
  * the background-tasks strip already owns that. Compaction is the one exception kept — a real,

@@ -22,15 +22,15 @@ function workspace() {
     {
       type: 'createTerminalTab',
       workspace: WS,
-      creation: { launchAgent: 'claude', startupCwd: '/Users/dev/orca' }
+      creation: { launchAgent: 'claude', startupCwd: '/Users/dev/quirky' }
     },
     {
       type: 'openEditorTab',
       workspace: WS,
-      fileId: '/Users/dev/orca/README.md',
+      fileId: '/Users/dev/quirky/README.md',
       contentType: 'editor',
       file: {
-        filePath: '/Users/dev/orca/README.md',
+        filePath: '/Users/dev/quirky/README.md',
         relativePath: 'README.md',
         language: 'markdown'
       }
@@ -115,7 +115,7 @@ describe('projectSessionTabs', () => {
         }
       },
       panes: { [apiTab]: { activeLeafId: apiSplit, expandedLeafId: null } },
-      editorDrafts: { [WS]: { '/Users/dev/orca/README.md': { dirtyDraftContent: '# draft' } } }
+      editorDrafts: { [WS]: { '/Users/dev/quirky/README.md': { dirtyDraftContent: '# draft' } } }
     })
     const facts: SessionTabsFacts = {
       tabLabels: {},
@@ -206,7 +206,7 @@ describe('projectSessionTabs', () => {
             parentTabId: agent!.tabId!,
             leafId: agent!.leafId!,
             launchAgent: 'claude',
-            startupCwd: '/Users/dev/orca',
+            startupCwd: '/Users/dev/quirky',
             parentLayout: {
               root: { type: 'leaf', leafId: agent!.leafId! },
               activeLeafId: agent!.leafId!,
@@ -218,16 +218,16 @@ describe('projectSessionTabs', () => {
             type: 'markdown',
             id: readme!.tabId!,
             title: 'README.md',
-            filePath: '/Users/dev/orca/README.md',
+            filePath: '/Users/dev/quirky/README.md',
             relativePath: 'README.md',
             language: 'markdown',
             mode: 'edit',
             isDirty: true,
             isActive: false,
-            sourceFileId: '/Users/dev/orca/README.md',
-            sourceFilePath: '/Users/dev/orca/README.md',
+            sourceFileId: '/Users/dev/quirky/README.md',
+            sourceFilePath: '/Users/dev/quirky/README.md',
             sourceRelativePath: 'README.md',
-            documentVersion: 'file:/Users/dev/orca/README.md',
+            documentVersion: 'file:/Users/dev/quirky/README.md',
             color: null,
             isPinned: false
           },

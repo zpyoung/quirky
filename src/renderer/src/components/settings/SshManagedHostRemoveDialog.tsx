@@ -13,12 +13,12 @@ import {
 
 /** Main refuses to remove a host its managed server still holds; only Stop or Forget frees it. */
 export function isManagedServerSshHost(
-  target: Pick<SshTarget, 'orcadFence' | 'orcadProvisioning'>
+  target: Pick<SshTarget, 'quirkydFence' | 'quirkydProvisioning'>
 ): boolean {
-  return target.orcadFence !== undefined || target.orcadProvisioning !== undefined
+  return target.quirkydFence !== undefined || target.quirkydProvisioning !== undefined
 }
 
-/** Sends a host Orca runs on to its server row instead of a removal main would refuse. */
+/** Sends a host Quirky runs on to its server row instead of a removal main would refuse. */
 export function SshManagedHostRemoveDialog({
   label,
   onClose
@@ -45,7 +45,7 @@ export function SshManagedHostRemoveDialog({
           <DialogDescription>
             {translate(
               'auto.components.settings.sshManagedHostRemove.descriptionServerHost',
-              'Orca runs on {{label}}. In Remote Orca Servers, open the ⋯ menu on {{label}} and choose Stop… to remove Orca from the host, or Forget… if the host is gone. Then you can remove this SSH host.',
+              'Quirky runs on {{label}}. In Remote Quirky Servers, open the ⋯ menu on {{label}} and choose Stop… to remove Quirky from the host, or Forget… if the host is gone. Then you can remove this SSH host.',
               { label: label ?? '' }
             )}
           </DialogDescription>
@@ -57,7 +57,7 @@ export function SshManagedHostRemoveDialog({
           <Button onClick={openManagedServers}>
             {translate(
               'auto.components.settings.sshManagedHostRemove.openServers',
-              'Open Remote Orca Servers'
+              'Open Remote Quirky Servers'
             )}
           </Button>
         </DialogFooter>

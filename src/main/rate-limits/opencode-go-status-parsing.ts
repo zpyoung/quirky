@@ -71,7 +71,7 @@ function percentMeterToWindow(meter: unknown, windowMinutes: number): RateLimitW
 }
 
 /**
- * Parse the OpenCode Go usage API body into Orca's usage windows.
+ * Parse the OpenCode Go usage API body into Quirky's usage windows.
  * @param text - Raw response body from `GET /zen/go/v1/usage`.
  * @returns The mapped windows, or null when the body is not a usage payload.
  */

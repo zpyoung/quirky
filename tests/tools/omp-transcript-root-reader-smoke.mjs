@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout path')
-const orcaRoot = fileURLToPath(new URL('../../', import.meta.url))
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-root-reader-'))
+const quirkyRoot = fileURLToPath(new URL('../../', import.meta.url))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-root-reader-'))
 const home = join(scratch, 'home')
 const xdg = join(scratch, 'data')
 process.env.HOME = home
@@ -34,10 +34,10 @@ try {
     source(process.argv[2], 'packages/coding-agent/src/session/session-manager.ts')
   )
   const { readNativeChatTranscript } = await import(
-    source(orcaRoot, 'src/main/native-chat/transcript-reader.ts')
+    source(quirkyRoot, 'src/main/native-chat/transcript-reader.ts')
   )
   const { resolveSessionFilePath } = await import(
-    source(orcaRoot, 'src/main/native-chat/session-file-resolver.ts')
+    source(quirkyRoot, 'src/main/native-chat/session-file-resolver.ts')
   )
   const results = []
   for (const profile of ['', 'work']) {

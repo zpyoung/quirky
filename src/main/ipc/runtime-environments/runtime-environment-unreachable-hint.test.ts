@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest'
 import { withRuntimeUnreachableHint } from './runtime-environment-unreachable-hint'
 import { withRemoteRuntimeTailscaleHint } from '../../../shared/remote-runtime-tailscale-hint'
 
-const UNREACHABLE = 'Could not connect to the remote Orca runtime at ws://127.0.0.1:42000.'
+const UNREACHABLE = 'Could not connect to the remote Quirky runtime at ws://127.0.0.1:42000.'
 
 describe('withRuntimeUnreachableHint', () => {
   it('points a WSL host at its own reconnect, never at Tailscale', () => {
     const message = withRuntimeUnreachableHint(
-      { orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 42000, remotePort: 6768 } },
+      { quirkydDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 42000, remotePort: 6768 } },
       UNREACHABLE,
       'ws://127.0.0.1:42000'
     )
     expect(message).not.toMatch(/tailscale/i)
-    expect(message).toContain('The Orca server in the WSL distro Ubuntu isn’t answering')
+    expect(message).toContain('The Quirky server in the WSL distro Ubuntu isn’t answering')
   })
 
   it('keeps the Tailscale hint for a network server', () => {
@@ -23,7 +23,7 @@ describe('withRuntimeUnreachableHint', () => {
 
   it('leaves other failures alone', () => {
     const wsl = {
-      orcadDeployment: { kind: 'wsl' as const, distro: 'Ubuntu', localPort: 1, remotePort: 2 }
+      quirkydDeployment: { kind: 'wsl' as const, distro: 'Ubuntu', localPort: 1, remotePort: 2 }
     }
     expect(withRuntimeUnreachableHint(wsl, 'Unauthorized', null)).toBe('Unauthorized')
   })
@@ -32,12 +32,14 @@ describe('withRuntimeUnreachableHint', () => {
     ['a paired server', {}],
     [
       'a legacy SSH-managed server',
-      { orcadDeployment: { sshTargetId: 't', sshTargetGeneration: 1, localPort: 1, remotePort: 2 } }
+      {
+        quirkydDeployment: { sshTargetId: 't', sshTargetGeneration: 1, localPort: 1, remotePort: 2 }
+      }
     ],
     [
       'an SSH-managed server',
       {
-        orcadDeployment: {
+        quirkydDeployment: {
           kind: 'ssh' as const,
           sshTargetId: 't',
           sshTargetGeneration: 1,
@@ -55,12 +57,12 @@ describe('withRuntimeUnreachableHint', () => {
   it('pins the full WSL hint text', () => {
     expect(
       withRuntimeUnreachableHint(
-        { orcadDeployment: { kind: 'wsl', distro: 'Debian', localPort: 1, remotePort: 2 } },
-        'Timed out waiting for the remote Orca runtime.',
+        { quirkydDeployment: { kind: 'wsl', distro: 'Debian', localPort: 1, remotePort: 2 } },
+        'Timed out waiting for the remote Quirky runtime.',
         null
       )
     ).toBe(
-      'Timed out waiting for the remote Orca runtime. The Orca server in the WSL distro Debian isn’t answering; connect it again in Settings → Remote Orca Servers → WSL hosts.'
+      'Timed out waiting for the remote Quirky runtime. The Quirky server in the WSL distro Debian isn’t answering; connect it again in Settings → Remote Quirky Servers → WSL hosts.'
     )
   })
 })

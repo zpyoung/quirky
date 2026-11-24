@@ -1,4 +1,4 @@
-import type { MobileWebShellFailureReason } from '../../modules/orca-mobile-web-shell/src/load-state'
+import type { MobileWebShellFailureReason } from '../../modules/quirky-mobile-web-shell/src/load-state'
 import type { MobileWebPageRoute, PageRouteRefusalVerdict } from './page-route-policy'
 import type {
   MobileWebBundleCompatManifest,

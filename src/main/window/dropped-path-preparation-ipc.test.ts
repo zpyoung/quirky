@@ -40,7 +40,7 @@ vi.mock('./darwin-user-temp-dir', () => ({
 import { registerDroppedPathPreparation } from './dropped-path-preparation-ipc'
 
 const DRAG_TEMP = join('/', 'var', 'T', 'TemporaryItems', 'NSIRD_screencaptureui_1', 'Shot.png')
-const COPY = join('/', 'var', 'T', 'orca-drops-501', 'orca-drop-abc123', 'Shot.png')
+const COPY = join('/', 'var', 'T', 'quirky-drops-501', 'quirky-drop-abc123', 'Shot.png')
 const FINDER = join('/', 'Users', 'me', 'Desktop', 'notes.txt')
 
 function copied(sourcePath: string, destPath = sourcePath): DragTempCopyItemResult {

@@ -125,7 +125,7 @@ describe('a Grok chat Stop', () => {
     await host.flushStreamedEvents(SESSION)
     await stop(host)
     await waitFor(() => expect(first.exited).toBe(true))
-    // The task ended with Grok's process; Orca cannot say how, so its row says no more than that.
+    // The task ended with Grok's process; Quirky cannot say how, so its row says no more than that.
     const task = (await rows()).find((row) => row.itemId.includes('background-task'))
     expect(task?.body).toMatchObject({
       blocks: [

@@ -32,7 +32,7 @@ function settle(delivered: 'accepted' | undefined) {
   const args = {
     runtime: {
       getNestedWorkerMaxDepth: () => 3,
-      getTerminalOrchestrationCliCommand: () => 'orca'
+      getTerminalOrchestrationCliCommand: () => 'quirky'
     },
     db,
     run: { id: 'run_1' },
@@ -68,8 +68,8 @@ describe('a structured worker whose agent outlasts the preamble wait', () => {
       state: 'outcome_unknown',
       turnStart: 'unobserved',
       nextCommands: [
-        'orca orchestration worker-show --dispatch d1 --json',
-        'orca orchestration worker-abandon --dispatch d1 --json'
+        'quirky orchestration worker-show --dispatch d1 --json',
+        'quirky orchestration worker-abandon --dispatch d1 --json'
       ]
     })
     expect(db.markWorkerStartUnknown).toHaveBeenCalledWith(

@@ -11,13 +11,13 @@ import {
   type ServerTarget
 } from '../../shared/node-runtime-pin'
 import { setMainHttpClient } from '../network/http-client'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { materializeCachedNodeRuntime } from './pinned-runtime-materializer'
 import { RUNTIME_ARCHIVE_RETRY_DELAYS_MS } from './runtime-archive-download'
 
 const extraction = vi.hoisted(() => ({ executable: new Uint8Array(), member: '' }))
 
-vi.mock('@orca/process-host', () => ({
+vi.mock('@quirky/process-host', () => ({
   runProcess: vi.fn(async (spec: { args: string[] }) => {
     const flag = spec.args.includes('-C') ? '-C' : '-d'
     const extracted = join(spec.args[spec.args.indexOf(flag) + 1]!, ...extraction.member.split('/'))
@@ -59,7 +59,7 @@ function responseFetcher(body: Uint8Array, declaredLength = body.byteLength): ty
 
 beforeEach(async () => {
   extraction.member = nodeRuntimeExecutablePath(TARGET, NODE_RUNTIME_ASSETS[TARGET].archive)
-  cacheRoot = await mkdtemp(join(tmpdir(), 'orca-node-runtime-executable-'))
+  cacheRoot = await mkdtemp(join(tmpdir(), 'quirky-node-runtime-executable-'))
 })
 
 afterEach(async () => {
@@ -165,13 +165,13 @@ describe('materializeCachedNodeRuntime', () => {
     await writeFile(join(cacheRoot, 'plain-file'), 'not a directory')
     const { runProcess: spawnForReal } = await vi.importActual<{
       runProcess: typeof runProcess
-    }>('@orca/process-host')
+    }>('@quirky/process-host')
     vi.mocked(runProcess).mockImplementationOnce(spawnForReal)
-    vi.stubEnv('ORCA_UNZIP_BIN', path())
+    vi.stubEnv('QUIRKY_UNZIP_BIN', path())
 
     await expect(
       materializeCachedNodeRuntime(target, cacheRoot, { fetcher: responseFetcher(archive) })
-    ).rejects.toThrow(/install unzip, or set ORCA_UNZIP_BIN/)
+    ).rejects.toThrow(/install unzip, or set QUIRKY_UNZIP_BIN/)
     expect(await readdir(runtimeDirFor(target))).toEqual([])
   })
 

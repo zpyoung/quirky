@@ -18,8 +18,8 @@ function stateWithWorkspace() {
     repos: [
       {
         id: 'repo',
-        displayName: 'Orca',
-        path: '/orca',
+        displayName: 'Quirky',
+        path: '/quirky',
         connectionId: null,
         badgeColor: 'blue',
         addedAt: 0
@@ -42,11 +42,11 @@ describe('notification workspace labels', () => {
       }
     })
     expect(getNotificationWorkspaceLabels(state, 'wt')).toEqual({
-      repoLabel: 'Orca',
+      repoLabel: 'Quirky',
       worktreeLabel: 'Feature'
     })
     expect(getNotificationWorkspaceLabels(state, 'worktree:wt')).toEqual({
-      repoLabel: 'Orca',
+      repoLabel: 'Quirky',
       worktreeLabel: 'Feature'
     })
   })
@@ -62,7 +62,7 @@ describe('notification workspace labels', () => {
       })
     ]
     expect(getNotificationWorkspaceLabels(state, 'remote')).toEqual({
-      repoLabel: 'Orca',
+      repoLabel: 'Quirky',
       worktreeLabel: 'Remote feature'
     })
   })
@@ -219,16 +219,16 @@ describe('notification workspace labels', () => {
   })
 
   describe('STA-4343 two-host worktree id collision', () => {
-    const COLLIDING_ID = 'repo1::/work/orca'
+    const COLLIDING_ID = 'repo1::/work/quirky'
     const HOSTS = {
       // The laptop row is unqualified, which is how a local worktree listing publishes it.
       local: {
         row: { displayName: 'Laptop feature' },
-        repo: { displayName: 'Orca on laptop', connectionId: null }
+        repo: { displayName: 'Quirky on laptop', connectionId: null }
       },
       'ssh:build-box': {
         row: { hostId: 'ssh:build-box' as const, displayName: 'Build box feature' },
-        repo: { displayName: 'Orca on build box', connectionId: 'build-box' }
+        repo: { displayName: 'Quirky on build box', connectionId: 'build-box' }
       }
     } as const
     type CollidingHostId = keyof typeof HOSTS
@@ -245,7 +245,7 @@ describe('notification workspace labels', () => {
       const rival: CollidingHostId = naiveWinner === 'local' ? 'ssh:build-box' : 'local'
       const repos: Repo[] = [rival, naiveWinner].map((hostId) => ({
         id: 'repo1',
-        path: '/work/orca',
+        path: '/work/quirky',
         badgeColor: 'blue',
         addedAt: 0,
         ...HOSTS[hostId].repo
@@ -258,7 +258,7 @@ describe('notification workspace labels', () => {
               makeWorktree({
                 id: COLLIDING_ID,
                 repoId: 'repo1',
-                path: '/work/orca',
+                path: '/work/quirky',
                 ...HOSTS[hostId].row
               })
             ],

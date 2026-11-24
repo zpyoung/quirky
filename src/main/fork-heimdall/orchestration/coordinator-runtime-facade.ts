@@ -1,12 +1,12 @@
 import type { WatcherEnrollment } from '../../../shared/fork-heimdall/watcher-types'
 import type { RuntimeTerminalShow } from '../../../shared/runtime-types'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 
 export function coordinatorRuntimeFacade(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   workspaceId: string
-): OrcaRuntimeService {
+): QuirkyRuntimeService {
   const identity = enrollment.coordinatorIdentity
   const boundMethods = new Map<PropertyKey, { source: object; bound: object }>()
   const syntheticShow = async (handle: string) => {

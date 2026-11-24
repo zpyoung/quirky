@@ -25,7 +25,7 @@ import type { BrowserRouteSessionRegistry } from './browser-route-session-regist
 import type { BrowserRouteSessionHandle } from './browser-route-session-state'
 
 type BrowserClientPageCreationDependencies = BrowserClientPageAuthorityIdentity & {
-  orcaProfileId: string
+  quirkyProfileId: string
   storageScope: string
   retainNetworkRoute(executionHostKey: string, signal: AbortSignal): Promise<RetainedNetworkRoute>
   retireSupersededExecutionHostPages(route: RetainedNetworkRoute): Promise<void>
@@ -68,19 +68,19 @@ export async function createReservedBrowserClientPage(
     routeSession = await dependencies.routeSessions.preparePage({
       ...(event.command.profile ? { profileMetadata: event.command.profile } : {}),
       identity: {
-        orcaProfileId: dependencies.orcaProfileId,
+        quirkyProfileId: dependencies.quirkyProfileId,
         browserProfileId: event.command.browserProfileId,
         authorityConnectionIdentity: dependencies.authorityConnectionIdentity,
         executionHostIdentity: route.executionHostIdentity
       },
       compatibleIdentity: {
-        orcaProfileId: dependencies.orcaProfileId,
+        quirkyProfileId: dependencies.quirkyProfileId,
         browserProfileId: event.command.browserProfileId,
         authorityConnectionIdentity: dependencies.pairingAuthorityConnectionIdentity,
         executionHostIdentity: route.executionHostIdentity
       },
       legacyIdentity: {
-        orcaProfileId: dependencies.orcaProfileId,
+        quirkyProfileId: dependencies.quirkyProfileId,
         browserProfileId: event.command.browserProfileId,
         authorityConnectionIdentity: dependencies.legacyAuthorityConnectionIdentity,
         executionHostIdentity: route.legacyExecutionHostIdentity

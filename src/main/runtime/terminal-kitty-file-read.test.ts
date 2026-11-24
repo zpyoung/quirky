@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { link, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { readTerminalKittyFile, resolveKittyFilePath } from './terminal-kitty-file-read'
 import { TERMINAL_KITTY_FILE_MAX_BYTES } from '../../shared/terminal-kitty-file'
 import * as terminalArtifacts from './terminal/artifacts/artifact-integrity'
@@ -16,7 +16,7 @@ afterEach(async () => {
 })
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-kitty-file-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-kitty-file-'))
   roots.push(root)
   const workspacePath = join(root, 'workspace')
   await mkdir(workspacePath)

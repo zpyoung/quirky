@@ -11,7 +11,7 @@ import type {
   NotificationDispatchResult,
   NotificationSettings
 } from '../../shared/notification-settings-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import { translateMain } from '../i18n/main-i18n'
 import { reserveNotificationCooldown } from '../../shared/notification-burst-cooldown'
@@ -24,7 +24,7 @@ export type NotificationDeliveryDependencies = {
   setTrayAttention: (attention: boolean) => void
   isNotificationSupported: () => boolean
   /** Null when no runtime is paired, so mobile fan-out is skipped entirely. */
-  dispatchMobileNotification: OrcaRuntimeService['dispatchMobileNotification'] | null
+  dispatchMobileNotification: QuirkyRuntimeService['dispatchMobileNotification'] | null
   readAuthorizationStatus: () => Promise<
     'authorized' | 'denied' | 'not-determined' | 'unknown' | null
   >

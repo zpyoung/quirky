@@ -1,9 +1,9 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import { parseExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
-import { getManagedOrcadFenceEnvironmentId } from '../../shared/managed-orcad-ssh-owner'
+import { getManagedQuirkydFenceEnvironmentId } from '../../shared/managed-quirkyd-ssh-owner'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import {
-  getOrcadSshDeployment,
+  getQuirkydSshDeployment,
   getRuntimeSshAccess,
   type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
@@ -12,7 +12,7 @@ import { fingerprintRuntimeSshTarget } from '../ssh/runtime-ssh-target-fingerpri
 
 export type ListRuntimeEnvironments = () => readonly Pick<
   KnownRuntimeEnvironment,
-  'id' | 'orcadDeployment' | 'sshAccess'
+  'id' | 'quirkydDeployment' | 'sshAccess'
 >[]
 
 export const listAppRuntimeEnvironments: ListRuntimeEnvironments = () =>
@@ -47,8 +47,8 @@ export function isEditorSshHostForOwner(
   if (target.generation !== link.sshTargetGeneration) {
     return false
   }
-  if (getOrcadSshDeployment(environment)) {
-    return getManagedOrcadFenceEnvironmentId(target) === environment.id
+  if (getQuirkydSshDeployment(environment)) {
+    return getManagedQuirkydFenceEnvironmentId(target) === environment.id
   }
   // Why: editing a host keeps its generation, so SSH access also pins the settings it was verified on.
   const access = environment.sshAccess

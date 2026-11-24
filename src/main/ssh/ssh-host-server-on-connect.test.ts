@@ -2,9 +2,9 @@ import type { ManagedServerUpdateDeps } from './managed-server-update-check'
 import { describe, expect, it, vi } from 'vitest'
 import type { SshTarget } from '../../shared/ssh-types'
 import {
-  OrcadHostUnsupportedError,
-  OrcadStdioBridgeUnavailableError
-} from '../orcad/orcad-host-unavailable'
+  QuirkydHostUnsupportedError,
+  QuirkydStdioBridgeUnavailableError
+} from '../quirkyd/quirkyd-host-unavailable'
 import {
   resolveHostServerOnConnect,
   type HostServerOnConnectDeps
@@ -39,7 +39,7 @@ describe('which server an SSH host runs on connect', () => {
   })
 
   it('keeps a host whose stopped server could not be started managed, with the reason', async () => {
-    const detail = 'orcad did not become ready.\nLast lines of orcad.log:\nboom'
+    const detail = 'quirkyd did not become ready.\nLast lines of quirkyd.log:\nboom'
     const d = deps({
       managedEnvironmentId: () => 'env-9',
       ensureServing: vi.fn(async () => ({ state: 'unverifiable' as const, detail }))
@@ -81,7 +81,7 @@ describe('which server an SSH host runs on connect', () => {
       })),
       autoUpdate: vi.fn(async () => ({
         outcome: 'deferred' as const,
-        code: 'orcad_update_terminals_running',
+        code: 'quirkyd_update_terminals_running',
         reason: '3 terminals are running'
       }))
     })
@@ -117,7 +117,7 @@ describe('which server an SSH host runs on connect', () => {
       convert: async () => ({
         outcome: 'refused',
         verdict: 'live',
-        code: 'orcad_migration_terminals',
+        code: 'quirkyd_migration_terminals',
         reason: 'A relay terminal is still running.'
       })
     })
@@ -144,7 +144,7 @@ describe('which server an SSH host runs on connect', () => {
       convert: async () => ({
         outcome: 'refused',
         verdict: 'live',
-        code: 'orcad_migration_preflight_blocked',
+        code: 'quirkyd_migration_preflight_blocked',
         reason: 'An automation still runs on this host.'
       })
     })
@@ -160,7 +160,7 @@ describe('which server an SSH host runs on connect', () => {
       convert: async () => ({
         outcome: 'refused',
         verdict: 'live',
-        code: 'orcad_migration_preflight_blocked',
+        code: 'quirkyd_migration_preflight_blocked',
         reason: 'This SSH host cannot move yet: saved tabs and panes (2).',
         canLeaveBehind: true
       })
@@ -173,16 +173,16 @@ describe('which server an SSH host runs on connect', () => {
     })
   })
 
-  it('falls back to the relay ladder for good when orcad cannot run, and remembers why', async () => {
+  it('falls back to the relay ladder for good when quirkyd cannot run, and remembers why', async () => {
     const d = deps({
       isEmptyHost: () => true,
       deploy: async () => {
-        throw new OrcadHostUnsupportedError('Packaged orcad template does not support x')
+        throw new QuirkydHostUnsupportedError('Packaged quirkyd template does not support x')
       }
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'unsupported_host'
     })
     expect(d.recordUnavailable).toHaveBeenCalledWith(target, 'unsupported_host')
@@ -194,12 +194,12 @@ describe('which server an SSH host runs on connect', () => {
       convert: async () => ({
         outcome: 'deferred' as const,
         candidateVersion: '1.0.0',
-        code: 'orcad_candidate_preflight_failed',
+        code: 'quirkyd_candidate_preflight_failed',
         reason: 'glibc 2.17 is below the floor'
       })
     })
     await expect(resolveHostServerOnConnect(target, preflight)).resolves.toMatchObject({
-      reason: 'orcad_unavailable'
+      reason: 'quirkyd_unavailable'
     })
     expect(preflight.recordUnavailable).toHaveBeenCalledWith(target, 'native_preflight')
     // The conversion fenced the host first; that fence must go before the relay serves it.
@@ -207,7 +207,7 @@ describe('which server an SSH host runs on connect', () => {
 
     const remembered = deps({ recordedUnavailable: () => 'unsupported_host' })
     await expect(resolveHostServerOnConnect(target, remembered)).resolves.toMatchObject({
-      reason: 'orcad_unavailable'
+      reason: 'quirkyd_unavailable'
     })
     expect(remembered.convert).not.toHaveBeenCalled()
   })
@@ -218,7 +218,7 @@ describe('which server an SSH host runs on connect', () => {
       resolveHostServerOnConnect(
         {
           ...target,
-          orcadFence: { environmentId: 'env-1', sourceChangedAt: '2026-10-05T00:00:00Z' }
+          quirkydFence: { environmentId: 'env-1', sourceChangedAt: '2026-10-05T00:00:00Z' }
         },
         changed
       )
@@ -240,11 +240,11 @@ describe('which server an SSH host runs on connect', () => {
     warn.mockRestore()
   })
 
-  it('touches no host when this build carries no orcad template', async () => {
+  it('touches no host when this build carries no quirkyd template', async () => {
     const d = deps({ hasTemplate: () => false, isEmptyHost: () => true })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'artifacts_unavailable'
     })
     expect(d.deploy).not.toHaveBeenCalled()
@@ -271,7 +271,7 @@ describe('which server an SSH host runs on connect', () => {
     const d = deps({
       convert: async () => {
         throw new Error(
-          'orcad_migration_stage_failed:orcad_migration_repository_path_conflict:/root/migrepo'
+          'quirkyd_migration_stage_failed:quirkyd_migration_repository_path_conflict:/root/migrepo'
         )
       }
     })
@@ -288,7 +288,7 @@ describe('which server an SSH host runs on connect', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const d = deps({
       convert: async () => {
-        throw new Error('orcad_migration_linked_project_terminals:/root/my repo')
+        throw new Error('quirkyd_migration_linked_project_terminals:/root/my repo')
       }
     })
     const result = await resolveHostServerOnConnect(target, d)
@@ -309,7 +309,7 @@ describe('which server an SSH host runs on connect', () => {
           bridged: true as const
         })),
         convert: async () => {
-          throw new Error(`orcad_migration_${code}:/root/my repo`)
+          throw new Error(`quirkyd_migration_${code}:/root/my repo`)
         }
       })
       const result = await resolveHostServerOnConnect(target, d)
@@ -342,7 +342,7 @@ describe('which server an SSH host runs on connect', () => {
     const conflict = deps({
       relayTerminals: bridgedTerminals,
       convert: async () => {
-        throw new Error('orcad_migration_repository_path_conflict:/root/migrepo')
+        throw new Error('quirkyd_migration_repository_path_conflict:/root/migrepo')
       }
     })
     const refused = await resolveHostServerOnConnect(target, conflict)
@@ -352,7 +352,7 @@ describe('which server an SSH host runs on connect', () => {
       relayTerminals: bridgedTerminals,
       hasUnfinishedConversion: () => true,
       convert: async () => {
-        throw new Error('orcad_migration_linked_project_terminals:/root/my repo')
+        throw new Error('quirkyd_migration_linked_project_terminals:/root/my repo')
       }
     })
     const heldResult = await resolveHostServerOnConnect(target, held)
@@ -365,7 +365,7 @@ describe('which server an SSH host runs on connect', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const d = deps({
       convert: async () => {
-        throw new Error('orcad_migration_linked_project_unowned_terminals:/root/my repo')
+        throw new Error('quirkyd_migration_linked_project_unowned_terminals:/root/my repo')
       }
     })
     const result = await resolveHostServerOnConnect(target, d)
@@ -381,7 +381,7 @@ describe('which server an SSH host runs on connect', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const d = deps({
       convert: async () => {
-        throw new Error('orcad_migration_staged_claim_conflict:repository-path:/root/migrepo')
+        throw new Error('quirkyd_migration_staged_claim_conflict:repository-path:/root/migrepo')
       }
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toMatchObject({
@@ -395,12 +395,12 @@ describe('which server an SSH host runs on connect', () => {
     const d = deps({
       isEmptyHost: () => true,
       deploy: vi.fn(async () => {
-        throw new OrcadStdioBridgeUnavailableError('exit 127')
+        throw new QuirkydStdioBridgeUnavailableError('exit 127')
       })
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'ssh_tunnel_unavailable'
     })
     expect(d.abandonDeploy).toHaveBeenCalledWith(target)
@@ -413,12 +413,12 @@ describe('which server an SSH host runs on connect', () => {
       managedEnvironmentId: () => 'env-9',
       isFencedBeforeStaging: () => true,
       ensureTunnel: vi.fn(async () => {
-        throw new OrcadStdioBridgeUnavailableError('exit 127')
+        throw new QuirkydStdioBridgeUnavailableError('exit 127')
       })
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'ssh_tunnel_unavailable'
     })
     expect(d.releaseUnreachableSetup).toHaveBeenCalledWith(target)
@@ -426,7 +426,7 @@ describe('which server an SSH host runs on connect', () => {
   })
 
   it('keeps a staged or converted host fenced when its tunnel fails', async () => {
-    const failure = new OrcadStdioBridgeUnavailableError('exit 127')
+    const failure = new QuirkydStdioBridgeUnavailableError('exit 127')
     const d = deps({
       managedEnvironmentId: () => 'env-9',
       ensureTunnel: vi.fn(async () => {
@@ -454,13 +454,13 @@ describe('which server an SSH host runs on connect', () => {
       managedEnvironmentId: () => 'env-9',
       hasUnfinishedConversion: () => true,
       convert: vi.fn(async () => {
-        throw new Error('orcad_migration_source_changed')
+        throw new Error('quirkyd_migration_source_changed')
       })
     })
     await expect(resolveHostServerOnConnect(target, d)).resolves.toMatchObject({
       route: 'unserved',
       reason: 'failed',
-      detail: 'orcad_migration_source_changed'
+      detail: 'quirkyd_migration_source_changed'
     })
     expect(d.abandonConversion).toHaveBeenCalledWith(target)
   })
@@ -520,7 +520,7 @@ describe('which server an SSH host runs on connect', () => {
       const d = managed({
         autoUpdate: async () => ({
           outcome: 'deferred',
-          code: 'orcad_update_terminals_running',
+          code: 'quirkyd_update_terminals_running',
           reason
         })
       })
@@ -532,7 +532,7 @@ describe('which server an SSH host runs on connect', () => {
       expect(d.recordUpdateFailure).not.toHaveBeenCalled()
     })
 
-    it('never downgrades a host a newer Orca activated', async () => {
+    it('never downgrades a host a newer Quirky activated', async () => {
       const d = managed({
         autoUpdate: async () => ({ outcome: 'skipped', reason: 'host-newer' })
       })
@@ -544,7 +544,8 @@ describe('which server an SSH host runs on connect', () => {
     })
 
     it('records a rolled-back update so the same app version does not retry it', async () => {
-      const reason = 'Candidate failed readiness. orcad 0.1.0+a was restarted and is serving again.'
+      const reason =
+        'Candidate failed readiness. quirkyd 0.1.0+a was restarted and is serving again.'
       const failed = managed({ autoUpdate: async () => ({ outcome: 'failed', reason }) })
       await expect(resolveHostServerOnConnect(target, failed)).resolves.toMatchObject({
         route: 'managed',

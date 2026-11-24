@@ -46,7 +46,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -295,7 +295,7 @@ describe('Store', () => {
       pinnedRefusal: 'illegal_instruction',
       glibc: '2.28',
       runtimeSha256: 'a'.repeat(64),
-      orcaMajor: 1
+      quirkyMajor: 1
     }
     store.addSshTarget({
       id: 'ssh-ladder-ok',

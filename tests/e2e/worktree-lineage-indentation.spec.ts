@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
 import {
   addRepoWithWorkspaces,
@@ -12,25 +12,25 @@ test.use({ seedTestRepo: false })
 
 for (const compactCards of [false, true]) {
   test(`legacy lineage keeps a local title step (${compactCards ? 'compact' : 'detailed'})`, async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    const repo = await addRepoWithWorkspaces(orcaPage, testInfo, 4)
+    await waitForSessionReady(quirkyPage)
+    const repo = await addRepoWithWorkspaces(quirkyPage, testInfo, 4)
     await writeWorkspaceMeta(
-      orcaPage,
+      quirkyPage,
       repo.ids.map((worktreeId, index) => ({
         worktreeId,
         updates: { displayName: `Level ${index} workspace`, sortOrder: index }
       }))
     )
     await linkWorkspaces(
-      orcaPage,
+      quirkyPage,
       repo.ids.slice(1).map((childId, index) => ({ childId, parentId: repo.ids[index]! }))
     )
     for (const showStatus of [false, true]) {
       for (const group of ['none', 'repo', 'manual', 'deep-manual', 'deep-folder'] as const) {
         await evaluatePolled(
-          orcaPage,
+          quirkyPage,
           async ({ compactCards, showStatus, group, repoId }) => {
             const store = window.__store!
             const state = store.getState()
@@ -87,7 +87,7 @@ for (const compactCards of [false, true]) {
           { compactCards, showStatus, group, repoId: repo.repoId }
         )
 
-        const sidebar = orcaPage.locator('[data-worktree-sidebar]')
+        const sidebar = quirkyPage.locator('[data-worktree-sidebar]')
         await expect(sidebar.locator('[data-worktree-card-status-slot]')).toHaveCount(
           showStatus ? 4 : 0
         )
@@ -112,7 +112,7 @@ for (const compactCards of [false, true]) {
             })
             .toBeCloseTo(LINEAGE_IMMEDIATE_PARENT_STEP + 1, 0)
         }
-        await orcaPage.screenshot({
+        await quirkyPage.screenshot({
           path: testInfo.outputPath(`${group}-status-${showStatus}.png`)
         })
       }

@@ -10,7 +10,7 @@
       "settledAt": 0,
       "error": {
         "category": "Error",
-        "message": "Update the paired desktop Orca app to use mobile voice settings.",
+        "message": "Update the paired desktop Quirky app to use mobile voice settings.",
         "isRpcDeliveryUnknown": false
       }
     },

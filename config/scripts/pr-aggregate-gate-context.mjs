@@ -24,7 +24,7 @@ export const aggregateShell = aggregateJob.steps.find(
   (step) => step.name === 'Require successful checks'
 )
 export const aggregateSelectors = checkJobsForWorkflow(
-  PR_CHECK_JOBS.filter((job) => job !== 'orcad_browser'),
+  PR_CHECK_JOBS.filter((job) => job !== 'quirkyd_browser'),
   aggregateWorkflow,
   aggregateShell
 )

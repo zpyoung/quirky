@@ -27,7 +27,7 @@ export async function importCookiesFromSafari(
       return {
         ok: false,
         reason:
-          'macOS denied access to Safari cookies. Grant Full Disk Access to Orca in System Settings → Privacy & Security → Full Disk Access.'
+          'macOS denied access to Safari cookies. Grant Full Disk Access to Quirky in System Settings → Privacy & Security → Full Disk Access.'
       }
     }
     return { ok: false, reason: 'Could not read Safari cookies.' }

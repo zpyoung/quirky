@@ -5,7 +5,7 @@ import { mainProcessState as state } from './main-process-state'
 import { SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE } from './single-instance-lock'
 import { acquireDesktopProfileInstanceLock } from './desktop-profile-instance-lock'
 
-/** False when orcad holds the profile; unlike a second desktop, nothing else would say why. */
+/** False when quirkyd holds the profile; unlike a second desktop, nothing else would say why. */
 export function acquireDesktopProfileLockOrExplain(userDataPath: string): boolean {
   const profileLock = acquireDesktopProfileInstanceLock(userDataPath)
   if (profileLock.state !== 'held') {
@@ -35,7 +35,7 @@ export function handleMainProcessPreflightFailure(error: unknown, exitCode = 1):
 
   const showDialogAndExit = (): void => {
     try {
-      dialog.showErrorBox('Orca could not start', message)
+      dialog.showErrorBox('Quirky could not start', message)
     } catch (dialogError) {
       console.warn('[startup] Could not show startup failure:', dialogError)
     } finally {

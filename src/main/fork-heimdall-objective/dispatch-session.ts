@@ -10,7 +10,7 @@ import { ObjectiveEnrollmentPayloadSchema } from '../../shared/fork-heimdall-obj
 import { objectiveLaneForTask } from '../../shared/fork-heimdall-objective/parallel-scheduling'
 import type { ObjectiveDispatchRecord } from '../../shared/fork-heimdall-objective/parallel-types'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { inspectHeimdallWorkerTerminal } from '../fork-heimdall/orchestration/worker-dispatch-routing'
 import type { ObjectiveStore } from './objective-store'
 import type { ObjectiveSnapshotBinding } from './execution-context'
@@ -37,7 +37,7 @@ export type ObjectiveDispatchSessionIdentity = {
  * fresh session is allowed to write there.
  */
 export async function inspectObjectiveWorkerSession(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   identity: ObjectiveDispatchSessionIdentity
 ): Promise<ObjectiveDispatchSessionReuse> {
   if (identity.dispatchId === null) {
@@ -110,7 +110,7 @@ export async function inspectObjectiveWorkerSession(
 }
 
 export async function inspectObjectiveDispatchSession(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   record: ObjectiveDispatchRecord
 ): Promise<ObjectiveDispatchSessionReuse> {
   return await inspectObjectiveWorkerSession(runtime, {
@@ -122,7 +122,7 @@ export async function inspectObjectiveDispatchSession(
 
 /** True only when the dispatch's worker process is proven exited; unverifiable counts as live. */
 export async function objectiveDispatchSessionExited(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   record: ObjectiveDispatchRecord
 ): Promise<boolean> {
   return (await inspectObjectiveDispatchSession(runtime, record)).status === 'gone'
@@ -188,7 +188,7 @@ export function countObjectiveLaneTerminalNodes(args: {
   return count
 }
 export async function resolveObjectiveSerialLaneTerminal(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   action: Extract<ObjectiveAction, { kind: 'dispatch-node' }>

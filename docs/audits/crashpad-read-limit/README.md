@@ -1,6 +1,6 @@
 # Crashpad bounded reads
 
-After a crash, Orca extracts a short diagnostic signature from a potentially large dump.
+After a crash, Quirky extracts a short diagnostic signature from a potentially large dump.
 The old reader loaded the complete dump. The current parser reads bounded ranges through
 four retained 64 KiB pages and scans embedded diagnostic text in roughly 1 MiB windows.
 It can capture a report that grows beyond the existing 64 MiB directory-discovery limit
@@ -10,7 +10,7 @@ discovered retain the existing exclusion policy.
 ## Reproduction
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/crashpad-read-limit/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/crashpad-read-limit/reproduce.mjs
 ```
 
 Use the repository's installed dependencies and supported Node version. The runner checks
@@ -44,7 +44,7 @@ more than eight reads, preventing repeated reads between module and name pages.
 ## Parser compatibility
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/crashpad-read-limit/stream-signature-parity.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/crashpad-read-limit/stream-signature-parity.cjs
 ```
 
 The separate parity script compares 47 fixtures with the published parser at

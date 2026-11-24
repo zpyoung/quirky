@@ -1,4 +1,4 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { readHostBrowserPageIds, readHostBrowserPageUrl } from './helpers/host-session-tabs'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'

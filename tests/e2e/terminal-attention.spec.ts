@@ -1,5 +1,5 @@
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   execInTerminal,
   waitForActivePanePtyId,
@@ -137,25 +137,25 @@ test.describe('Terminal attention', () => {
   // the cross-component attention contract: background terminal attention
   // raises the tab indicator, and focusing the tab clears it.
   test('background terminal attention marks a tab unread and clears on focus', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
-    const firstTabId = await getActiveTabId(orcaPage)
+    const firstTabId = await getActiveTabId(quirkyPage)
     if (!firstTabId) {
       throw new Error('Expected an initial terminal tab')
     }
 
-    const secondTabId = await createTerminalTab(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+    const secondTabId = await createTerminalTab(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
     // Focus the first tab so the second becomes a background tab; attention
     // arriving there should raise its indicator.
-    await activateTerminalTab(orcaPage, firstTabId)
-    await orcaPage.evaluate((tabId) => {
+    await activateTerminalTab(quirkyPage, firstTabId)
+    await quirkyPage.evaluate((tabId) => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is unavailable')
@@ -176,13 +176,13 @@ test.describe('Terminal attention', () => {
     }, secondTabId)
 
     await expect
-      .poll(async () => (await getUnreadTerminalTabIds(orcaPage)).includes(secondTabId), {
+      .poll(async () => (await getUnreadTerminalTabIds(quirkyPage)).includes(secondTabId), {
         timeout: 10_000,
         message: 'Background tab did not become unread after BEL'
       })
       .toBe(true)
 
-    const secondTabBell = orcaPage
+    const secondTabBell = quirkyPage
       .locator(
         `[data-testid="sortable-tab"][data-tab-id="${secondTabId}"] [data-testid="tab-activity-bell"]`
       )
@@ -190,10 +190,10 @@ test.describe('Terminal attention', () => {
     await expect(secondTabBell).toBeVisible()
 
     // Activating the tab counts as "the user saw it" — the indicator clears.
-    await activateTerminalTab(orcaPage, secondTabId)
+    await activateTerminalTab(quirkyPage, secondTabId)
 
     await expect
-      .poll(async () => (await getUnreadTerminalTabIds(orcaPage)).includes(secondTabId), {
+      .poll(async () => (await getUnreadTerminalTabIds(quirkyPage)).includes(secondTabId), {
         timeout: 5_000,
         message: 'Unread state did not clear when the user focused the tab'
       })
@@ -203,44 +203,44 @@ test.describe('Terminal attention', () => {
 
   // Why (on screen means read, #28637): a BEL on the tab the present user is
   // looking at is already read, so it must leave no unread marker or bell.
-  test('a BEL on the focused tab leaves no unread marker', async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+  test('a BEL on the focused tab leaves no unread marker', async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
-    const activeTabId = await getActiveTabId(orcaPage)
+    const activeTabId = await getActiveTabId(quirkyPage)
     if (!activeTabId) {
       throw new Error('Expected an active terminal tab')
     }
-    const activePtyId = await waitForActivePanePtyId(orcaPage)
-    await installRendererTitleLog(orcaPage)
+    const activePtyId = await waitForActivePanePtyId(quirkyPage)
+    await installRendererTitleLog(quirkyPage)
 
     // Why: presence comes only from trusted input; a bare Shift keydown sends nothing to the shell.
-    await focusActiveXterm(orcaPage, activeTabId)
-    await orcaPage.keyboard.press('Shift')
+    await focusActiveXterm(quirkyPage, activeTabId)
+    await quirkyPage.keyboard.press('Shift')
 
     await emitBellAndWaitForTitleFlush(
-      orcaPage,
+      quirkyPage,
       activePtyId,
       `focused-tab-bell-marker-${Date.now()}`
     )
 
     await expect
-      .poll(async () => (await getUnreadTerminalTabIds(orcaPage)).includes(activeTabId), {
+      .poll(async () => (await getUnreadTerminalTabIds(quirkyPage)).includes(activeTabId), {
         timeout: 5_000,
         message: 'A BEL on the focused tab left it unread'
       })
       .toBe(false)
     await expect(
-      orcaPage.locator(
+      quirkyPage.locator(
         `[data-testid="sortable-tab"][data-tab-id="${activeTabId}"] [data-testid="tab-activity-bell"]`
       )
     ).toHaveCount(0)
   })
 
   // Why (restart regression guard): the original user-reported bug was that
-  // after restarting Orca with a Claude Code session open, clicking between
+  // after restarting Quirky with a Claude Code session open, clicking between
   // panes on the restored tab produced undismissable bell indicators. Root
   // cause: xterm's SerializeAddon captures the TUI's mode-setting bytes
   // (e.g. `\e[?1004h` for focus reporting) in the scrollback snapshot, and
@@ -258,20 +258,20 @@ test.describe('Terminal attention', () => {
   // reset, xterm would dutifully emit focus escapes; with the reset, mode
   // 1004 is off and nothing leaks to the shell, so no BELs fire.
   test('mode bits replayed into xterm do not leak focus escapes to the shell', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
-    const firstTabId = await getActiveTabId(orcaPage)
+    const firstTabId = await getActiveTabId(quirkyPage)
     if (!firstTabId) {
       throw new Error('Expected an initial terminal tab')
     }
 
-    const secondTabId = await createTerminalTab(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+    const secondTabId = await createTerminalTab(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
     // secondTabId is already active after createTerminalTab. Simulate what
     // scrollback replay does: a DECSET 1004 byte landing in xterm. Then
@@ -292,7 +292,7 @@ test.describe('Terminal attention', () => {
     // the callback for the POST_REPLAY_MODE_RESET write, we guarantee any
     // transient focus escapes emitted while mode 1004 was briefly on have
     // already fired before the spy exists. No fixed sleep needed.
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ tabId, modeReset }) =>
         new Promise<void>((resolve, reject) => {
           const managers = window.__paneManagers
@@ -332,8 +332,8 @@ test.describe('Terminal attention', () => {
       // enabled, xterm will emit `\e[O` via onData — captured by the spy above.
       // Also explicitly blur the xterm instance so the DOM focus actually moves
       // (setActiveTab alone doesn't blur focus).
-      await activateTerminalTab(orcaPage, firstTabId)
-      await orcaPage.evaluate((tabId) => {
+      await activateTerminalTab(quirkyPage, firstTabId)
+      await quirkyPage.evaluate((tabId) => {
         const managers = window.__paneManagers
         const manager = managers?.get(tabId)
         const pane = manager?.getActivePane()
@@ -346,14 +346,14 @@ test.describe('Terminal attention', () => {
       // Why: xterm does not reliably answer DA1 writes in hidden Electron
       // windows, but focus-reporting leaks are emitted as part of the focus
       // task itself. Let that task settle, then inspect the captured bytes.
-      await orcaPage.waitForTimeout(100)
+      await quirkyPage.waitForTimeout(100)
 
       // Mode 1004 reset succeeded iff no focus escapes are emitted — we assert
       // on the precise byte-level mechanism the fix guards against (`\e[I`
       // focus-in / `\e[O` focus-out), not tab unread state, because under the
       // show-until-interact model that state can be flipped by unrelated
       // shell-startup BELs.
-      const emittedFromXterm = await orcaPage.evaluate(
+      const emittedFromXterm = await quirkyPage.evaluate(
         () =>
           (window as unknown as { __XTERM_ONDATA_SPY__: string[] | undefined })
             .__XTERM_ONDATA_SPY__ ?? []
@@ -367,7 +367,7 @@ test.describe('Terminal attention', () => {
       // Dispose the onData subscription and clear the globals so nothing leaks
       // across tests on the shared renderer. Runs even if an assertion above
       // failed.
-      await orcaPage.evaluate(() => {
+      await quirkyPage.evaluate(() => {
         const w = window as unknown as {
           __XTERM_ONDATA_DISPOSE__?: () => void
           __XTERM_ONDATA_SPY__?: string[]

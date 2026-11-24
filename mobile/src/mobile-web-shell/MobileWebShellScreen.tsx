@@ -3,9 +3,9 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useNavigation, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  OrcaMobileWebShellView,
+  QuirkyMobileWebShellView,
   parseMobileWebShellLoadState
-} from '../../modules/orca-mobile-web-shell/src'
+} from '../../modules/quirky-mobile-web-shell/src'
 import { HostRouteNoticeBanner } from '../components/HostRouteNoticeBanner'
 import { ProtocolBlockScreen } from '../components/ProtocolBlockScreen'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
@@ -397,7 +397,7 @@ export function MobileWebShellScreen({
           onDismiss={() => setNoticeDismissedFor(state.sessionId)}
         />
       )}
-      <OrcaMobileWebShellView
+      <QuirkyMobileWebShellView
         key={state.sessionId}
         ref={bridge.viewRef}
         style={styles.shellView}

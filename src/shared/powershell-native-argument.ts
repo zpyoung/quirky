@@ -20,7 +20,7 @@ function quotePowerShellMultilineLiteral(value: string): string {
 }
 
 /**
- * PowerShell function that escapes arguments for `$Program`, for Orca's agent wrappers to splat.
+ * PowerShell function that escapes arguments for `$Program`, for Quirky's agent wrappers to splat.
  *
  * Why at runtime: the escaping depends on the PowerShell reading the line. Legacy argv passing
  * (Windows PowerShell 5.1, pwsh before 7.3, and 7.3's `Windows` mode for `.cmd`/`.bat`) leaves
@@ -32,7 +32,7 @@ function quotePowerShellMultilineLiteral(value: string): string {
  * a `\"` would flip cmd's quote parity and turn a later `&` into an operator.
  */
 export function getPowerShellEscapeNativeArgsFunction(): string {
-  return `function Global:__OrcaEscapeNativeArgs([string]$Program, [object[]]$Arguments) {
+  return `function Global:__QuirkyEscapeNativeArgs([string]$Program, [object[]]$Arguments) {
     Set-StrictMode -Off
     $mode = $PSNativeCommandArgumentPassing
     $cmd = $Program -match '\\.(bat|cmd)$'

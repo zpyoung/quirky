@@ -150,7 +150,7 @@ describe('codex dispatch admission', () => {
     })
     const adapter = await acquiredCodexAdapter({ codex, settlements: [] })
 
-    // Codex's own words reach the sentence and the fact; Orca's prefix reaches neither.
+    // Codex's own words reach the sentence and the fact; Quirky's prefix reaches neither.
     expect(await send(adapter, 'client-1')).toEqual({
       state: 'rejected',
       reason: "Codex didn't accept this message: thread not found.",

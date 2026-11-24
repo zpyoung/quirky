@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test as base, expect } from './helpers/orca-app'
+import { test as base, expect } from './helpers/quirky-app'
 import {
   buildFakeAgentCommandOverride,
   FAKE_AGENT_WINDOWS_SHELL
@@ -19,7 +19,7 @@ import { RuntimeClient } from '../../src/cli/runtime-client'
 import type { RuntimeTerminalListResult, RuntimeTerminalRead } from '../../src/shared/runtime-types'
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './helpers/fake-codex-launch-probes'
 
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-orchestration-worker-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-orchestration-worker-'))
 const spawnLedgerPath = path.join(fakeCliDir, 'spawn.jsonl')
 const interruptionLedgerPath = path.join(fakeCliDir, 'interruption.jsonl')
 const fakeCodexPath = path.join(fakeCliDir, process.platform === 'win32' ? 'codex.cmd' : 'codex')
@@ -34,13 +34,13 @@ function appendLedger(envName, event) {
   } catch {}
 }
 ${FAKE_CODEX_LAUNCH_PROBES_SOURCE}
-appendLedger('ORCA_E2E_SPAWN_LEDGER', { event: 'spawn', startedAt: Date.now() })
+appendLedger('QUIRKY_E2E_SPAWN_LEDGER', { event: 'spawn', startedAt: Date.now() })
 process.stdout.write('\\u001b]0;Codex Ready\\u0007OpenAI Codex\\nmodel: e2e\\ndirectory: e2e\\n')
 let acknowledged = false
 process.stdin.on('data', (chunk) => {
   const input = chunk.toString()
   if (input.includes('\\x03')) {
-    appendLedger('ORCA_E2E_INTERRUPTION_LEDGER', { event: 'stdin-ctrl-c' })
+    appendLedger('QUIRKY_E2E_INTERRUPTION_LEDGER', { event: 'stdin-ctrl-c' })
   }
   if (!acknowledged && input.includes('\\r')) {
     acknowledged = true
@@ -49,7 +49,7 @@ process.stdin.on('data', (chunk) => {
 })
 for (const signal of ['SIGINT', 'SIGHUP', 'SIGTERM']) {
   process.on(signal, () => {
-    appendLedger('ORCA_E2E_INTERRUPTION_LEDGER', { event: 'signal', signal })
+    appendLedger('QUIRKY_E2E_INTERRUPTION_LEDGER', { event: 'signal', signal })
     process.exit(0)
   })
 }
@@ -73,8 +73,8 @@ const test = base.extend({
   launchEnv: [
     {
       PATH: `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-      ORCA_E2E_SPAWN_LEDGER: spawnLedgerPath,
-      ORCA_E2E_INTERRUPTION_LEDGER: interruptionLedgerPath
+      QUIRKY_E2E_SPAWN_LEDGER: spawnLedgerPath,
+      QUIRKY_E2E_INTERRUPTION_LEDGER: interruptionLedgerPath
     },
     { option: true }
   ]
@@ -111,11 +111,11 @@ function isProcessAlive(pid: number): boolean {
 }
 
 test('worker-start preserves one live inactive worker across workspace re-entry', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.evaluate(
     async ({ agentCommand, terminalWindowsShell }) => {
       await window.__store?.getState().updateSettings({
         agentCmdOverrides: { codex: agentCommand },
@@ -124,12 +124,12 @@ test('worker-start preserves one live inactive worker across workspace re-entry'
     },
     { agentCommand: fakeCodexCommand, terminalWindowsShell: FAKE_AGENT_WINDOWS_SHELL }
   )
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  const coordinatorTabId = await getActiveTabId(orcaPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  const coordinatorTabId = await getActiveTabId(quirkyPage)
   expect(coordinatorTabId).toBeTruthy()
-  await waitForActivePanePtyId(orcaPage)
-  const coordinatorPane = await waitForActivePaneHookDescriptor(orcaPage)
+  await waitForActivePanePtyId(quirkyPage)
+  const coordinatorPane = await waitForActivePaneHookDescriptor(quirkyPage)
   const userDataDir = await electronApp.evaluate(({ app }) => app.getPath('userData'))
   const client = new RuntimeClient(userDataDir, 30_000, null, null)
   const coordinator = await client.call<{ terminal: { handle: string } }>('terminal.resolvePane', {
@@ -213,13 +213,13 @@ test('worker-start preserves one live inactive worker across workspace re-entry'
   )
   expect(isProcessAlive(spawn.pid)).toBe(true)
   expect(readLedger(interruptionLedgerPath)).toEqual([])
-  const workerTab = orcaPage.locator(
+  const workerTab = quirkyPage.locator(
     `[data-testid="sortable-tab"][data-tab-id="${workerTerminal!.tabId}"]`
   )
   await expect(workerTab).toBeVisible()
   await expect(workerTab).toHaveAttribute('data-active', 'false')
   await expect(
-    orcaPage.locator(`[data-testid="sortable-tab"][data-tab-id="${coordinatorTabId}"]`)
+    quirkyPage.locator(`[data-testid="sortable-tab"][data-tab-id="${coordinatorTabId}"]`)
   ).toHaveAttribute('data-active', 'true')
 
   await client.call('orchestration.send', {
@@ -233,17 +233,17 @@ test('worker-start preserves one live inactive worker across workspace re-entry'
   })
   expect(checked.result.messages).toEqual([expect.objectContaining({ subject: 'ACK' })])
 
-  const otherWorktreeId = await switchToOtherWorktree(orcaPage, worktreeId)
+  const otherWorktreeId = await switchToOtherWorktree(quirkyPage, worktreeId)
   expect(otherWorktreeId).toBeTruthy()
   await expect(workerTab).not.toBeVisible()
-  await switchToWorktree(orcaPage, worktreeId)
+  await switchToWorktree(quirkyPage, worktreeId)
 
   await expect(workerTab).toBeVisible()
   await expect(
-    orcaPage.locator(`[data-testid="sortable-tab"][data-tab-id="${workerTerminal!.tabId}"]`)
+    quirkyPage.locator(`[data-testid="sortable-tab"][data-tab-id="${workerTerminal!.tabId}"]`)
   ).toHaveCount(1)
   await expect(
-    orcaPage.locator(`[data-testid="sortable-tab"][data-tab-title="${workerTabTitle}"]`)
+    quirkyPage.locator(`[data-testid="sortable-tab"][data-tab-title="${workerTabTitle}"]`)
   ).toHaveCount(1)
   const terminalsAfterReturn = await client.call<RuntimeTerminalListResult>('terminal.list')
   const workerAfterReturn = terminalsAfterReturn.result.terminals.find(
@@ -267,5 +267,5 @@ test('worker-start preserves one live inactive worker across workspace re-entry'
   expect(workerOutputAfterReturn.result.terminal.tail.join('\n')).not.toContain(
     'Conversation interrupted'
   )
-  await expect(orcaPage.locator('body')).not.toContainText('Conversation interrupted')
+  await expect(quirkyPage.locator('body')).not.toContainText('Conversation interrupted')
 })

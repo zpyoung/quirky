@@ -35,7 +35,7 @@ import {
 } from './terminal-topology/terminal-pane-admission'
 import { windowViewPatchForMain, windowViewSaveForMain } from './window-save-view'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 /** Each patch a writer made: the stored partition, the full saves before and after, the patch. */
 type PatchCall = {
@@ -301,7 +301,7 @@ function differingRecords(calls: readonly PatchCall[]): string[] {
   return [...differing].sort()
 }
 
-const GIT = 'repo-1::/Users/dev/orca'
+const GIT = 'repo-1::/Users/dev/quirky'
 // The two a switch-off window restores differently from their full save, dropping tab-b or adding
 // it (legacy-partition-full-save-hydration.test.ts); the others differ only in records on disk.
 const SURFACE_TOMBSTONE = 'legacy surface tombstone on a pane still showing its terminal'

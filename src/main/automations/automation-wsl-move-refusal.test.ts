@@ -91,8 +91,8 @@ async function evaluateAt(
 
 let fenceDir: string
 beforeEach(() => {
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-automation-wsl-move-'))
-  fenceDir = mkdtempSync(join(tmpdir(), 'orca-automation-wsl-fence-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-automation-wsl-move-'))
+  fenceDir = mkdtempSync(join(tmpdir(), 'quirky-automation-wsl-fence-'))
   loadWslMoveFence(fenceDir)
   runAutomationPrecheckMock.mockReset()
   vi.useFakeTimers()
@@ -122,7 +122,7 @@ describe('scheduled automations under a WSL move', () => {
       error: WSL_MOVE_IN_PROGRESS
     })
     expect(WSL_MOVE_IN_PROGRESS).toBe(
-      "This automation's project is moving to its WSL host, so Orca skipped this run. Runs resume when the move finishes."
+      "This automation's project is moving to its WSL host, so Quirky skipped this run. Runs resume when the move finishes."
     )
   })
 
@@ -147,7 +147,7 @@ describe('scheduled automations under a WSL move', () => {
       new Date('2026-05-16T09:00:00').getTime()
     )
     expect(WSL_MOVE_OWNED_BY_HOST).toBe(
-      "This automation's project now runs on its WSL host, which runs this automation there. Orca no longer runs this local copy."
+      "This automation's project now runs on its WSL host, which runs this automation there. Quirky no longer runs this local copy."
     )
   })
 

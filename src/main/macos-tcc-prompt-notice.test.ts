@@ -9,7 +9,7 @@ const watchOptions: { onPrompt: () => void }[] = []
 vi.mock('./codex-accounts/fs-utils', () => ({
   writeFileAtomically: (...args: unknown[]) => writeFileAtomically(...args)
 }))
-vi.mock('./persistence', () => ({ getCanonicalUserDataPath: () => '/tmp/orca-tcc-notice-test' }))
+vi.mock('./persistence', () => ({ getCanonicalUserDataPath: () => '/tmp/quirky-tcc-notice-test' }))
 vi.mock('./macos-tcc-log-stream-orphans', () => ({
   reclaimOrphanedTccLogStreams: vi.fn(async () => 0)
 }))

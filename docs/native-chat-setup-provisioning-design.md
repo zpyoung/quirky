@@ -24,7 +24,7 @@ Background attribution-only callers intentionally inherit their established no-s
 
 Add coverage that feeds actual structured renderer creation arguments through the production payload builder, RPC schema/argument mapping, host startup, and real terminal provisioner, recording created terminals. New-tab setup should create Setup alone for background native chat, while blank/background creation still receives its shell. Cover both agents, activated attribution-only creation, run-hooks, promised chat, explicit startup, default tabs, split anchors, and setup-only/failure behavior using existing tests where adequate.
 
-Demonstrate the regression failing against the original policy and passing after the change. Run relevant renderer/runtime/RPC/provisioning/folder tests, node and web typechecks, and changed-file format/lint checks with `ORCA_BACKGROUND_LAUNCH=1`. No platform or rendered UI result is claimed without an actual run. Independent Astra review must converge before implementation and review the final diff with no unresolved P0/P1; record P2 dispositions in the review report.
+Demonstrate the regression failing against the original policy and passing after the change. Run relevant renderer/runtime/RPC/provisioning/folder tests, node and web typechecks, and changed-file format/lint checks with `QUIRKY_BACKGROUND_LAUNCH=1`. No platform or rendered UI result is claimed without an actual run. Independent Astra review must converge before implementation and review the final diff with no unresolved P0/P1; record P2 dispositions in the review report.
 
 ## Results
 

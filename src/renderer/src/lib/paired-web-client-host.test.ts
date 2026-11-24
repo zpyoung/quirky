@@ -36,7 +36,7 @@ describe('a paired web client routes every owner through its server (#9047)', ()
   afterEach(() => vi.unstubAllGlobals())
 
   it('routes a workspace the server calls local to the server, never to the browser', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     for (const state of [
       webState(),
       webState({ activeWorktreeId: WT, activeWorkspaceExecutionHostId: 'local' }),
@@ -55,7 +55,7 @@ describe('a paired web client routes every owner through its server (#9047)', ()
   })
 
   it('starts setup terminals and local folder workspaces on the server', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     expect(
       resolveTerminalHostOwnership(webState(), 'ephemeral-setup-terminal:panel-1', 'spawn')
     ).toEqual({ kind: 'runtime', runtimeEnvironmentId: ENV })
@@ -70,7 +70,7 @@ describe('a paired web client routes every owner through its server (#9047)', ()
   })
 
   it('keeps an SSH target as the place and the server as the transport', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = webState({ activeWorktreeId: WT, activeWorkspaceExecutionHostId: 'ssh:target-1' })
     expect(resolveWorktreeOperationRoute(state, WT)).toEqual({
       executionHostId: 'ssh:target-1',
@@ -79,7 +79,7 @@ describe('a paired web client routes every owner through its server (#9047)', ()
   })
 
   it('still refuses an id two hosts publish instead of guessing one', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const state = webState({
       worktreesByRepo: {
         'repo-1': [

@@ -24,7 +24,7 @@ describe('resolveAbsoluteDirOverride', () => {
     ['a parent reference', '..'],
     ['a relative path', 'rel/path'],
     // Grok 1.0.30 does not expand `~` — `GROK_HOME=~/x` makes it create a literal `~` dir under
-    // its own cwd — so expanding one here would point Orca at a directory no agent writes to.
+    // its own cwd — so expanding one here would point Quirky at a directory no agent writes to.
     ['an unexpanded tilde', '~/sessions'],
     // Drive-*relative*: both resolve against that drive's current directory, not its root.
     ['a drive-relative path', 'C:foo'],

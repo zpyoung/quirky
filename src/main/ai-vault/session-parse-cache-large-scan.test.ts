@@ -45,7 +45,7 @@ it('count-bounds rows only other readers made, never rows History listed', () =>
 
 it('does not reparse an unchanged corpus past the resume bound, across scans or restart', async () => {
   resetSessionParseCacheForTests()
-  root = await mkdtemp(join(tmpdir(), 'orca-history-no-reparse-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-history-no-reparse-'))
   const cacheFile = join(root, 'cache.json')
   initSessionParseCachePersistence({ filePath: cacheFile, appVersion: 'test' })
   const candidates: SessionFileCandidate[] = []

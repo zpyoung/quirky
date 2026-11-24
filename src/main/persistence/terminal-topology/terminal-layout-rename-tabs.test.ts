@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { CommandOf } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { WorkspaceLayoutStream } from '../../runtime/workspace-layout-stream'
@@ -34,7 +34,7 @@ const leafOf = (index: number) => `00000000-0000-4000-8000-${String(index).padSt
 
 /** A store whose local partition holds `count` git-workspace tabs and one folder tab. */
 async function storeWithTabs(count: number): Promise<{ store: Store; directory: string }> {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-rename-tabs-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-rename-tabs-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const local = new WindowSession(getDefaultWorkspaceSession())
@@ -85,7 +85,7 @@ describe('Store.applyTabRenames (layout.apply renameTabs)', () => {
       { rename: rename(FIXTURE_GIT_WORKTREE_ID, 'missing', 'Gone'), code: 'tab_not_found' }
     ])
     // Both partitions in one durable mutation: one notice for any partition, or one per partition.
-    expect(written).toEqual(ORCA_LAYOUT_OWNER_IS_MAIN ? ['local', SSH] : [null])
+    expect(written).toEqual(QUIRKY_LAYOUT_OWNER_IS_MAIN ? ['local', SSH] : [null])
     const reopened = await reopenTopologyStore(store, directory)
     expect(generatedTitles(reopened)).toEqual([
       ['tab-0', 'Fix the login page'],

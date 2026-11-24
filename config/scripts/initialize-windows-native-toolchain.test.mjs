@@ -9,7 +9,7 @@ import {
 const receipt = [
   'Developer Command Prompt banner, not an environment variable',
   'TOKEN=should-not-be-exported',
-  'ORCA_WINDOWS_NATIVE_ENVIRONMENT',
+  'QUIRKY_WINDOWS_NATIVE_ENVIRONMENT',
   'VCINSTALLDIR=C:\\Visual Studio\\VC\\',
   'VSCMD_VER=18.10.12224.181',
   'WindowsSDKVersion=10.0.28000.0\\',
@@ -34,7 +34,7 @@ describe('Windows compiler environment receipt', () => {
   })
 
   it.each([
-    receipt.replace('ORCA_WINDOWS_NATIVE_ENVIRONMENT', 'missing'),
+    receipt.replace('QUIRKY_WINDOWS_NATIVE_ENVIRONMENT', 'missing'),
     receipt.replace('VCINSTALLDIR=', 'unrelated='),
     receipt.replace('VSCMD_VER=', 'unrelated='),
     receipt.replace('WindowsSDKVersion=', 'unrelated='),

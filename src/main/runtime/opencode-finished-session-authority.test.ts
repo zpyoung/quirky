@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../agent-hooks/server'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { makeStore } from './runtime-rpc-worktree-store-fixtures'
 import { spawnedPtyEnv } from './spawned-pty-env-fixtures'
 
@@ -43,7 +43,7 @@ vi.mock('../git/worktree', () => ({
 }))
 
 type LaunchedOpenCodePane = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   ptyId: string
   paneKey: string
   tabId: string
@@ -55,10 +55,10 @@ async function launchOpenCodePane(options: {
   ptyId: string
   getForegroundProcess: () => Promise<string | null>
   retireAgentHookCompatibilityAuthority?: (paneKey: string) => void
-  attestAgentHookCompatibilityAuthority?: OrcaRuntimeServiceDeps['attestAgentHookCompatibilityAuthority']
+  attestAgentHookCompatibilityAuthority?: QuirkyRuntimeServiceDeps['attestAgentHookCompatibilityAuthority']
 }): Promise<LaunchedOpenCodePane> {
   const spawn = vi.fn().mockResolvedValue({ id: options.ptyId, incarnationId: 'incarnation-1' })
-  const runtime = new OrcaRuntimeService(makeStore() as never, undefined, {
+  const runtime = new QuirkyRuntimeService(makeStore() as never, undefined, {
     attestAgentHookCompatibilityAuthority:
       options.attestAgentHookCompatibilityAuthority ??
       ((candidate) => ({ paneKey: candidate.paneKey, source: 'current_hook' as const })),
@@ -78,8 +78,8 @@ async function launchOpenCodePane(options: {
     launchAgent: 'opencode'
   })
   const env = spawnedPtyEnv(spawn.mock.calls[0]?.[0])
-  const paneKey = env.ORCA_PANE_KEY
-  const launchToken = env.ORCA_AGENT_LAUNCH_TOKEN
+  const paneKey = env.QUIRKY_PANE_KEY
+  const launchToken = env.QUIRKY_AGENT_LAUNCH_TOKEN
   expect(paneKey).toBeTruthy()
   expect(launchToken).toBeTruthy()
   return {
@@ -92,7 +92,7 @@ async function launchOpenCodePane(options: {
   }
 }
 
-type OrcaRuntimeServiceDeps = NonNullable<ConstructorParameters<typeof OrcaRuntimeService>[2]>
+type QuirkyRuntimeServiceDeps = NonNullable<ConstructorParameters<typeof QuirkyRuntimeService>[2]>
 
 /** Drain the microtask + timer queues the deferred foreground read chains through. */
 async function settle(ticks = 40): Promise<void> {
@@ -181,11 +181,11 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
     })
     const hookEnv = server.buildPtyEnv()
     const post = (payload: Record<string, unknown>): Promise<Response> =>
-      fetch(`http://127.0.0.1:${hookEnv.ORCA_AGENT_HOOK_PORT}/hook/opencode`, {
+      fetch(`http://127.0.0.1:${hookEnv.QUIRKY_AGENT_HOOK_PORT}/hook/opencode`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Orca-Agent-Hook-Token': hookEnv.ORCA_AGENT_HOOK_TOKEN
+          'X-Quirky-Agent-Hook-Token': hookEnv.QUIRKY_AGENT_HOOK_TOKEN
         },
         body: JSON.stringify({
           paneKey: pane.paneKey,
@@ -211,7 +211,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
     pane.runtime.onPtyData(pane.ptyId, '\x1b]133;D;0\x07', 100)
     await settle()
 
-    // Every later process in this shell inherits ORCA_AGENT_LAUNCH_TOKEN from the PTY env,
+    // Every later process in this shell inherits QUIRKY_AGENT_LAUNCH_TOKEN from the PTY env,
     // so the finished session's token must stop attesting once its command completed.
     expect(
       server.attestCompatibilityAuthority({
@@ -242,11 +242,11 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
     // Both sessions post the same launchToken: it lives in the PTY env, so every
     // process started in this shell inherits it. Only sessionID separates them.
     const post = (sessionId: string): Promise<Response> =>
-      fetch(`http://127.0.0.1:${hookEnv.ORCA_AGENT_HOOK_PORT}/hook/opencode`, {
+      fetch(`http://127.0.0.1:${hookEnv.QUIRKY_AGENT_HOOK_PORT}/hook/opencode`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Orca-Agent-Hook-Token': hookEnv.ORCA_AGENT_HOOK_TOKEN
+          'X-Quirky-Agent-Hook-Token': hookEnv.QUIRKY_AGENT_HOOK_TOKEN
         },
         body: JSON.stringify({
           paneKey: pane.paneKey,
@@ -280,7 +280,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
   })
 
   it('does not rehydrate a finished session token as restored authority after a restart', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-sta4557-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-sta4557-'))
     tempDirs.push(userDataPath)
     const first = new AgentHookServer()
     servers.push(first)
@@ -291,11 +291,11 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
       retireAgentHookCompatibilityAuthority: (paneKey) => first.retirePaneAuthority(paneKey)
     })
     const hookEnv = first.buildPtyEnv()
-    await fetch(`http://127.0.0.1:${hookEnv.ORCA_AGENT_HOOK_PORT}/hook/opencode`, {
+    await fetch(`http://127.0.0.1:${hookEnv.QUIRKY_AGENT_HOOK_PORT}/hook/opencode`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Orca-Agent-Hook-Token': hookEnv.ORCA_AGENT_HOOK_TOKEN
+        'X-Quirky-Agent-Hook-Token': hookEnv.QUIRKY_AGENT_HOOK_TOKEN
       },
       body: JSON.stringify({
         paneKey: pane.paneKey,
@@ -316,7 +316,7 @@ describe('OpenCode finished-session launch authority (STA-4557)', () => {
     servers.push(restarted)
     await restarted.start({ env: 'production', userDataPath })
 
-    // After a restart the PTY survives with ORCA_AGENT_LAUNCH_TOKEN still in its env and
+    // After a restart the PTY survives with QUIRKY_AGENT_LAUNCH_TOKEN still in its env and
     // pty.launchToken gone, so a persisted commitment is the whole proof of authority.
     expect(
       restarted.attestCompatibilityAuthority({

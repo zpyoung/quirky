@@ -3,8 +3,8 @@
  * into its status note and telemetry reason.
  */
 import type { SshManagedServerUpdateNote, SshTarget } from '../../shared/ssh-types'
-import type { ManagedOrcadAutoUpdateOutcome } from '../managed-server/lifecycle/orcad-managed-auto-update'
-import { ORCAD_ACTIVATION_FENCE_BUSY_CODE } from '../managed-server/activation/orcad-activation-fence-hold'
+import type { ManagedQuirkydAutoUpdateOutcome } from '../managed-server/lifecycle/quirkyd-managed-auto-update'
+import { QUIRKYD_ACTIVATION_FENCE_BUSY_CODE } from '../managed-server/activation/quirkyd-activation-fence-hold'
 
 /** What a managed host's update on connect did; `connected` when there was nothing to do. */
 export type HostServerUpdateReason =
@@ -21,7 +21,7 @@ export type ManagedServerUpdateDeps = {
   autoUpdate: (
     environmentId: string,
     options: { failedBefore: () => boolean; onUpdating: () => void }
-  ) => Promise<ManagedOrcadAutoUpdateOutcome>
+  ) => Promise<ManagedQuirkydAutoUpdateOutcome>
   /** Why an update to this app version already failed on the host, so it isn't retried. */
   recordedUpdateFailure: (target: SshTarget) => string | null
   /** True once an update failed on this host during this app launch; a restart retries once. */
@@ -46,7 +46,7 @@ export async function checkManagedServerUpdate(
   deps: ManagedServerUpdateDeps,
   onUpdating: () => void
 ): Promise<HostServerUpdateOnConnect> {
-  let result: ManagedOrcadAutoUpdateOutcome
+  let result: ManagedQuirkydAutoUpdateOutcome
   try {
     result = await deps.autoUpdate(environmentId, {
       // Why read inside: an overlapping check may record a failure while this one waits on the lock.
@@ -55,7 +55,7 @@ export async function checkManagedServerUpdate(
       onUpdating
     })
   } catch (error) {
-    console.warn('[ssh] Could not check the managed Orca server for an update:', error)
+    console.warn('[ssh] Could not check the managed Quirky server for an update:', error)
     return {
       note: {
         state: 'check-failed',
@@ -81,7 +81,7 @@ export async function checkManagedServerUpdate(
         note: { state: 'deferred', detail: result.reason },
         reason: 'update_deferred',
         recorded: false,
-        ...(result.code === ORCAD_ACTIVATION_FENCE_BUSY_CODE ? { fenceBusy: true as const } : {})
+        ...(result.code === QUIRKYD_ACTIVATION_FENCE_BUSY_CODE ? { fenceBusy: true as const } : {})
       }
     case 'failed':
       deps.recordUpdateFailure(target, result.reason)
@@ -96,7 +96,7 @@ export async function checkManagedServerUpdate(
 }
 
 function skipped(
-  reason: Extract<ManagedOrcadAutoUpdateOutcome, { outcome: 'skipped' }>['reason'],
+  reason: Extract<ManagedQuirkydAutoUpdateOutcome, { outcome: 'skipped' }>['reason'],
   failure: string | null
 ): HostServerUpdateOnConnect {
   switch (reason) {

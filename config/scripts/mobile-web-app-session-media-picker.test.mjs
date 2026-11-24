@@ -133,7 +133,7 @@ describe('the rule that reads a module for a picker', () => {
   }
 
   it('names every way in and nothing else', () => {
-    const scratch = mkdtempSync(join(tmpdir(), 'orca-session-media-picker-'))
+    const scratch = mkdtempSync(join(tmpdir(), 'quirky-session-media-picker-'))
     try {
       mkdirSync(join(scratch, 'src'), { recursive: true })
       for (const [name, source] of Object.entries(PLANTED)) {

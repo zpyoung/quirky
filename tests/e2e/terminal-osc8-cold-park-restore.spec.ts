@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Page } from '@stablyai/playwright-test'
 import { alternateScreenFixtureScript } from './alternate-screen-fixture-script'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { stageNodeScriptForTerminal } from './helpers/run-node-script-in-terminal'
 import { parkHiddenTabBehindDecoy } from './helpers/terminal-hidden-parking'
 import {
@@ -20,10 +20,10 @@ import {
 import { nodeTerminalCommand } from './terminal-node-command'
 import { waitForPtyShellEcho } from './terminal-pty-readiness'
 
-const PARKING_DELAY_MS = Number(process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS) || 500
+const PARKING_DELAY_MS = Number(process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS) || 500
 
 test.use({
-  orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
+  quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
 })
 
 type LinkProbe = { clientX: number; clientY: number; tabId: string }
@@ -111,7 +111,7 @@ async function activateTerminalTab(page: Page, tabId: string): Promise<void> {
   await page.evaluate((tabId) => {
     const state = window.__store?.getState()
     if (!state) {
-      throw new Error('Orca store unavailable')
+      throw new Error('Quirky store unavailable')
     }
     state.setActiveTabType('terminal', window.__store?.getState().activeWorktreeId ?? null)
     state.setActiveTab(tabId)
@@ -120,39 +120,41 @@ async function activateTerminalTab(page: Page, tabId: string): Promise<void> {
   await waitForActiveTerminalManager(page, 30_000)
 }
 
-test('restores and opens an OSC 8 link after its terminal is cold-parked', async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await orcaPage.evaluate(async () => {
+test('restores and opens an OSC 8 link after its terminal is cold-parked', async ({
+  quirkyPage
+}) => {
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await quirkyPage.evaluate(async () => {
     await window.__store?.getState().updateSettings({
       openLinksInApp: true,
       openLinksInAppPreferencePrompted: true
     })
   })
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const tabId = await getActiveTabId(orcaPage)
-  const ptyId = await waitForActivePanePtyId(orcaPage)
-  await waitForPtyShellEcho(orcaPage, ptyId, 15_000)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const tabId = await getActiveTabId(quirkyPage)
+  const ptyId = await waitForActivePanePtyId(quirkyPage)
+  await waitForPtyShellEcho(quirkyPage, ptyId, 15_000)
 
   const label = `#${randomUUID().slice(0, 6)}`
-  const url = `https://example.com/orca-osc8-${randomUUID()}`
+  const url = `https://example.com/quirky-osc8-${randomUUID()}`
   const linkedOutput = `\x1b[?1049h\x1b[2J\x1b[H\x1b]8;id=cold-park;${url}\x1b\\${label}\x1b]8;;\x1b\\\n`
   // Why staged rather than `node -e`: PowerShell mangles the escapes (#8521), and it
   // keeps the label out of the command line so the readiness poll below cannot be
   // satisfied by the shell's own echo. `staged.command` is bypassed because it runs a
   // bare `node`; nodeTerminalCommand pins process.execPath for Windows CI's PATH.
   const staged = stageNodeScriptForTerminal(alternateScreenFixtureScript(linkedOutput), {
-    prefix: 'orca-osc8-cold-park'
+    prefix: 'quirky-osc8-cold-park'
   })
   try {
-    await sendToTerminal(orcaPage, ptyId, `${nodeTerminalCommand([staged.scriptPath])}\r`)
-    await expect.poll(() => getTerminalContent(orcaPage, 4_000)).toContain(label)
+    await sendToTerminal(quirkyPage, ptyId, `${nodeTerminalCommand([staged.scriptPath])}\r`)
+    await expect.poll(() => getTerminalContent(quirkyPage, 4_000)).toContain(label)
 
-    const baselineProbe = await locateLink(orcaPage, label)
-    await orcaPage.mouse.move(baselineProbe.clientX, baselineProbe.clientY)
+    const baselineProbe = await locateLink(quirkyPage, label)
+    await quirkyPage.mouse.move(baselineProbe.clientX, baselineProbe.clientY)
     await expect
-      .poll(() => readLinkState(orcaPage, tabId, label))
+      .poll(() => readLinkState(quirkyPage, tabId, label))
       .toMatchObject({
         bufferType: 'alternate',
         serializedUri: true,
@@ -160,16 +162,16 @@ test('restores and opens an OSC 8 link after its terminal is cold-parked', async
         uri: url
       })
 
-    await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, {
+    await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, {
       parkDelayMs: PARKING_DELAY_MS
     })
-    await activateTerminalTab(orcaPage, tabId)
-    await expect.poll(() => getTerminalContent(orcaPage, 4_000)).toContain(label)
+    await activateTerminalTab(quirkyPage, tabId)
+    await expect.poll(() => getTerminalContent(quirkyPage, 4_000)).toContain(label)
 
-    const restoredProbe = await locateLink(orcaPage, label)
-    await orcaPage.mouse.move(restoredProbe.clientX, restoredProbe.clientY)
+    const restoredProbe = await locateLink(quirkyPage, label)
+    await quirkyPage.mouse.move(restoredProbe.clientX, restoredProbe.clientY)
     await expect
-      .poll(() => readLinkState(orcaPage, tabId, label))
+      .poll(() => readLinkState(quirkyPage, tabId, label))
       .toMatchObject({
         bufferType: 'alternate',
         serializedUri: true,
@@ -177,17 +179,19 @@ test('restores and opens an OSC 8 link after its terminal is cold-parked', async
         uri: url
       })
 
-    const isMac = await orcaPage.evaluate(() => navigator.userAgent.includes('Mac'))
+    const isMac = await quirkyPage.evaluate(() => navigator.userAgent.includes('Mac'))
     const modifier = isMac ? 'Meta' : 'Control'
-    await orcaPage.keyboard.down(modifier)
-    await orcaPage.mouse.down()
-    await orcaPage.mouse.up()
-    await orcaPage.keyboard.up(modifier)
+    await quirkyPage.keyboard.down(modifier)
+    await quirkyPage.mouse.down()
+    await quirkyPage.mouse.up()
+    await quirkyPage.keyboard.up(modifier)
     await expect
-      .poll(async () => (await getBrowserTabs(orcaPage, worktreeId)).some((tab) => tab.url === url))
+      .poll(async () =>
+        (await getBrowserTabs(quirkyPage, worktreeId)).some((tab) => tab.url === url)
+      )
       .toBe(true)
   } finally {
-    await sendToTerminal(orcaPage, ptyId, '\x03').catch(() => undefined)
+    await sendToTerminal(quirkyPage, ptyId, '\x03').catch(() => undefined)
     staged.cleanup()
   }
 })

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { buildShellCommandFromArgv } from '../../src/shared/tui-agent-startup-shell'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getPiAgentStatusExtensionSource } from '../../src/main/pi/agent-status-extension-source'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
@@ -10,17 +10,17 @@ import {
 } from './helpers/terminal'
 
 test('installed OMP renders the task draft without starting a turn', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.skip(
-    !process.env.ORCA_OMP_PROOF_BINARY || process.platform === 'win32',
+    !process.env.QUIRKY_OMP_PROOF_BINARY || process.platform === 'win32',
     'Opt-in POSIX OMP runtime proof'
   )
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage)
-  const ptyId = await waitForActivePanePtyId(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage)
+  const ptyId = await waitForActivePanePtyId(quirkyPage)
   const sourcePath = testInfo.outputPath('status.ts')
   const probePath = testInfo.outputPath('probe.ts')
   const resultPath = testInfo.outputPath('result.json')
@@ -35,20 +35,20 @@ export default function (api) {
   api.on('session_start', (_event, ctx) => {
     setTimeout(() => writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({
       text: ctx.ui.getEditorText(), hasUI: ctx.hasUI,
-      consumed: !process.env.ORCA_OMP_PREFILL, turns
+      consumed: !process.env.QUIRKY_OMP_PREFILL, turns
     })), 1500)
   })
 }`
   )
   await execInTerminal(
-    orcaPage,
+    quirkyPage,
     ptyId,
     buildShellCommandFromArgv(
       [
         'env',
-        `ORCA_OMP_PREFILL=${draft}`,
-        'ORCA_PI_STATUS_OWNED=',
-        process.env.ORCA_OMP_PROOF_BINARY ?? '',
+        `QUIRKY_OMP_PREFILL=${draft}`,
+        'QUIRKY_PI_STATUS_OWNED=',
+        process.env.QUIRKY_OMP_PROOF_BINARY ?? '',
         '--no-session',
         '--no-extensions',
         '--extension',
@@ -71,6 +71,6 @@ export default function (api) {
       { timeout: 45_000 }
     )
     .toEqual({ text: draft, hasUI: true, consumed: true, turns: 0 })
-  await expect(orcaPage.locator('.xterm-screen').first()).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('omp-prefilled.png') })
+  await expect(quirkyPage.locator('.xterm-screen').first()).toBeVisible()
+  await quirkyPage.screenshot({ path: testInfo.outputPath('omp-prefilled.png') })
 })

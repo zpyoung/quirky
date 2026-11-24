@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { credential } from './native-account-test-fixtures'
 import {
   readAntigravityMacOSCredential,
@@ -8,12 +8,12 @@ import {
 } from './native-macos-credentials'
 
 const enabled =
-  process.platform === 'darwin' && process.env.ORCA_REAL_AGY_NATIVE_BACKEND_TEST === '1'
+  process.platform === 'darwin' && process.env.QUIRKY_REAL_AGY_NATIVE_BACKEND_TEST === '1'
 
 describe.skipIf(!enabled)('isolated macOS native credential backend', () => {
   it('writes and reads two complete profiles in a disposable item without changing agy authority', async () => {
     const target = {
-      service: `orca-antigravity-backend-test.${randomUUID()}`,
+      service: `quirky-antigravity-backend-test.${randomUUID()}`,
       account: 'task-only'
     }
     expect(target.service).not.toBe('gemini')

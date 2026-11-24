@@ -7,7 +7,7 @@ import type {
 import { assertClipboardTextWriteWithinLimitWithYield } from '../../shared/clipboard-text'
 import { normalizeBrowserNavigationUrl } from '../../shared/browser-url'
 import { BrowserError } from './cdp-bridge'
-import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
+import { QUIRKY_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
 import { focusedValueSetExpression } from './agent-browser-bridge-input'
 import { EMBEDDED_NAVIGATION_TIMEOUT_MS } from './agent-browser-bridge-types'
 import {
@@ -93,7 +93,7 @@ export abstract class AgentBrowserBridgeCoreCommands extends AgentBrowserBridgeQ
           }
           if (!this.getWebContents(target.webContentsId)) {
             throw this.createPageUnavailableError(
-              `${ORCA_TAB_SESSION_PREFIX}${target.browserPageId}`
+              `${QUIRKY_TAB_SESSION_PREFIX}${target.browserPageId}`
             )
           }
           // Why: ERR_ABORTED also covers a page vetoing unload; that navigation did not succeed.

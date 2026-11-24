@@ -59,7 +59,7 @@ export type AskQuestion =
   | AskDateQuestion
   | AskConfirmQuestion
 
-/** Flat question set for one `orca ask` invocation; no conditional branching (logic.md § Question schema). */
+/** Flat question set for one `quirky ask` invocation; no conditional branching (logic.md § Question schema). */
 export type AskSpec = { questions: AskQuestion[] }
 
 export type AskValidationError = { path: string; message: string }
@@ -102,7 +102,7 @@ export type AskStreamFrame =
   | { type: 'event'; event: AskRegistryEvent }
   | { type: 'end'; reason: 'epoch_changed' | 'closed' }
 
-/** Default `ask.wait` chunk size (tech.md § C5: `orca ask` register → wait loop). */
+/** Default `ask.wait` chunk size (tech.md § C5: `quirky ask` register → wait loop). */
 export const ASK_DEFAULT_CHUNK_MS = 100_000
 
 // New ask-only constant: mirrors resolveOrchestrationAskClientTimeoutMs's chunk+grace shape

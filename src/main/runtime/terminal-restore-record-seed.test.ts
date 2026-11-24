@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
@@ -47,8 +47,8 @@ function makeStore() {
   }
 }
 
-function makeRuntimeWithLeaf(): OrcaRuntimeService {
-  const runtime = new OrcaRuntimeService(makeStore() as never)
+function makeRuntimeWithLeaf(): QuirkyRuntimeService {
+  const runtime = new QuirkyRuntimeService(makeStore() as never)
   runtime.setPtyController({
     spawn: vi.fn(async () => ({ id: 'never' })),
     write: () => true,
@@ -184,7 +184,7 @@ describe('seedTerminalRestoreTail', () => {
   it('republishes session tabs when a seeded title lands', () => {
     const runtime = makeRuntimeWithLeaf()
     const touch = vi.spyOn(
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService defines this protected method; the spy only observes it.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService defines this protected method; the spy only observes it.
       runtime as unknown as { touchMobileSessionSnapshotsForPty: (ptyId: string) => void },
       'touchMobileSessionSnapshotsForPty'
     )
@@ -244,7 +244,7 @@ describe('seedTerminalRestoreTail', () => {
 })
 
 describe('terminal query dispatch characterization', () => {
-  class QueryDispatchRuntime extends OrcaRuntimeService {
+  class QueryDispatchRuntime extends QuirkyRuntimeService {
     prepareMobileCreate() {
       this.registerPty('pty-query', 'workspace')
       const pty = this.ptysById.get('pty-query')
@@ -430,7 +430,7 @@ describe('terminal query dispatch characterization', () => {
 })
 
 describe('terminal query reentry characterization', () => {
-  class QueryRuntime extends OrcaRuntimeService {
+  class QueryRuntime extends QuirkyRuntimeService {
     readonly calls: string[] = []
     surfaceReads = 0
 
@@ -555,12 +555,12 @@ describe('terminal query reentry characterization', () => {
 describe('terminal view promise characterization', () => {
   const snapshot: RuntimeTerminalBufferSnapshot = { data: 'screen', cols: 80, rows: 24 }
   it('returns the current available-state promise with the runtime receiver and original arity', () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const expected = Promise.resolve(snapshot)
-    const receivers: OrcaRuntimeService[] = []
+    const receivers: QuirkyRuntimeService[] = []
     const arities: number[] = []
     runtime['serializeTerminalBufferFromAvailableState'] = function (
-      this: OrcaRuntimeService,
+      this: QuirkyRuntimeService,
       ...args
     ) {
       receivers.push(this)
@@ -573,11 +573,11 @@ describe('terminal view promise characterization', () => {
     expect(arities).toEqual([2])
   })
   it('reads the current fallback after provider completion and keeps provider-first options', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const provider = Promise.withResolvers<PtyProviderBufferSnapshot | null>()
-    const receivers: OrcaRuntimeService[] = []
+    const receivers: QuirkyRuntimeService[] = []
     const opts = { scrollbackRows: 12 }
-    runtime['serializeProviderTerminalBuffer'] = function (this: OrcaRuntimeService, ...args) {
+    runtime['serializeProviderTerminalBuffer'] = function (this: QuirkyRuntimeService, ...args) {
       receivers.push(this)
       expect(args).toEqual(['view-pty', opts, { timeoutMs: 8000, retireOnTimeout: true }])
       return provider.promise
@@ -586,7 +586,7 @@ describe('terminal view promise characterization', () => {
     runtime['serializeTerminalBufferFromAvailableState'] = firstFallback
     const pending = runtime.serializeAuthoritativeTerminalBuffer('view-pty', opts)
     runtime['serializeTerminalBufferFromAvailableState'] = function (
-      this: OrcaRuntimeService,
+      this: QuirkyRuntimeService,
       ...args
     ) {
       receivers.push(this)
@@ -599,17 +599,17 @@ describe('terminal view promise characterization', () => {
     expect(receivers).toEqual([runtime, runtime])
   })
   it('skips driver reads for empty input and rechecks the current driver before a write', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const initialDriver = vi.fn(() => ({ kind: 'desktop' as const }))
     runtime.getDriver = initialDriver
     await expect(runtime.writeTerminalPreviewInput('view-pty', '')).resolves.toBe(false)
     expect(initialDriver).not.toHaveBeenCalled()
-    const receivers: OrcaRuntimeService[] = []
-    runtime['writeTerminalInputChunks'] = async function (this: OrcaRuntimeService, ...args) {
+    const receivers: QuirkyRuntimeService[] = []
+    runtime['writeTerminalInputChunks'] = async function (this: QuirkyRuntimeService, ...args) {
       receivers.push(this)
       expect(args.length).toBe(3)
       expect(args[2].inputKind).toBe('driving')
-      runtime.getDriver = function (this: OrcaRuntimeService) {
+      runtime.getDriver = function (this: QuirkyRuntimeService) {
         receivers.push(this)
         return { kind: 'mobile', clientId: 'phone' }
       }

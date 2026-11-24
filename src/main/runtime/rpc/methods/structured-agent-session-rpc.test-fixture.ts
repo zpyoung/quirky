@@ -11,7 +11,7 @@ import {
   StructuredAgentSessionStatusFeed,
   type StructuredAgentSessionStatusSubscriber
 } from '../../../native-chat/agent-session-wire/structured-agent-session-status-feed'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   AGENT_SESSION_PENDING_SEND_RESULT_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY
@@ -259,7 +259,7 @@ export function dispatcher(
     ...runtimeOverrides
   }
   return new RpcDispatcher({
-    runtime: runtime as unknown as OrcaRuntimeService,
+    runtime: runtime as unknown as QuirkyRuntimeService,
     methods
   })
 }

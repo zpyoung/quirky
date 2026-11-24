@@ -1,9 +1,9 @@
-"""Runs one Jupyter kernel for Orca in the interpreter that launched this script.
+"""Runs one Jupyter kernel for Quirky in the interpreter that launched this script.
 
-Protocol: one JSON object per line. Orca writes {"op": "execute", "code": ...} and
+Protocol: one JSON object per line. Quirky writes {"op": "execute", "code": ...} and
 {"op": "interrupt"} to stdin; this writes {"type": ...} frames to stdout. Closing
-stdin shuts the kernel down, so the kernel never outlives Orca. When the kernel
-dies this process exits, so its exit is the one death signal Orca watches.
+stdin shuts the kernel down, so the kernel never outlives Quirky. When the kernel
+dies this process exits, so its exit is the one death signal Quirky watches.
 """
 
 import json
@@ -61,7 +61,7 @@ def forward(msg):
 def execute_all(client, codes):
     while True:
         code = codes.get()
-        # allow_stdin=False: input() raises a clear error instead of reading Orca's command pipe.
+        # allow_stdin=False: input() raises a clear error instead of reading Quirky's command pipe.
         reply = client.execute_interactive(code, allow_stdin=False, output_hook=forward)
         content = reply["content"]
         send(

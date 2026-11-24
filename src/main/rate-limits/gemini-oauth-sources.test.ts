@@ -34,7 +34,7 @@ describe.skipIf(process.platform === 'win32')('saveGeminiCredentials', () => {
     rmSync(state.home, { recursive: true, force: true })
   })
 
-  // Regression (#31125): orcad no longer inherits umask 077, so the replacement must be born 0600.
+  // Regression (#31125): quirkyd no longer inherits umask 077, so the replacement must be born 0600.
   it('keeps the refreshed OAuth tokens owner-only under a permissive umask', async () => {
     // Imported here: the module resolves the credential path from homedir() at load.
     const { saveGeminiCredentials } = await import('./gemini-oauth-sources')

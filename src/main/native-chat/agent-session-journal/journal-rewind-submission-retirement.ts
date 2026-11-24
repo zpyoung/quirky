@@ -3,7 +3,7 @@ import type { JournalReducerState } from './journal-reducer'
 
 export function retireRewoundJournalSubmission(state: JournalReducerState, itemId: string): void {
   const identity = parseAgentJournalItemKey(itemId)
-  if (identity?.provider !== 'orca') {
+  if (identity?.provider !== 'quirky') {
     return
   }
   state.submissions.delete(identity.clientMessageId)

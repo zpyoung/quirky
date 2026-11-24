@@ -1,10 +1,10 @@
-import { OrcaRuntimeWithMobileTookFloor } from './mobile-terminal-activity'
+import { QuirkyRuntimeWithMobileTookFloor } from './mobile-terminal-activity'
 import {
   MOBILE_AUTO_RESTORE_FIT_MAX_MS,
   MOBILE_AUTO_RESTORE_FIT_MIN_MS
-} from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-postlude'
 
-export abstract class OrcaRuntimeWithReclaimTerminalForDesktop extends OrcaRuntimeWithMobileTookFloor {
+export abstract class QuirkyRuntimeWithReclaimTerminalForDesktop extends QuirkyRuntimeWithMobileTookFloor {
   abstract isMobileSubscriberActive(ptyId: string): boolean
   abstract setMobileDisplayMode(ptyId: string, mode: 'auto' | 'desktop'): void
 

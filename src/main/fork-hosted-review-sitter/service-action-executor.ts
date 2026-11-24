@@ -10,7 +10,7 @@ import type {
   HostedReviewWorld
 } from '../../shared/fork-hosted-review-sitter/types'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   buildHostedReviewWorkerDispatch,
   type HostedReviewWorkerDispatch
@@ -94,7 +94,7 @@ function providerExpectedAfter(
 }
 
 export async function executeHostedReviewSitterAction(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   provider: HostedReviewSitterProviderAdapter,
   action: HostedReviewSitterAction,

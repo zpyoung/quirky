@@ -14,7 +14,7 @@ describe('WSL Codex commands', () => {
   it('checks the alias-neutral PATH the runner supplies', () => {
     const script = buildWslCodexAvailabilityScript()
 
-    expect(script).toContain('_orca_lookup_command=')
+    expect(script).toContain('_quirky_lookup_command=')
     expect(script).toContain("'codex'")
     expect(script).toContain('[ -n "$resolved" ]')
     expect(script).not.toContain('bash -ic')
@@ -30,9 +30,9 @@ describe('WSL Codex commands', () => {
     expect(command).not.toContain('BROWSER')
   })
 
-  it('stops the distro opening a second tab only when Orca opens the link', () => {
+  it('stops the distro opening a second tab only when Quirky opens the link', () => {
     const command = buildWslCodexLoginArgs('Ubuntu', '/home/alice/managed-home', {
-      orcaOpensSignInLink: true
+      quirkyOpensSignInLink: true
     }).at(-1)
 
     expect(command).toContain('export BROWSER=true\nexec "$resolved" login')

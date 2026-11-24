@@ -1,6 +1,6 @@
 /**
- * The account env a desktop pushes to a host it owns the accounts of (a WSL distro's orcad, which
- * has no account services: WSL-via-orcad D10). Launches the host starts on its own (CLI,
+ * The account env a desktop pushes to a host it owns the accounts of (a WSL distro's quirkyd, which
+ * has no account services: WSL-via-quirkyd D10). Launches the host starts on its own (CLI,
  * orchestration, automations, structured chats, AI commit text, bare commands) take it, so they run
  * the account this desktop selected for that distro, as its own launches into the distro do.
  */
@@ -32,5 +32,5 @@ export function hostAccountLaunchEnvFor(
 }
 
 export function hostAccountsManagedByDesktopMessage(wslDistro: string): string {
-  return `Accounts for this WSL host are managed in the Orca desktop app: Settings → AI Provider Accounts, with the ${wslDistro} (WSL) host selected.`
+  return `Accounts for this WSL host are managed in the Quirky desktop app: Settings → AI Provider Accounts, with the ${wslDistro} (WSL) host selected.`
 }

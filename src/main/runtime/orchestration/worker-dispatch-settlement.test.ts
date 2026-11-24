@@ -13,7 +13,7 @@ describe('settled assignment worker recovery', () => {
   let databasePath: string
   let db: OrchestrationDb
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-worker-settlement-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-worker-settlement-'))
     databasePath = join(directory, 'orchestration.db')
     db = new OrchestrationDb(databasePath)
   })

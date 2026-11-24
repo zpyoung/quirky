@@ -21,7 +21,7 @@ import { recordingStructuredAgentSessionLogger } from '../agent-session-wire/str
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-journal-open-failure-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-journal-open-failure-'))
 })
 
 afterEach(async () => {
@@ -202,17 +202,17 @@ describe('createJournalOpenReadRefusals', () => {
       return error instanceof Error && error.cause instanceof Error ? error.cause.message : ''
     })
     expect(causes).toEqual([
-      expect.stringContaining("newer Orca's row at sequence 7"),
+      expect.stringContaining("newer Quirky's row at sequence 7"),
       expect.stringContaining('damaged at sequence 3: sequence-gap')
     ])
   })
 
   // A load refused on its rows arrives already classified, and is logged once per session too.
-  it("logs a load refused as a newer Orca's chat, or as damage, once per session until it opens", () => {
+  it("logs a load refused as a newer Quirky's chat, or as damage, once per session until it opens", () => {
     const log = recordingStructuredAgentSessionLogger()
     const refusals = createJournalOpenReadRefusals(log.logger)
     const newer = journalOpenRefusalError(
-      new AgentSessionJournalError('journal_read_only', 'a newer Orca wrote session-1')
+      new AgentSessionJournalError('journal_read_only', 'a newer Quirky wrote session-1')
     )
     for (let attempt = 0; attempt < 3; attempt += 1) {
       expect(refusals.refusal('session-1', newer)).toBe(newer)
@@ -235,9 +235,9 @@ describe('createJournalOpenReadRefusals', () => {
   })
 })
 
-// Only an update gets past a journal a newer Orca wrote, so it has a reason of its own: a client
+// Only an update gets past a journal a newer Quirky wrote, so it has a reason of its own: a client
 // that chose words by `journalUnavailable` said to try again, and retrying never cleared it.
-describe('a journal a newer Orca wrote', () => {
+describe('a journal a newer Quirky wrote', () => {
   const readOnly = () =>
     new AgentSessionJournalError('journal_read_only', 'the journal uses a newer schema')
 
@@ -245,21 +245,21 @@ describe('a journal a newer Orca wrote', () => {
     // As the wire carries it (the mobile and older-client tests read this shape).
     expect(JSON.parse(JSON.stringify(journalOpenRefusal(readOnly())))).toEqual({
       code: 'agent_session_journal_unreadable',
-      message: 'Chats were saved by a newer Orca. Update Orca to keep using them.',
-      details: { reason: 'journalWrittenByNewerOrca' }
+      message: 'Chats were saved by a newer Quirky. Update Quirky to keep using them.',
+      details: { reason: 'journalWrittenByNewerQuirky' }
     })
     expect(journalOpenRefusalError(readOnly()).refusal).toMatchObject({
-      details: { reason: 'journalWrittenByNewerOrca' }
+      details: { reason: 'journalWrittenByNewerQuirky' }
     })
   })
 
   it('refuses a read with the same reason', () => {
     const { logger } = recordingStructuredAgentSessionLogger()
     expect(journalOpenReadRefusal(readOnly(), logger, 'session-1').refusal).toMatchObject({
-      details: { reason: 'journalWrittenByNewerOrca' }
+      details: { reason: 'journalWrittenByNewerQuirky' }
     })
     expect(
       createJournalOpenReadRefusals(logger).refusal('session-1', readOnly()).refusal
-    ).toMatchObject({ details: { reason: 'journalWrittenByNewerOrca' } })
+    ).toMatchObject({ details: { reason: 'journalWrittenByNewerQuirky' } })
   })
 })

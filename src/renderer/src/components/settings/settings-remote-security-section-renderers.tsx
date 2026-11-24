@@ -15,16 +15,16 @@ export function renderServersSettingsSection(context: SettingsRenderContext): Re
     <RuntimeServersPageProvider>
       <SettingsSection
         id="servers"
-        title={translate('auto.components.settings.Settings.bd0181eeca', 'Remote Orca Servers')}
+        title={translate('auto.components.settings.Settings.bd0181eeca', 'Remote Quirky Servers')}
         description={
           model.isWebClient
             ? translate(
                 'auto.components.settings.Settings.7686cb5c36',
-                'Connect this browser to a saved Orca server.'
+                'Connect this browser to a saved Quirky server.'
               )
             : translate(
                 'auto.components.settings.Settings.remoteServersDescription',
-                'Run Orca on another machine and work on it from here.'
+                'Run Quirky on another machine and work on it from here.'
               )
         }
         searchEntries={navigation.getSectionSearchEntries('servers')}

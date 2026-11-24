@@ -56,7 +56,7 @@ export function initializeMainProcessObservers(): void {
   // composition root — independent of product telemetry — and must
   // initialize before any IPC handler / runtime span is created so the
   // tracer's active sink is populated at the moment the first span fires.
-  // Honors DO_NOT_TRACK / ORCA_TELEMETRY_DISABLED / ORCA_DIAGNOSTICS_DISABLED
+  // Honors DO_NOT_TRACK / QUIRKY_TELEMETRY_DISABLED / QUIRKY_DIAGNOSTICS_DISABLED
   // / CI internally; those gates do not need to be re-checked here.
   initObservability()
   recordDurableCrashBreadcrumb('main_process_lifecycle_started', {

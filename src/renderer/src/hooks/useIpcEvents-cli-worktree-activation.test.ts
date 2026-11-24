@@ -192,7 +192,7 @@ describe('useIpcEvents CLI-created worktree activation', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}
@@ -461,7 +461,7 @@ describe('useIpcEvents CLI-created worktree activation', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}

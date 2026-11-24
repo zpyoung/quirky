@@ -13,4 +13,4 @@ export const MEDIA_FILE_MIME_TYPES: Record<string, string> = {
   '.webm': 'video/webm'
 }
 
-export const MEDIA_PREVIEW_SCHEME = 'orca-media'
+export const MEDIA_PREVIEW_SCHEME = 'quirky-media'

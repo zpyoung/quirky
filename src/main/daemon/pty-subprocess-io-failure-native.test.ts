@@ -1,7 +1,7 @@
 import { fstatSync } from 'node:fs'
 import type * as pty from 'node-pty'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { loadNodePtyForTests } from '../orcad/orcad-node-slot-fixture'
+import { loadNodePtyForTests } from '../quirkyd/quirkyd-node-slot-fixture'
 import { createDaemonPtySubprocessHandle } from './pty-subprocess/subprocess-handle'
 import { TerminalHost } from './terminal-host'
 
@@ -26,7 +26,7 @@ describePosix('failed-I/O teardown with a real native PTY', () => {
           '/bin/sh',
           [
             '-c',
-            'printf "orca-cleanup-ready\\n"; while IFS= read -r line; do printf "reply:%s\\n" "$line"; done'
+            'printf "quirky-cleanup-ready\\n"; while IFS= read -r line; do printf "reply:%s\\n" "$line"; done'
           ],
           {
             cwd: process.cwd(),
@@ -65,7 +65,9 @@ describePosix('failed-I/O teardown with a real native PTY', () => {
               onExit
             }
           })
-          await vi.waitFor(() => expect(output).toContain('orca-cleanup-ready'), { timeout: 3000 })
+          await vi.waitFor(() => expect(output).toContain('quirky-cleanup-ready'), {
+            timeout: 3000
+          })
           handle.resize(100, 30)
           handle.write('roundtrip\n')
           await vi.waitFor(() => expect(output).toContain('reply:roundtrip'), { timeout: 3000 })

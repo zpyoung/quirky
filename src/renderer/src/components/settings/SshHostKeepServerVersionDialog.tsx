@@ -11,11 +11,11 @@ import {
   DialogHeader,
   DialogTitle
 } from '../ui/dialog'
-import { getManagedOrcadApi } from './use-managed-server-catalog'
+import { getManagedQuirkydApi } from './use-managed-server-catalog'
 
 /** An older build changed this host; it is offered moving those additions or keeping the server’s. */
 export function hasSshHostSourceChanged(target: SshTarget): boolean {
-  return Boolean(getManagedOrcadApi() && target.orcadFence?.sourceChangedAt)
+  return Boolean(getManagedQuirkydApi() && target.quirkydFence?.sourceChangedAt)
 }
 
 export function SshHostKeepServerVersionDialog({
@@ -29,7 +29,7 @@ export function SshHostKeepServerVersionDialog({
   onOpenChange: (open: boolean) => void
   onChanged: () => void
 }): React.JSX.Element | null {
-  const api = getManagedOrcadApi()
+  const api = getManagedQuirkydApi()
   const mountedRef = useMountedRef()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -37,7 +37,7 @@ export function SshHostKeepServerVersionDialog({
     setError(null)
     onOpenChange(next)
   }
-  if (!api || !target.orcadFence?.sourceChangedAt) {
+  if (!api || !target.quirkydFence?.sourceChangedAt) {
     return null
   }
   const keepServerVersion = async (): Promise<void> => {
@@ -69,7 +69,7 @@ export function SshHostKeepServerVersionDialog({
           <DialogDescription>
             {translate(
               'auto.components.settings.keepServer.description',
-              'This host keeps using its Orca server as it is. What the older version of Orca added or changed here is not moved; it stays only in this computer’s saved settings until they are cleaned up.'
+              'This host keeps using its Quirky server as it is. What the older version of Quirky added or changed here is not moved; it stays only in this computer’s saved settings until they are cleaned up.'
             )}
           </DialogDescription>
         </DialogHeader>

@@ -8,20 +8,20 @@ import type { RuntimeMobileSessionTabMove } from '../../shared/runtime-types'
 import type { TerminalTabCreateReply } from '../../shared/terminal-reveal-identity'
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { requestAgentLaunchTabPublishFromRenderer } from './agent-launch-tab-publish-relay'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { registerRendererDocumentNavigation } from './renderer-document-navigation'
 import { createRuntimeRendererNotificationSender } from './runtime-renderer-notification-sender'
 import { requestSessionTabCloseFromRenderer } from './session-tab-close-request-relay'
 import { revealTerminalPaneInWindow } from './terminal-pane-reveal-relay'
 import { requestTerminalTabCloseFromRenderer } from './terminal-tab-close-request-relay'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 
 let runtimeNotifierTokenCounter = 0
 let activeRuntimeNotifierToken: number | null = null
 
 export function registerRuntimeWindowLifecycle(
   mainWindow: BrowserWindow,
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): void {
   const notifierToken = ++runtimeNotifierTokenCounter
   activeRuntimeNotifierToken = notifierToken
@@ -215,7 +215,7 @@ export function registerRuntimeWindowLifecycle(
     clientHostedBrowserRowsChanged: (event) => send('runtime:clientHostedBrowserRowsChanged', event)
   })
   // Switch point: the window reads its sidebar from main's feed and re-reads on each notice.
-  const detachSidebarInputsNotices = ORCA_SIDEBAR_INPUTS_IS_MAIN
+  const detachSidebarInputsNotices = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
     ? runtime.onClientEvent(
         (event) => {
           if (event.type === 'sidebarInputsChanged') {

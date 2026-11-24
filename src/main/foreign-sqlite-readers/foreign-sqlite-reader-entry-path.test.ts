@@ -4,7 +4,7 @@ import {
   FOREIGN_SQLITE_READER_ENTRY_FILENAME as ENTRY,
   resolveForeignSqliteReaderEntryPath
 } from './foreign-sqlite-reader-entry-path'
-import { ORCAD_FOREIGN_SQLITE_READER_ENTRY } from '../../shared/orcad-artifacts'
+import { QUIRKYD_FOREIGN_SQLITE_READER_ENTRY } from '../../shared/quirkyd-artifacts'
 
 const unpackaged = (moduleDir: string) => ({
   isPackaged: false,
@@ -13,8 +13,8 @@ const unpackaged = (moduleDir: string) => ({
 })
 
 describe('resolveForeignSqliteReaderEntryPath', () => {
-  it('looks for the file name the orcad build emits', () => {
-    expect(ENTRY).toBe(ORCAD_FOREIGN_SQLITE_READER_ENTRY)
+  it('looks for the file name the quirkyd build emits', () => {
+    expect(ENTRY).toBe(QUIRKYD_FOREIGN_SQLITE_READER_ENTRY)
   })
 
   it('resolves the entry beside a dev bundle', () => {
@@ -44,7 +44,7 @@ describe('resolveForeignSqliteReaderEntryPath', () => {
   })
 
   it('resolves inside app.asar in a packaged build', () => {
-    const resourcesPath = join('Orca.app', 'Contents', 'Resources')
+    const resourcesPath = join('Quirky.app', 'Contents', 'Resources')
     expect(
       resolveForeignSqliteReaderEntryPath(
         {
@@ -58,10 +58,10 @@ describe('resolveForeignSqliteReaderEntryPath', () => {
   })
 
   it('falls back to the module dir on a packaged host with no Electron resources', () => {
-    const expected = join('orcad', ENTRY)
+    const expected = join('quirkyd', ENTRY)
     expect(
       resolveForeignSqliteReaderEntryPath(
-        { isPackaged: true, resourcesPath: undefined, moduleDir: 'orcad' },
+        { isPackaged: true, resourcesPath: undefined, moduleDir: 'quirkyd' },
         (path) => path === expected
       )
     ).toBe(expected)

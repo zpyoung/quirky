@@ -19,7 +19,7 @@ export class AgentSessionJournalError extends Error {
   }
 }
 
-/** A newer Orca's database is never written: this host cannot represent rows it does not
+/** A newer Quirky's database is never written: this host cannot represent rows it does not
  *  understand. */
 export function assertJournalWritable(readOnly: boolean, sessionId: string): void {
   if (readOnly) {

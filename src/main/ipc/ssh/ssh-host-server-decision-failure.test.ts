@@ -31,7 +31,7 @@ const { getSshHostServerStatus, setSshHostServerStatus } =
 const target: SshTarget = { id: 'ssh-1', label: 'Box', host: 'box', port: 22, username: 'me' }
 const fenced: SshTarget = {
   ...target,
-  orcadFence: { environmentId: 'env-1' }
+  quirkydFence: { environmentId: 'env-1' }
 }
 
 beforeEach(() => vi.clearAllMocks())

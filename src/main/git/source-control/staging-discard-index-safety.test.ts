@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { bulkUnstageFiles, unstageFile } from './staging'
 import { bulkDiscardChanges, discardChanges } from './discard-changes'
 
@@ -25,7 +25,7 @@ describe('staging and discard preserve index authority', () => {
   let repo: string
 
   beforeEach(() => {
-    repo = mkdtempSync(path.join(tmpdir(), 'orca-real-git-'))
+    repo = mkdtempSync(path.join(tmpdir(), 'quirky-real-git-'))
     gitInit(repo)
   })
 

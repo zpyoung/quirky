@@ -110,7 +110,7 @@ export function TerminalPane({
         title={translate('auto.components.settings.TerminalPane.fd05fb109c', 'Terminal shell')}
         description={translate(
           'auto.components.settings.TerminalPane.69724e8f0c',
-          'Choose what Orca opens for new local terminal panes.'
+          'Choose what Quirky opens for new local terminal panes.'
         )}
       />
       <div className="space-y-3">
@@ -170,7 +170,7 @@ export function TerminalPane({
             <p id="default-shell-help" className="text-xs text-muted-foreground">
               {translate(
                 'auto.components.settings.TerminalPane.59573d0b33',
-                'Enter a shell name on PATH or an executable path. Orca starts it as a login shell.'
+                'Enter a shell name on PATH or an executable path. Quirky starts it as a login shell.'
               )}
             </p>
             {shellValidationError ? (

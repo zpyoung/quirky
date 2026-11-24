@@ -1,7 +1,7 @@
 {
   "accounts": {
     "wslAccountNotApplied": {
-      "description": "Agents there use the distro's default Claude and Codex accounts until Orca in WSL is updated.",
+      "description": "Agents there use the distro's default Claude and Codex accounts until Quirky in WSL is updated.",
       "title": "Account selection not applied in {{distro}}"
     }
   },
@@ -83,7 +83,7 @@
         "0e587e31fb": "yaml",
         "2132b670da": "both",
         "7711ad5122": "Local setup command",
-        "addHostHint": "Register another machine or Orca server",
+        "addHostHint": "Register another machine or Quirky server",
         "cloneDestinationPlaceholder": "/parent/directory/on/host",
         "cloneHostSetup": "Clone",
         "cloneProjectOnHost": "Clone project",
@@ -357,7 +357,7 @@
         "report": {
           "CrashReportDialog": {
             "56a3dfa283": "Failed to send crash report.",
-            "835037edc9": "· Orca",
+            "835037edc9": "· Quirky",
             "b175e90213": "No crash report is available.",
             "b2e36f53a1": "Failed to send crash report. Diagnostic ticket {{value0}} was uploaded but not linked.",
             "ead6fc0510": "No automatic crash report was captured. You can still send details and include recent diagnostic logs when available."
@@ -498,7 +498,7 @@
                 }
               },
               "steps": {
-                "description": "Enable agents to manage and coordinate Orca workspaces to execute larger tasks.",
+                "description": "Enable agents to manage and coordinate Quirky workspaces to execute larger tasks.",
                 "name": "Orchestration",
                 "subtitle": "Orchestration"
               },
@@ -599,11 +599,11 @@
             "c3b81ddea2": "DRAFT_ISSUE"
           },
           "ProjectViewStates": {
-            "ac83c45672": "Switch to a Table or Roadmap view to work with this project in Orca.",
-            "e4cc8b14f2": "Orca renders table and roadmap project views. This view uses a layout it cannot render yet."
+            "ac83c45672": "Switch to a Table or Roadmap view to work with this project in Quirky.",
+            "e4cc8b14f2": "Quirky renders table and roadmap project views. This view uses a layout it cannot render yet."
           },
           "ProjectViewWrapper": {
-            "1bf8c01c8b": "Switch to a Table view to work with this project in Orca."
+            "1bf8c01c8b": "Switch to a Table view to work with this project in Quirky."
           }
         }
       },
@@ -649,16 +649,16 @@
         },
         "WindowsFirewallNotice": {
           "allow": "Allow phone connections",
-          "blocked-description": "An existing inbound Block rule can override the pairing exception. Repair removes conflicting TCP rules for this Orca app, then allows port {{port}} on Private networks.",
-          "blocked-title": "Windows may be blocking Orca Mobile",
-          "missing-description": "Windows may block the pairing server. Add a rule for this Orca app and TCP port {{port}} on Private networks.",
+          "blocked-description": "An existing inbound Block rule can override the pairing exception. Repair removes conflicting TCP rules for this Quirky app, then allows port {{port}} on Private networks.",
+          "blocked-title": "Windows may be blocking Quirky Mobile",
+          "missing-description": "Windows may block the pairing server. Add a rule for this Quirky app and TCP port {{port}} on Private networks.",
           "missing-title": "Allow phone connections through Windows Firewall",
           "open-settings": "Open network settings",
-          "public-description": "Change this trusted Wi-Fi network to Private before allowing Orca Mobile connections.",
+          "public-description": "Change this trusted Wi-Fi network to Private before allowing Quirky Mobile connections.",
           "public-title": "Windows marks this network as public",
           "repair": "Repair firewall access",
           "repair-failed": "Could not update the Windows Firewall rules",
-          "repair-success": "Windows Firewall now allows Orca Mobile on private networks",
+          "repair-success": "Windows Firewall now allows Quirky Mobile on private networks",
           "repair-unverified": "Windows Firewall access could not be verified",
           "waiting": "Waiting for Windows…"
         },
@@ -691,18 +691,18 @@
           "a74c6d6b18": "not-installed"
         },
         "NotificationStep": {
-          "2c47f5465f": "Turn on Allow notifications for Orca in System Settings. This step updates automatically once enabled.",
+          "2c47f5465f": "Turn on Allow notifications for Quirky in System Settings. This step updates automatically once enabled.",
           "8124d085a6": "Open Mac Settings",
           "94562ba367": "macOS is asking for permission. Click Allow in the dialog and this step updates automatically.",
-          "aa36281b00": "Open System Settings and make sure Orca is allowed to send notifications.",
-          "d2dba86837": "Allow Orca in macOS"
+          "aa36281b00": "Open System Settings and make sure Quirky is allowed to send notifications.",
+          "d2dba86837": "Allow Quirky in macOS"
         },
         "OnboardingFlow": {
           "35bbaf5ae0": "notifications",
           "984338477a": "theme",
           "a5e5da02f7": "integrations",
           "c47e1bd149": "agent",
-          "ff92d15436": "Orca will notify you know when agents are done or need help."
+          "ff92d15436": "Quirky will notify you know when agents are done or need help."
         },
         "ThemeStep": {
           "ad19e5c916": "Importing…"
@@ -711,7 +711,7 @@
           "commandPrompt": "Command Prompt",
           "commandPromptDescription": "Opens new terminal panes with classic cmd.exe behavior.",
           "defaultShell": "Default Shell",
-          "defaultShellDescription": "Choose the shell Orca opens for new Windows terminal panes.",
+          "defaultShellDescription": "Choose the shell Quirky opens for new Windows terminal panes.",
           "gitBash": "Git Bash",
           "gitBashDescription": "Uses Git for Windows bash.exe for Unix-style shell workflows.",
           "gitBashUnavailable": "Selected, but Git Bash was not detected on this machine.",
@@ -912,10 +912,10 @@
             "tooManyChanges": "Too many changes detected. Only the first {{value0}} changes are shown."
           },
           "SourceControlAgentActionDialogForm": {
-            "1bb611240f": "Use {basePrompt} for Orca's default prompt.",
+            "1bb611240f": "Use {basePrompt} for Quirky's default prompt.",
             "3e8f21954f": "error",
             "74168d7ada": "idle",
-            "d8f40128ee": "{basePrompt} is Orca's default prompt."
+            "d8f40128ee": "{basePrompt} is Quirky's default prompt."
           },
           "SourceControlTextGenerationDialogForm": {
             "4eab815004": "CLI arguments",
@@ -967,7 +967,7 @@
                   "title": "{{provider}} authentication failed"
                 },
                 "auth_required": {
-                  "body": "{{provider}} must be connected in this environment before Orca can create a {{reviewLabel}}.",
+                  "body": "{{provider}} must be connected in this environment before Quirky can create a {{reviewLabel}}.",
                   "title": "Connect {{provider}}"
                 },
                 "base_missing": {
@@ -975,7 +975,7 @@
                   "title": "Base branch not on remote"
                 },
                 "cli": {
-                  "body": "Orca could not run {{provider}} CLI in this environment. Set it up here, then retry.",
+                  "body": "Quirky could not run {{provider}} CLI in this environment. Set it up here, then retry.",
                   "title": "{{provider}} CLI unavailable"
                 },
                 "default_branch": {
@@ -991,7 +991,7 @@
                   "title": "Commit changes first"
                 },
                 "fork": {
-                  "body": "Orca cannot create a {{reviewLabel}} from this fork head here.",
+                  "body": "Quirky cannot create a {{reviewLabel}} from this fork head here.",
                   "title": "Fork head unsupported"
                 },
                 "needs_sync": {
@@ -1012,7 +1012,7 @@
                 },
                 "skipped": {
                   "archived": {
-                    "body": "This repository is archived, so Orca is not refreshing {{reviewLabel}} status.",
+                    "body": "This repository is archived, so Quirky is not refreshing {{reviewLabel}} status.",
                     "title": "Repository archived"
                   },
                   "bare": {
@@ -1020,20 +1020,20 @@
                     "title": "Bare repository"
                   },
                   "disconnected": {
-                    "body": "This repository's execution host is disconnected, so Orca cannot refresh {{reviewLabel}} status.",
+                    "body": "This repository's execution host is disconnected, so Quirky cannot refresh {{reviewLabel}} status.",
                     "title": "Host disconnected"
                   },
                   "not_git": {
-                    "body": "Orca could not treat this folder as a Git repository for {{reviewLabel}} status.",
+                    "body": "Quirky could not treat this folder as a Git repository for {{reviewLabel}} status.",
                     "title": "Not a Git repository"
                   },
                   "remote": {
-                    "body": "Orca could not refresh {{reviewLabel}} status for this remote context. Retry after the host is available.",
+                    "body": "Quirky could not refresh {{reviewLabel}} status for this remote context. Retry after the host is available.",
                     "title": "Remote-only context"
                   }
                 },
                 "unsupported": {
-                  "body": "This repository provider does not support creating a {{reviewLabel}} from Orca.",
+                  "body": "This repository provider does not support creating a {{reviewLabel}} from Quirky.",
                   "title": "{{reviewLabelCap}} not supported here"
                 }
               }
@@ -1136,7 +1136,7 @@
           "338820326a": ") or the full cookie header (e.g.",
           "3455cf43fa": "Claude login.",
           "350b2a1aa7": "Use your current",
-          "4e32e030b2": "Stored locally. Orca sends it only to platform.minimax.io for usage refreshes.",
+          "4e32e030b2": "Stored locally. Quirky sends it only to platform.minimax.io for usage refreshes.",
           "566d9a99ab": "_token=…; minimax_group_id_v2=…",
           "5e08b0fe57": "Stored locally and sent only to platform.minimax.io for usage refreshes.",
           "79418c782a": "Open platform.minimax.io/console/usage in your browser, sign in, then copy the Cookie request header from DevTools (Network → any remains request → Cookie).",
@@ -1178,11 +1178,11 @@
           "df123171d1": "Not installed"
         },
         "AppearancePane": {
-          "0f28e7b30c": "Choose how Orca looks in the app window.",
-          "2df8f79aa5": "Show Orca in the titlebar.",
-          "42554f615f": "Choose the font used by the Orca interface.",
+          "0f28e7b30c": "Choose how Quirky looks in the app window.",
+          "2df8f79aa5": "Show Quirky in the titlebar.",
+          "42554f615f": "Choose the font used by the Quirky interface.",
           "4de76f6902": "Control what appears in the application titlebar.",
-          "5db6ba961f": "Show the Orca Mobile button at the top of the left sidebar.",
+          "5db6ba961f": "Show the Quirky Mobile button at the top of the left sidebar.",
           "622e1c3465": "Scale the entire application interface.",
           "661942ab7f": "Show the Tasks button at the top of the left sidebar.",
           "6a272ca553": "Titlebar",
@@ -1201,7 +1201,7 @@
         "AutoRenameBranchPromptEditor": {
           "0691753cf2": "Unsaved changes",
           "182d419b97": "built-in branch-name prompt",
-          "2f5dc661fe": "Appended to Orca's",
+          "2f5dc661fe": "Appended to Quirky's",
           "39278f4411": "; your branch prefix setting still applies.",
           "4416b25d29": "Prefer domain nouns from the task, avoid ticket IDs, and keep names reviewer-friendly.",
           "54ac229ad4": "Saving...",
@@ -1209,7 +1209,7 @@
           "63121132c0": "Discard",
           "7d6176f506": "Prompt",
           "af0831a590": "Saved",
-          "af2d9a2cc6": ". Orca generates only the final segment, like",
+          "af2d9a2cc6": ". Quirky generates only the final segment, like",
           "ebb942a2ec": "fix-login-flow"
         },
         "BrowserPane": {
@@ -1234,7 +1234,7 @@
         },
         "CliSkillRuntimeSetup": {
           "04325573f8": "WSL",
-          "0c9f3cf9da": "Choose where Orca checks and installs global agent skills.",
+          "0c9f3cf9da": "Choose where Quirky checks and installs global agent skills.",
           "0ed08febc5": "Failed to register the WSL shell command.",
           "3728a94fb6": "WSL shell command needs attention",
           "775a4cfbb8": "WSL shell command registration is unavailable",
@@ -1323,7 +1323,7 @@
           "a0832ccdb1": "downloaded"
         },
         "GeneralWorkspaceSettingsSection": {
-          "externalWorktreesDescription": "Choose whether worktrees created outside Orca appear by default.",
+          "externalWorktreesDescription": "Choose whether worktrees created outside Quirky appear by default.",
           "hide": "Hide",
           "show": "Show"
         },
@@ -1331,7 +1331,7 @@
           "f35007e6e8": "git-username"
         },
         "GrokAccountsSection": {
-          "c3d4e5f6a7": "Signed in. Orca only reads that file on disk — run grok login again if usage fails.",
+          "c3d4e5f6a7": "Signed in. Quirky only reads that file on disk — run grok login again if usage fails.",
           "d4e5f6a7b8": "Session expired — run grok login in a terminal to refresh."
         },
         "IntegrationsPane": {
@@ -1358,12 +1358,12 @@
           "4ee74d1470": "Set",
           "51000487c4": "gh auth login",
           "513abfe47d": "GitLab",
-          "5a1f86225a": "only when Orca cannot derive the API URL from the remote.",
+          "5a1f86225a": "only when Quirky cannot derive the API URL from the remote.",
           "62b20292de": "error",
           "6355fe585e": "Pull requests and commit statuses for detected repositories",
           "6432f6522e": "Connected",
           "67a9f26a80": ". Set",
-          "6f317f5132": "only when Orca cannot derive the API base URL from the git remote.",
+          "6f317f5132": "only when Quirky cannot derive the API base URL from the git remote.",
           "70c5f74f36": "GitHub",
           "8e078e480c": "Disconnect {{value0}}",
           "95b9a87e7e": "Test",
@@ -1400,11 +1400,11 @@
         },
         "MobileEmulatorAgentControlRow": {
           "1861982430": "Failed to load CLI status.",
-          "cdeaed9e37": "Registered the Orca CLI in PATH."
+          "cdeaed9e37": "Registered the Quirky CLI in PATH."
         },
         "MobileEmulatorSdkStatus": {
           "536026130e": "Emulator SDKs",
-          "dde0ec1cd8": "Toolchains Orca uses to run emulators. Android works on any OS via the Android SDK; iOS Simulators need Xcode on macOS."
+          "dde0ec1cd8": "Toolchains Quirky uses to run emulators. Android works on any OS via the Android SDK; iOS Simulators need Xcode on macOS."
         },
         "MobileNetworkInterfaceSection": {
           "1dc87a7fbc": "Tailscale",
@@ -1413,10 +1413,10 @@
           "39fad211d9": "Connect outside your Wi-Fi with a tailnet",
           "406a35121c": "Network Interface",
           "51d29927eb": "Install",
-          "63d5e4ae1e": "Regenerate the QR code and scan it from the Orca mobile app.",
+          "63d5e4ae1e": "Regenerate the QR code and scan it from the Quirky mobile app.",
           "668016be7a": "on your computer and phone.",
           "87985ba6f5": "In this Network Interface menu, choose the Tailscale address, usually a 100.x.y.z IP.",
-          "9fc5d203ff": "Orca Mobile connects directly to this computer. To use it away from the same LAN, put your computer and phone on the same private overlay network, then generate the QR code with that network address selected.",
+          "9fc5d203ff": "Quirky Mobile connects directly to this computer. To use it away from the same LAN, put your computer and phone on the same private overlay network, then generate the QR code with that network address selected.",
           "a9db5d771d": "Refresh network interfaces",
           "c541f67790": "Generate QR Code",
           "d536b5e20d": "Choose which network address to advertise in the QR code. Use your LAN address for same-network pairing, or an overlay network address (Tailscale, ZeroTier) for cross-network access."
@@ -1424,7 +1424,7 @@
         "MobileSettingsPane": {
           "9a3c280e49": "GitHub Releases",
           "b0088412a1": "or the Android APK from",
-          "c8491c17ef": "Control Orca from your phone by scanning a QR code. Beta / early preview - expect bugs and breaking changes. Get the iOS app from the"
+          "c8491c17ef": "Control Quirky from your phone by scanning a QR code. Beta / early preview - expect bugs and breaking changes. Get the iOS app from the"
         },
         "NotificationsPane": {
           "274af61bc0": "system",
@@ -1533,7 +1533,7 @@
           "0ef838094a": "Protocol {{value0}}",
           "163671f7b5": "Run",
           "1826bd0608": "Saved Servers",
-          "2c85efb3e8": "Selecting a saved server makes this browser use that paired Orca runtime as its default Host.",
+          "2c85efb3e8": "Selecting a saved server makes this browser use that paired Quirky runtime as its default Host.",
           "3595fd1948": "New Link",
           "3f67e8078a": "New projects are created on this computer unless you choose a saved server here. Existing projects, files and terminals stay on their own host.",
           "54dee18f5c": "Hide Form",
@@ -1541,34 +1541,34 @@
           "55fcc964cd": "on the server and paste the printed pairing URL.",
           "64b6bea541": "Default host for new projects",
           "6ce4664003": "Refresh servers",
-          "6e1280ca55": "Share this Orca server",
+          "6e1280ca55": "Share this Quirky server",
           "78692becbd": "Local desktop",
           "7b5986c8df": "Connected to {{value0}}. To create new projects there by default, choose it under Advanced > Default host for new projects.",
-          "84b9b2be05": "Create a revocable access grant so a browser or another Orca client can connect.",
-          "8cf8790697": "Saved servers route this browser through a paired Orca runtime.",
-          "960e901ae4": "orca serve --pairing-address <host>",
+          "84b9b2be05": "Create a revocable access grant so a browser or another Quirky client can connect.",
+          "8cf8790697": "Saved servers route this browser through a paired Quirky runtime.",
+          "960e901ae4": "quirky serve --pairing-address <host>",
           "9a3758d983": "No saved servers.",
           "9bc9b83474": "Pairing code",
           "9bee6bbeeb": "Add Server",
-          "9f7665a01b": "Removing the active server first switches Orca back to Local desktop. Existing host sessions are left alone.",
+          "9f7665a01b": "Removing the active server first switches Quirky back to Local desktop. Existing host sessions are left alone.",
           "activeServerRowHelp": "Default host for new projects. Existing projects stay on their own host.",
           "advanced": "Advanced",
           "advertiseThisApp": "Advertise this app as a server",
-          "advertiseThisAppHelp": "Create access links for browsers, mobile clients, or another Orca client to connect back to this running app.",
+          "advertiseThisAppHelp": "Create access links for browsers, mobile clients, or another Quirky client to connect back to this running app.",
           "aeb26635d2": "Remove {{value0}}",
           "b2fda48c39": "Removing the active server disconnects this browser from that host. Existing host sessions are left alone.",
-          "c3d772c514": "orca://pair?code=...",
+          "c3d772c514": "quirky://pair?code=...",
           "cloudVmWorkflow": "Cloud VM",
           "cloudVmWorkflowHelp": "Manage recipe-created cloud machines",
           "connectToRemoteServers": "Connect to remote servers",
-          "connectToRemoteServersHelp": "Pair another Orca runtime, then connect or disconnect it here.",
+          "connectToRemoteServersHelp": "Pair another Quirky runtime, then connect or disconnect it here.",
           "connectWorkflow": "Connect to a host",
           "connectWorkflowHelp": "This app joins another machine",
           "e038625857": "Dev box",
           "f3a3d6d834": "{{value0}} capabilities",
           "f75ce1c7a5": "Local keeps today's desktop behavior. Saved servers route supported client calls through the remote runtime.",
-          "orcaVersion": "Orca v{{value0}}",
-          "orcaVersionLastSeen": "Orca v{{value0}} (last seen)",
+          "quirkyVersion": "Quirky v{{value0}}",
+          "quirkyVersionLastSeen": "Quirky v{{value0}} (last seen)",
           "removeActiveServerBlocked": "This server is the default host for new projects. Choose another one in Advanced before removing it.",
           "removeActiveServerDescription": "This server is the default host for new projects. Choose another one in Advanced before removing it. Existing host sessions are left alone.",
           "reviewServerUpdates": "Check for Server Updates",
@@ -1584,7 +1584,7 @@
           "troubleshootWorkflow": "Connection troubleshooting",
           "updateAvailableOne": "1 update available",
           "updatesAvailable": "{{value0}} updates available",
-          "versionUnavailable": "Orca version unavailable",
+          "versionUnavailable": "Quirky version unavailable",
           "workflow": "Remote server workflow"
         },
         "RuntimeHostAccessForm": {
@@ -1594,22 +1594,22 @@
           "connectionDetails": "Connection details",
           "endpointKind": "Endpoint kind",
           "getLink": "Get an access link from the other host",
-          "headlessHelp": "Using headless orca serve? Run orca serve --pairing-address <reachable-host> on the other computer.",
+          "headlessHelp": "Using headless quirky serve? Run quirky serve --pairing-address <reachable-host> on the other computer.",
           "loopbackRecovery": "On the other computer, create a new link using Another device and choose its Tailscale or LAN address.",
-          "name": "Name in Orca",
-          "nameHelp": "This only changes how the computer appears in Orca.",
+          "name": "Name in Quirky",
+          "nameHelp": "This only changes how the computer appears in Quirky.",
           "networkConnection": "Network connection",
           "notAttempted": "Not attempted",
           "sshTunnel": "I am using an SSH tunnel to this local address",
           "stepChooseAddress": "Choose Another device and select a reachable address.",
-          "stepCopyLink": "Generate the link, then copy the “Pair another Orca client” link.",
-          "stepOpenShare": "Open Settings → Remote Orca Servers → Share this host."
+          "stepCopyLink": "Generate the link, then copy the “Pair another Quirky client” link.",
+          "stepOpenShare": "Open Settings → Remote Quirky Servers → Share this host."
         },
         "RuntimePairingUrlGenerator": {
           "279e0dcb57": "127.0.0.1 only works on this computer. Use a LAN, Tailscale, or custom address for another device.",
-          "2e5c4e3c93": "Pair another Orca client",
+          "2e5c4e3c93": "Pair another Quirky client",
           "6b9ca3e69b": "Open in browser",
-          "849825e829": "Paste this pairing URL into another Orca client.",
+          "849825e829": "Paste this pairing URL into another Quirky client.",
           "8de0f84fff": "Generate Access Link",
           "add-custom": "Add custom address…",
           "b91e36a986": "web",
@@ -1621,7 +1621,7 @@
           "staleAddress": "The connection address changed. Generate a new link for {{address}}."
         },
         "RuntimeRepairDialog": {
-          "description": "{{name}} no longer accepts this computer. On {{name}}, open Settings → Remote Orca Servers → Share this host, create a link for another Orca client, then paste it here."
+          "description": "{{name}} no longer accepts this computer. On {{name}}, open Settings → Remote Quirky Servers → Share this host, create a link for another Quirky client, then paste it here."
         },
         "Settings": {
           "084d8fac5b": "Privacy & Security",
@@ -1630,7 +1630,7 @@
           "23c6874fdf": "AI Capabilities",
           "8bd117d669": "Interface",
           "9abb9be3bc": "Set Up",
-          "b5ee17826b": "Pair remote Orca runtimes for persistent sessions, richer remote state, and web or mobile handoff.",
+          "b5ee17826b": "Pair remote Quirky runtimes for persistent sessions, richer remote state, and web or mobile handoff.",
           "dd72ed437a": "Choose which task providers appear in the Tasks page and sidebar.",
           "e1578cd4bc": "Workflows",
           "mobile_group": "Mobile"
@@ -1661,7 +1661,7 @@
           "51d7dba44d": "Import",
           "639ceb3698": "Add Target",
           "94c5284560": "Targets",
-          "a7d28dff81": "Add a remote host to connect to it in Orca.",
+          "a7d28dff81": "Add a remote host to connect to it in Quirky.",
           "syncedServerPlural": "Synced {{count}} servers",
           "syncedServerSingular": "Synced {{count}} server"
         },
@@ -1674,7 +1674,7 @@
           "f0871e6bfb": "connect"
         },
         "SshTargetForm": {
-          "137e88ce8d": "Remote terminals keep running after Orca disconnects from this host.",
+          "137e88ce8d": "Remote terminals keep running after Quirky disconnects from this host.",
           "29af933cd5": "New SSH Target",
           "4a342f44c1": "Advanced Connection",
           "92f80edbfd": "Remote Terminal Persistence",
@@ -1770,15 +1770,15 @@
           "554305956d": "Command path:",
           "61ac55278e": "Remove `{{value0}}` from WSL?",
           "6f91ad1333": "Failed to register `{{value0}}` in WSL.",
-          "7aa456a460": "Register `orca-ide` in ~/.local/bin inside WSL.",
+          "7aa456a460": "Register `quirky-ide` in ~/.local/bin inside WSL.",
           "7c3bb36706": "remove",
-          "7ee4e52b99": "Orca will register {{value0}} so the command works from WSL terminals.",
+          "7ee4e52b99": "Quirky will register {{value0}} so the command works from WSL terminals.",
           "89c7414cf5": "Removed `{{value0}}` from WSL.",
           "951536dda5": "Registered `{{value0}}` in WSL.",
           "9b6627522c": "Refresh",
           "ab6b022a5c": "Refresh WSL CLI status",
           "c6f6f89d7c": "Cancel",
-          "d8216eb22e": "This removes the WSL shell command. Orca itself remains installed on Windows.",
+          "d8216eb22e": "This removes the WSL shell command. Quirky itself remains installed on Windows.",
           "d9c6880dbd": "WSL shell command",
           "e2b0ee267f": "stale",
           "e49688f67f": "Register `{{value0}}` in WSL?",
@@ -1794,9 +1794,9 @@
         },
         "agent-awake-copy": {
           "95d3031db2": "Keeps this computer and display awake while agents are working. Lid-close behavior follows this device's power settings.",
-          "a42f6fbdd8": "Keeps this computer and display awake while agents are working. Orca also asks this device to stay awake when the lid is closed, subject to its power policy.",
+          "a42f6fbdd8": "Keeps this computer and display awake while agents are working. Quirky also asks this device to stay awake when the lid is closed, subject to its power policy.",
           "e5995ce268": "Keep computer awake while agents are working",
-          "modeDescriptionDefault": "Choose On, Agent, or Off. Agent mode stays awake while agents are working. Orca also asks this device to stay awake when the lid is closed, subject to its power policy.",
+          "modeDescriptionDefault": "Choose On, Agent, or Off. Agent mode stays awake while agents are working. Quirky also asks this device to stay awake when the lid is closed, subject to its power policy.",
           "modeDescriptionMac": "Choose On, Agent, or Off. Agent mode prevents idle sleep while agents work, so long runs finish with the lid open. Closing the lid still puts this Mac to sleep.",
           "modeDescriptionWindows": "Choose On, Agent, or Off. Agent mode stays awake while agents are working; lid-close behavior follows this device's power settings.",
           "modeTitle": "Keep computer awake"
@@ -1807,7 +1807,7 @@
         },
         "agent-status-hooks-copy": {
           "7707c15abb": "Agent status hooks",
-          "a68a642835": "Shows working, waiting, and done states in Orca. Turn off to remove Orca-managed hooks and stop reinstalling them."
+          "a68a642835": "Shows working, waiting, and done states in Quirky. Turn off to remove Quirky-managed hooks and stop reinstalling them."
         },
         "agents": {
           "search": {
@@ -1862,7 +1862,7 @@
           }
         },
         "artifacts": {
-          "account": "Orca account",
+          "account": "Quirky account",
           "connected": "Connected",
           "enable": "Enable Artifacts",
           "enableDescription": "Add Artifacts to the sidebar so you can open and delete shared files.",
@@ -1930,7 +1930,7 @@
             "c61b14be7c": "grok",
             "db11502270": "Default Agent",
             "e2da948f59": "Pre-select an AI coding agent in the new-workspace composer.",
-            "e3b1d42f95": "Proxy URL for Orca network requests and local terminal children.",
+            "e3b1d42f95": "Proxy URL for Quirky network requests and local terminal children.",
             "e55d62dfa4": "launchpad",
             "eb8946b2c9": "Hosts that should bypass the configured HTTP proxy.",
             "f472e97440": "aider"
@@ -1984,7 +1984,7 @@
           "row": {
             "update": "Update"
           },
-          "title": "Orca on your SSH hosts"
+          "title": "Quirky on your SSH hosts"
         },
         "mobile": {
           "settings": {
@@ -1994,9 +1994,9 @@
           }
         },
         "providerAccountScope": {
-          "localCredentials": "Credentials and account checks for this provider are owned by this desktop client. To use a server, change Settings > Remote Orca Servers > Advanced > Default host for new projects.",
+          "localCredentials": "Credentials and account checks for this provider are owned by this desktop client. To use a server, change Settings > Remote Quirky Servers > Advanced > Default host for new projects.",
           "localMac": "Local Mac",
-          "remoteServerCredentials": "Credentials and account checks for this provider are owned by this remote server. To use another host, change Settings > Remote Orca Servers > Advanced > Default host for new projects."
+          "remoteServerCredentials": "Credentials and account checks for this provider are owned by this remote server. To use another host, change Settings > Remote Quirky Servers > Advanced > Default host for new projects."
         },
         "repository": {
           "search": {
@@ -2011,7 +2011,7 @@
         "runtime": {
           "environments": {
             "search": {
-              "4575341c77": "Add a saved remote Orca server, generate a pairing URL, or choose the default host for new projects."
+              "4575341c77": "Add a saved remote Quirky server, generate a pairing URL, or choose the default host for new projects."
             }
           }
         },
@@ -2029,14 +2029,14 @@
           }
         },
         "sshHostServer": {
-          "linkedProjects_one": "This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automation there were not moved, and worktrees it created there show as external worktrees.",
-          "linkedProjects_other": "This host’s Orca server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automations there were not moved, and worktrees it created there show as external worktrees.",
-          "olderTerminals_one": "{{count}} terminal started by an older version of Orca is still running on this host, and it doesn’t stop on its own. Close it in that version of Orca or end it on the host, then reconnect.",
-          "olderTerminals_other": "{{count}} terminals started by an older version of Orca are still running on this host, and they don’t stop on their own. Close them in that version of Orca or end them on the host, then reconnect."
+          "linkedProjects_one": "This host’s Quirky server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automation there were not moved, and worktrees it created there show as external worktrees.",
+          "linkedProjects_other": "This host’s Quirky server already had {{paths}}, so this desktop now uses the server’s copy. This desktop’s tabs and {{count}} automations there were not moved, and worktrees it created there show as external worktrees.",
+          "olderTerminals_one": "{{count}} terminal started by an older version of Quirky is still running on this host, and it doesn’t stop on its own. Close it in that version of Quirky or end it on the host, then reconnect.",
+          "olderTerminals_other": "{{count}} terminals started by an older version of Quirky are still running on this host, and they don’t stop on their own. Close them in that version of Quirky or end them on the host, then reconnect."
         },
         "sshManagedHostRemove": {
-          "description": "Orca runs on {{label}}. Under Orca on your SSH hosts, use Stop… to remove Orca from the host, or Forget… if the host is gone. Then you can remove this SSH host.",
-          "open": "Open Orca on your SSH hosts"
+          "description": "Quirky runs on {{label}}. Under Quirky on your SSH hosts, use Stop… to remove Quirky from the host, or Forget… if the host is gone. Then you can remove this SSH host.",
+          "open": "Open Quirky on your SSH hosts"
         },
         "task": {
           "tracker": {
@@ -2121,7 +2121,7 @@
           "add": "Add WSL distro",
           "chip": "WSL",
           "connect": "Connect",
-          "description": "Orca runs a server inside each distro. A stopped distro starts only when you open one of its projects or connect it here.",
+          "description": "Quirky runs a server inside each distro. A stopped distro starts only when you open one of its projects or connect it here.",
           "experimental": "Experimental",
           "forceUpdate": "Force update",
           "remove": "Remove",
@@ -2129,7 +2129,7 @@
           "turnOn": "Turn on in Experimental"
         },
         "wslHostsExperimental": {
-          "description": "Add a WSL 2 distro as a host. Orca runs its server inside the distro, so git, files and terminals in new projects there run natively in Linux.",
+          "description": "Add a WSL 2 distro as a host. Quirky runs its server inside the distro, so git, files and terminals in new projects there run natively in Linux.",
           "keywordDistro": "distro",
           "keywordLinux": "linux",
           "keywordWsl": "wsl",
@@ -2154,7 +2154,7 @@
       "sidebar": {
         "AddRemoteHostDialog": {
           "pairingCode": "Pairing code",
-          "pairingCommand": "orca serve --pairing-address <host>",
+          "pairingCommand": "quirky serve --pairing-address <host>",
           "pairingHelpPrefix": "Run",
           "pairingHelpSuffix": "on the server and paste the printed pairing URL.",
           "serverName": "Server name",
@@ -2163,7 +2163,7 @@
           "sshPersistenceDefault": "Remote terminals on this host stay alive until you end them or reset the relay."
         },
         "AddRepoHostSelector": {
-          "addRemoteHostTooltip": "Choose SSH for a machine you can log into, or remote server for an Orca server.",
+          "addRemoteHostTooltip": "Choose SSH for a machine you can log into, or remote server for an Quirky server.",
           "local": "Local",
           "runtime": "Server",
           "ssh": "SSH"
@@ -2185,8 +2185,8 @@
           "add": "Add host",
           "added": "Already a host",
           "adding": "Setting up…",
-          "addingHint": "Installing and starting the Orca server in the distro. The first time can take a minute.",
-          "description": "Orca runs its server inside the distro, so git, files and terminals run natively in Linux. Use it for new projects; projects you opened through \\\\wsl.localhost keep working as they are.",
+          "addingHint": "Installing and starting the Quirky server in the distro. The first time can take a minute.",
+          "description": "Quirky runs its server inside the distro, so git, files and terminals run natively in Linux. Use it for new projects; projects you opened through \\\\wsl.localhost keep working as they are.",
           "distro": "Distro",
           "loading": "Looking for WSL distros…",
           "none": "No WSL distros found. Install one with: wsl --install",
@@ -2213,13 +2213,13 @@
           "sourceProject": "Task Source"
         },
         "HostRemoveDialog": {
-          "wslHostEndsTerminals": "Removes {{value0}} from Orca, ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched."
+          "wslHostEndsTerminals": "Removes {{value0}} from Quirky, ends its open terminals and stops Quirky’s server in that distro. Files in the distro are untouched."
         },
         "HostSectionHeaderMenu": {
           "63f36455cc": "Reconnect"
         },
         "LinearAgentSkillSetupPrompt": {
-          "missingBoth": "Orca CLI and Linear agent skill are missing.",
+          "missingBoth": "Quirky CLI and Linear agent skill are missing.",
           "panelDescription": "Install the host agent skill for linked Linear task handoffs.",
           "panelTitle": "Linear agent skill"
         },
@@ -2233,7 +2233,7 @@
         "ProjectGroupDeleteDialog": {
           "897e5d3d4c": "Delete Group and Remove Projects",
           "9be10d49ea": "and ungroup its projects.",
-          "eeabb8e8e4": "Remove {{value0}} contained {{value1}} from Orca"
+          "eeabb8e8e4": "Remove {{value0}} contained {{value1}} from Quirky"
         },
         "ProjectOrderManualDefaultNotice": {
           "822ff300ad": "Dismiss",
@@ -2390,8 +2390,8 @@
                 "0e0379f24a_other": "{{count}} branches kept",
                 "6310412304_one": "Review {{count}} Branch",
                 "6310412304_other": "Review {{count}} Branches",
-                "a3cdd9d9e6_one": "Git kept {{count}} local branch because it may contain unmerged commits. Kept branches do not retain workspace folders; their commits remain in the repository. Orca may continue freeing workspace disk space in the background.",
-                "a3cdd9d9e6_other": "Git kept {{count}} local branches because they may contain unmerged commits. Kept branches do not retain workspace folders; their commits remain in the repository. Orca may continue freeing workspace disk space in the background.",
+                "a3cdd9d9e6_one": "Git kept {{count}} local branch because it may contain unmerged commits. Kept branches do not retain workspace folders; their commits remain in the repository. Quirky may continue freeing workspace disk space in the background.",
+                "a3cdd9d9e6_other": "Git kept {{count}} local branches because they may contain unmerged commits. Kept branches do not retain workspace folders; their commits remain in the repository. Quirky may continue freeing workspace disk space in the background.",
                 "cea24c2b7d_one": "{{count}} workspace removed",
                 "cea24c2b7d_other": "{{count}} workspaces removed",
                 "d42f1f14e0_one": "Retry {{count}} Branch",
@@ -2465,10 +2465,10 @@
           "linkCopied": "Share link copied"
         },
         "SkillInstallDialog": {
-          "4a00d133c5": "Orca verifies access and package identity before changing the selected machine."
+          "4a00d133c5": "Quirky verifies access and package identity before changing the selected machine."
         },
         "SkillInstallManagementDialog": {
-          "070654c6d1": "Orca will preserve them unless you explicitly discard the local changes.",
+          "070654c6d1": "Quirky will preserve them unless you explicitly discard the local changes.",
           "1c9e7f420a": "Installed bundle skills",
           "2ae587d39c": "Retry incomplete coverage",
           "34c2ef9e71": "Install {{count}} skills",
@@ -2510,7 +2510,7 @@
           "descriptionV2": "Review the exact files, then publish an immutable version behind an unlisted link.",
           "newVersionDescription": "Review the exact files, then publish an immutable version to the existing Cloud package.",
           "peopleRequired": "Select at least one teammate.",
-          "readyDescription": "Recipients authenticate with Orca before they can inspect or install it.",
+          "readyDescription": "Recipients authenticate with Quirky before they can inspect or install it.",
           "readyDescriptionV2": "Anyone with this unlisted link can inspect and install the skills."
         },
         "SkillShareReviewContent": {
@@ -2650,10 +2650,10 @@
           "ResourceUsageStatusSegment": {
             "1b24a32d3a": "Memory",
             "4bb076fa89": "Kill",
-            "6449a95c78": "How much of this machine's physical RAM the Orca-tracked processes are sitting on.",
+            "6449a95c78": "How much of this machine's physical RAM the Quirky-tracked processes are sitting on.",
             "6d9793d4bc": "Resource Manager - Terminals",
             "996295bff2": "orphan terminal",
-            "9e2525c89f": "Resident memory held by Orca plus the processes under each worktree's terminals.",
+            "9e2525c89f": "Resident memory held by Quirky plus the processes under each worktree's terminals.",
             "e7ccce7e87": "of system RAM"
           },
           "SshStatusSegment": {
@@ -2897,13 +2897,13 @@
             "3eed73394f": "Your keyboard is paused"
           },
           "TerminalErrorToast": {
-            "hostTerminalCap": "The host is already running as many terminals as Orca allows. Close a terminal you no longer need, then try again.",
-            "ptyAllocationLimit": "Your system cannot allocate any more pty devices. Close some terminals you are not using, in Orca or another program, then try again.",
+            "hostTerminalCap": "The host is already running as many terminals as Quirky allows. Close a terminal you no longer need, then try again.",
+            "ptyAllocationLimit": "Your system cannot allocate any more pty devices. Close some terminals you are not using, in Quirky or another program, then try again.",
             "terminalProcessLimit": "Your system cannot start another terminal process. Close unused terminals or quit unused processes, then try again."
           },
           "TerminalSessionStateSaveFailureDialog": {
             "678c780a2c": "Disk space is unavailable",
-            "e2fcf07c0d": "Orca could not save this terminal session because local storage is full or not writable. Open the disk space analyzer to find workspace storage you can clean up."
+            "e2fcf07c0d": "Quirky could not save this terminal session because local storage is full or not writable. Open the disk space analyzer to find workspace storage you can clean up."
           },
           "TerminalSshReconnectOverlay": {
             "connectButton": "Connect",
@@ -2976,11 +2976,11 @@
             "d1094dd529": "Needs review",
             "d3eef9463d": "No inactive workspaces to delete.",
             "dba753e94f": "to delete",
-            "e0b5a4deaa": "Review inactive workspaces before deleting their local files and Orca state.",
+            "e0b5a4deaa": "Review inactive workspaces before deleting their local files and Quirky state.",
             "e94b1f8bb4": "Clear filters",
             "ee81adfcef": "View",
             "efb3843e75": "Filter and sort workspaces",
-            "f637f63882": "Resource Manager counts {{value0}}; this list found {{value1}}. That counter reads Orca's activity record alone, while this scan also checks each workspace's git history and skips disconnected remotes.",
+            "f637f63882": "Resource Manager counts {{value0}}; this list found {{value1}}. That counter reads Quirky's activity record alone, while this scan also checks each workspace's git history and skips disconnected remotes.",
             "f68d538c63": "No workspaces in this cleanup set.",
             "fc49f79434": "mixed",
             "gitFilter": "Git",
@@ -3027,8 +3027,8 @@
         "dropPartiallyAttached_other": "{{failureCount}} of {{count}} items could not be attached."
       },
       "useGlobalFileDrop": {
-        "nativeDropTempCopyFailed_one": "Orca couldn't copy {{count}} dropped file.",
-        "nativeDropTempCopyFailed_other": "Orca couldn't copy {{count}} dropped files."
+        "nativeDropTempCopyFailed_one": "Quirky couldn't copy {{count}} dropped file.",
+        "nativeDropTempCopyFailed_other": "Quirky couldn't copy {{count}} dropped files."
       },
       "useIpcEvents": {
         "60428567b4": "Local terminal reveal is unavailable while a remote runtime is active",
@@ -3043,7 +3043,7 @@
         "cookie": {
           "import": {
             "toast": {
-              "googleCookiesSkipped": "Google cookies were not imported. Open a browser in Orca on {{value0}} with this profile, then sign into Google."
+              "googleCookiesSkipped": "Google cookies were not imported. Open a browser in Quirky on {{value0}} with this profile, then sign into Google."
             }
           }
         }
@@ -3102,7 +3102,7 @@
           "5a58e03a26": "Deleted \"{{value0}}\".",
           "670864ab52": "Keeping local {{value0}} up to date",
           "889487d8bb": "Dismiss",
-          "d1d78a7baa": "Git could not safely delete branch \"{{value0}}\"{{value1}}, so Orca kept it to avoid losing local commits.",
+          "d1d78a7baa": "Git could not safely delete branch \"{{value0}}\"{{value1}}, so Quirky kept it to avoid losing local commits.",
           "f4503ca505": "Open Settings > Git and try again.",
           "fa9299a66f": "Your new worktree is current, but local {{value0}} is {{value1}} {{value2}} behind. AI diffs may miss recent commits."
         }
@@ -3179,7 +3179,7 @@
       },
       "failureWords": {
         "accountSwitchInProgress": "{{agent}}'s setup is changing on this host. Try again after it finishes.",
-        "agentCommandNotRunnable": "{{agent}}'s Command in Settings → Agents must be a program path or name Orca can find, with no arguments or variables. Change it or reset it.",
+        "agentCommandNotRunnable": "{{agent}}'s Command in Settings → Agents must be a program path or name Quirky can find, with no arguments or variables. Change it or reset it.",
         "agentCommandNotSignedIn": "Sign in to {{agent}} with `{{loginCommand}}` on the computer running this chat.",
         "agentNotSignedIn": "Sign in to {{agent}}.",
         "answerUnconfirmed": "Your answer was recorded but the agent did not confirm it.",
@@ -3231,10 +3231,10 @@
         "emptyMessage": "This message is empty, so it was not sent.",
         "historyInOtherAccount": "This chat's history is in another Claude account. Switch back to that account to continue it.",
         "historyTooLarge": "This conversation's history is too large to restore here.",
-        "hostFault": "Orca ran into a problem, so this didn't go through.",
-        "hostFaultTryAgain": "Orca ran into a problem, so this didn't go through. Try again.",
-        "hostRestarted": "Orca restarted before this message was sent.",
-        "hostStopped": "{{agent}} never finished starting, so Orca stopped it.",
+        "hostFault": "Quirky ran into a problem, so this didn't go through.",
+        "hostFaultTryAgain": "Quirky ran into a problem, so this didn't go through. Try again.",
+        "hostRestarted": "Quirky restarted before this message was sent.",
+        "hostStopped": "{{agent}} never finished starting, so Quirky stopped it.",
         "interactiveAgentNotSignedIn": "Sign in to {{agent}} by running `{{loginCommand}}` and using `{{slashCommand}}` on the computer running this chat.",
         "launchFolderMissing": "The folder this chat ran in no longer exists. Restore it to continue this chat.",
         "managedAccountEnvOverride": "This Claude launch sets its own Anthropic sign-in variables. Remove them to use a managed Claude account.",
@@ -3259,7 +3259,7 @@
         "queueFull": "Too many messages were waiting for the agent, so this one was not sent.",
         "runCommandAgain": "Run /{{command}} again.",
         "runCommandWhenDone": "Run /{{command}} when it's done.",
-        "runtimeNotInstalled": "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Orca.",
+        "runtimeNotInstalled": "{{agent}} isn't installed on the computer running this chat. Install it from the chat in a current version of Quirky.",
         "sendAgainToTryOnceMore": "Send your message again to try once more.",
         "sendToTryAgain": "Send your message to try again.",
         "sessionNotRestored": "{{agent}} couldn't reopen its earlier session, so this chat continues in a new one. {{agent}} doesn't remember the earlier messages.",
@@ -3280,7 +3280,7 @@
         "usageLimitWindowSession": "session",
         "usageLimitWindowWeekly": "weekly",
         "usageLimitWindowWeeklyModel": "weekly model",
-        "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent."
+        "writeFailed": "Quirky couldn't hand this message to the agent, so it was not sent."
       },
       "notices": {
         "compaction": "Context compacted",
@@ -3383,10 +3383,10 @@
         "attachmentExpired": "This attachment expired.",
         "backgroundTasksRunning": "Background tasks are still running.",
         "cancelNotSaved": "Couldn't cancel this question or approval.",
-        "cannotRunHere": "Orca can't run this agent in a chat here.",
-        "capacity": "Orca on the computer running this chat has hit a request limit. Update Orca there, then try again.",
-        "chatNotFound": "Orca can't find this chat.",
-        "chatSavedByNewerOrca": "This chat was saved by a newer Orca.",
+        "cannotRunHere": "Quirky can't run this agent in a chat here.",
+        "capacity": "Quirky on the computer running this chat has hit a request limit. Update Quirky there, then try again.",
+        "chatNotFound": "Quirky can't find this chat.",
+        "chatSavedByNewerQuirky": "This chat was saved by a newer Quirky.",
         "clearAfterAnswer": "Answer the agent's question or approval, then run /clear.",
         "clearAfterRetry": "Retry your earlier message, then run /clear.",
         "clearAfterSending": "Your earlier message is still being sent. Run /clear once it has gone.",
@@ -3398,10 +3398,10 @@
         "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "conversationCleared": "This conversation has been cleared.",
         "goalsUnsupported": "This agent doesn't support goals.",
-        "historyUnavailable": "Orca couldn't open this chat's history right now.",
-        "historyUnreadable": "Orca couldn't read this chat's saved history.",
+        "historyUnavailable": "Quirky couldn't open this chat's history right now.",
+        "historyUnreadable": "Quirky couldn't read this chat's saved history.",
         "historyUnusable": "Unable to load this chat.",
-        "hostReconciling": "Orca is still checking on this chat after restarting.",
+        "hostReconciling": "Quirky is still checking on this chat after restarting.",
         "messageNotSaved": "Couldn't save your message.",
         "messagesUnsettled": "A message you sent earlier isn't confirmed yet.",
         "notAvailable": "This isn't available in this chat.",
@@ -3417,21 +3417,21 @@
         "notDoneStopTasks": "The background tasks weren't stopped.",
         "openCurrentConversation": "Open the current conversation to continue.",
         "optionRejected": "The agent didn't accept this setting.",
-        "outcomeUnknown": "Orca couldn't confirm what happened. Check the chat.",
+        "outcomeUnknown": "Quirky couldn't confirm what happened. Check the chat.",
         "ownerUnproven": "The previous agent in this chat may still be running.",
         "promptPending": "The agent is waiting for an answer to a question or approval.",
         "questionChanged": "This question was already answered or has changed.",
         "queueTooLarge": "Too much text is waiting in the queue.",
         "quitTerminalAgent": "Quit that agent to continue the chat here.",
         "reattachFile": "Remove it and attach it again.",
-        "recordFailed": "Orca couldn't save this to the chat's history.",
-        "recordUnreadable": "Orca couldn't read this chat's saved state.",
+        "recordFailed": "Quirky couldn't save this to the chat's history.",
+        "recordUnreadable": "Quirky couldn't read this chat's saved state.",
         "reopenChat": "Reopen the chat to check again.",
         "restartFailed": "The agent couldn't restart.",
         "runClearWhenDone": "Run /clear when it's done.",
         "runCompactWhenDone": "Run /compact when it's done.",
-        "savedByNewerOrca": "Chats were saved by a newer Orca.",
-        "sendOutcomeLost": "Orca couldn't confirm your message reached the agent. Check the chat, then send it again if needed.",
+        "savedByNewerQuirky": "Chats were saved by a newer Quirky.",
+        "sendOutcomeLost": "Quirky couldn't confirm your message reached the agent. Check the chat, then send it again if needed.",
         "settleEarlierMessage": "Wait for your earlier message to go through, or retry it.",
         "shrinkQueue": "Delete a queued message, or wait for one to go through, then try again.",
         "startNewChat": "Start a new chat to continue.",
@@ -3439,10 +3439,10 @@
         "tryAgain": "Try again.",
         "tryAgainComposerSend": "Send it again.",
         "turnActive": "The agent is still responding.",
-        "unreachable": "Orca couldn't reach the agent.",
-        "unsupported": "This needs a newer Orca on the computer running this chat. Update Orca there, then try again.",
-        "updateOrcaToKeepUsing": "Update Orca to keep using them.",
-        "updateOrcaToOpenChat": "Update Orca to open it.",
+        "unreachable": "Quirky couldn't reach the agent.",
+        "unsupported": "This needs a newer Quirky on the computer running this chat. Update Quirky there, then try again.",
+        "updateQuirkyToKeepUsing": "Update Quirky to keep using them.",
+        "updateQuirkyToOpenChat": "Update Quirky to open it.",
         "waitForBackgroundTasks": "Wait for the background tasks to finish.",
         "waitForCommand": "Wait for the /compact or /clear to finish.",
         "waitForStart": "Wait for the agent to finish starting.",
@@ -3453,8 +3453,8 @@
     "onboarding": {
       "integrations": {
         "capabilities": {
-          "browseIssues": "Browse GitHub issues and pull requests in the Tasks view without leaving Orca",
-          "managePullRequests": "Read, comment on, and merge pull requests without leaving Orca",
+          "browseIssues": "Browse GitHub issues and pull requests in the Tasks view without leaving Quirky",
+          "managePullRequests": "Read, comment on, and merge pull requests without leaving Quirky",
           "reviewStatus": "See issue state, review status, and CI checks on every worktree",
           "startWorkspaceFromIssue": "Start a workspace from any GitHub issue or pull request, prefilled with its title and context"
         }
@@ -3543,11 +3543,11 @@
   "runtimeRpc": {
     "startupFailure": {
       "guidance": {
-        "addressInUse": "Another process may be holding the port. Restart Orca to try again.",
-        "invalidPath": "Orca's data folder may be missing, moved, or at a path that is too long. Restore it or use a shorter path, then restart Orca.",
-        "permissionDenied": "Orca couldn't write its runtime file. Check permissions on Orca's data folder, then restart.",
-        "storageUnavailable": "Your disk may be full or read-only. Free up space, then restart Orca.",
-        "unknown": "Restart Orca to try again."
+        "addressInUse": "Another process may be holding the port. Restart Quirky to try again.",
+        "invalidPath": "Quirky's data folder may be missing, moved, or at a path that is too long. Restore it or use a shorter path, then restart Quirky.",
+        "permissionDenied": "Quirky couldn't write its runtime file. Check permissions on Quirky's data folder, then restart.",
+        "storageUnavailable": "Your disk may be full or read-only. Free up space, then restart Quirky.",
+        "unknown": "Restart Quirky to try again."
       }
     }
   },
@@ -3571,16 +3571,16 @@
         "administratorDialogScope": "This changes permissions for the whole app. SSH and WSL keep their own permissions.",
         "administratorDocumentation": "Read the guide",
         "administratorLabel": "Administrator mode",
-        "administratorPromptCancellation": "Canceling Windows’ prompt reopens Orca with its retained terminals. SSH and WSL permissions stay controlled on their hosts.",
+        "administratorPromptCancellation": "Canceling Windows’ prompt reopens Quirky with its retained terminals. SSH and WSL permissions stay controlled on their hosts.",
         "administratorRestartConsequences": "Save your work first. After approval, terminals and agents on the current local terminal host close. Restored tabs open new administrator shells.",
-        "administratorRestartFailed": "Orca could not restart. Try again or use the manual instructions.",
-        "administratorScope": "Permissions for the Orca app. Existing terminals may differ.",
-        "administratorSearchDescription": "See Orca’s Windows permissions or restart with administrator approval.",
+        "administratorRestartFailed": "Quirky could not restart. Try again or use the manual instructions.",
+        "administratorScope": "Permissions for the Quirky app. Existing terminals may differ.",
+        "administratorSearchDescription": "See Quirky’s Windows permissions or restart with administrator approval.",
         "administratorStatus": "Administrator",
         "cancelAdministratorRestart": "Cancel",
         "checkingAdministrator": "Checking…",
         "closeAdministratorHelp": "Close",
-        "closeLocalSessions": "Save your work, close all local terminal sessions, then exit Orca.",
+        "closeLocalSessions": "Save your work, close all local terminal sessions, then exit Quirky.",
         "confirmAdministratorRestart": "Restart as administrator?",
         "keywordAdmin": "admin",
         "keywordAdministrator": "administrator",
@@ -3588,8 +3588,8 @@
         "keywordPermissions": "permissions",
         "keywordRestart": "restart",
         "keywordUac": "uac",
-        "launchAdministrator": "In the Windows Start menu, right-click Orca and choose Run as administrator. Approve the Windows prompt using your usual account.",
-        "launchStandard": "Open Orca normally from the Windows Start menu.",
+        "launchAdministrator": "In the Windows Start menu, right-click Quirky and choose Run as administrator. Approve the Windows prompt using your usual account.",
+        "launchStandard": "Open Quirky normally from the Windows Start menu.",
         "manualAdministratorHelp": "Manual instructions",
         "openManageSessions": "Open Manage Sessions",
         "restartAdministrator": "Restart as administrator",

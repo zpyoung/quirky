@@ -4,8 +4,8 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 // or in the same chat after /clear, as it does for a chat's own mail.
 
 import { describe, expect, it, vi } from 'vitest'
-import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
+import { formatQuirkySessionAddress } from '../../shared/quirky-session-address'
+import { testQuirkySessionId } from '../../shared/quirky-session-address-test-fixture'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
 import {
   COORDINATOR,
@@ -27,7 +27,7 @@ import {
   turnText
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
-const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
+const WORKER = formatQuirkySessionAddress(testQuirkySessionId(PEER_CHAT))
 const POINTER = /orchestration message/
 
 async function idleEdges(sessionId: string): Promise<void> {

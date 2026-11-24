@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import type { RuntimeMetadata } from '../../shared/runtime-bootstrap'
 import type { RuntimeRpcFailure } from '../../shared/runtime-rpc-envelope'
 import { SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE } from '../../shared/single-instance-exit-code'
@@ -20,7 +20,7 @@ export type ServeProfileVerdict =
   | { verdict: 'unverifiable'; reason: 'endpoint-held' | 'access-denied'; pid: number | null }
   | { verdict: 'absent' }
 
-/** The part of `orca status` the verdict reads. */
+/** The part of `quirky status` the verdict reads. */
 type ServeProfileStatus = {
   result: { app: { pid?: number | null }; runtime: { reachable: boolean } }
 }
@@ -39,7 +39,7 @@ const DEFAULT_DEPS: PreflightDeps = {
 
 /**
  * Why before the exec: macOS aborts a second Electron main inside `_RegisterApplication`, before
- * any Orca JavaScript can apply the one-Orca-per-profile rule, so the CLI must decide first.
+ * any Quirky JavaScript can apply the one-Quirky-per-profile rule, so the CLI must decide first.
  * Only a definitive refusal frees the profile; a recorded pid alone proves nothing (pids recycle).
  */
 export async function decideServeProfileVerdict(
@@ -73,16 +73,16 @@ export function serveProfileRefusalMessage(
   verdict: Exclude<ServeProfileVerdict, { verdict: 'absent' }>
 ): string {
   const who = verdict.pid === null ? 'another process' : `pid ${verdict.pid}`
-  const lead = `[serve] Orca is already running for this userData profile as ${who}`
+  const lead = `[serve] Quirky is already running for this userData profile as ${who}`
   if (verdict.verdict === 'live') {
     return verdict.evidence === 'rpc'
-      ? `${lead}; not starting a second process. Run \`orca status\` to inspect it, or stop it before serving again.`
-      : `${lead}: its socket accepts connections but it is not answering \`orca status\` yet; not starting a second process. Wait for it to finish starting, or stop it before serving again.`
+      ? `${lead}; not starting a second process. Run \`quirky status\` to inspect it, or stop it before serving again.`
+      : `${lead}: its socket accepts connections but it is not answering \`quirky status\` yet; not starting a second process. Wait for it to finish starting, or stop it before serving again.`
   }
   if (verdict.reason === 'access-denied') {
     return `${lead}: it refused this CLI's credentials, so it cannot be shown to be stopped; not starting a second process. Stop it, or run this command as the user that started it.`
   }
-  return `${lead}: its socket neither accepted nor refused a connection, so this profile cannot be shown to be free; not starting a second process. Stop that process, or delete orca-runtime.json from this profile if nothing owns it.`
+  return `${lead}: its socket neither accepted nor refused a connection, so this profile cannot be shown to be free; not starting a second process. Stop that process, or delete quirky-runtime.json from this profile if nothing owns it.`
 }
 
 function refusalEnvelope(code: string, message: string, data: unknown): RuntimeRpcFailure {
@@ -146,7 +146,7 @@ export function preflightElectronServe(
       const fingerprint = options.fingerprint ?? serveEnvironmentFingerprint
       if (park && isServeAbortParkActive(park, fingerprint(), options.now ?? Date.now())) {
         const minutes = Math.max(1, Math.round(((options.now ?? Date.now()) - park.at) / 60_000))
-        const message = `[serve] Not starting: \`orca serve\` aborted at macOS startup in this environment ${minutes} min ago, and retrying here cannot help. ${park.diagnostic} Run it with --force to try anyway.`
+        const message = `[serve] Not starting: \`quirky serve\` aborted at macOS startup in this environment ${minutes} min ago, and retrying here cannot help. ${park.diagnostic} Run it with --force to try anyway.`
         writeRefusal(args, refusalEnvelope('runtime_serve_parked', message, { at: park.at }))
         return SERVE_ABORT_PARK_EXIT_CODE
       }
@@ -155,7 +155,7 @@ export function preflightElectronServe(
   return refuseIfProfileServed(args, userDataPath, options.deps)
 }
 
-/** The runtime-neutral half: refuse with exit 3 while another Orca serves or may serve this profile. */
+/** The runtime-neutral half: refuse with exit 3 while another Quirky serves or may serve this profile. */
 export function refuseIfProfileServed(
   args: ElectronServePreflightArgs,
   userDataPath: string,
@@ -181,7 +181,7 @@ export function refuseIfProfileServed(
   })
 }
 
-/** Remembers a macOS startup abort so a later, separate `orca serve` here refuses before exec. */
+/** Remembers a macOS startup abort so a later, separate `quirky serve` here refuses before exec. */
 export function recordElectronServeStartupAbort(
   userDataPath: string,
   diagnostic: string,

@@ -31,7 +31,7 @@ describe('isStableAdoptionFailure', () => {
   it('keeps retrying a code-stripped connection failure even if it names a stable code', () => {
     expect(
       isStableAdoptionFailure(
-        new Error('Could not connect to the remote Orca runtime: method_not_found')
+        new Error('Could not connect to the remote Quirky runtime: method_not_found')
       )
     ).toBe(false)
   })

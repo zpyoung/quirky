@@ -9,7 +9,7 @@ import { recordedCreatorIdentity, type DispatchCreator } from '../dispatch-depth
 import type { OrchestrationDb } from '../orchestration-db'
 import { transitionLifecycleWithDb } from '../lifecycle-transition'
 import { taskNotFoundError, taskNotStartableError } from '../../task-dispatch-refusal'
-import { dispatchAssigneeOrcaSessionId } from '../../dispatch-assignee-orca-session-id'
+import { dispatchAssigneeQuirkySessionId } from '../../dispatch-assignee-quirky-session-id'
 
 export function createDispatchContext(
   this: OrchestrationDb,
@@ -66,7 +66,7 @@ export function createDispatchContext(
       launchTokenHash: launchTokenHash ?? null,
       assigneeHandle,
       assigneePaneKey: assigneePaneKey ?? null,
-      assigneeOrcaSessionId: dispatchAssigneeOrcaSessionId({
+      assigneeQuirkySessionId: dispatchAssigneeQuirkySessionId({
         handle: assigneeHandle,
         processIncarnation
       }),

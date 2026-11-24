@@ -5,11 +5,11 @@ import { reuseSavedCloneTarget } from './saved-clone-target'
 
 vi.mock('../repo-git-remote-identity', () => ({ runGitProbeOnHost: vi.fn() }))
 
-const url = 'https://gitlab.example.com/team/orca.git'
+const url = 'https://gitlab.example.com/team/quirky.git'
 const project: Repo = {
   id: 'saved',
-  path: '/repos/orca',
-  displayName: 'orca',
+  path: '/repos/quirky',
+  displayName: 'quirky',
   badgeColor: '#fff',
   addedAt: 1,
   kind: 'git'
@@ -76,7 +76,7 @@ describe('saved clone probe budget', () => {
       .mockRejectedValueOnce(missingHead)
       .mockResolvedValueOnce({ stdout: '\n' })
       .mockRejectedValueOnce(Object.assign(new Error('fatal: No such ref: HEAD'), { code: 128 }))
-    await expect(decide()).rejects.toThrow('already an Orca project')
+    await expect(decide()).rejects.toThrow('already an Quirky project')
     expect(probe).toHaveBeenCalledTimes(3)
   })
 
@@ -91,13 +91,13 @@ describe('saved clone probe budget', () => {
     ]
   ])('does not retry the host after %s', async (_label, error) => {
     probe.mockRejectedValue(error)
-    await expect(decide()).rejects.toThrow('already an Orca project')
+    await expect(decide()).rejects.toThrow('already an Quirky project')
     expect(probe).toHaveBeenCalledTimes(1)
   })
 
   it('does not retry when there is no route to the host', async () => {
     probe.mockResolvedValue(null)
-    await expect(decide()).rejects.toThrow('already an Orca project')
+    await expect(decide()).rejects.toThrow('already an Quirky project')
     expect(probe).toHaveBeenCalledTimes(1)
   })
 
@@ -113,7 +113,7 @@ describe('saved clone probe budget', () => {
           )
         })
     )
-    const assertion = expect(decide()).rejects.toThrow('already an Orca project')
+    const assertion = expect(decide()).rejects.toThrow('already an Quirky project')
     await vi.runAllTimersAsync()
     await assertion
     expect(Date.now() - started).toBe(20_000)

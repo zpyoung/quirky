@@ -271,7 +271,7 @@ async function runUpdateUnlocked(
   }
 
   const base = await resolveGitRemoteRebaseSource(runGit, input.baseRef)
-  const fetchedBaseRef = `refs/orca/hosted-review-sitter/${randomUUID()}`
+  const fetchedBaseRef = `refs/quirky/hosted-review-sitter/${randomUUID()}`
   const fetchArgs = [
     base.remoteName,
     `+refs/heads/${base.branchName}:${fetchedBaseRef}`,

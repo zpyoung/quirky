@@ -12,7 +12,7 @@ import {
   reopenTopologyStore
 } from './terminal-topology-profile-fixture'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
@@ -32,7 +32,7 @@ afterEach(() => {
 
 /** What a serve host with no window stores for a client-created terminal, as main writes it. */
 async function windowlessHostWithTerminal(): Promise<{ store: Store; directory: string }> {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-windowless-restart-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-windowless-restart-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const created = await store.applyLayoutCommand({

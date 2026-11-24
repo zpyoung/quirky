@@ -26,7 +26,7 @@ describe('HostTerminalLedger', () => {
   let now: number
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-host-terminals-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-host-terminals-'))
     alive = new Set([100, 200])
     now = 1_000_000
   })
@@ -174,28 +174,28 @@ describe('HostTerminalLedger', () => {
 describe('resolveMaxHostTerminals', () => {
   it('defaults when the override is absent or out of range', () => {
     expect(resolveMaxHostTerminals({})).toBe(DEFAULT_MAX_HOST_TERMINALS)
-    expect(resolveMaxHostTerminals({ ORCA_DAEMON_MAX_HOST_TERMINALS: 'many' })).toBe(
+    expect(resolveMaxHostTerminals({ QUIRKY_DAEMON_MAX_HOST_TERMINALS: 'many' })).toBe(
       DEFAULT_MAX_HOST_TERMINALS
     )
-    expect(resolveMaxHostTerminals({ ORCA_DAEMON_MAX_HOST_TERMINALS: '0' })).toBe(
+    expect(resolveMaxHostTerminals({ QUIRKY_DAEMON_MAX_HOST_TERMINALS: '0' })).toBe(
       DEFAULT_MAX_HOST_TERMINALS
     )
-    expect(resolveMaxHostTerminals({ ORCA_DAEMON_MAX_HOST_TERMINALS: '100000' })).toBe(
+    expect(resolveMaxHostTerminals({ QUIRKY_DAEMON_MAX_HOST_TERMINALS: '100000' })).toBe(
       DEFAULT_MAX_HOST_TERMINALS
     )
   })
 
   it('accepts a tuned cap', () => {
-    expect(resolveMaxHostTerminals({ ORCA_DAEMON_MAX_HOST_TERMINALS: ' 64 ' })).toBe(64)
+    expect(resolveMaxHostTerminals({ QUIRKY_DAEMON_MAX_HOST_TERMINALS: ' 64 ' })).toBe(64)
   })
 })
 
 describe('defaultHostTerminalLedgerDir', () => {
   it('uses the per-user machine-local base beside relocated daemon sockets', () => {
-    expect(defaultHostTerminalLedgerDir('linux', 1000)).toBe('/tmp/.orca-daemon-1000/terminals')
-    expect(defaultHostTerminalLedgerDir('darwin', 501)).toBe('/tmp/.orca-daemon-501/terminals')
+    expect(defaultHostTerminalLedgerDir('linux', 1000)).toBe('/tmp/.quirky-daemon-1000/terminals')
+    expect(defaultHostTerminalLedgerDir('darwin', 501)).toBe('/tmp/.quirky-daemon-501/terminals')
     expect(defaultHostTerminalLedgerDir('win32', undefined)).toBe(
-      join(tmpdir(), 'orca-daemon-host-terminals')
+      join(tmpdir(), 'quirky-daemon-host-terminals')
     )
   })
 })

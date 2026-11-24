@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { readPosixProcessRow, type ProcessRowRead } from './provider-process-row-read'
 
 // Covers the one stop the supervisor cannot make itself: its own SIGKILL leaves the provider's
-// detached group running, so Orca, which outlives it, finishes the stop. POSIX only: Windows
+// detached group running, so Quirky, which outlives it, finishes the stop. POSIX only: Windows
 // providers have no supervisor.
 
 // The supervisor disconnects right after reporting, so this bounds only a wedged channel.

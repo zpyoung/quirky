@@ -16,8 +16,8 @@ import {
   type ExecutionHostId
 } from '../../../shared/execution-host'
 
-const LAUNCH_STORAGE_KEY = 'orca:structuredAgentLaunches:v1'
-const TOMBSTONE_STORAGE_KEY = 'orca:structuredAgentLaunchCancelledSessions:v1'
+const LAUNCH_STORAGE_KEY = 'quirky:structuredAgentLaunches:v1'
+const TOMBSTONE_STORAGE_KEY = 'quirky:structuredAgentLaunchCancelledSessions:v1'
 const records = new Map<string, StructuredAgentLaunchPersistedRecord>()
 /** Cancelled session id -> the host that owns it. */
 const tombstones = new Map<string, ExecutionHostId>()

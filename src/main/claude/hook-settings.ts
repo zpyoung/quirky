@@ -118,7 +118,7 @@ export function getRemoteManagedEventCommand(eventName: string, scriptPath: stri
     : getRemoteManagedCommand(scriptPath)
 }
 
-/** `nativeHookPath` is the installed orca-agent-hook.exe, or null to keep the `.cmd` form. */
+/** `nativeHookPath` is the installed quirky-agent-hook.exe, or null to keep the `.cmd` form. */
 export function getManagedLifecycleHook(
   scriptPath: string,
   settings = CLAUDE_HOOK_SETTINGS,
@@ -166,7 +166,7 @@ export function getWindowsManagedLifecycleHook(scriptPath: string): HookCommandC
 
 function getWindowsPowerShellLifecycleCommand(scriptPath: string): string {
   const scriptFileName = win32.basename(scriptPath)
-  const quotedRelativePath = quotePowerShellLiteral(`.orca\\agent-hooks\\${scriptFileName}`)
+  const quotedRelativePath = quotePowerShellLiteral(`.quirky\\agent-hooks\\${scriptFileName}`)
   return (
     `$scriptPath = Join-Path $env:USERPROFILE ${quotedRelativePath}; ` +
     'if (Test-Path -LiteralPath $scriptPath -PathType Leaf) { & $scriptPath; exit $LASTEXITCODE }; ' +

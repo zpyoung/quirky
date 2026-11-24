@@ -278,7 +278,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       disabled: core.disabled,
       sendPty: noop,
       sendStructured,
-      consumeOrcaCommand: resume.consume,
+      consumeQuirkyCommand: resume.consume,
       setDraft: core.setDraft,
       setCaret: core.setCaret
     })

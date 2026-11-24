@@ -29,7 +29,7 @@ export type DaemonPidFile = {
   bootId?: string
   /** Forking app's binary — macOS pins the daemon's TCC responsible process to it (STA-3491). */
   spawnerExecPath?: string
-  /** Self-detected systemd scope unit the daemon landed in, e.g. `orca-daemon-<nonce>.scope`;
+  /** Self-detected systemd scope unit the daemon landed in, e.g. `quirky-daemon-<nonce>.scope`;
    *  `null` when it detected none. Absent on records no daemon wrote (adoption) or that predate
    *  durable-scope launching. */
   cgroupUnit?: string | null
@@ -144,7 +144,7 @@ export function getDaemonSocketPath(
   // an older build is never reused after a breaking protocol change.
   if (process.platform === 'win32') {
     const suffix = createHash('sha256').update(runtimeDir).digest('hex').slice(0, 12)
-    return `\\\\?\\pipe\\orca-terminal-host-v${protocolVersion}-${suffix}`
+    return `\\\\?\\pipe\\quirky-terminal-host-v${protocolVersion}-${suffix}`
   }
   return resolveDaemonUnixSocketPath(runtimeDir, `daemon-v${protocolVersion}.sock`)
 }

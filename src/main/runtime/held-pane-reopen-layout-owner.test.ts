@@ -5,7 +5,7 @@ import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type * as DaemonHoldModule from '../daemon/daemon-newer-protocol-hold'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 const daemonHold = vi.hoisted(() => ({ reopen: vi.fn() }))
 vi.mock('../daemon/daemon-newer-protocol-hold', async (importOriginal) => ({
   ...(await importOriginal<typeof DaemonHoldModule>()),
@@ -13,14 +13,14 @@ vi.mock('../daemon/daemon-newer-protocol-hold', async (importOriginal) => ({
 }))
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 
 const PANE = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS_LEAF_ID }
 
@@ -29,7 +29,7 @@ async function heldPaneRuntime() {
   const { runtimeStore, getSession, setSession } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
-  const runtime = new OrcaRuntimeService(
+  const runtime = new QuirkyRuntimeService(
     Object.assign(runtimeStore, {
       getWorkspaceSessionHostIds: (): ExecutionHostId[] => [LOCAL_EXECUTION_HOST_ID]
     })
@@ -52,7 +52,7 @@ async function heldPaneRuntime() {
 }
 
 /** The pane's start status as main publishes it to a paired desktop. */
-function publishedStatus(runtime: InstanceType<typeof OrcaRuntimeService>) {
+function publishedStatus(runtime: InstanceType<typeof QuirkyRuntimeService>) {
   const { snapshot, unsubscribe } = runtime.subscribeWorkspaceLayouts(() => {})
   unsubscribe()
   return snapshot

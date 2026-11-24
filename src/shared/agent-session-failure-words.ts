@@ -2,7 +2,7 @@
 //
 // A row's `text`, a rejected message's `reason` and a conversation command's `error` are what
 // every released client prints as they are, so the host writes them here, from the fact, and
-// nowhere else: never Orca's own error text, a refusal's message, or a probe's evidence. A
+// nowhere else: never Quirky's own error text, a refusal's message, or a probe's evidence. A
 // provider's words reach the sentence only when the provider wrote them for a person. Each sentence
 // is built from the pieces in `agent-session-failure-copy`, which desktop translates to word the
 // same fact in the reader's language.
@@ -336,7 +336,7 @@ export function agentSessionFailureWords(
   if (context.surface === 'row') {
     return { text: branded(agentSessionFailureSentence(fact, 'row', context)), failure: fact }
   }
-  // The rejection overload admits only these; a caller that got past the types is Orca's bug.
+  // The rejection overload admits only these; a caller that got past the types is Quirky's bug.
   if (!isSubmissionRejectionFact(fact)) {
     throw new Error(`agent session failure kind ${fact.kind} cannot reject a message`)
   }

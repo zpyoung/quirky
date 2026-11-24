@@ -23,7 +23,7 @@ async function capture(root: string, args: string[]): Promise<string> {
 
 describe.skipIf(process.platform === 'win32')('real ripgrep POSIX filename identities', () => {
   it('lists, searches, and opens literal-backslash and nested names independently', async () => {
-    const parent = await mkdtemp(join(tmpdir(), 'orca-rg-identity-'))
+    const parent = await mkdtemp(join(tmpdir(), 'quirky-rg-identity-'))
     const root = join(parent, 'repo\\root')
     try {
       await mkdir(join(root, 'a'), { recursive: true })

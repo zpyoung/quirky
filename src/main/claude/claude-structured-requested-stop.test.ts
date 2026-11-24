@@ -85,7 +85,7 @@ describe('a requested stop of a structured Claude chat', () => {
     expect(turns.at(-1)).toMatchObject({ turnId: 'turn-1', state: 'interrupted' })
     const ended = events.filter((event) => event.type === 'ended')
     expect(ended).toEqual([expect.objectContaining({ reason: 'claude session closed' })])
-    // The host ends the child's record on it, as the close Orca asked for, never as a crash.
+    // The host ends the child's record on it, as the close Quirky asked for, never as a crash.
     expect(ended[0]).toMatchObject({ cause: 'requested-close' })
   })
 })

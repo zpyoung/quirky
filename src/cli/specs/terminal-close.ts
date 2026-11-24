@@ -6,7 +6,7 @@ export const TERMINAL_CLOSE_COMMAND_SPEC: CommandSpec = {
   destructive: true,
   summary: 'Close one terminal, its whole tab, or every terminal in a workspace',
   usage:
-    'orca terminal close ([--terminal <handle>] [--tab] | --worktree <selector> --all) [--json]',
+    'quirky terminal close ([--terminal <handle>] [--tab] | --worktree <selector> --all) [--json]',
   allowedFlags: [...GLOBAL_FLAGS, 'terminal', 'tab', 'worktree', 'all'],
   notes: [
     'Without --all, closes one terminal pane/session; add --tab to close its whole tab.',
@@ -14,8 +14,8 @@ export const TERMINAL_CLOSE_COMMAND_SPEC: CommandSpec = {
     'Use workspace Sleep when the terminals and agent sessions should resume later.'
   ],
   examples: [
-    'orca terminal close --terminal term_abc123',
-    'orca terminal close --terminal term_abc123 --tab --json',
-    'orca terminal close --worktree active --all --json'
+    'quirky terminal close --terminal term_abc123',
+    'quirky terminal close --terminal term_abc123 --tab --json',
+    'quirky terminal close --worktree active --all --json'
   ]
 }

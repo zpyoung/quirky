@@ -86,7 +86,7 @@ describe('AgentBrowserBridge', () => {
   function ownSocketDirectory(): void {
     Object.assign(bridge, {
       ownsAgentBrowserSocketDirectory: true,
-      agentBrowserEnv: { AGENT_BROWSER_SOCKET_DIR: '/tmp/orca-ab-test' }
+      agentBrowserEnv: { AGENT_BROWSER_SOCKET_DIR: '/tmp/quirky-ab-test' }
     })
   }
 
@@ -115,7 +115,7 @@ describe('AgentBrowserBridge', () => {
 
     expect(await bridge.snapshot()).toMatchObject({ snapshot: 'ready' })
     expect(closeCallCount()).toBe(0)
-    expect(lstatSyncMock).toHaveBeenCalledWith('/tmp/orca-ab-test/orca-tab-tab-1.sock')
+    expect(lstatSyncMock).toHaveBeenCalledWith('/tmp/quirky-ab-test/quirky-tab-tab-1.sock')
   })
 
   it('fails closed when stale agent-browser session ownership cannot be reset', async () => {
@@ -141,7 +141,7 @@ describe('AgentBrowserBridge', () => {
       const rejection = expect(promise).rejects.toMatchObject({
         code: 'browser_owner_unavailable',
         message:
-          'Could not reset stale helper session orca-tab-tab-1; retry after agent-browser exits'
+          'Could not reset stale helper session quirky-tab-tab-1; retry after agent-browser exits'
       })
 
       await vi.advanceTimersByTimeAsync(3_000)
@@ -226,7 +226,7 @@ describe('AgentBrowserBridge', () => {
 
     const destroyPromise = (
       bridge as unknown as { destroySession: (name: string) => Promise<void> }
-    ).destroySession('orca-tab-tab-1')
+    ).destroySession('quirky-tab-tab-1')
     const nextSnapshot = bridge.snapshot()
 
     await Promise.resolve()
@@ -270,7 +270,7 @@ describe('AgentBrowserBridge', () => {
           webContentsId: number
         ) => Promise<void>
       }
-    ).ensureSession('orca-tab-tab-1', 'tab-1', 100)
+    ).ensureSession('quirky-tab-tab-1', 'tab-1', 100)
 
     await vi.waitFor(() => {
       expect(releaseStaleClose).not.toBeNull()
@@ -279,7 +279,7 @@ describe('AgentBrowserBridge', () => {
 
     const destroyPromise = (
       bridge as unknown as { destroySession: (name: string) => Promise<void> }
-    ).destroySession('orca-tab-tab-1')
+    ).destroySession('quirky-tab-tab-1')
 
     releaseStaleClose!()
     await ensurePromise
@@ -328,7 +328,7 @@ describe('AgentBrowserBridge', () => {
 
     const destroyPromise = (
       bridge as unknown as { destroySession: (name: string) => Promise<void> }
-    ).destroySession('orca-tab-tab-1')
+    ).destroySession('quirky-tab-tab-1')
 
     expect(activeChild.kill).toHaveBeenCalledTimes(1)
     await expect(runningSnapshot).rejects.toMatchObject({
@@ -540,7 +540,7 @@ describe('AgentBrowserBridge', () => {
 
     const sessions = (bridge as unknown as { sessions: Map<string, { lastCommandAt: number }> })
       .sessions
-    const session = sessions.get('orca-tab-tab-1')!
+    const session = sessions.get('quirky-tab-tab-1')!
     session.lastCommandAt = Date.now() - 11 * 60 * 1000
 
     const commandCalls: string[][] = []
@@ -597,7 +597,7 @@ describe('AgentBrowserBridge', () => {
   it('bounds concurrent helper retirements during runtime shutdown', async () => {
     const sessions = (bridge as unknown as { sessions: Map<string, unknown> }).sessions
     for (let index = 0; index < 6; index++) {
-      sessions.set(`orca-tab-tab-${index}`, {
+      sessions.set(`quirky-tab-tab-${index}`, {
         proxy: { stop: vi.fn(async () => {}) },
         cdpEndpoint: `ws://127.0.0.1:${9200 + index}`,
         initialized: true,

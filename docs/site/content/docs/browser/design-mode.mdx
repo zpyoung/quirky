@@ -4,10 +4,10 @@ title: Design Mode
 
 import { ImagePlaceholder } from '@/components/docs/prose'
 
-Design Mode turns the Orca browser into a pointer-to-code tool. Toggle it on, click any UI element on the rendered page, and the element drops into the agent chat as rich context — with its DOM, computed styles, and a screenshot.
+Design Mode turns the Quirky browser into a pointer-to-code tool. Toggle it on, click any UI element on the rendered page, and the element drops into the agent chat as rich context — with its DOM, computed styles, and a screenshot.
 
 <ImagePlaceholder
-  src="/docs/orca-design-mode.gif"
+  src="/docs/quirky-design-mode.gif"
   caption="Design Mode: click a button, it lands in the agent chat"
 />
 
@@ -17,7 +17,7 @@ Click the **Design Mode** toggle in the browser toolbar. Your cursor becomes a p
 
 ## Drop into chat
 
-Click an element. Orca captures:
+Click an element. Quirky captures:
 
 - The element's HTML (outer and a small neighborhood).
 - Its computed CSS — colors, fonts, spacing.
@@ -28,4 +28,4 @@ All of that ships into the active agent terminal as one attachment, and you type
 
 ## Use the result
 
-The agent edits the source, Orca hot-reloads, you click again to verify. The tightest version of this loop is the hero recipe [Fix a UI bug with Design Mode](/docs/recipes/design-mode-fix).
+The agent edits the source, Quirky hot-reloads, you click again to verify. The tightest version of this loop is the hero recipe [Fix a UI bug with Design Mode](/docs/recipes/design-mode-fix).

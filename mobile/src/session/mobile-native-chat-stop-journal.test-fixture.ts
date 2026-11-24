@@ -90,12 +90,12 @@ export function stopJournal(
   const stopEvent = (turnId?: string): number =>
     add({
       kind: 'tombstone',
-      itemId: 'orca:stop-event',
+      itemId: 'quirky:stop-event',
       revision: 1,
       stopEvent: { reason: 'user-stop', at: 1, ...(turnId ? { turnId } : {}) }
     })
   const turnBody = (id: string, turnId: string, state: 'running' | 'completed' | 'interrupted') =>
-    ({ kind: 'turn', turnId, state, userItemId: `orca:${id}`, startedAt: 1 }) as const
+    ({ kind: 'turn', turnId, state, userItemId: `quirky:${id}`, startedAt: 1 }) as const
   /** The provider opens a turn for `id`, echoes the send and streams an answer. */
   const openTurn = (id: string, turnId: string): void => {
     const record = turnItem(turnId)
@@ -163,7 +163,7 @@ export function stopJournal(
     if (state === 'interrupted') {
       add({
         kind: 'item',
-        itemId: `orca:stop%3A${turnId}`,
+        itemId: `quirky:stop%3A${turnId}`,
         revision: 1,
         body: { kind: 'status', text: 'Cancellation requested.' },
         turnScope: inTurn(turnId)

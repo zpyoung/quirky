@@ -56,7 +56,7 @@ describe('decodeAgentSessionAgentsResult', () => {
           contextUsage: false,
           imagePrompts: false,
           steering: 'queue',
-          approvalEnforcement: 'orca'
+          approvalEnforcement: 'quirky'
         }
       }
     ])

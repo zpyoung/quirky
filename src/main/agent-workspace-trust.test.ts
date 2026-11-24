@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ClaudeFolderTrustFile from './claude/claude-folder-trust-file'
 
-const CODEX_CONFIG_FILES = ['/orca/codex-home/config.toml', '/home/u/.codex/config.toml']
+const CODEX_CONFIG_FILES = ['/quirky/codex-home/config.toml', '/home/u/.codex/config.toml']
 
 const mocks = vi.hoisted(() => ({
   codex: vi.fn<(path: string, configFiles: readonly string[]) => Promise<void>>(async () => {}),
@@ -128,7 +128,10 @@ describe('applyAgentWorkspaceTrust on this machine', () => {
   })
 
   // Why: a config dir that does not exist keeps a regression here from writing a real config.
-  const noConfig = { ...local, env: { CLAUDE_CONFIG_DIR: join(tmpdir(), 'orca-no-claude-config') } }
+  const noConfig = {
+    ...local,
+    env: { CLAUDE_CONFIG_DIR: join(tmpdir(), 'quirky-no-claude-config') }
+  }
   it.each([
     ['the home folder', homedir(), noConfig],
     [
@@ -160,7 +163,7 @@ describe('applyAgentWorkspaceTrust on this machine', () => {
   })
 
   it('never pre-trusts a home reached through a symlink, since the writers store the realpath', async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-agent-trust-home-')))
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-agent-trust-home-')))
     try {
       const home = join(root, 'home')
       mkdirSync(home)
@@ -188,7 +191,7 @@ describe('applyAgentWorkspaceTrust for Claude', () => {
   let root: string
 
   beforeEach(() => {
-    root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-agent-trust-')))
+    root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-agent-trust-')))
   })
 
   afterEach(() => {

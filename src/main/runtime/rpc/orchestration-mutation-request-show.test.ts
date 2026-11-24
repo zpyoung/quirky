@@ -4,7 +4,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 import { OrchestrationDb } from '../orchestration/db'
 import { defineMethod, type RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
@@ -20,7 +20,7 @@ const Params = z.object({ subject: z.string() })
 
 function createHarness() {
   const db = new OrchestrationDb(':memory:')
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   const effect = vi.fn((subject: string) =>
     db.insertMessage({ runId: 'run_legacy_local', from: 'caller', to: 'recipient', subject })
@@ -104,7 +104,7 @@ describe('orchestration.requestShow', () => {
 
   it('does not claim a concurrently running mutation was interrupted by a restart', async () => {
     const db = new OrchestrationDb(':memory:')
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     let finishMutation: (() => void) | undefined
     let reportStarted: (() => void) | undefined
@@ -138,7 +138,7 @@ describe('orchestration.requestShow', () => {
     const result = (response as { result: { state: string; interpretation: string } }).result
     expect(result.state).toBe('pending')
     expect(result.interpretation).toContain('may still be running')
-    expect(result.interpretation).not.toContain('so Orca restarted')
+    expect(result.interpretation).not.toContain('so Quirky restarted')
 
     finishMutation?.()
     await runningMutation

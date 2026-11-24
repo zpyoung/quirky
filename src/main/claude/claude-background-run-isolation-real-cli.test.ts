@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { claudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
 import { CLAUDE_MODEL_LIST_ARGS } from '../../shared/claude-model-list-probe'
@@ -10,7 +10,7 @@ import { realClaudeAvailable, realClaudeCommand } from './claude-real-cli-availa
 
 // Pins the contract with Claude itself: its `mcp_status` and `get_settings` answers (no turn spent)
 // in a throwaway home whose own settings allowlist its user-scope server.
-const root = mkdtempSync(join(tmpdir(), 'orca-claude-isolation-'))
+const root = mkdtempSync(join(tmpdir(), 'quirky-claude-isolation-'))
 afterEach(() => rmSync(root, { recursive: true, force: true }))
 
 async function loaded(args: string[]): Promise<{ servers: unknown; hooksOff: unknown }> {

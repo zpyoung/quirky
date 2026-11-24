@@ -1,4 +1,4 @@
-// `orca project setup-delete` used to drop a repo-backed project even while its terminals were
+// `quirky project setup-delete` used to drop a repo-backed project even while its terminals were
 // running and its workspaces had saved details, orphaning both with no warning.
 import { describe, expect, it, vi } from 'vitest'
 import { RuntimeProjectHostSetupController } from './runtime-project-host-setup-controller'

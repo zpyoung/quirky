@@ -260,7 +260,7 @@ export class RuntimeLinearCommentCommands extends RuntimeLinearCreateCommands {
       `No Linear issue comment ${commentId} was found.`,
       {
         nextSteps: [
-          'Run `orca linear issue <id> --comments --json` and pass a comment `id` from it.'
+          'Run `quirky linear issue <id> --comments --json` and pass a comment `id` from it.'
         ]
       }
     )
@@ -273,10 +273,10 @@ export class RuntimeLinearCommentCommands extends RuntimeLinearCreateCommands {
     cause?: string
   ): LinearAgentAccessError {
     const issue = comment.issue.identifier
-    const readBack = `orca linear issue ${issue} --comments --workspace ${workspaceId} --json`
+    const readBack = `quirky linear issue ${issue} --comments --workspace ${workspaceId} --json`
     return linearError(
       'linear_write_unconfirmed',
-      `Linear may have applied the comment ${verb}, but Orca could not confirm it.`,
+      `Linear may have applied the comment ${verb}, but Quirky could not confirm it.`,
       {
         workspaceId,
         issueIdentifier: comment.issue.identifier,

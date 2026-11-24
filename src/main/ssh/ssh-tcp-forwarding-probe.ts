@@ -1,7 +1,7 @@
 /**
  * Whether an SSH host lets this client open a local forward, asked each time a managed tunnel
  * starts. A host whose sshd refuses forwarding (`AllowTcpForwarding no`) is reached through the
- * stdio bridge instead (orcad-managed-tunnel-transport.ts).
+ * stdio bridge instead (quirkyd-managed-tunnel-transport.ts).
  */
 import { connect, type Socket } from 'node:net'
 import type { ClientChannel } from 'ssh2'

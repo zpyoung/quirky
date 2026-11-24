@@ -1,6 +1,6 @@
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as MobileSessionPublication } from '../../session-tabs/session-tabs-change-publication'
-import type { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab as MobileSessionPreservation } from '../../session-tabs/mobile-session-publication-preservation'
-import { OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh } from './perform-mobile-session-pty-records-refresh'
+import type { QuirkyRuntimeWithScheduleMobileSessionTabsChanged as MobileSessionPublication } from '../../session-tabs/session-tabs-change-publication'
+import type { QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab as MobileSessionPreservation } from '../../session-tabs/mobile-session-publication-preservation'
+import { QuirkyRuntimeWithPerformMobileSessionPtyRecordsRefresh } from './perform-mobile-session-pty-records-refresh'
 import type {
   RuntimeMobileSessionTabsResult,
   RuntimeMobileSessionTabsSnapshot,
@@ -20,9 +20,9 @@ import {
 } from '../../../../shared/agent-session-resume'
 import type {
   MobileTerminalResumeCommand,
-  OrcaRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup
+  QuirkyRuntimeWithResolveMobileSessionTerminalCommand as MobileTerminalStartup
 } from '../../terminal/launch/mobile-terminal-startup'
-import type { OrcaRuntimeWithStopTerminalsForWorktree as SessionEditHost } from '../../terminal/stop/worktree-terminal-stop'
+import type { QuirkyRuntimeWithStopTerminalsForWorktree as SessionEditHost } from '../../terminal/stop/worktree-terminal-stop'
 import { claimWindowWakeRecordForPane, isWindowWakeSleepRecord } from './window-wake-sleep-record'
 import {
   buildHeadlessMobileSessionTabGroups,
@@ -30,7 +30,7 @@ import {
 } from '../../mobile-session-layout-projection'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
-export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
+export abstract class QuirkyRuntimeWithApplyMobileSessionTabNavigation extends QuirkyRuntimeWithPerformMobileSessionPtyRecordsRefresh {
   protected abstract emitMobileSessionTabsSnapshotToClient(
     ...args: Parameters<MobileSessionPublication['emitMobileSessionTabsSnapshotToClient']>
   ): ReturnType<MobileSessionPublication['emitMobileSessionTabsSnapshotToClient']>

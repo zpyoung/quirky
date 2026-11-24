@@ -12,13 +12,13 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ProcessHost from '@orca/process-host'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type * as ProcessHost from '@quirky/process-host'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 
 const { runProcessMock } = vi.hoisted(() => ({
   runProcessMock: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>()
 }))
-vi.mock('@orca/process-host', async (importActual) => {
+vi.mock('@quirky/process-host', async (importActual) => {
   const actual = await importActual<typeof ProcessHost>()
   runProcessMock.mockImplementation((spec) => actual.runProcess(spec))
   return { runProcess: runProcessMock }
@@ -34,7 +34,7 @@ describe('cloneMacTree', () => {
   let destination: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-mac-tree-clone-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-mac-tree-clone-'))
     source = join(root, 'source')
     destination = join(root, 'copy')
     await mkdir(join(source, 'ws'), { recursive: true })

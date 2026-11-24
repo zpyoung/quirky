@@ -10,8 +10,8 @@ describe('resolveFallbackForegroundProcess', () => {
     'reads the terminal scope wrappers as the shell, but a user-typed systemd-run as work',
     () => {
       setTerminalScopesForTest({
-        slice: 'orca_ptys_a.slice',
-        sliceCgroupPath: '/sys/fs/cgroup/x/orca_ptys_a.slice',
+        slice: 'quirky_ptys_a.slice',
+        sliceCgroupPath: '/sys/fs/cgroup/x/quirky_ptys_a.slice',
         systemdRun: '/usr/bin/systemd-run',
         envBinary: '/usr/bin/env',
         launchId: 'a',

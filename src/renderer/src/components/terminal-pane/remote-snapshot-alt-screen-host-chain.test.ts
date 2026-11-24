@@ -160,7 +160,7 @@ async function render(events: PaneEvent[]): Promise<Terminal> {
 }
 
 type HostModules = {
-  OrcaRuntimeService: new (store: null) => HostRuntime
+  QuirkyRuntimeService: new (store: null) => HostRuntime
   sendSnapshotFrames: (send: HostSendFrame, options: Record<string, unknown>) => unknown
   serializeBudgetedRequestedSnapshot: (
     runtime: HostRuntime,
@@ -176,8 +176,8 @@ let hostModules: HostModules | null = null
 // test it crossed the 30s test limit whenever the directory ran in parallel.
 async function loadHostModules(): Promise<HostModules> {
   const [runtime, publication, flowControl] = await Promise.all([
-    vi.importActual<Pick<HostModules, 'OrcaRuntimeService'>>(
-      '../../../../main/runtime/orca-runtime'
+    vi.importActual<Pick<HostModules, 'QuirkyRuntimeService'>>(
+      '../../../../main/runtime/quirky-runtime'
     ),
     vi.importActual<Pick<HostModules, 'sendSnapshotFrames' | 'serializeBudgetedRequestedSnapshot'>>(
       '../../../../main/runtime/rpc/methods/terminal/terminal-snapshot-publication'
@@ -187,7 +187,7 @@ async function loadHostModules(): Promise<HostModules> {
     )
   ])
   return {
-    OrcaRuntimeService: runtime.OrcaRuntimeService,
+    QuirkyRuntimeService: runtime.QuirkyRuntimeService,
     sendSnapshotFrames: publication.sendSnapshotFrames,
     serializeBudgetedRequestedSnapshot: publication.serializeBudgetedRequestedSnapshot,
     installMultiplexFlowControl: flowControl.installMultiplexFlowControl
@@ -202,13 +202,13 @@ async function publishHostRecovery(
     throw new Error('host modules are loaded in beforeAll')
   }
   const {
-    OrcaRuntimeService,
+    QuirkyRuntimeService,
     sendSnapshotFrames,
     serializeBudgetedRequestedSnapshot,
     installMultiplexFlowControl
   } = hostModules
 
-  const host = new OrcaRuntimeService(null)
+  const host = new QuirkyRuntimeService(null)
   host.setPtyController({
     write: () => true,
     kill: () => true,

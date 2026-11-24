@@ -374,7 +374,7 @@ describe('StructuredAgentSessionTurnCompletionFeed', () => {
     }
     const commandTurn = (lifecycle: AgentJournalTurnLifecycle): AgentJournalRenderItem => ({
       ...turnItem({ ...lifecycle, userItemId: command.itemId }, 4),
-      itemId: 'orca:command-turn:c1'
+      itemId: 'quirky:command-turn:c1'
     })
     h.setJournal(
       [...real, command, commandTurn(turn('compact:c1', 'running'))],

@@ -84,7 +84,7 @@ let root: string
 let transcriptPath: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-usage-append-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-usage-append-'))
   homedirMock.mockReturnValue(root)
   const projectDir = join(root, '.claude', 'projects', 'project-a')
   await mkdir(projectDir, { recursive: true })

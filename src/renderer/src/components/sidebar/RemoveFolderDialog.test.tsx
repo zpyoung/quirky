@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   > = {}
   const tabsByWorktree: Record<string, { id: string }[]> = {}
   const ptyIdsByTabId: Record<string, string[]> = {}
-  const runtimeEnvironments: { id: string; orcadDeployment?: { sshTargetId: string } }[] = []
+  const runtimeEnvironments: { id: string; quirkydDeployment?: { sshTargetId: string } }[] = []
   return {
     state: {
       activeModal: 'confirm-remove-folder' as string | null,
@@ -94,7 +94,7 @@ describe('RemoveFolderDialog', () => {
     mocks.state.modalData.hostId = 'runtime:env-vm'
     mocks.state.repos = [repo(null, 'runtime:env-vm')]
     mocks.state.runtimeEnvironments = [
-      { id: 'env-vm', orcadDeployment: { sshTargetId: 'runtime-ssh-runtime-1' } }
+      { id: 'env-vm', quirkydDeployment: { sshTargetId: 'runtime-ssh-runtime-1' } }
     ]
 
     const html = renderToStaticMarkup(<RemoveFolderDialog />)

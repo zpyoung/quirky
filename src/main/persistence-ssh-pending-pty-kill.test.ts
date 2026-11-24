@@ -24,7 +24,7 @@ const NOW = 1_800_000_000_000
 // legacy relay bridge, and otherwise carries them so a downgrade can still replay them.
 describe('persisted SSH pending PTY kills', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

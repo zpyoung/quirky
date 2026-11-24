@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { createServer } from 'node:http'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
 import { getManagedCommand, CODEX_EVENTS } from './codex-hook-definition'
 import { getManagedScript } from './codex-hook-script'
@@ -22,7 +22,7 @@ describe('Codex Windows hook command', () => {
     (profile) => {
       vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
       vi.stubEnv('SystemRoot', 'D:\\Windows')
-      const path = `C:\\Users\\${profile}\\.orca\\agent-hooks\\codex-hook.cmd`
+      const path = `C:\\Users\\${profile}\\.quirky\\agent-hooks\\codex-hook.cmd`
       const command = getManagedCommand(path)
       expect(command).not.toMatch(/powershell\.exe|EncodedCommand|Set-ExecutionPolicy/)
       expect(command).toBe(
@@ -35,8 +35,8 @@ describe('Codex Windows hook command', () => {
 
   it('writes a bare forward-slash path when the profile is one token', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    expect(getManagedCommand('C:\\Users\\alice\\.orca\\agent-hooks\\codex-hook.cmd')).toBe(
-      'C:/Users/alice/.orca/agent-hooks/codex-hook.cmd'
+    expect(getManagedCommand('C:\\Users\\alice\\.quirky\\agent-hooks\\codex-hook.cmd')).toBe(
+      'C:/Users/alice/.quirky/agent-hooks/codex-hook.cmd'
     )
   })
 })
@@ -57,7 +57,7 @@ describe.skipIf(process.platform !== 'win32')('Codex hook delivery through Power
   it.each([windowsPowerShell, ...(windowsPwsh ? [windowsPwsh] : [])])(
     'delivers all eight events exactly once from a Unicode profile through %s',
     async (shell) => {
-      const root = mkdtempSync(join(tmpdir(), 'orca-codex-cjk-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-codex-cjk-'))
       const home = join(root, "测试 사용자 O'Brien")
       mkdirSync(home)
       const scriptPath = join(home, 'codex-hook.cmd')
@@ -68,7 +68,7 @@ describe.skipIf(process.platform !== 'win32')('Codex hook delivery through Power
         const chunks: Buffer[] = []
         req.on('data', (chunk) => chunks.push(chunk))
         req.on('end', () => {
-          tokens.push(req.headers['x-orca-agent-hook-token'])
+          tokens.push(req.headers['x-quirky-agent-hook-token'])
           posts.push(new URLSearchParams(Buffer.concat(chunks).toString('utf8')))
           res.writeHead(204).end()
         })
@@ -80,13 +80,13 @@ describe.skipIf(process.platform !== 'win32')('Codex hook delivery through Power
       }
       const env = {
         ...Object.fromEntries(
-          Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_'))
+          Object.entries(process.env).filter(([key]) => !key.startsWith('QUIRKY_'))
         ),
-        ORCA_BACKGROUND_LAUNCH: '1',
-        ORCA_AGENT_HOOK_PORT: String(address.port),
-        ORCA_AGENT_HOOK_TOKEN: 'unicode-test-token',
-        ORCA_PANE_KEY: 'unicode-tab:unicode-leaf',
-        ORCA_WORKTREE_ID: 'C:\\folder workspace\\测试 & repo'
+        QUIRKY_BACKGROUND_LAUNCH: '1',
+        QUIRKY_AGENT_HOOK_PORT: String(address.port),
+        QUIRKY_AGENT_HOOK_TOKEN: 'unicode-test-token',
+        QUIRKY_PANE_KEY: 'unicode-tab:unicode-leaf',
+        QUIRKY_WORKTREE_ID: 'C:\\folder workspace\\测试 & repo'
       }
       const payloads = CODEX_EVENTS.map((hook_event_name) =>
         JSON.stringify({
@@ -118,8 +118,8 @@ describe.skipIf(process.platform !== 'win32')('Codex hook delivery through Power
         expect(tokens).toEqual(CODEX_EVENTS.map(() => 'unicode-test-token'))
         expect(posts.map((post) => post.get('payload')).sort()).toEqual([...payloads].sort())
         for (const post of posts) {
-          expect(post.get('paneKey')).toBe(env.ORCA_PANE_KEY)
-          expect(post.get('worktreeId')).toBe(env.ORCA_WORKTREE_ID)
+          expect(post.get('paneKey')).toBe(env.QUIRKY_PANE_KEY)
+          expect(post.get('worktreeId')).toBe(env.QUIRKY_WORKTREE_ID)
         }
         await new Promise<void>((resolve) => server.close(() => resolve()))
         expect(await invoke(getManagedCommand(scriptPath), payloads[0])).toMatchObject({

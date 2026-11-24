@@ -8,7 +8,7 @@ import type {
 } from '../../shared/agent-session-journal-types'
 import { randomUUID } from 'node:crypto'
 import type { AgentJournalDispatchRejection } from '../../shared/agent-session-failure-words'
-import { cancelProcessAcquisition } from '@orca/process-host/cancel-process-acquisition'
+import { cancelProcessAcquisition } from '@quirky/process-host/cancel-process-acquisition'
 import type {
   CodexAppServerConnection,
   openCodexAppServerConnection
@@ -139,9 +139,9 @@ export type CodexSession = {
   ended: boolean
   /** First observed child exit survives rejected settlement admission. */
   exitObservedAt?: number
-  /** The close Orca began for this child: asked for, or forced as a death, and why. Whatever ends
+  /** The close Quirky began for this child: asked for, or forced as a death, and why. Whatever ends
    *  the child after it (that close, or the exit the connection reports meanwhile) keeps this. */
-  orcaClose?: { requested: boolean; reason: Error }
+  quirkyClose?: { requested: boolean; reason: Error }
   fence: number
   acquisitionGeneration: string
   threadId: string

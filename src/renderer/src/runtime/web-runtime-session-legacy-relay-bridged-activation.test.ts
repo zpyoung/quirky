@@ -74,7 +74,7 @@ describe('activating a pane the legacy relay bridge serves', () => {
   it("drops an earlier tab's pending focus so its late snapshot cannot pull focus back", async () => {
     stubWindow(vi.fn())
     const owner = { environmentId: ENVIRONMENT_ID }
-    recordWebSessionFocusIntent(owner, WORKTREE_ID, 'orcad-tab::leaf')
+    recordWebSessionFocusIntent(owner, WORKTREE_ID, 'quirkyd-tab::leaf')
 
     await activateWebRuntimeSessionTab({
       worktreeId: WORKTREE_ID,
@@ -104,12 +104,12 @@ describe('activating a pane the legacy relay bridge serves', () => {
     expect(call).not.toHaveBeenCalled()
 
     // A sibling pane on screen is aimed at by leaf, so the server never picks the bridged one.
-    showing('orcad-leaf')
+    showing('quirkyd-leaf')
     await activateWebRuntimeSessionTab({ worktreeId: WORKTREE_ID, tabId })
     expect(call).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'session.tabs.activate',
-        params: expect.objectContaining({ tabId: 'relay-tab', leafId: 'orcad-leaf' })
+        params: expect.objectContaining({ tabId: 'relay-tab', leafId: 'quirkyd-leaf' })
       })
     )
   })
@@ -118,7 +118,7 @@ describe('activating a pane the legacy relay bridge serves', () => {
     const call = vi.fn().mockResolvedValue({ id: 'activate', ok: true, result: {} })
     stubWindow(call)
 
-    for (const hostTabId of ['relay-tab::orcad-leaf', 'orcad-tab::leaf']) {
+    for (const hostTabId of ['relay-tab::quirkyd-leaf', 'quirkyd-tab::leaf']) {
       await activateWebRuntimeSessionTab({
         worktreeId: WORKTREE_ID,
         tabId: toWebTerminalSurfaceTabId(hostTabId),
@@ -130,7 +130,7 @@ describe('activating a pane the legacy relay bridge serves', () => {
     expect(call).toHaveBeenCalledWith(
       expect.objectContaining({
         method: 'session.tabs.activate',
-        params: expect.objectContaining({ tabId: 'orcad-tab::leaf' })
+        params: expect.objectContaining({ tabId: 'quirkyd-tab::leaf' })
       })
     )
   })

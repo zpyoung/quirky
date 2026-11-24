@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createEditorStore, createEditorTabsStore } from './editor-slice-test-harness'
 import type { AppState } from '../types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 const { toastErrorMock } = vi.hoisted(() => ({
   toastErrorMock: vi.fn()
@@ -654,7 +654,7 @@ describe('createEditorSlice openDiff', () => {
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
     expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+      QUIRKY_LAYOUT_OWNER_IS_MAIN ? undefined : false
     )
   })
 
@@ -687,7 +687,7 @@ describe('createEditorSlice openDiff', () => {
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
     expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+      QUIRKY_LAYOUT_OWNER_IS_MAIN ? undefined : false
     )
   })
 
@@ -730,7 +730,7 @@ describe('createEditorSlice openDiff', () => {
     ])
     // Not a preview: a switch-on build omits the flag rather than writing false.
     expect(store.getState().unifiedTabsByWorktree['wt-1']?.[0]?.isPreview).toBe(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? undefined : false
+      QUIRKY_LAYOUT_OWNER_IS_MAIN ? undefined : false
     )
   })
 })

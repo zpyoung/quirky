@@ -8,7 +8,7 @@ import type { ObjectiveAction } from '../../shared/fork-heimdall-objective/objec
 import type { ObjectiveDispatchRecord } from '../../shared/fork-heimdall-objective/parallel-types'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
 import type { PlannerReport } from '../../shared/fork-heimdall-objective/plan-schema'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { ObjectiveSnapshotBinding } from './execution-context'
 import { ObjectiveNodeIngestRejectedError } from './merge-train-git'
 import { ingestObjectiveNodeReport } from './local-node-report-action'
@@ -53,7 +53,7 @@ type Fixture = {
   binding: ObjectiveSnapshotBinding
   context: ExecuteContext<ObjectiveWorld>
   objectiveStore: ObjectiveStore
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   workspacePath: string
   database: ObjectiveDatabase
 }
@@ -221,8 +221,8 @@ async function buildFixture(): Promise<Fixture> {
     binding,
     context,
     objectiveStore,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService is a class with private fields; never called in these tests.
-    runtime: {} as OrcaRuntimeService,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService is a class with private fields; never called in these tests.
+    runtime: {} as QuirkyRuntimeService,
     workspacePath,
     database
   }

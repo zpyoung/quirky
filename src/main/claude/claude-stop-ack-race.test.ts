@@ -1,13 +1,13 @@
 // A task that finishes on its own just as the user presses Stop keeps its own ending. The CLI
-// writes the task's completion before its answer to `stop_task`, but the SDK hands Orca a control
+// writes the task's completion before its answer to `stop_task`, but the SDK hands Quirky a control
 // answer as soon as it reads it and queues every other frame, so the acknowledgement can arrive
-// first. Driven through the real SDK and Orca's stream-json connection against the scripted CLI.
+// first. Driven through the real SDK and Quirky's stream-json connection against the scripted CLI.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { createAgentChildWorkAdmission } from '../../shared/agent-status-child-work-admission'
 import type { AgentChildWorkEvidence } from '../../shared/agent-status-child-work-evidence'
 import { reconcileAgentChildWorkEvidence } from '../../shared/agent-status-child-work-reconciliation'
@@ -102,8 +102,8 @@ async function stoppedAsItCompleted(ahead: number) {
       cwd: dir,
       env: {
         PATH: process.env.PATH ?? '',
-        ORCA_SDK_CONTRACT_SCENARIO_PATH: scenarioPath,
-        ORCA_SDK_CONTRACT_REPORT_PATH: join(dir, 'report.json')
+        QUIRKY_SDK_CONTRACT_SCENARIO_PATH: scenarioPath,
+        QUIRKY_SDK_CONTRACT_REPORT_PATH: join(dir, 'report.json')
       }
     },
     {

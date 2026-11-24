@@ -448,7 +448,7 @@ describe('native chat workspace file drops', () => {
 
     const image = screen.getByText('/remote/repo/image.png')
     expect(image.getAttribute('data-connection-id')).toBe('ssh-1')
-    expect(screen.getByTestId('draft').textContent).toMatch(/^\[Image\]\(orca-image:[\w-]+\) $/)
+    expect(screen.getByTestId('draft').textContent).toMatch(/^\[Image\]\(quirky-image:[\w-]+\) $/)
   })
 
   it('supports PTY-owned and folder-workspace paths with the same ownership gate', () => {

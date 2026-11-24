@@ -31,7 +31,7 @@ describe('orchestration mailbox transport settlement', () => {
 
   it('durably reserves before transport and redrives a rejected write', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-transport-settlement-')
+    const db = createDatabase('quirky-mailbox-transport-settlement-')
     const first = createRuntime(db)
     const observedWrite = vi.fn((_ptyId: string, _data: string) => true)
     let settleWrite: ((settlement: WriteSettlement) => void) | undefined
@@ -76,7 +76,7 @@ describe('orchestration mailbox transport settlement', () => {
 
   it('preserves the reservation when a settled write throws after handing off bytes', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-throwing-settlement-')
+    const db = createDatabase('quirky-mailbox-throwing-settlement-')
     const first = createRuntime(db)
     const observedWrite = vi.fn((_ptyId: string, _data: string) => true)
     first.runtime.setPtyController({
@@ -111,7 +111,7 @@ describe('orchestration mailbox transport settlement', () => {
 
   it('does not replay Enter after its settlement is lost', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-mailbox-ambiguous-enter-')
+    const db = createDatabase('quirky-mailbox-ambiguous-enter-')
     const first = createRuntime(db)
     const observedWrite = vi.fn((_ptyId: string, _data: string) => true)
     first.runtime.setPtyController({

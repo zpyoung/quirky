@@ -18,7 +18,7 @@ import {
   type RuntimeEnvironmentCallRequest
 } from '@/runtime/runtime-compatibility-test-fixture'
 import { clearRuntimeCompatibilityCacheForTests } from '@/runtime/runtime-rpc-client'
-import { ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
+import { QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
 const mocks = vi.hoisted(() => ({
@@ -48,7 +48,7 @@ const openFile = openGuardedFile
 async function requestRestartSave(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT, {
+      new CustomEvent(QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT, {
         detail: { claim: () => undefined, resolve, reject: (m: string) => reject(new Error(m)) }
       })
     )

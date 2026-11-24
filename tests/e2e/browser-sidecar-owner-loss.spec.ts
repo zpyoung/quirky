@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getRuntimeMetadataPath } from '../../src/shared/runtime-bootstrap'
-import { expect, test } from './helpers/orca-app'
-import { launchOwnedBrowserForE2E } from './helpers/orca-restart'
+import { expect, test } from './helpers/quirky-app'
+import { launchOwnedBrowserForE2E } from './helpers/quirky-restart'
 import { cleanupE2EDaemons } from './helpers/electron-process-shutdown'
 
 test.use({ seedTestRepo: false })
@@ -11,7 +11,7 @@ test.use({ seedTestRepo: false })
 for (const early of [false, true]) {
   test(`hidden browser exits after owner loss ${early ? 'during startup' : 'after readiness'}`, async () => {
     const profile = mkdtempSync(
-      join(process.platform === 'win32' ? tmpdir() : '/tmp', 'orca-owner-')
+      join(process.platform === 'win32' ? tmpdir() : '/tmp', 'quirky-owner-')
     )
     const child = launchOwnedBrowserForE2E(profile)
     let stderr = ''

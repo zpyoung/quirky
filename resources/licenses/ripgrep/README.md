@@ -1,6 +1,6 @@
 # Bundled ripgrep notices
 
-Orca ships prebuilt ripgrep (`rg`) binaries from `@vscode/ripgrep-universal` under
+Quirky ships prebuilt ripgrep (`rg`) binaries from `@vscode/ripgrep-universal` under
 `Resources/ripgrep/` and in the standalone runtime's `ripgrep/` directory,
 for local, WSL, and SSH-remote search.
 

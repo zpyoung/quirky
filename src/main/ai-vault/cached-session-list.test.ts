@@ -84,7 +84,7 @@ describe('listAiVaultSessions symlinked scope', () => {
   beforeEach(async () => {
     resetAiVaultSessionListCacheForTests()
     scanAiVaultSessionsInService.mockReset()
-    root = await realpath(await mkdtemp(join(tmpdir(), 'orca-cached-scope-')))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-cached-scope-')))
   })
   afterEach(async () => {
     resetAiVaultSessionListCacheForTests()

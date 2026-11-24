@@ -37,7 +37,7 @@ it('gives a WSL host owner to this desktop, for that distro, with a stable ident
   const environments = [
     {
       id: 'wsl:Ubuntu',
-      orcadDeployment: {
+      quirkydDeployment: {
         kind: 'wsl',
         distro: 'Ubuntu',
         localPort: 41000,
@@ -45,7 +45,7 @@ it('gives a WSL host owner to this desktop, for that distro, with a stable ident
       }
     }
   ]
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the account owner reads only id and orcadDeployment.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the account owner reads only id and quirkydDeployment.
   useAppStore.setState({ runtimeEnvironments: environments as never })
   const fallback = {
     kind: 'environment',

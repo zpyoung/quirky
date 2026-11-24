@@ -71,19 +71,19 @@ describe('acquireSingleInstanceLock', () => {
 
     const [registered] = fake.listeners['second-instance'] ?? []
     expect(registered).toBeDefined()
-    registered?.({}, ['/opt/orca/orca-linux.AppImage', '--serve'], '/home/orca')
+    registered?.({}, ['/opt/quirky/quirky-linux.AppImage', '--serve'], '/home/quirky')
 
     expect(onSecondInstance).toHaveBeenCalledTimes(1)
-    expect(onSecondInstance).toHaveBeenCalledWith(['/opt/orca/orca-linux.AppImage', '--serve'])
+    expect(onSecondInstance).toHaveBeenCalledWith(['/opt/quirky/quirky-linux.AppImage', '--serve'])
   })
 })
 
 describe('shouldActivateDesktopForSecondInstance', () => {
   it('ignores a duplicate serve launch but still activates for a desktop launch', () => {
-    // Why: a supervisor respawning `orca serve` must not open a window on a display-less host (#11935).
-    const serveArgv = ['/opt/orca/orca-linux.AppImage', '--serve']
+    // Why: a supervisor respawning `quirky serve` must not open a window on a display-less host (#11935).
+    const serveArgv = ['/opt/quirky/quirky-linux.AppImage', '--serve']
     expect(shouldActivateDesktopForSecondInstance(serveArgv)).toBe(false)
-    expect(shouldActivateDesktopForSecondInstance(['/Applications/Orca.app/orca'])).toBe(true)
+    expect(shouldActivateDesktopForSecondInstance(['/Applications/Quirky.app/quirky'])).toBe(true)
   })
 
   it('ignores a duplicate CLI-form serve launch the CLI redirect never rewrote', () => {
@@ -91,7 +91,7 @@ describe('shouldActivateDesktopForSecondInstance', () => {
     // start reaches Electron in that shape, so a flag-only check would open a window on the live server.
     expect(
       shouldActivateDesktopForSecondInstance([
-        '/opt/orca/squashfs-root/orca-ide',
+        '/opt/quirky/squashfs-root/quirky-ide',
         'serve',
         '--port',
         '6768',
@@ -101,7 +101,7 @@ describe('shouldActivateDesktopForSecondInstance', () => {
     ).toBe(false)
     // A path argument that merely contains `serve` is still a desktop launch.
     expect(
-      shouldActivateDesktopForSecondInstance(['/opt/orca/orca-ide', '/home/u/serve-repo'])
+      shouldActivateDesktopForSecondInstance(['/opt/quirky/quirky-ide', '/home/u/serve-repo'])
     ).toBe(true)
   })
 
@@ -118,7 +118,7 @@ describe('SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE', () => {
 })
 
 describe('shouldSkipSingleInstanceLock', () => {
-  const E2E = { ORCA_E2E_USER_DATA_DIR: '/tmp/orca-e2e-userdata-1' }
+  const E2E = { QUIRKY_E2E_USER_DATA_DIR: '/tmp/quirky-e2e-userdata-1' }
 
   it('takes the lock for dev desktop, packaged and serve launches alike', () => {
     expect(shouldSkipSingleInstanceLock({ isDev: true, isServeMode: false, env: {} })).toBe(false)
@@ -134,7 +134,7 @@ describe('shouldSkipSingleInstanceLock', () => {
       shouldSkipSingleInstanceLock({
         isDev: true,
         isServeMode: false,
-        env: { ...E2E, ORCA_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1' }
+        env: { ...E2E, QUIRKY_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1' }
       })
     ).toBe(false)
   })
@@ -152,7 +152,7 @@ describe('logSingleInstanceLockFailure', () => {
 
   it('tells a second dev launch which profile is taken and how to run another copy', () => {
     const write = vi.fn()
-    const userDataPath = '/Users/dev/Library/Application Support/orca-dev'
+    const userDataPath = '/Users/dev/Library/Application Support/quirky-dev'
 
     logSingleInstanceLockFailure({ isDevDesktop: true, userDataPath }, write)
 
@@ -161,7 +161,7 @@ describe('logSingleInstanceLockFailure', () => {
     expect(line).toBe(`${singleInstanceLockFailureMessage({ isDevDesktop: true, userDataPath })}\n`)
     expect(line.trimEnd()).not.toContain('\n')
     expect(line).toContain(`the profile at ${userDataPath}`)
-    expect(line).toContain('ORCA_DEV_USER_DATA_PATH=')
+    expect(line).toContain('QUIRKY_DEV_USER_DATA_PATH=')
     // A background or serve instance shows no window, so the line claims none.
     expect(line).not.toMatch(/focus|window/i)
   })
@@ -171,7 +171,7 @@ describe('shouldBypassSingleInstanceLock', () => {
   it('allows the hidden diagnostic bypass only for packaged macOS app launches', () => {
     expect(
       shouldBypassSingleInstanceLock({
-        env: { ORCA_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
+        env: { QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
         isDev: false,
         isServeMode: false,
         platform: 'darwin'
@@ -179,7 +179,7 @@ describe('shouldBypassSingleInstanceLock', () => {
     ).toBe(true)
     expect(
       shouldBypassSingleInstanceLock({
-        env: { ORCA_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
+        env: { QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
         isDev: true,
         isServeMode: false,
         platform: 'darwin'
@@ -187,7 +187,7 @@ describe('shouldBypassSingleInstanceLock', () => {
     ).toBe(false)
     expect(
       shouldBypassSingleInstanceLock({
-        env: { ORCA_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
+        env: { QUIRKY_BYPASS_SINGLE_INSTANCE_LOCK: '1' },
         isDev: false,
         isServeMode: false,
         platform: 'linux'

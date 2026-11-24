@@ -18,10 +18,10 @@ export type AgentSessionRefusalAction =
   /** Continue somewhere else: the current conversation, or a new chat. */
   | 'goElsewhere'
   | 'checkChat'
-  | 'updateOrca'
+  | 'updateQuirky'
   /** What the write was for is over: the question it answered moved on. */
   | 'nothingLeft'
-  /** Orca's own state or fault; nothing the person does gets past it. */
+  /** Quirky's own state or fault; nothing the person does gets past it. */
   | 'hostFinding'
 
 export type AgentSessionRefusalReasonWords =
@@ -167,7 +167,7 @@ const REASON_WORDS = {
     handoffInFlight: codeWords('retry')
   },
   agent_session_operation_expired: { operationExpired: codeWords('retry') },
-  agent_session_operation_capacity: { operationCapacity: codeWords('updateOrca') },
+  agent_session_operation_capacity: { operationCapacity: codeWords('updateQuirky') },
   agent_session_operation_unknown: {
     outcomeUnknown: codeWords('checkChat'),
     resultLost: codeWords('checkChat'),
@@ -181,16 +181,16 @@ const REASON_WORDS = {
     journalCorrupt: causeWords('historyUnusable', 'hostFinding'),
     // Says its step despite 'retry' unless a Retry stands beside it: the phone often has none.
     journalUnavailable: causeWords('historyUnavailable', 'retry', 'tryAgain'),
-    // A write meets it on a newer Orca's database, or from an older host keeping the chat
+    // A write meets it on a newer Quirky's database, or from an older host keeping the chat
     // read-only; a read meets it on this one chat, which only an update opens.
-    journalWrittenByNewerOrca: {
-      ...causeWords('savedByNewerOrca', 'updateOrca', 'updateOrcaToKeepUsing'),
-      history: { cause: 'chatSavedByNewerOrca', step: 'updateOrcaToOpenChat' }
+    journalWrittenByNewerQuirky: {
+      ...causeWords('savedByNewerQuirky', 'updateQuirky', 'updateQuirkyToKeepUsing'),
+      history: { cause: 'chatSavedByNewerQuirky', step: 'updateQuirkyToOpenChat' }
     }
   },
   // Mostly thrown as an RPC error; `hostUnsupported` is also returned and recorded. The code's own
   // words ask for an update, which only a method the host doesn't know proves; no reason here means
-  // an older Orca. An unsupported location or agent, or no chat host, is not fixed by updating, and
+  // an older Quirky. An unsupported location or agent, or no chat host, is not fixed by updating, and
   // a client missing the capability words this with its own older copy. Only `hostUnsupported`
   // names its cause: this agent or location can't run as a chat.
   structured_agent_session_unsupported: {

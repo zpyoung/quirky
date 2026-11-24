@@ -1,5 +1,5 @@
 /**
- * The two headless `orca serve` hosts the layout oracle drives with no window: orcad (plain Node)
+ * The two headless `quirky serve` hosts the layout oracle drives with no window: quirkyd (plain Node)
  * and Electron serve. Both keep their pairing port across restarts so paired clients and the
  * oracle's layout stream reconnect.
  */
@@ -9,14 +9,14 @@ import { createServer, type AddressInfo } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { RuntimeClient } from '../../../src/cli/runtime/client'
-import { resolveBundledOrcadRuntime } from '../../../src/main/orcad/orcad-bundled-runtime'
-import { runProcess } from '@orca/process-host'
+import { resolveBundledQuirkydRuntime } from '../../../src/main/quirkyd/quirkyd-bundled-runtime'
+import { runProcess } from '@quirky/process-host'
 import { NODE_RUNTIME_PIN } from '../../../src/shared/node-runtime-pin'
 import { cleanupE2EDaemons } from './electron-process-shutdown'
 import { launchHeadlessPairedRuntimeHost } from './headless-paired-runtime-host'
-import { cliServeProfile, spawnUntilReady, type ReadyProcess } from './orca-serve-cli-host'
+import { cliServeProfile, spawnUntilReady, type ReadyProcess } from './quirky-serve-cli-host'
 
-export type HeadlessHostKind = 'orcad' | 'electron'
+export type HeadlessHostKind = 'quirkyd' | 'electron'
 
 type RestartOptions = { cold?: boolean; whileStopped?: () => void | Promise<void> }
 
@@ -36,15 +36,15 @@ export type HeadlessOracleHost = {
   dispose: () => Promise<void>
 }
 
-const ORCAD_SLOT = path.resolve('out/orcad')
+const QUIRKYD_SLOT = path.resolve('out/quirkyd')
 const PROFILE_REMOVAL = { recursive: true, force: true, maxRetries: 50, retryDelay: 100 }
 
-/** The pinned Node an unpackaged `out/orcad` runs on (its natives are built for it). */
-export function orcadNodeExecutable(): string | null {
-  if (!existsSync(path.join(ORCAD_SLOT, 'orcad.js'))) {
+/** The pinned Node an unpackaged `out/quirkyd` runs on (its natives are built for it). */
+export function quirkydNodeExecutable(): string | null {
+  if (!existsSync(path.join(QUIRKYD_SLOT, 'quirkyd.js'))) {
     return null
   }
-  const packaged = resolveBundledOrcadRuntime(ORCAD_SLOT)
+  const packaged = resolveBundledQuirkydRuntime(QUIRKYD_SLOT)
   if (packaged) {
     return packaged
   }
@@ -68,7 +68,7 @@ async function reserveLoopbackPort(): Promise<number> {
   return port
 }
 
-function parseOrcadReadiness(stdout: string): { pairingUrl: string; daemon: string } | null {
+function parseQuirkydReadiness(stdout: string): { pairingUrl: string; daemon: string } | null {
   const newline = stdout.indexOf('\n')
   if (newline === -1) {
     return null
@@ -86,16 +86,16 @@ function parseOrcadReadiness(stdout: string): { pairingUrl: string; daemon: stri
 
 type StartedHost = Omit<HeadlessOracleHost, 'cleanups'>
 
-async function startOrcadHost(scratch: string, node: string): Promise<StartedHost> {
+async function startQuirkydHost(scratch: string, node: string): Promise<StartedHost> {
   const profile = cliServeProfile(scratch)
   const port = await reserveLoopbackPort()
-  const env = { ...profile.env, ORCA_USER_DATA: profile.userDataDir }
+  const env = { ...profile.env, QUIRKY_USER_DATA: profile.userDataDir }
   const launch = (): Promise<ReadyProcess<{ pairingUrl: string; daemon: string }>> =>
     spawnUntilReady({
-      label: 'orcad serve',
+      label: 'quirkyd serve',
       program: node,
       args: [
-        path.join(ORCAD_SLOT, 'orcad.js'),
+        path.join(QUIRKYD_SLOT, 'quirkyd.js'),
         '--bind',
         '127.0.0.1',
         '--port',
@@ -104,21 +104,21 @@ async function startOrcadHost(scratch: string, node: string): Promise<StartedHos
       ],
       env,
       timeoutMs: 120_000,
-      parseReady: parseOrcadReadiness
+      parseReady: parseQuirkydReadiness
     })
   let serve: ReadyProcess<{ pairingUrl: string; daemon: string }> | null = await launch()
   if (!serve.ready.pairingUrl || !serve.ready.daemon.includes('"live"')) {
     await serve.stop()
     await cleanupE2EDaemons(profile.userDataDir)
-    throw new Error(`orcad serve is not usable: ${serve.ready.daemon}\n${serve.stderr()}`)
+    throw new Error(`quirkyd serve is not usable: ${serve.ready.daemon}\n${serve.stderr()}`)
   }
   return {
-    kind: 'orcad',
+    kind: 'quirkyd',
     userDataDir: profile.userDataDir,
     scratch,
     pairingUrl: serve.ready.pairingUrl,
     restart: async ({ cold, whileStopped } = {}) => {
-      // SIGTERM is orcad's graceful stop and leaves the PTY daemon running.
+      // SIGTERM is quirkyd's graceful stop and leaves the PTY daemon running.
       await serve?.stop()
       serve = null
       if (cold) {
@@ -168,7 +168,7 @@ function profileParent(): string {
   if (process.platform === 'win32' || tmp.length <= 32) {
     return tmp
   }
-  const parent = path.join(os.homedir(), '.orca-lo')
+  const parent = path.join(os.homedir(), '.quirky-lo')
   mkdirSync(parent, { recursive: true })
   return parent
 }
@@ -176,11 +176,11 @@ function profileParent(): string {
 export async function startHeadlessOracleHost(kind: HeadlessHostKind): Promise<HeadlessOracleHost> {
   const scratch = mkdtempSync(path.join(profileParent(), 'lo-'))
   try {
-    const node = kind === 'orcad' ? orcadNodeExecutable() : null
-    if (kind === 'orcad' && !node) {
-      throw new Error('out/orcad or its pinned Node is missing (pnpm build:orcad)')
+    const node = kind === 'quirkyd' ? quirkydNodeExecutable() : null
+    if (kind === 'quirkyd' && !node) {
+      throw new Error('out/quirkyd or its pinned Node is missing (pnpm build:quirkyd)')
     }
-    const started = node ? await startOrcadHost(scratch, node) : await startElectronHost(scratch)
+    const started = node ? await startQuirkydHost(scratch, node) : await startElectronHost(scratch)
     const cleanups: (() => void)[] = []
     return {
       ...started,

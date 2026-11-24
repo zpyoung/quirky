@@ -2,7 +2,7 @@ import { getStoredRepoSshConnectionId } from '../../repo-execution-host'
 import { ipcMain } from 'electron'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { isFolderRepo } from '../../../shared/repo-kind'
-import { hasHooksFile, loadHooks, hasUnrecognizedOrcaYamlKeys } from '../../hooks'
+import { hasHooksFile, loadHooks, hasUnrecognizedQuirkyYamlKeys } from '../../hooks'
 import { resolveRepoForExecutionHost } from '../worktrees/repo-host-ownership'
 import type { WorktreeIpcContext } from '../worktrees/worktree-ipc-context'
 
@@ -39,8 +39,8 @@ export function registerWorktreeHookCheckHandler(context: WorktreeIpcContext): v
 
       const has = hasHooksFile(repo.path)
       const hooks = has ? loadHooks(repo.path) : null
-      // Why: unrecognised top-level keys mean the file is well-formed but from a newer Orca; suggest updating rather than "could not be parsed".
-      const mayNeedUpdate = has && !hooks && hasUnrecognizedOrcaYamlKeys(repo.path)
+      // Why: unrecognised top-level keys mean the file is well-formed but from a newer Quirky; suggest updating rather than "could not be parsed".
+      const mayNeedUpdate = has && !hooks && hasUnrecognizedQuirkyYamlKeys(repo.path)
       return {
         status: 'ok',
         hasHooks: has,

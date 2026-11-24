@@ -87,7 +87,7 @@ export async function writeToolHeavyCorpus(args: {
   seed?: number
 }): Promise<ToolHeavyCorpus> {
   const random = mulberry32(args.seed ?? 11)
-  const root = await mkdtemp(join(tmpdir(), 'orca-search-convfts-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-search-convfts-'))
   const files: string[] = []
   const proseWordsPerTurn = 160
   // Tool and prose words are not the same length, so the share is over bytes.

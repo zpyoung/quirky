@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 function selectPlan(home: string, site: 'zai' | 'bigmodel'): void {
@@ -29,10 +29,10 @@ function selectPlan(home: string, site: 'zai' | 'bigmodel'): void {
 }
 
 test('Accounts recognizes the selected CLI plan and preserves a separately saved quota key', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
+  await waitForSessionReady(quirkyPage)
   const home = await electronApp.evaluate(({ app }) => app.getPath('home'))
   await electronApp.evaluate(() => {
     const realFetch = globalThis.fetch
@@ -53,18 +53,18 @@ test('Accounts recognizes the selected CLI plan and preserves a separately saved
       return realFetch(input, init)
     }
   })
-  await orcaPage.evaluate(() => {
+  await quirkyPage.evaluate(() => {
     const state = window.__store?.getState()
     state?.openSettingsPage()
     state?.openSettingsTarget({ pane: 'accounts', repoId: null, sectionId: 'accounts-zcode' })
   })
-  const section = orcaPage.locator('#accounts-zcode')
+  const section = quirkyPage.locator('#accounts-zcode')
   await expect(section).toBeVisible({ timeout: 30_000 })
   await expect(section.getByText('No GLM Coding Plan linked', { exact: true })).toBeVisible()
   await section.screenshot({ path: testInfo.outputPath('01-no-cli-plan.png') })
 
   selectPlan(home, 'zai')
-  await orcaPage.evaluate(() => window.__store?.getState().refreshRateLimits())
+  await quirkyPage.evaluate(() => window.__store?.getState().refreshRateLimits())
   await expect(section.getByText('Using the ZCode CLI sign-in', { exact: true })).toBeVisible({
     timeout: 30_000
   })
@@ -72,7 +72,7 @@ test('Accounts recognizes the selected CLI plan and preserves a separately saved
   await section.screenshot({ path: testInfo.outputPath('02-cli-plan.png') })
 
   selectPlan(home, 'bigmodel')
-  await orcaPage.evaluate(() => window.__store?.getState().refreshRateLimits())
+  await quirkyPage.evaluate(() => window.__store?.getState().refreshRateLimits())
   await expect(section.getByText('67%', { exact: true })).toBeVisible({ timeout: 30_000 })
   await expect(section.getByText('12%', { exact: true })).toHaveCount(0)
   await section.screenshot({ path: testInfo.outputPath('03-selected-account.png') })
@@ -81,7 +81,7 @@ test('Accounts recognizes the selected CLI plan and preserves a separately saved
   await section.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(section.getByText(/API key saved ·/)).toBeVisible({ timeout: 15_000 })
   await expect(section.getByText('33%', { exact: true })).toBeVisible({ timeout: 30_000 })
-  const savedPath = path.join(home, '.orca', 'zcode-plan-api-key.enc')
+  const savedPath = path.join(home, '.quirky', 'zcode-plan-api-key.enc')
   expect(existsSync(savedPath)).toBe(true)
   await section.screenshot({ path: testInfo.outputPath('04-saved-key-priority.png') })
   await section.getByRole('button', { name: 'Forget key', exact: true }).click()

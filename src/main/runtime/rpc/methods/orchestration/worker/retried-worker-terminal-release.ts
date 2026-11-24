@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { isStructuredWorkerHandle } from '../../../../../../shared/structured-worker-handle'
 import { completeWorkerTerminalRelease } from './worker-release-completion'
@@ -12,7 +12,7 @@ import { completeWorkerTerminalRelease } from './worker-release-completion'
  * Cleanup only: the retry neither waits on it nor fails because of it.
  */
 export function releaseRetriedWorkerTerminal(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   db: OrchestrationDb,
   start: { retryOf?: string; terminal?: string }
 ): void {

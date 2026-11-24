@@ -9,7 +9,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { LoadedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-load-types'
 import type { PublishedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-published'
 import {
@@ -85,7 +85,7 @@ export class WorkspaceLayoutStream {
   /** The last change frame's position; never reset, so a reply's position outlives resubscribes. */
   private seq = 0
   /** Names this stream for the process's life: a reader seeing another one missed frames. */
-  private readonly epoch = ORCA_LAYOUT_OWNER_IS_MAIN ? randomUUID() : undefined
+  private readonly epoch = QUIRKY_LAYOUT_OWNER_IS_MAIN ? randomUUID() : undefined
 
   constructor(
     private readonly deps: {
@@ -186,7 +186,7 @@ export class WorkspaceLayoutStream {
       const store = this.deps.store()
       const stopWrites = store?.onWorkspaceSessionWritten?.((hostId) => this.markDirty(hostId))
       // Switch point: a window-owned build publishes when the writes' task ends, as before.
-      const stopOperations = ORCA_LAYOUT_OWNER_IS_MAIN
+      const stopOperations = QUIRKY_LAYOUT_OWNER_IS_MAIN
         ? store?.onWorkspaceSessionOperationEnded?.(() => this.flush())
         : undefined
       this.stopWatching =
@@ -281,7 +281,7 @@ export class WorkspaceLayoutStream {
     for (const [key, { layout, json }] of next) {
       const titles = this.liveTitlesOf(layout)
       // Switch point: a pane's start status is live state, laid over as its title is.
-      const starts = ORCA_LAYOUT_OWNER_IS_MAIN ? paneStartFactsOf(layout, this.deps) : null
+      const starts = QUIRKY_LAYOUT_OWNER_IS_MAIN ? paneStartFactsOf(layout, this.deps) : null
       const liveTitles = JSON.stringify(starts ? [titles, starts] : titles)
       const previous = before.get(key)
       if (previous?.json === json && previous.liveTitles === liveTitles) {
@@ -295,7 +295,7 @@ export class WorkspaceLayoutStream {
     }
     this.shown = shown
     // Switch point: a window-owned build sends each workspace whole, one frame each.
-    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !this.epoch) {
+    if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !this.epoch) {
       this.deliverEach([
         ...removed.map((key): WorkspaceLayoutEvent => ({ type: 'removed', key })),
         ...changed.map((key): WorkspaceLayoutEvent => ({
@@ -341,7 +341,7 @@ export class WorkspaceLayoutStream {
     const fresh = new Map<string, PublishedWorkspaceLayout>()
     for (const [key, { layout }] of this.projection.projectFresh()) {
       const titled = withLiveTitles(layout, this.liveTitlesOf(layout))
-      const starts = ORCA_LAYOUT_OWNER_IS_MAIN ? paneStartFactsOf(layout, this.deps) : null
+      const starts = QUIRKY_LAYOUT_OWNER_IS_MAIN ? paneStartFactsOf(layout, this.deps) : null
       fresh.set(key, starts ? withPaneStartFacts(titled, starts) : titled)
     }
     return fresh

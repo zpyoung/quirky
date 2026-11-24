@@ -1,5 +1,5 @@
 // Real children (plain Node, never an agent CLI) behind the real connection. One stops talking
-// mid-turn by closing its stdout while the process keeps running: nothing exited and Orca can still
+// mid-turn by closing its stdout while the process keeps running: nothing exited and Quirky can still
 // write to it, so, as in the common pattern, the turn runs on until a Stop or close ends the agent.
 // The other exits while a process it started still holds its stdout open: the exit alone ends it.
 
@@ -27,7 +27,7 @@ afterEach(async () => {
 // Answers the handshake and echoes one reply chunk for the prompt, then runs `onPrompt`.
 const agentScript = (onPrompt: string): string => String.raw`
   const fs = require('node:fs')
-  fs.writeFileSync(process.env.ORCA_TEST_PID_FILE, String(process.pid))
+  fs.writeFileSync(process.env.QUIRKY_TEST_PID_FILE, String(process.pid))
   const send = (frame) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...frame }) + '\n')
   let buffered = ''
   process.stdin.setEncoding('utf8').on('data', (chunk) => {
@@ -39,7 +39,7 @@ const agentScript = (onPrompt: string): string => String.raw`
       if (frame.method === 'initialize') {
         send({ id: frame.id, result: { protocolVersion: 1, agentCapabilities: {} } })
       } else if (frame.method === 'session/new') {
-        send({ id: frame.id, result: JSON.parse(process.env.ORCA_TEST_SESSION) })
+        send({ id: frame.id, result: JSON.parse(process.env.QUIRKY_TEST_SESSION) })
       } else if (frame.method === '_x.ai/subagent/cancel') {
         send({ id: frame.id, error: {
           code: -32602, message: 'Invalid params', data: 'invalid params: missing field \`subagentId\`'
@@ -70,7 +70,7 @@ const EXITS_HOLDING_STDOUT = agentScript(String.raw`
     ['-e', 'setInterval(() => {}, 60000)'],
     { stdio: ['ignore', 'inherit', 'ignore'] }
   )
-  fs.writeFileSync(process.env.ORCA_TEST_PID_FILE + '.held', String(held.pid))
+  fs.writeFileSync(process.env.QUIRKY_TEST_PID_FILE + '.held', String(held.pid))
   process.exit(3)
 `)
 
@@ -84,8 +84,8 @@ function alive(pid: number): boolean {
 }
 
 describe('ACP agent that closes its stdout but keeps running', () => {
-  it('leaves the turn running and the agent alive until Orca closes it', async () => {
-    const pidFile = join(mkdtempSync(join(tmpdir(), 'orca-acp-broken-stream-')), 'pid')
+  it('leaves the turn running and the agent alive until Quirky closes it', async () => {
+    const pidFile = join(mkdtempSync(join(tmpdir(), 'quirky-acp-broken-stream-')), 'pid')
     const rig = await openAcpAdapterRig({
       deps: {
         stopGraceMs: 20,
@@ -96,8 +96,8 @@ describe('ACP agent that closes its stdout but keeps running', () => {
               args: ['-e', CLOSES_STDOUT_MID_TURN],
               cwd: process.cwd(),
               env: {
-                ORCA_TEST_PID_FILE: pidFile,
-                ORCA_TEST_SESSION: JSON.stringify({
+                QUIRKY_TEST_PID_FILE: pidFile,
+                QUIRKY_TEST_SESSION: JSON.stringify({
                   sessionId: PROVIDER_SESSION,
                   configOptions: GROK_CONFIG_OPTIONS
                 })
@@ -132,7 +132,7 @@ describe('ACP agent that closes its stdout but keeps running', () => {
 
 describe('ACP agent that exits while a process it started holds its stdout open', () => {
   it('ends the session at the exit, with the turn interrupted', async () => {
-    const pidFile = join(mkdtempSync(join(tmpdir(), 'orca-acp-held-stdout-')), 'pid')
+    const pidFile = join(mkdtempSync(join(tmpdir(), 'quirky-acp-held-stdout-')), 'pid')
     const rig = await openAcpAdapterRig({
       deps: {
         connect: (_launch, options) =>
@@ -142,8 +142,8 @@ describe('ACP agent that exits while a process it started holds its stdout open'
               args: ['-e', EXITS_HOLDING_STDOUT],
               cwd: process.cwd(),
               env: {
-                ORCA_TEST_PID_FILE: pidFile,
-                ORCA_TEST_SESSION: JSON.stringify({
+                QUIRKY_TEST_PID_FILE: pidFile,
+                QUIRKY_TEST_SESSION: JSON.stringify({
                   sessionId: PROVIDER_SESSION,
                   configOptions: GROK_CONFIG_OPTIONS
                 })

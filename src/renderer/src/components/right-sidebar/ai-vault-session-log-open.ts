@@ -6,7 +6,7 @@ import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { translate } from '@/i18n/i18n'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
-import { canOpenAiVaultSessionLogInOrca } from './ai-vault-session-path-actions'
+import { canOpenAiVaultSessionLogInQuirky } from './ai-vault-session-path-actions'
 
 type AiVaultLogSession = Pick<AiVaultSession, 'filePath' | 'executionHostId'>
 
@@ -37,16 +37,16 @@ function focusEditorContent(): void {
 }
 
 /**
- * Open a local AI Vault session log inside Orca as a permanent, read-only editor
+ * Open a local AI Vault session log inside Quirky as a permanent, read-only editor
  * tab (or activate an existing tab without reducing its authority). Reuses
- * Orca's external-file `openFile` pipeline; it never grants write capability by
+ * Quirky's external-file `openFile` pipeline; it never grants write capability by
  * itself and never redirects the open to a remote host.
  */
-export async function openAiVaultSessionLogInOrca(session: AiVaultLogSession): Promise<void> {
+export async function openAiVaultSessionLogInQuirky(session: AiVaultLogSession): Promise<void> {
   const filePath = session.filePath?.trim()
   // Defensive: UI availability should already withhold blank/remote/synthetic
   // paths. Bail silently rather than toast — there is no user-actionable error.
-  if (!filePath || !canOpenAiVaultSessionLogInOrca(session)) {
+  if (!filePath || !canOpenAiVaultSessionLogInQuirky(session)) {
     return
   }
   const state = useAppStore.getState()

@@ -12,7 +12,7 @@ const bashAvailable = existsSync('/bin/bash')
 /** Sources the omp wrapper from a startup file that already aliased `omp`, then
  *  asserts the file parsed to its end and the alias still reaches the binary. */
 function expectAliasedOmpNameSurvives(shell: string, enableAliases: string): void {
-  const root = mkdtempSync(join(tmpdir(), 'orca-omp-alias-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-omp-alias-'))
   roots.push(root)
   const bin = join(root, 'bin')
   mkdirSync(bin)
@@ -40,7 +40,7 @@ function expectAliasedOmpNameSurvives(shell: string, enableAliases: string): voi
       env: {
         ...process.env,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ''}`,
-        ORCA_OMP_STATUS_EXTENSION: extension
+        QUIRKY_OMP_STATUS_EXTENSION: extension
       }
     }
   )
@@ -58,7 +58,7 @@ afterEach(() => {
 
 // Why: a user alias named omp used to expand into the wrapper's own `omp()`
 // header, and the shell abandons the rest of the startup file at that syntax
-// error — taking every hook Orca defines below the wrapper with it.
+// error — taking every hook Quirky defines below the wrapper with it.
 describe.skipIf(process.platform === 'win32')('omp wrapper under a user alias named omp', () => {
   it.skipIf(!bashAvailable)('keeps a user alias named omp working in bash', () => {
     expectAliasedOmpNameSurvives('/bin/bash', 'shopt -s expand_aliases')
@@ -71,7 +71,7 @@ describe.skipIf(process.platform === 'win32')('omp wrapper under a user alias na
 
 describe.skipIf(process.platform === 'win32' || !zshAvailable)('OMP wrapper global aliases', () => {
   it.each(['--help', '-v', 'models'])('parses with hostile global alias %s', (token) => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-omp-global-alias-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-omp-global-alias-'))
     roots.push(root)
     const startup = join(root, 'startup.zsh')
     writeFileSync(
@@ -79,7 +79,7 @@ describe.skipIf(process.platform === 'win32' || !zshAvailable)('OMP wrapper glob
       [
         `alias -g -- ${token}='${token} 2>&1 | cat'`,
         getPosixOmpShellWrapper(),
-        `if ! __orca_omp_should_skip_extension '${token}'; then exit 1; fi`,
+        `if ! __quirky_omp_should_skip_extension '${token}'; then exit 1; fi`,
         'printf "parsed\\n"',
         `alias -g -- '${token}'`
       ].join('\n')

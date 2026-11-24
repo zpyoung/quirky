@@ -12,7 +12,7 @@ afterEach(() => {
 })
 
 function writeFixture(contents: string): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-reverse-scan-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-reverse-scan-'))
   roots.push(root)
   const file = join(root, 'transcript.jsonl')
   writeFileSync(file, contents)

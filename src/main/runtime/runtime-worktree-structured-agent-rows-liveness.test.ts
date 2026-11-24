@@ -46,7 +46,7 @@ const journals = createTrackedJournalOpener()
 
 beforeEach(async () => {
   _internals.resetCachesForTests()
-  root = await mkdtemp(join(tmpdir(), 'orca-structured-ps-liveness-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-structured-ps-liveness-'))
 })
 
 afterEach(async () => {

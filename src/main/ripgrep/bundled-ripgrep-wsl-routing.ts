@@ -10,7 +10,7 @@ export type BundledRipgrepWslRouting = {
 const WINDOWS_DRIVE_PATH = /^[A-Za-z]:[\\/]/
 
 /**
- * Where Orca's ripgrep runs for a local workspace root, given the distro the project's git runs in.
+ * Where Quirky's ripgrep runs for a local workspace root, given the distro the project's git runs in.
  *
  * Why a Windows drive root stays on the host even under a WSL project runtime: rg only reads files,
  * so unlike git there is no index whose stat cache two writers would invalidate, and the host reads

@@ -1,7 +1,7 @@
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import type { DescendantSnapshot } from '../pty-descendant-termination'
 import { spawnManagedProviderProcess } from './managed-provider-process'
 

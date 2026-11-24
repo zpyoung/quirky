@@ -4,7 +4,7 @@
  * `wsl-move-dispositions.test.ts` censuses the untyped ones (localStorage modules, SQLite tables),
  * so a new field cannot ship without a decision. UI, storage and out-of-store tables live in the
  * sibling `wsl-move-*-dispositions.ts` files. `item` numbers are the inventory rows in the
- * mover design (docs/design/wsl-via-orcad-lossless-mover.md, section 2).
+ * mover design (docs/design/wsl-via-quirkyd-lossless-mover.md, section 2).
  */
 import type { PersistedState } from '../persisted-state-types'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
@@ -91,9 +91,9 @@ export const PERSISTED_STATE_DISPOSITIONS = {
   automationRuns: moveDisposition(19, {
     note: 'An in-flight run in scope blocks the move.'
   }),
-  orcadMigrationImportReceipts: notApplicableDisposition(67, 'Mover-owned.'),
-  orcadMigrationEvictedReceipts: notApplicableDisposition(67, 'Mover-owned.'),
-  orcadMigrationStagedCatalogs: notApplicableDisposition(68, 'Mover-owned.'),
+  quirkydMigrationImportReceipts: notApplicableDisposition(67, 'Mover-owned.'),
+  quirkydMigrationEvictedReceipts: notApplicableDisposition(67, 'Mover-owned.'),
+  quirkydMigrationStagedCatalogs: notApplicableDisposition(68, 'Mover-owned.'),
   onboarding: notApplicableDisposition(62),
   featureInteractionTelemetryBuckets: notApplicableDisposition(62),
   codexResetCreditAttemptLedger: notApplicableDisposition(62),

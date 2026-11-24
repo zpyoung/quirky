@@ -22,7 +22,7 @@ function group(overrides: Partial<SkillFreshnessGroupModel> = {}): SkillFreshnes
   return {
     name: 'computer-use',
     status: 'update-available',
-    orcaOwned: false,
+    quirkyOwned: false,
     lockSource: 'acme/agent-skills',
     locations: [
       {
@@ -62,14 +62,14 @@ describe('SkillUpdateRow', () => {
   it('labels a copy from another source quietly and names that source', async () => {
     await render(<SkillUpdateRow group={group()} state="available" />)
 
-    expect(container?.textContent).toContain('Not from Orca')
+    expect(container?.textContent).toContain('Not from Quirky')
     expect(container?.textContent).not.toContain('Update available')
     expect(tooltipText()).toBe(
-      'Installed from acme/agent-skills. Selecting it replaces it with Orca’s version.'
+      'Installed from acme/agent-skills. Selecting it replaces it with Quirky’s version.'
     )
     // Why: the source is only in the tooltip, so keyboard focus must be able to open it.
     const label = Array.from(container?.querySelectorAll('[tabindex="0"]') ?? []).find((node) =>
-      node.textContent?.includes('Not from Orca')
+      node.textContent?.includes('Not from Quirky')
     )
     expect(label).toBeDefined()
   })
@@ -78,20 +78,20 @@ describe('SkillUpdateRow', () => {
     await render(<SkillUpdateRow group={group({ lockSource: null })} state="available" />)
 
     expect(tooltipText()).toBe(
-      'No Orca install record for this copy. Selecting it replaces it with Orca’s version.'
+      'No Quirky install record for this copy. Selecting it replaces it with Quirky’s version.'
     )
   })
 
-  it('keeps the update badge for Orca’s own skill', async () => {
+  it('keeps the update badge for Quirky’s own skill', async () => {
     await render(
       <SkillUpdateRow
-        group={group({ name: 'orca-cli', orcaOwned: true, lockSource: 'zpyoung/quirky' })}
+        group={group({ name: 'quirky-cli', quirkyOwned: true, lockSource: 'zpyoung/quirky' })}
         state="available"
       />
     )
 
     expect(container?.textContent).toContain('Update available')
-    expect(container?.textContent).not.toContain('Not from Orca')
+    expect(container?.textContent).not.toContain('Not from Quirky')
   })
 
   it('renders a checkbox only while the user is choosing', async () => {

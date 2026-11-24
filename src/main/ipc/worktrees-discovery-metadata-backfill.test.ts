@@ -303,15 +303,15 @@ describe('registerWorktreeHandlers', () => {
   it('repairs legacy project ids when an SSH worktree lists from persisted metadata', async () => {
     const repo = {
       id: 'repo-ssh',
-      path: '/remote/orca',
-      displayName: 'orca',
+      path: '/remote/quirky',
+      displayName: 'quirky',
       badgeColor: '#000',
       addedAt: 0,
       connectionId: 'ssh-target-1'
     }
     store.getRepo.mockReturnValue(repo)
     store.getAllWorktreeMeta.mockReturnValue({
-      'repo-ssh::/remote/orca': makeWorktreeMeta({
+      'repo-ssh::/remote/quirky': makeWorktreeMeta({
         instanceId: 'existing-instance',
         projectId: 'repo:repo-ssh',
         hostId: 'ssh:ssh-target-1',
@@ -325,8 +325,8 @@ describe('registerWorktreeHandlers', () => {
         projectId: 'github:stablyai/orca',
         hostId: 'ssh:ssh-target-1',
         repoId: 'repo-ssh',
-        path: '/remote/orca',
-        displayName: 'orca',
+        path: '/remote/quirky',
+        displayName: 'quirky',
         setupState: 'ready',
         setupMethod: 'imported-existing-folder',
         createdAt: 0,
@@ -353,14 +353,14 @@ describe('registerWorktreeHandlers', () => {
 
     expect(listWorktreesMock).not.toHaveBeenCalled()
     expect(store.setWorktreeMeta).toHaveBeenCalledWith(
-      hostWorktreeTarget({ id: 'repo-ssh::/remote/orca', hostId: 'ssh:ssh-target-1' }),
+      hostWorktreeTarget({ id: 'repo-ssh::/remote/quirky', hostId: 'ssh:ssh-target-1' }),
       {
         projectId: 'github:stablyai/orca'
       }
     )
     expect(listed).toEqual([
       expect.objectContaining({
-        id: 'repo-ssh::/remote/orca',
+        id: 'repo-ssh::/remote/quirky',
         projectId: 'github:stablyai/orca',
         hostId: 'ssh:ssh-target-1',
         projectHostSetupId: 'repo-ssh',

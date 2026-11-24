@@ -13,13 +13,13 @@ describe('buildAgentContext', () => {
         ['worktree', 'delete']
       ],
       summary: 'Remove a worktree',
-      usage: 'orca worktree rm',
+      usage: 'quirky worktree rm',
       allowedFlags: ['worktree', 'force']
     },
     {
       path: ['agent-context'],
       summary: 'Print the schema',
-      usage: 'orca agent-context',
+      usage: 'quirky agent-context',
       allowedFlags: []
     }
   ]
@@ -63,7 +63,7 @@ describe('buildAgentContext', () => {
       {
         path: ['terminal', 'stop'],
         summary: 'Deprecated',
-        usage: 'orca terminal stop',
+        usage: 'quirky terminal stop',
         allowedFlags: [],
         hidden: true
       }
@@ -99,7 +99,7 @@ describe('agent-context over the live registry', () => {
     expect(agentContext?.flags).not.toContain('page')
   })
 
-  it('marks raw passthrough commands without synthesizing Orca flags', () => {
+  it('marks raw passthrough commands without synthesizing Quirky flags', () => {
     const schema = buildAgentContext(COMMAND_SPECS)
     const claudeTeams = schema.commands.find((command) => command.command === 'claude-teams')
     expect(claudeTeams?.argumentMode).toBe('passthrough')

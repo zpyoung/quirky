@@ -1,5 +1,5 @@
 /**
- * Reads the event-loop delay windows main or orcad append to their userData during e2e runs
+ * Reads the event-loop delay windows main or quirkyd append to their userData during e2e runs
  * (src/main/diagnostics/event-loop-delay-probe.ts) and summarizes a time range of them.
  */
 
@@ -36,7 +36,7 @@ function parseWindow(line: string): ReadWindow | null {
     typeof value.windowMs !== 'number' ||
     typeof value.p99 !== 'number' ||
     typeof value.max !== 'number' ||
-    (value.process !== 'main' && value.process !== 'orcad')
+    (value.process !== 'main' && value.process !== 'quirkyd')
   ) {
     return null
   }

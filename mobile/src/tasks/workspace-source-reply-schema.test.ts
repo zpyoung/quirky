@@ -227,7 +227,7 @@ describe('detected agent ids', () => {
   })
 })
 
-describe('the orca.yaml hooks require nothing', () => {
+describe('the quirky.yaml hooks require nothing', () => {
   it('reads the recorded reply for a repo with no setup script and no source', () => {
     expect(repoSetupHooksSchema.safeParse({ hooks: { scripts: {} } }).success).toBe(true)
   })

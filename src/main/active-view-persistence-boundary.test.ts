@@ -27,7 +27,7 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
 
 describe('active-view persistence boundary', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-active-view-boundary-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-active-view-boundary-'))
   })
 
   afterEach(async () => {
@@ -40,7 +40,7 @@ describe('active-view persistence boundary', () => {
     vi.useFakeTimers()
     vi.resetModules()
     const { Store } = await import('./persistence')
-    const dataFile = join(testState.dir, 'orca-data.json')
+    const dataFile = join(testState.dir, 'quirky-data.json')
     const store = createSqliteTestStore(Store, { dataFile })
     store.flush()
     const durableBefore = readPersistedStateJson(dataFile)

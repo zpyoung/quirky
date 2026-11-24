@@ -9,7 +9,7 @@ import { GROK, openAcpAdapterRig } from './acp-structured-adapter.test-support'
 afterEach(() => closeProviderTimelineRigs())
 
 it('gives each process its own temp folder, removed at exit, and clears an earlier run at the first start', async () => {
-  const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-acp-temp-'))
+  const dataDirectory = await mkdtemp(join(tmpdir(), 'quirky-acp-temp-'))
   const root = join(dataDirectory, 'acp-temp', 'grok')
   const leftover = join(root, 'run-earlier-host', 'bundle')
   await mkdir(leftover, { recursive: true })

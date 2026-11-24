@@ -1,5 +1,5 @@
 // Manual benchmark: how long removing a large checkout takes, and how slow a store-style write gets
-// meanwhile. Opt in (it builds ~100k files): ORCA_WORKTREE_REMOVAL_BENCH=1 ./node_modules/.bin/vitest \
+// meanwhile. Opt in (it builds ~100k files): QUIRKY_WORKTREE_REMOVAL_BENCH=1 ./node_modules/.bin/vitest \
 //   run --config config/vitest.config.ts src/main/git/worktree-removal-large-tree.bench.test.ts
 import { execFile } from 'node:child_process'
 import { appendFileSync, existsSync, statSync } from 'node:fs'
@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { removeWorktree } from './worktree'
 
 const execFileAsync = promisify(execFile)
-const describeBench = process.env.ORCA_WORKTREE_REMOVAL_BENCH ? describe : describe.skip
+const describeBench = process.env.QUIRKY_WORKTREE_REMOVAL_BENCH ? describe : describe.skip
 
 const FIXTURE_DIRECTORIES = 200
 const FIXTURE_FILES_PER_DIRECTORY = 500
@@ -29,7 +29,7 @@ describeBench('worktree removal on a large checkout', () => {
   }
 
   beforeAll(async () => {
-    scratchDir = await mkdtemp(join(tmpdir(), 'orca-worktree-removal-bench-'))
+    scratchDir = await mkdtemp(join(tmpdir(), 'quirky-worktree-removal-bench-'))
     repoPath = join(scratchDir, 'repo')
     worktreePath = join(scratchDir, 'workspaces', 'repo', 'bench')
     await mkdir(repoPath, { recursive: true })
@@ -127,8 +127,8 @@ describeBench('worktree removal on a large checkout', () => {
       ` storeDuring n=${duringMs.length} p50=${percentile(duringMs, 50).toFixed(1)}ms` +
       ` p90=${percentile(duringMs, 90).toFixed(1)}ms max=${Math.max(...duringMs).toFixed(1)}ms`
     console.log(line)
-    if (process.env.ORCA_WORKTREE_REMOVAL_BENCH_LOG) {
-      appendFileSync(process.env.ORCA_WORKTREE_REMOVAL_BENCH_LOG, `${line}\n`)
+    if (process.env.QUIRKY_WORKTREE_REMOVAL_BENCH_LOG) {
+      appendFileSync(process.env.QUIRKY_WORKTREE_REMOVAL_BENCH_LOG, `${line}\n`)
     }
     expect(existsSync(worktreePath)).toBe(false)
     const { stdout } = await execFileAsync('git', ['worktree', 'list'], { cwd: repoPath })

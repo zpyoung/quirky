@@ -20,7 +20,7 @@ export function AuthFailedBannerActions({
       <Pressable style={styles.action} onPress={onRepair}>
         <Text style={styles.actionText}>Re-pair</Text>
       </Pressable>
-      <Text style={styles.note}>Reconnect or remove this host from the Orca app.</Text>
+      <Text style={styles.note}>Reconnect or remove this host from the Quirky app.</Text>
     </>
   )
 }

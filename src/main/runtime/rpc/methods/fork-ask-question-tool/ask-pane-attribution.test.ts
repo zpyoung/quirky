@@ -27,7 +27,7 @@ describe('resolveAskAttribution (C3)', () => {
 
   it('never trusts a paneKey that does not resolve to a live pane', async () => {
     // Why: the server never trusts an env claim without validating it (tech.md C3) — an
-    // unproven ORCA_PANE_KEY must not silently win over resolution.
+    // unproven QUIRKY_PANE_KEY must not silently win over resolution.
     const result = await resolveAskAttribution({ paneKey: VALID_PANE_KEY }, h.runtime)
     expect(result.paneKey).toBeNull()
   })
@@ -72,7 +72,10 @@ describe('resolveAskAttribution (C3)', () => {
 
   it('a terminalHandle that resolves no pane still carries through for the no-UI dispatch lookup', async () => {
     h.setKnownWorktree('wt_2')
-    const result = await resolveAskAttribution({ terminalHandle: 'term_headless', worktreeId: 'wt_2' }, h.runtime)
+    const result = await resolveAskAttribution(
+      { terminalHandle: 'term_headless', worktreeId: 'wt_2' },
+      h.runtime
+    )
     expect(result.paneKey).toBeNull()
     expect(result.dispatchLookupHandle).toBe('term_headless')
   })

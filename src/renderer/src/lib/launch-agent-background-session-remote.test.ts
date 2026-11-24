@@ -153,9 +153,9 @@ describe('launchAgentBackgroundSession remote runtime and SSH startup delivery',
 
     expect(mockSpawn).toHaveBeenCalledWith(
       expect.objectContaining({
-        command: expect.stringContaining('ORCA_HERMES_STARTUP_QUERY'),
+        command: expect.stringContaining('QUIRKY_HERMES_STARTUP_QUERY'),
         connectionId: 'ssh-1',
-        env: expect.objectContaining({ ORCA_HERMES_STARTUP_QUERY: 'remote automation prompt' })
+        env: expect.objectContaining({ QUIRKY_HERMES_STARTUP_QUERY: 'remote automation prompt' })
       })
     )
   })
@@ -183,7 +183,7 @@ describe('launchAgentBackgroundSession remote runtime and SSH startup delivery',
           })
         )
         const dataSidecar = mockSubscribeToPtyData.mock.calls[0]?.[1] as (data: string) => void
-        dataSidecar('\x1b]777;orca-shell-ready\x07user@remote repo % ')
+        dataSidecar('\x1b]777;quirky-shell-ready\x07user@remote repo % ')
         vi.advanceTimersByTime(20_000)
         expect(mockWrite).not.toHaveBeenCalled()
       } finally {

@@ -35,7 +35,7 @@ export const ENVIRONMENT_HANDLERS: Record<string, CommandHandler> = {
       if (current.result.machineName === undefined) {
         throw new RuntimeClientError(
           'incompatible_runtime',
-          'This Orca runtime does not support machine names. Update Orca on that host and try again.'
+          'This Quirky runtime does not support machine names. Update Quirky on that host and try again.'
         )
       }
       await client.call('settings.update', { machineName: requestedName })
@@ -61,14 +61,14 @@ export const ENVIRONMENT_HANDLERS: Record<string, CommandHandler> = {
         `Saved environment ${result.environment.name} (${result.environment.id}).`
     )
   },
-  // Why: an agent told "run it on <name>" had nowhere to look. `orca environment list` showed
+  // Why: an agent told "run it on <name>" had nowhere to look. `quirky environment list` showed
   // paired servers only, and nothing in the CLI listed SSH targets at all, so the wrong-axis
   // guess was the only move available. This is the one place that answers both.
   'host list': async ({ client, flags, json }) => {
     rejectLocalPairingStoreRetargeting(
       flags,
-      '`orca host list`. It answers from this machine\u2019s own pairing store, so a routed answer would name servers paired with a different machine.',
-      'Run `orca host list` on that machine to see the SSH targets registered there.'
+      '`quirky host list`. It answers from this machine\u2019s own pairing store, so a routed answer would name servers paired with a different machine.',
+      'Run `quirky host list` on that machine to see the SSH targets registered there.'
     )
     const sshTargets = (await listSshTargets(client)).map((target) => ({
       kind: 'ssh' as const,
@@ -80,7 +80,7 @@ export const ENVIRONMENT_HANDLERS: Record<string, CommandHandler> = {
       ...(target.remotePlatform ? { platform: target.remotePlatform } : {})
     }))
     // Why: this listing answers from the local pairing store; dialing each paired server would make
-    // it slow and offline-fragile. `orca host name --environment <name>` asks one server directly.
+    // it slow and offline-fragile. `quirky host name --environment <name>` asks one server directly.
     const localStatus = await readLocalHostDescriptor(client)
     const environments = listEnvironments(getDefaultUserDataPath()).map((environment) => ({
       kind: 'environment' as const,
@@ -105,8 +105,8 @@ export const ENVIRONMENT_HANDLERS: Record<string, CommandHandler> = {
   'environment list': async ({ flags, json }) => {
     rejectLocalPairingStoreRetargeting(
       flags,
-      '`orca environment list`. Paired servers are stored on this machine, so there is no other host to ask.',
-      'Run `orca environment list` on that machine to see the servers paired with it.'
+      '`quirky environment list`. Paired servers are stored on this machine, so there is no other host to ask.',
+      'Run `quirky environment list` on that machine to see the servers paired with it.'
     )
     const environments = listEnvironments(getDefaultUserDataPath()).map(redactRuntimeEnvironment)
     printResult(localSuccess({ environments }), json, formatEnvironmentList)

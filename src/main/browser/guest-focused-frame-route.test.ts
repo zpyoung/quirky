@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { WebContents } from 'electron'
 import {
-  isOrcaFrameSessionTraffic,
+  isQuirkyFrameSessionTraffic,
   resolveFocusedFrameRoute,
   type GuestSessionCdpSender
 } from './guest-focused-frame-route'
@@ -138,7 +138,7 @@ describe('resolveFocusedFrameRoute', () => {
       expect(await route).toEqual({ kind: 'unknown' })
       await vi.advanceTimersByTimeAsync(2_000)
 
-      expect(isOrcaFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'LATE')).toBe(true)
+      expect(isQuirkyFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'LATE')).toBe(true)
     } finally {
       vi.useRealTimers()
     }
@@ -187,8 +187,8 @@ describe('resolveFocusedFrameRoute', () => {
   })
 })
 
-describe('isOrcaFrameSessionTraffic', () => {
-  it('hides only the sessions Orca attached, and forgets them when they detach', async () => {
+describe('isQuirkyFrameSessionTraffic', () => {
+  it('hides only the sessions Quirky attached, and forgets them when they detach', async () => {
     const guest = fakeGuest()
     await resolveFocusedFrameRoute(
       guest,
@@ -199,11 +199,16 @@ describe('isOrcaFrameSessionTraffic', () => {
       })
     )
 
-    expect(isOrcaFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'S1')).toBe(true)
-    expect(isOrcaFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'AGENT')).toBe(false)
-    expect(isOrcaFrameSessionTraffic(guest, 'Page.loadEventFired', {}, undefined)).toBe(false)
+    expect(isQuirkyFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'S1')).toBe(true)
+    expect(isQuirkyFrameSessionTraffic(guest, 'Runtime.consoleAPICalled', {}, 'AGENT')).toBe(false)
+    expect(isQuirkyFrameSessionTraffic(guest, 'Page.loadEventFired', {}, undefined)).toBe(false)
     expect(
-      isOrcaFrameSessionTraffic(guest, 'Target.detachedFromTarget', { sessionId: 'S1' }, undefined)
+      isQuirkyFrameSessionTraffic(
+        guest,
+        'Target.detachedFromTarget',
+        { sessionId: 'S1' },
+        undefined
+      )
     ).toBe(true)
   })
 })

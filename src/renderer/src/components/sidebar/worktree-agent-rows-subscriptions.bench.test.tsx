@@ -18,10 +18,10 @@ type Round = { elapsedMs: number; cpuMs: number; renders: number }
 type Result = { active: boolean; listeners: number; rounds: Round[] }
 
 const LEAF = '11111111-1111-4111-8111-111111111111'
-const CARDS = Number(process.env.ORCA_BENCH_CARDS ?? 100)
-const WRITES = Number(process.env.ORCA_BENCH_WRITES ?? 500)
+const CARDS = Number(process.env.QUIRKY_BENCH_CARDS ?? 100)
+const WRITES = Number(process.env.QUIRKY_BENCH_WRITES ?? 500)
 
-it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
+it.skipIf(!process.env.QUIRKY_AGENT_ROWS_BENCH)(
   'measures mounted agent row subscriptions',
   () => {
     const original = useAppStore.getState()
@@ -119,8 +119,8 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
       }
       const report = { cards: CARDS, writes: WRITES, results }
       console.log(JSON.stringify(report))
-      if (process.env.ORCA_BENCH_OUTPUT) {
-        writeFileSync(process.env.ORCA_BENCH_OUTPUT, `${JSON.stringify(report, null, 2)}\n`)
+      if (process.env.QUIRKY_BENCH_OUTPUT) {
+        writeFileSync(process.env.QUIRKY_BENCH_OUTPUT, `${JSON.stringify(report, null, 2)}\n`)
       }
     } finally {
       act(() => root.unmount())

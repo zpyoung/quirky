@@ -4,7 +4,7 @@ import { observeAgentStateFile } from './codex-path-observation'
 import { resolvePromotionWriteTarget } from './config-settings-promotion-write-target'
 import { writeFileAtomically } from '../codex-accounts/fs-utils'
 import { parseWslUncPath } from '../../shared/wsl-paths'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import { upsertPromotedSettingsInContent } from './codex-config-settings-upsert'
 import {
   PROMOTED_STRUCTURED_KEYS,
@@ -33,7 +33,7 @@ export type CodexSettingsBaselineSnapshotOptions = {
   conflicts?: ReadonlyMap<string, CodexSettingsConflict>
   /**
    * Whether a mirror actually made the runtime's registration tables canonical.
-   * A bootstrap baseline must leave this false: claiming tables Orca never
+   * A bootstrap baseline must leave this false: claiming tables Quirky never
    * mirrored would read a source config that never had them as a removal.
    */
   mirroredRegistrations?: boolean
@@ -44,11 +44,11 @@ export type CodexSettingsBaselineSnapshotOptions = {
 
 /**
  * Records the promotable settings the runtime config.toml holds after a mirror, so the next
- * promotion can tell "value Orca mirrored" from "value Codex wrote for the user".
+ * promotion can tell "value Quirky mirrored" from "value Codex wrote for the user".
  * Call after a successful mirror only — advancing past an unpromoted change strands it forever.
  */
 export function snapshotCodexRuntimeSettingsBaseline(
-  runtimeHomePath = getOrcaManagedCodexHomePath(),
+  runtimeHomePath = getQuirkyManagedCodexHomePath(),
   options: CodexSettingsBaselineSnapshotOptions = {}
 ): void {
   try {
@@ -100,7 +100,7 @@ export type CodexSettingsPromotionPlan = {
 
 function getHostPromotionHomes(): CodexSettingsPromotionHomes {
   return {
-    runtimeHomePath: getOrcaManagedCodexHomePath(),
+    runtimeHomePath: getQuirkyManagedCodexHomePath(),
     systemHomePath: getSystemCodexHomePath()
   }
 }
@@ -166,7 +166,7 @@ function promoteCodexRuntimeSettingsToSystemUnsafe(
     })
   }
   // Why: registration tables reconcile against the mirrored-table baseline, which
-  // is legitimately empty before the first mirror — a table Orca never made
+  // is legitimately empty before the first mirror — a table Quirky never made
   // canonical is an addition, never a removal it must honor. Scalars still need a
   // real baseline, so they stay gated above.
   if (updates.size === 0 && !hasCodexRegistrationEntries(runtimeTomlObservation.value)) {
@@ -179,7 +179,7 @@ function promoteCodexRuntimeSettingsToSystemUnsafe(
   mkdirSync(dirname(writeTarget.path), { recursive: true, mode: 0o700 })
   // Why: this is the user's real ~/.codex/config.toml, and an indeterminate
   // existence probe sent it down the reconstruct branch below, which replaces
-  // the canonical config with settings derived from Orca's runtime copy. One
+  // the canonical config with settings derived from Quirky's runtime copy. One
   // read replaces the old existsSync + read pair and its TOCTOU gap.
   // With a baseline, this arm is a backstop — an unreadable system config
   // already refused in readPromotedSettingValues, because `writeTarget.path`

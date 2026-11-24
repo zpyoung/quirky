@@ -9,7 +9,7 @@ import { ClaudeProvisionalRowCorrections } from './claude-provisional-row-correc
 import type { ClaudeSubagentLinkageVerdict } from './claude-subagent-linkage'
 
 function identityOf(toolUseId: string): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: `claude-tool:claude-session:${toolUseId}` }
+  return { provider: 'quirky', clientMessageId: `claude-tool:claude-session:${toolUseId}` }
 }
 
 const RUNNING: AgentJournalItemBody = {

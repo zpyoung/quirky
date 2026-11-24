@@ -80,11 +80,11 @@ export function getWindowsClaudeHookEntry(): string {
     '@echo off',
     // Inherited delayed expansion would eat exclamation marks in the profile path.
     'setlocal DisableDelayedExpansion',
-    `set "ORCA_CLAUDE_HOOK_IMPL=%~dp0${PAYLOAD_FILE_NAME}"`,
-    'if not exist "%ORCA_CLAUDE_HOOK_IMPL%" goto :missing_impl',
+    `set "QUIRKY_CLAUDE_HOOK_IMPL=%~dp0${PAYLOAD_FILE_NAME}"`,
+    'if not exist "%QUIRKY_CLAUDE_HOOK_IMPL%" goto :missing_impl',
     // Transfer control without CALL's second expansion of percent signs in the path.
     // A payload that exists but cannot start (locked, quarantined) falls through to the neutral reply.
-    '"%ORCA_CLAUDE_HOOK_IMPL%"',
+    '"%QUIRKY_CLAUDE_HOOK_IMPL%"',
     ':missing_impl',
     'echo {}',
     ...buildWindowsHookEnvironmentGuardLines(),
@@ -98,7 +98,7 @@ export async function refreshWindowsClaudeHookFiles(
   entryPath: string,
   payload: string
 ): Promise<void> {
-  // A surviving exe copy is Orca-owned too; a running one is moved aside, as in install().
+  // A surviving exe copy is Quirky-owned too; a running one is moved aside, as in install().
   const bundledHook = resolveBundledWindowsNativeHookExecutable()
   if (bundledHook) {
     const executable = getWindowsClaudeHookExecutablePath(entryPath)
@@ -108,7 +108,7 @@ export async function refreshWindowsClaudeHookFiles(
       )
       .catch(() => {})
   }
-  // A surviving entry is Orca-owned; creating a missing one stays install()'s presence-gated job.
+  // A surviving entry is Quirky-owned; creating a missing one stays install()'s presence-gated job.
   if (!(await scriptStillExists(entryPath))) {
     return
   }

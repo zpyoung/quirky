@@ -37,7 +37,7 @@ export function visibleHostRouteNotice(
   return hostRouteNoticeMessage(notice)
 }
 
-/** Tapping a workspace on a server whose Orca predates the desktop relay. */
+/** Tapping a workspace on a server whose Quirky predates the desktop relay. */
 export function serverUpdateNeededNotice(hostLabel: string): string {
-  return `Update Orca on ${hostLabel} to open its workspaces from your phone.`
+  return `Update Quirky on ${hostLabel} to open its workspaces from your phone.`
 }

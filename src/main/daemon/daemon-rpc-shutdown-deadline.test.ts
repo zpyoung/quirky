@@ -19,7 +19,7 @@ let releaseDisposal: (() => void) | undefined
 let cancelDeadline: (() => void) | undefined
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-shutdown-deadline-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-shutdown-deadline-'))
 })
 
 afterEach(async () => {

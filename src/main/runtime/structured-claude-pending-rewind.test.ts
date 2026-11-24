@@ -9,7 +9,7 @@ import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { AgentSessionRewindFork } from '../../shared/agent-session-rewind'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
 import { fakeClaude } from '../claude/claude-structured-session-test-support'
 import { claudeAndCodexAgents } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionAdapterRouter } from '../native-chat/agent-session-wire/structured-agent-session-adapter-router'
@@ -29,7 +29,7 @@ import { openTestJournalHostDatabase } from '../native-chat/agent-session-journa
 import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 
 const caller = { callerKey: 'desktop' }
-const PROVIDER_SESSION_ID = claudeSessionIdForOrcaSession(HOST_TEST_SESSION)
+const PROVIDER_SESSION_ID = claudeSessionIdForQuirkySession(HOST_TEST_SESSION)
 const TARGET = agentJournalItemKey({
   provider: 'claude',
   sessionId: PROVIDER_SESSION_ID,
@@ -113,7 +113,7 @@ async function reattach() {
 
 beforeEach(async () => {
   resetHostTestOperationIds()
-  directory = await mkdtemp(join(tmpdir(), 'orca-claude-pending-rewind-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-claude-pending-rewind-'))
   store = await openTestAgentSessionRecordStore(directory)
   claude = fakeClaude({ initSessionId: PROVIDER_SESSION_ID })
   adapter = createStructuredClaudeRuntimeAdapter({

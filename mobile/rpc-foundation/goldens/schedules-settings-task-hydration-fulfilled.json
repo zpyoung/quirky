@@ -241,7 +241,7 @@
       }
     },
     "2db932a72b8a": {
-      "name": "trustedOrcaHooks",
+      "name": "trustedQuirkyHooks",
       "ordinal": 54,
       "value": {}
     },
@@ -546,7 +546,7 @@
           "$rpc": "null"
         },
         "sites": [],
-        "unavailableReason": "Update Orca desktop to browse Jira on mobile."
+        "unavailableReason": "Update Quirky desktop to browse Jira on mobile."
       }
     },
     "76b7c2cf6fb0": {
@@ -632,7 +632,7 @@
       }
     },
     "7d8029e889cf": {
-      "name": "projectRepoNotInOrca",
+      "name": "projectRepoNotInQuirky",
       "ordinal": 27,
       "value": {
         "$rpc": "null"

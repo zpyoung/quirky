@@ -24,10 +24,10 @@ import {
 } from './journal-row-builders'
 import type { JournalRow } from './journal-row-schema'
 
-const TURN_1: AgentJournalItemIdentity = { provider: 'orca', clientMessageId: 'turn-1' }
-const TURN_2: AgentJournalItemIdentity = { provider: 'orca', clientMessageId: 'turn-2' }
+const TURN_1: AgentJournalItemIdentity = { provider: 'quirky', clientMessageId: 'turn-1' }
+const TURN_2: AgentJournalItemIdentity = { provider: 'quirky', clientMessageId: 'turn-2' }
 const COMMAND_TURN: AgentJournalItemIdentity = {
-  provider: 'orca',
+  provider: 'quirky',
   clientMessageId: 'command-turn:cmd-1'
 }
 const inTurn = (identity: AgentJournalItemIdentity): AgentJournalTurnScope => ({
@@ -36,7 +36,7 @@ const inTurn = (identity: AgentJournalItemIdentity): AgentJournalTurnScope => ({
 })
 
 function row(id: string): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: id }
+  return { provider: 'quirky', clientMessageId: id }
 }
 
 function prose(text: string): AgentJournalItemBody {

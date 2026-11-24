@@ -12,7 +12,7 @@ let session: Session | undefined
 let root: string | undefined
 
 async function shellThatRan(command: string, settledMarker: string): Promise<Session> {
-  root = mkdtempSync(join(tmpdir(), 'orca-run-shell-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-run-shell-'))
   writeFileSync(join(root, '.bash_profile'), "PS1='prompt> '\n")
   vi.stubEnv('HOME', root)
   const subprocess = await createPtySubprocess({

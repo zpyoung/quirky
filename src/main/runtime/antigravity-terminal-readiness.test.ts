@@ -35,7 +35,7 @@ describe('Antigravity terminal readiness', () => {
 
   /**
    * Provenance: transcribed from a live agy 1.2.7 / Gemini 3.8 Flash session observed through
-   * Orca on 2026-09-21, NOT a byte-exact PTY capture — node-pty could not be rebuilt on this
+   * Quirky on 2026-09-21, NOT a byte-exact PTY capture — node-pty could not be rebuilt on this
    * Windows host (winpty's GetCommitHash.bat fails under node-gyp), so the recorder in
    * docs/reference/agent-pty-transcript-capture.md was unavailable. The account row and the
    * workspace path are scrubbed per that doc's privacy table. Replace this with a real

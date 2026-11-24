@@ -2,7 +2,7 @@
 // start that failed shows why. Neither starts a terminal of its own.
 
 import { useAppStore } from '@/store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
 import type { PaneStartStatus } from '../../../../../shared/workspace-layout/workspace-layout-published'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -19,7 +19,7 @@ export function waitsForMainPaneStart(
   session: ConnectPanePtySession,
   connect: () => void
 ): boolean {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (!QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     return false
   }
   const start = useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]

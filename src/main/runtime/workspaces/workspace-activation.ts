@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithListManagedWorktrees } from './managed-workspace-operations'
+import { QuirkyRuntimeWithListManagedWorktrees } from './managed-workspace-operations'
 import type { RuntimeNavigationTarget } from '../../../shared/runtime-navigation'
 import {
   navigationTargetsClients,
@@ -54,7 +54,7 @@ import {
 } from '../launched-agent-foreground'
 import { worktreeRowTarget } from '../../persistence/host-qualified-worktree-meta'
 
-export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntimeWithListManagedWorktrees {
+export abstract class QuirkyRuntimeWithActivateManagedWorktree extends QuirkyRuntimeWithListManagedWorktrees {
   protected abstract toAgentSessionOptions(
     preferences: AgentLaunchPreferences | undefined
   ): Record<string, SessionOptionValue> | undefined
@@ -75,7 +75,7 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
     worktreeId: string
     activated: boolean
     /** Mobile-scoped slept-agent wake outcome. `unsupported-headless` means no
-     *  renderer holds the sleeping records (headless `orca serve`), so nothing
+     *  renderer holds the sleeping records (headless `quirky serve`), so nothing
      *  woke — clients must not present the worktree's agents as resumed. */
     sleepingAgentWake: 'requested' | 'unsupported-headless' | 'not-applicable'
   }> {

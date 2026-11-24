@@ -26,7 +26,7 @@ describe('Cmd+J website navigation', () => {
   it.each([
     ['brex.com', 'https://brex.com/'],
     ['  brex.com  ', 'https://brex.com/'],
-    ['brex.com/signup?source=orca#start', 'https://brex.com/signup?source=orca#start'],
+    ['brex.com/signup?source=quirky#start', 'https://brex.com/signup?source=quirky#start'],
     ['https://brex.com/login', 'https://brex.com/login'],
     ['docs.github.io', 'https://docs.github.io/'],
     ['github.io', 'https://github.io/'],

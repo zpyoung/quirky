@@ -1,11 +1,11 @@
 import type { RuntimeSessionTabsInventoryPublication as SessionTabsInventoryPublicationMethods } from './session-tabs-inventory-publication'
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
-import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
-import type { OrcaRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession as HydrateHeadlessMobileSessionTabsFromWorkspaceSessionMethods } from './mobile-session-hydration'
-import type { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs as BuildHeadlessMobileSessionBrowserTabsMethods } from '../session-lifecycle/projection/build-headless-mobile-session-browser-tabs'
-import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RestoreLivePairedRendererSessionOwnedMobileTerminalsMethods } from './renderer-session-terminal-rescue'
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
-import { OrcaRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
+import type { QuirkyRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
+import type { QuirkyRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
+import type { QuirkyRuntimeWithHydrateHeadlessMobileSessionTabsFromWorkspaceSession as HydrateHeadlessMobileSessionTabsFromWorkspaceSessionMethods } from './mobile-session-hydration'
+import type { QuirkyRuntimeWithBuildHeadlessMobileSessionBrowserTabs as BuildHeadlessMobileSessionBrowserTabsMethods } from '../session-lifecycle/projection/build-headless-mobile-session-browser-tabs'
+import type { QuirkyRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RestoreLivePairedRendererSessionOwnedMobileTerminalsMethods } from './renderer-session-terminal-rescue'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSessionTabGroupLayoutMethods } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
+import { QuirkyRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
 import {
   mainTerminalSurfaces,
   type MainTerminalSurfacesHost
@@ -21,7 +21,7 @@ import type { PtyControllerInventory } from '../runtime-pty-controller-contract'
 import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { PaneStartStatuses } from '../pane-start-statuses'
 
-export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends OrcaRuntimeWithSyncWindowGraph {
+export abstract class QuirkyRuntimeWithCollectMobileVisibleGraphChangedWorktrees extends QuirkyRuntimeWithSyncWindowGraph {
   abstract get workspaceLayoutReads(): WorkspaceLayoutReads
   declare protected readonly paneStartStatuses: PaneStartStatuses | null
 
@@ -290,7 +290,7 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
   }
 
   supportsAuthoritativeSessionTabsInventory(): boolean {
-    return process.env.ORCA_E2E_DISABLE_AUTHORITATIVE_SESSION_TABS_INVENTORY !== '1'
+    return process.env.QUIRKY_E2E_DISABLE_AUTHORITATIVE_SESSION_TABS_INVENTORY !== '1'
   }
 
   protected assertSessionTabsInventoryRequestActive(signal?: AbortSignal): void {

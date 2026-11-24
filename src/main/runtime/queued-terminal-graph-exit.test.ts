@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const WORKTREE = 'repo::/tmp/graph-exit'
 const TAB = '10000000-0000-4000-8000-000000000001'
@@ -8,7 +8,7 @@ const PTY = `${WORKTREE}@@terminal`
 const FIRST = '10000000-0000-4000-8000-000000000003'
 const NEXT = '10000000-0000-4000-8000-000000000004'
 
-class ExitAuthorityRuntime extends OrcaRuntimeService {
+class ExitAuthorityRuntime extends QuirkyRuntimeService {
   override resolveWorktreeSelector(selector: string) {
     return super.resolveWorktreeSelector(selector)
   }
@@ -43,7 +43,7 @@ class ExitAuthorityRuntime extends OrcaRuntimeService {
 }
 
 function graph(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   ptyId: string | null = PTY,
   snapshotVersion?: number
 ): void {
@@ -80,7 +80,7 @@ function graph(
   })
 }
 
-function register(runtime: OrcaRuntimeService, incarnationId = FIRST): void {
+function register(runtime: QuirkyRuntimeService, incarnationId = FIRST): void {
   runtime.registerPty(PTY, WORKTREE, null, { tabId: TAB, leafId: LEAF, incarnationId })
 }
 

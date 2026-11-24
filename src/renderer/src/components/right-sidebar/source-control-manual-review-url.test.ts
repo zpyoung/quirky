@@ -63,7 +63,7 @@ describe('buildSourceControlManualReviewUrl', () => {
         pushTarget: {
           remoteName: 'fork',
           branchName: 'feature/fork-head',
-          remoteUrl: 'git@github.com:contributor/orca.git'
+          remoteUrl: 'git@github.com:contributor/quirky.git'
         }
       })
     ).toBe('https://github.com/stablyai/orca/compare/main...contributor:feature/fork-head?expand=1')
@@ -89,12 +89,12 @@ describe('buildSourceControlManualReviewUrl', () => {
         baseRef: 'refs/remotes/origin/release/next',
         branchName: 'feature/gitlab',
         repoRemoteName: 'origin',
-        repoRemoteUrl: 'git@gitlab.company.test:group/sub/orca.git',
+        repoRemoteUrl: 'git@gitlab.company.test:group/sub/quirky.git',
         provider: 'gitlab',
         upstreamName: 'origin/feature/gitlab'
       })
     ).toBe(
-      'https://gitlab.company.test/group/sub/orca/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature%2Fgitlab&merge_request%5Btarget_branch%5D=release%2Fnext'
+      'https://gitlab.company.test/group/sub/quirky/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature%2Fgitlab&merge_request%5Btarget_branch%5D=release%2Fnext'
     )
   })
 
@@ -104,17 +104,17 @@ describe('buildSourceControlManualReviewUrl', () => {
         baseRef: 'refs/remotes/upstream/main',
         branchName: 'feature/fork-head',
         repoRemoteName: 'upstream',
-        repoRemoteUrl: 'git@gitlab.company.test:group/sub/orca.git',
+        repoRemoteUrl: 'git@gitlab.company.test:group/sub/quirky.git',
         provider: 'gitlab',
         pushTarget: {
           remoteName: 'fork',
           branchName: 'feature/fork-head',
-          remoteUrl: 'git@gitlab.company.test:contributor/orca.git'
+          remoteUrl: 'git@gitlab.company.test:contributor/quirky.git'
         }
       })
-      // On the fork project — not group/sub/orca, where source_branch would 404.
+      // On the fork project — not group/sub/quirky, where source_branch would 404.
     ).toBe(
-      'https://gitlab.company.test/contributor/orca/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature%2Ffork-head&merge_request%5Btarget_branch%5D=main'
+      'https://gitlab.company.test/contributor/quirky/-/merge_requests/new?merge_request%5Bsource_branch%5D=feature%2Ffork-head&merge_request%5Btarget_branch%5D=main'
     )
   })
 
@@ -127,7 +127,7 @@ describe('buildSourceControlManualReviewUrl', () => {
         branchName: 'quick-commands',
         repoRemoteName: 'origin',
         repoRemoteUrl: 'https://github.com/stablyai/orca.git',
-        upstreamName: 'pr-devajmeireles-orca/quick-commands'
+        upstreamName: 'pr-devajmeireles-quirky/quick-commands'
       })
     ).toBeNull()
   })
@@ -144,18 +144,18 @@ describe('buildSourceControlManualReviewUrl', () => {
     ).toBe('https://github.com/stablyai/orca/compare/main...feature/pushed-name?expand=1')
   })
 
-  it('still qualifies the fork head when Orca resolved the fork push URL', () => {
+  it('still qualifies the fork head when Quirky resolved the fork push URL', () => {
     expect(
       buildSourceControlManualReviewUrl({
         baseRef: 'refs/remotes/origin/main',
         branchName: 'quick-commands',
         repoRemoteName: 'origin',
         repoRemoteUrl: 'https://github.com/stablyai/orca.git',
-        upstreamName: 'pr-devajmeireles-orca/quick-commands',
+        upstreamName: 'pr-devajmeireles-quirky/quick-commands',
         pushTarget: {
-          remoteName: 'pr-devajmeireles-orca',
+          remoteName: 'pr-devajmeireles-quirky',
           branchName: 'quick-commands',
-          remoteUrl: 'git@github.com:devajmeireles/orca.git'
+          remoteUrl: 'git@github.com:devajmeireles/quirky.git'
         }
       })
     ).toBe('https://github.com/stablyai/orca/compare/main...devajmeireles:quick-commands?expand=1')
@@ -167,7 +167,7 @@ describe('buildSourceControlManualReviewUrl', () => {
         baseRef: 'refs/remotes/origin/main',
         branchName: 'feature/unknown',
         repoRemoteName: 'origin',
-        repoRemoteUrl: 'git@git.company.test:team/orca.git',
+        repoRemoteUrl: 'git@git.company.test:team/quirky.git',
         upstreamName: 'origin/feature/unknown'
       })
     ).toBeNull()

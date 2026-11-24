@@ -11,28 +11,28 @@ const fixtures = [
   ...['  ', '    '].flatMap((indent) =>
     [true, false].map((retained) => ({
       name: `trailing list comment (${indent.length} spaces, retained: ${retained})`,
-      list: `${indent}# list head\n${retained ? `${indent}- keep\n` : ''}${indent}- orca-status # managed entry\n${indent}# list tail\n`,
+      list: `${indent}# list head\n${retained ? `${indent}- keep\n` : ''}${indent}- quirky-status # managed entry\n${indent}# list tail\n`,
       suffix: '  custom: "off"\nmodel: "001"\n'
     }))
   ),
   {
     name: 'comment before the next root setting',
-    list: '    - keep\n    - orca-status # managed entry\n',
+    list: '    - keep\n    - quirky-status # managed entry\n',
     suffix: '# Operator notes\nmodel: "001"\n'
   },
   {
     name: 'comment before the next plugin setting',
-    list: '    - keep\n    - orca-status # managed entry\n',
+    list: '    - keep\n    - quirky-status # managed entry\n',
     suffix: '  # Plugin notes\n  custom: "off"\nmodel: "001"\n'
   },
   {
     name: 'comment at the end of the document',
-    list: '    - keep\n    - orca-status # managed entry\n',
+    list: '    - keep\n    - quirky-status # managed entry\n',
     suffix: '# End notes\n'
   },
   {
     name: 'leading comment on the first retained entry',
-    list: '    # lead\n    - orca-status\n    # between\n    - keep\n',
+    list: '    # lead\n    - quirky-status\n    # between\n    - keep\n',
     suffix: 'model: "001"\n'
   }
 ]
@@ -41,7 +41,7 @@ describe.each(['\n', '\r\n'])('Hermes comment boundaries (%j)', (eol) => {
   describe.each(['install', 'remove'])('%s', (operation) => {
     it.each(fixtures)('preserves $name exactly once through the service', async (fixture) => {
       const key = operation === 'install' ? 'disabled' : 'enabled'
-      const enabled = operation === 'install' ? '  enabled: [orca-status]\n' : ''
+      const enabled = operation === 'install' ? '  enabled: [quirky-status]\n' : ''
       const input = `plugins:\n${enabled}  ${key}:\n${fixture.list}${fixture.suffix}`.replaceAll(
         '\n',
         eol
@@ -63,7 +63,7 @@ describe.each(['\n', '\r\n'])('Hermes comment boundaries (%j)', (eol) => {
         expect(output.replaceAll(eol, '')).not.toContain('\n')
       }
 
-      const root = mkdtempSync(join(tmpdir(), 'orca-hermes-comments-'))
+      const root = mkdtempSync(join(tmpdir(), 'quirky-hermes-comments-'))
       const home = join(root, '.hermes')
       mkdirSync(home)
       const path = join(home, 'config.yaml')

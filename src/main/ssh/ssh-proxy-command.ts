@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { Duplex } from 'node:stream'
 import type { Socket as NetSocket } from 'node:net'
 import type { SshTarget } from '../../shared/ssh-types'

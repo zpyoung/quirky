@@ -13,7 +13,7 @@ afterEach(async () => {
 
 describe('parseJcodeSessionFile', () => {
   it('parses a jcode session doc, skipping injected context envelopes', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-jcode-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-jcode-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'session_badger_123.json')
     const mtimeMs = Date.now()
@@ -64,7 +64,7 @@ describe('parseJcodeSessionFile', () => {
   })
 
   it('skips a malformed (partially written) session doc', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-jcode-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-jcode-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'session_badger_456.json')
     const mtimeMs = Date.now()
@@ -79,7 +79,7 @@ describe('parseJcodeSessionFile', () => {
   })
 
   it('falls back to the file name for the session id', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'orca-jcode-parser-'))
+    const dir = await mkdtemp(join(tmpdir(), 'quirky-jcode-parser-'))
     tempDirs.push(dir)
     const path = join(dir, 'session_orphan_9.json')
     const mtimeMs = Date.now()

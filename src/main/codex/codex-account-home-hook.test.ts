@@ -62,12 +62,12 @@ function userApprovalHashes(): string[] {
 }
 
 beforeEach(() => {
-  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'orca-account-home-hook-')))
+  root = realpathSync.native(mkdtempSync(join(tmpdir(), 'quirky-account-home-hook-')))
   const home = join(root, 'home')
-  accountHome = join(home, '.local', 'share', 'orca', 'codex-accounts', 'a1', 'home')
+  accountHome = join(home, '.local', 'share', 'quirky', 'codex-accounts', 'a1', 'home')
   mkdirSync(accountHome, { recursive: true })
   mkdirSync(join(root, 'user-data'))
-  vi.stubEnv('ORCA_USER_DATA_PATH', join(root, 'user-data'))
+  vi.stubEnv('QUIRKY_USER_DATA_PATH', join(root, 'user-data'))
   vi.stubEnv('CODEX_HOME', '')
   mocks.homedir.mockReturnValue(home)
   mocks.hashes = Object.fromEntries(
@@ -93,13 +93,13 @@ afterEach(() => {
 })
 
 describe('reconcileCodexAccountHomeHook', () => {
-  it("adds Orca's entry beside the account's own hook, keeping its approval", async () => {
+  it("adds Quirky's entry beside the account's own hook, keeping its approval", async () => {
     await reconcileCodexAccountHomeHook(accountHome, () => true, true)
 
-    const orcaCommand = getCodexManagedHookInstallMaterial().command
+    const quirkyCommand = getCodexManagedHookInstallMaterial().command
     const hooks = readHooks()
-    expect(commandsOf(hooks.Stop)).toEqual(['notify-me.sh', orcaCommand])
-    expect(commandsOf(hooks.SessionStart)).toEqual([orcaCommand])
+    expect(commandsOf(hooks.Stop)).toEqual(['notify-me.sh', quirkyCommand])
+    expect(commandsOf(hooks.SessionStart)).toEqual([quirkyCommand])
     expect(userApprovalHashes()).toEqual(['sha256:user'])
     const approved = [...readHookTrustEntries(tomlPath()).values()].map((s) => s.trustedHash)
     expect(approved).toContain('sha256:codex-stop')
@@ -107,7 +107,7 @@ describe('reconcileCodexAccountHomeHook', () => {
     expect(existsSync(join(root, 'home', '.codex'))).toBe(false)
   })
 
-  it("takes only Orca's entry back out when hooks are turned off", async () => {
+  it("takes only Quirky's entry back out when hooks are turned off", async () => {
     await reconcileCodexAccountHomeHook(accountHome, () => true, false)
     await reconcileCodexAccountHomeHook(accountHome, () => false, false)
 

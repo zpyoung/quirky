@@ -15,9 +15,9 @@ import {
   NATIVE_CHAT_NOTICE_COPY,
   nativeChatNoticeLook
 } from '../../../../shared/native-chat-notice'
-import { useNativeChatOrcaStopView } from './native-chat-orca-stop-context'
+import { useNativeChatQuirkyStopView } from './native-chat-quirky-stop-context'
 import { NativeChatInterruptedContinueButton } from './NativeChatInterruptedContinue'
-import { nativeChatOrcaStopRowText } from './native-chat-orca-stop-words'
+import { nativeChatQuirkyStopRowText } from './native-chat-quirky-stop-words'
 import { ProviderFrameRow } from './NativeChatTranscriptChrome'
 import { Button } from '@/components/ui/button'
 import {
@@ -59,7 +59,7 @@ export function NativeChatNoticeRow({
   allowFileUriLinks?: boolean
 }): React.JSX.Element {
   useTranslation()
-  const orcaStopView = useNativeChatOrcaStopView()
+  const quirkyStopView = useNativeChatQuirkyStopView()
   const claudeSignIn = useNativeChatClaudeSignInView()
   const look = nativeChatNoticeLook(block)
   if (look.kind === 'divider') {
@@ -121,24 +121,25 @@ export function NativeChatNoticeRow({
       </Card>
     )
   }
-  // The host's row about an Orca stop names the cause and the machine, muted: Orca stopped, not the
+  // The host's row about an Quirky stop names the cause and the machine, muted: Quirky stopped, not the
   // agent. Outside a chat that knows its machine it keeps the host's own words.
-  const { orcaStop } = block
-  const { hostLabel, remoteHost, continueAvailable } = orcaStopView
+  const { quirkyStop } = block
+  const { hostLabel, remoteHost, continueAvailable } = quirkyStopView
   // A paired server with no name to show is still a remote server; its id is not a name.
   const machine =
     hostLabel ??
     (remoteHost
-      ? translate('components.native-chat.notices.orcaStopUnnamedServer', 'the remote server')
+      ? translate('components.native-chat.notices.quirkyStopUnnamedServer', 'the remote server')
       : null)
-  const named = orcaStop !== undefined && machine !== null
+  const named = quirkyStop !== undefined && machine !== null
   const continueOffered =
-    orcaStop?.turnItemId !== undefined && orcaStop.turnItemId === orcaStopView.offeredTurnItemId
+    quirkyStop?.turnItemId !== undefined &&
+    quirkyStop.turnItemId === quirkyStopView.offeredTurnItemId
   const failure = readWholeAgentSessionFailureFact(block.failure)
   const antigravitySignInContent = nativeChatAntigravitySignInContent(failure?.kind, agentName)
   const usageLimitContinue =
     block.usageLimitTurnItemId !== undefined &&
-    block.usageLimitTurnItemId === orcaStopView.usageLimitTurnItemId
+    block.usageLimitTurnItemId === quirkyStopView.usageLimitTurnItemId
   // Only reword auth text fully described by its fact; host text may also carry command advice.
   const authSurface =
     failure?.kind === 'notSignedIn'
@@ -147,7 +148,7 @@ export function NativeChatNoticeRow({
         )
       : undefined
   const text = named
-    ? nativeChatOrcaStopRowText(orcaStop.cause, machine, { continueAvailable, remoteHost })
+    ? nativeChatQuirkyStopRowText(quirkyStop.cause, machine, { continueAvailable, remoteHost })
     : failure?.kind === 'usageLimitReached'
       ? agentSessionFailureSentence(
           failure,
@@ -196,11 +197,11 @@ export function NativeChatNoticeRow({
           {antigravitySignInContent ?? text}
         </p>
         {continueOffered ? (
-          <NativeChatInterruptedContinueButton onContinue={orcaStopView.continueNow} />
+          <NativeChatInterruptedContinueButton onContinue={quirkyStopView.continueNow} />
         ) : usageLimitContinue ? (
           <NativeChatInterruptedContinueButton
-            onContinue={orcaStopView.continueUsageLimit}
-            disabled={orcaStopView.usageLimitContinueDisabled}
+            onContinue={quirkyStopView.continueUsageLimit}
+            disabled={quirkyStopView.usageLimitContinueDisabled}
             explanation={translate(
               'components.native-chat.interruptedContinue.usageLimitExplanation',
               'Asks the agent to continue where it left off. Use it once the limit resets.'

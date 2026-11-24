@@ -74,9 +74,9 @@ describe('a scenario that declares its device', () => {
   })
 
   it('reads the declared entry, and null for everything else', async () => {
-    const { module } = store({ 'orca:key': 'declared' })
-    await expect(module.getItem!('orca:key')).resolves.toBe('declared')
-    await expect(module.getItem!('orca:other')).resolves.toBeNull()
+    const { module } = store({ 'quirky:key': 'declared' })
+    await expect(module.getItem!('quirky:key')).resolves.toBe('declared')
+    await expect(module.getItem!('quirky:other')).resolves.toBeNull()
   })
 
   /**
@@ -85,18 +85,18 @@ describe('a scenario that declares its device', () => {
    */
   it('records a write as an effect without letting a read see it', async () => {
     const { module, effects } = store({})
-    await module.setItem!('orca:key', 'written')
-    await module.removeItem!('orca:key')
-    await expect(module.getItem!('orca:key')).resolves.toBeNull()
+    await module.setItem!('quirky:key', 'written')
+    await module.removeItem!('quirky:key')
+    await expect(module.getItem!('quirky:key')).resolves.toBeNull()
     expect(effects).toEqual([
-      { name: 'device-store.setItem', value: { key: 'orca:key', value: 'written' } },
-      { name: 'device-store.removeItem', value: { key: 'orca:key' } }
+      { name: 'device-store.setItem', value: { key: 'quirky:key', value: 'written' } },
+      { name: 'device-store.removeItem', value: { key: 'quirky:key' } }
     ])
   })
 
   it('refuses a member the declaration does not back', () => {
     const { module } = store({})
-    expect(() => module.multiGet!('orca:key')).toThrow(
+    expect(() => module.multiGet!('quirky:key')).toThrow(
       `Native store reached during recording: ${STORE}.multiGet`
     )
   })

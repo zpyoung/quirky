@@ -16,7 +16,7 @@ let linkedRepo: string
 const linkDir = (target: string, path: string): Promise<void> => symlink(target, path, 'junction')
 
 beforeEach(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), 'orca-scope-real-paths-')))
+  root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-scope-real-paths-')))
   realRepo = join(root, 'data', 'api')
   linkedRepo = join(root, 'work-api')
   await mkdir(join(realRepo, 'pkg'), { recursive: true })

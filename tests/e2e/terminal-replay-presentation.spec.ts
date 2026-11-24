@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { writeFile } from 'node:fs/promises'
 import { build } from 'esbuild'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import {
   focusActiveTerminalInput,
@@ -14,25 +14,25 @@ import { runNodeScriptInTerminal } from './helpers/run-node-script-in-terminal'
 import { compareTerminalScreenshots } from './terminal-screenshot-diff'
 import type { TerminalReplayPresentationProbe } from './fixtures/terminal-replay-presentation-probe'
 
-test.use({ orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: '120000' } })
+test.use({ quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: '120000' } })
 
 for (const scenario of [
   { name: 'at a foreign grid in DOM', resize: true, gpu: 'off' },
   { name: 'at the same grid in DOM', resize: false, gpu: 'off' },
   { name: 'at a foreign grid in WebGL', resize: true, gpu: 'on' }
 ] as const) {
-  test(`retains the painted frame ${scenario.name}`, async ({ orcaPage }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage)
-    await focusActiveTerminalInput(orcaPage)
-    const ptyId = await waitForActivePanePtyId(orcaPage)
+  test(`retains the painted frame ${scenario.name}`, async ({ quirkyPage }, testInfo) => {
+    await waitForSessionReady(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage)
+    await focusActiveTerminalInput(quirkyPage)
+    const ptyId = await waitForActivePanePtyId(quirkyPage)
     const quietProcess = await runNodeScriptInTerminal(
-      orcaPage,
+      quirkyPage,
       ptyId,
       "process.stdout.write('REPLAY_PROBE_READY\\r\\n'); process.stdin.on('data', () => process.stdout.write('REVEAL_INPUT_ACK\\r\\n'))"
     )
-    await expect.poll(() => getTerminalContent(orcaPage, 10_000)).toContain('REPLAY_PROBE_READY')
+    await expect.poll(() => getTerminalContent(quirkyPage, 10_000)).toContain('REPLAY_PROBE_READY')
     quietProcess.cleanup()
 
     const bundle = await build({
@@ -50,12 +50,12 @@ for (const scenario of [
     if (!script) {
       throw new Error('Replay presentation probe did not build')
     }
-    await orcaPage.addScriptTag({ content: script })
-    await orcaPage.evaluate(
+    await quirkyPage.addScriptTag({ content: script })
+    await quirkyPage.evaluate(
       (gpu) => window.__terminalReplayPresentationProbe?.prepare(gpu),
       scenario.gpu
     )
-    const screen = orcaPage.locator('[data-replay-paint-probe="true"]')
+    const screen = quirkyPage.locator('[data-replay-paint-probe="true"]')
     const input = screen.locator('.xterm-helper-textarea')
     if (scenario.gpu === 'on') {
       const webglAttached = await screen
@@ -71,14 +71,14 @@ for (const scenario of [
     }
     await expect(input).toBeFocused()
     // Why: feature-tip tooltips can overlap the screen clip and change between captures.
-    await orcaPage.addStyleTag({
+    await quirkyPage.addStyleTag({
       content: '[role="tooltip"] { display: none !important; }'
     })
     const before = await screen.boundingBox()
     if (!before) {
       throw new Error('Terminal screen has no measurable viewport')
     }
-    const cdp = await orcaPage.context().newCDPSession(orcaPage)
+    const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
     const captureFrame = async (name: string): Promise<Buffer> => {
       const { data } = await cdp.send('Page.captureScreenshot', {
         format: 'png',
@@ -93,14 +93,14 @@ for (const scenario of [
 
     try {
       // Hidden Electron screenshots can outlive the presentation hold cap, so freeze timers once the replay is held.
-      await orcaPage.clock.install()
-      await orcaPage.evaluate(
+      await quirkyPage.clock.install()
+      await quirkyPage.evaluate(
         (resize) => window.__terminalReplayPresentationProbe?.start(resize),
         scenario.resize
       )
-      await orcaPage.waitForFunction(() => window.__terminalReplayPresentationProbe?.waiting)
+      await quirkyPage.waitForFunction(() => window.__terminalReplayPresentationProbe?.waiting)
       // Why a small lead: pauseAt cannot target a fake time that already passed.
-      await orcaPage.clock.pauseAt(await orcaPage.evaluate(() => Date.now() + 50))
+      await quirkyPage.clock.pauseAt(await quirkyPage.evaluate(() => Date.now() + 50))
       const during = await captureFrame('during-replay.png')
       expect(
         compareTerminalScreenshots(previous, during).diffRatio,
@@ -109,8 +109,8 @@ for (const scenario of [
       await expect(input).toBeFocused()
       await expect(input).toHaveCSS('visibility', 'visible')
 
-      await orcaPage.clock.resume()
-      await orcaPage.evaluate(async () => {
+      await quirkyPage.clock.resume()
+      await quirkyPage.evaluate(async () => {
         const probe: TerminalReplayPresentationProbe | undefined =
           window.__terminalReplayPresentationProbe
         probe?.release()
@@ -118,7 +118,7 @@ for (const scenario of [
       })
       await expect(screen).toHaveCSS('opacity', '1')
       await expect(input).toBeFocused()
-      await expect(orcaPage.locator('[data-terminal-replay-frame]')).toHaveCount(0)
+      await expect(quirkyPage.locator('[data-terminal-replay-frame]')).toHaveCount(0)
       const after = await screen.boundingBox()
       expect(after?.width).toBeCloseTo(before.width, 0)
       expect(after?.height).toBeCloseTo(before.height, 0)
@@ -127,16 +127,16 @@ for (const scenario of [
     } finally {
       await testInfo.attach('replay-events', {
         body: JSON.stringify(
-          await orcaPage.evaluate(() => window.__terminalReplayPresentationProbe?.trace),
+          await quirkyPage.evaluate(() => window.__terminalReplayPresentationProbe?.trace),
           null,
           2
         ),
         contentType: 'application/json'
       })
-      await orcaPage.evaluate(() => window.__terminalReplayPresentationProbe?.dispose())
-      await orcaPage.clock.resume().catch(() => undefined)
+      await quirkyPage.evaluate(() => window.__terminalReplayPresentationProbe?.dispose())
+      await quirkyPage.clock.resume().catch(() => undefined)
       await cdp.detach()
-      await sendToTerminal(orcaPage, ptyId, '\x03').catch(() => undefined)
+      await sendToTerminal(quirkyPage, ptyId, '\x03').catch(() => undefined)
     }
   })
 }

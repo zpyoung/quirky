@@ -142,12 +142,12 @@ export async function resolveSharedReleaseCacheRoot(
   if (
     isolatedCacheRoot ||
     process.env.CI ||
-    process.env.ORCA_DISABLE_SHARED_RELEASE_CACHE === '1'
+    process.env.QUIRKY_DISABLE_SHARED_RELEASE_CACHE === '1'
   ) {
     return undefined
   }
   try {
-    const { runProcess } = await import('@orca/process-host')
+    const { runProcess } = await import('@quirky/process-host')
     const result = await runProcess({
       program: 'git',
       args: ['rev-parse', '--git-common-dir'],
@@ -162,7 +162,7 @@ export async function resolveSharedReleaseCacheRoot(
     if (!common || common.includes('\n')) {
       return undefined
     }
-    return join(resolve(repoRoot, common), 'orca-cache', 'release-source')
+    return join(resolve(repoRoot, common), 'quirky-cache', 'release-source')
   } catch {
     return undefined
   }

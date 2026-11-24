@@ -55,7 +55,7 @@ describe('shallow watcher subscription', () => {
   })
 
   it('emits only included primary files, including an existing nested directory', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     try {
       await mkdir(join(root, 'logs'))
       const events: string[] = []
@@ -91,7 +91,7 @@ describe('shallow watcher subscription', () => {
   })
 
   it('does not forward events after unsubscribe', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     try {
       const events: string[] = []
       const subscription = startShallowWatcher(
@@ -116,7 +116,7 @@ describe('shallow watcher subscription', () => {
   it.skipIf(process.platform === 'win32')(
     'preserves a literal backslash in an included filename',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
       const events: string[] = []
       const subscription = startShallowWatcher(
         root,
@@ -137,7 +137,7 @@ describe('shallow watcher subscription', () => {
   )
 
   it('rebinds a nested directory that is replaced, which leaves fs.watch deaf', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     try {
       await mkdir(join(root, 'logs'))
       const events: string[] = []
@@ -166,7 +166,7 @@ describe('shallow watcher subscription', () => {
   })
 
   it('reuses the nested binding for an ordinary change event', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     try {
       await mkdir(join(root, 'logs'))
       const subscription = startShallowWatcher(
@@ -188,7 +188,7 @@ describe('shallow watcher subscription', () => {
 
   it('retries a failed replacement binding and resyncs after recovery', async () => {
     vi.useFakeTimers()
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     const logs = join(root, 'logs')
     let subscription: ReturnType<typeof startShallowWatcher> | undefined
     try {
@@ -234,7 +234,7 @@ describe('shallow watcher subscription', () => {
     'retains full $field precision at startup and after silent $parent replacement',
     async ({ parent, field }) => {
       vi.useFakeTimers()
-      const root = await mkdtemp(join(tmpdir(), 'orca-shallow-large-identity-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-large-identity-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
       let subscription: ReturnType<typeof startShallowWatcher> | undefined
@@ -318,7 +318,7 @@ describe('shallow watcher subscription', () => {
     'recovers an inode-less %s replacement while ignoring ordinary timestamp changes',
     async (parent) => {
       vi.useFakeTimers()
-      const root = await mkdtemp(join(tmpdir(), 'orca-shallow-inode-less-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-inode-less-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
       let subscription: ReturnType<typeof startShallowWatcher> | undefined
@@ -400,7 +400,7 @@ describe('shallow watcher subscription', () => {
     'keeps native $parent watches live without churn when birth time is $birthtime',
     async ({ parent, birthtime }) => {
       vi.useFakeTimers()
-      const root = await mkdtemp(join(tmpdir(), 'orca-shallow-unavailable-identity-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-unavailable-identity-'))
       const directory = join(root, parent)
       let subscription: ReturnType<typeof startShallowWatcher> | undefined
       try {
@@ -468,7 +468,7 @@ describe('shallow watcher subscription', () => {
     'admits a usable $parent identity once after an unknown binding (replaced=$replaced)',
     async ({ parent, replaced }) => {
       vi.useFakeTimers()
-      const root = await mkdtemp(join(tmpdir(), 'orca-shallow-known-identity-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-known-identity-'))
       const directory = join(root, parent)
       const previousDirectory = join(dirname(directory), `${basename(directory)}-previous`)
       let subscription: ReturnType<typeof startShallowWatcher> | undefined
@@ -544,7 +544,7 @@ describe('shallow watcher subscription', () => {
 
   it('resyncs included files when an initially missing directory becomes watchable', async () => {
     vi.useFakeTimers()
-    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-shallow-watcher-'))
     let subscription: ReturnType<typeof startShallowWatcher> | undefined
     try {
       const defaultWatch = vi.mocked(watch).getMockImplementation()

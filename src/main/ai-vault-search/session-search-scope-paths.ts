@@ -7,7 +7,7 @@ import {
 } from '../../shared/cross-platform-path'
 import { isFolderRepo } from '../../shared/repo-kind'
 import { resolveConfiguredWorktreeBasePaths } from '../../shared/worktree/configured-worktree-base-path'
-import { buildKnownOrcaWorkspaceLayouts } from '../../shared/worktree/ownership'
+import { buildKnownQuirkyWorkspaceLayouts } from '../../shared/worktree/ownership'
 import type { SessionSearchScopeCatalog } from './session-search-scope-catalog'
 
 type ScopeRepo = SessionSearchScopeCatalog['repos'][number]
@@ -41,7 +41,7 @@ export class ScopePathSet {
 }
 
 /**
- * The directories Orca creates this repo's worktrees in, past and present, where
+ * The directories Quirky creates this repo's worktrees in, past and present, where
  * such a directory belongs to this repo alone.
  *
  * A global root counts only under nesting: flat placement makes it every
@@ -60,7 +60,7 @@ export function managedWorktreeDirectories(
   )
   const repoName = getRuntimePathBasename(repo.path).replace(/\.git$/, '')
   const directories: string[] = []
-  for (const layout of buildKnownOrcaWorkspaceLayouts(settings, repo)) {
+  for (const layout of buildKnownQuirkyWorkspaceLayouts(settings, repo)) {
     if (configured.has(normalizeRuntimePathForComparison(layout.path))) {
       directories.push(layout.path)
     } else if (layout.nestWorkspaces && repoName) {

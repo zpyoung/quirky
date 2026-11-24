@@ -13,7 +13,12 @@ function textSpec() {
 async function registerOnCapablePane(h: AskRpcHarness, requestId = 'req_1') {
   h.setPaneOwner(PANE_KEY, 'term_1')
   h.hasLocalRendererWindow.value = true
-  return h.call('ask.register', { spec: textSpec(), requestId, paneKey: PANE_KEY, cwd: '/repo' }) as Promise<{
+  return h.call('ask.register', {
+    spec: textSpec(),
+    requestId,
+    paneKey: PANE_KEY,
+    cwd: '/repo'
+  }) as Promise<{
     askId: string
   }>
 }
@@ -76,14 +81,22 @@ describe('ask.* RPC methods', () => {
       const { askId } = await registerOnCapablePane(h)
       const controller = new AbortController()
 
-      const abortedWait = h.call('ask.wait', { askId, chunkMs: 60_000 }, { signal: controller.signal })
+      const abortedWait = h.call(
+        'ask.wait',
+        { askId, chunkMs: 60_000 },
+        { signal: controller.signal }
+      )
       controller.abort()
       const pending = (await abortedWait) as AskEnvelope
       expect(pending).toMatchObject({ status: 'pending', askId })
       expect(h.askDb.getAsk(askId)?.status).toBe('registered')
 
       const resumedWait = h.call('ask.wait', { askId, chunkMs: 5000 })
-      await h.call('ask.answer', { askId, answers: { q1: { value: 'Ada', source: 'input' } }, skipped: [] })
+      await h.call('ask.answer', {
+        askId,
+        answers: { q1: { value: 'Ada', source: 'input' } },
+        skipped: []
+      })
       const answered = (await resumedWait) as AskEnvelope
       expect(answered.status).toBe('answered')
     })
@@ -146,7 +159,11 @@ describe('ask.* RPC methods', () => {
     it('rejects the whole submission on a domain violation and commits nothing', async () => {
       const { askId } = await registerOnCapablePane(h)
       await expect(
-        h.call('ask.answer', { askId, answers: { q1: { value: 123, source: 'input' } }, skipped: [] })
+        h.call('ask.answer', {
+          askId,
+          answers: { q1: { value: 123, source: 'input' } },
+          skipped: []
+        })
       ).rejects.toThrow()
       expect(h.askDb.getAsk(askId)?.status).toBe('registered')
     })
@@ -154,7 +171,11 @@ describe('ask.* RPC methods', () => {
     it('rejects an answer naming an unknown question id', async () => {
       const { askId } = await registerOnCapablePane(h)
       await expect(
-        h.call('ask.answer', { askId, answers: { nope: { value: 'x', source: 'input' } }, skipped: ['q1'] })
+        h.call('ask.answer', {
+          askId,
+          answers: { nope: { value: 'x', source: 'input' } },
+          skipped: ['q1']
+        })
       ).rejects.toThrow(/nope/)
     })
   })
@@ -163,8 +184,16 @@ describe('ask.* RPC methods', () => {
     it('the first commit wins; a second concurrent answer returns committed: false exactly once', async () => {
       const { askId } = await registerOnCapablePane(h)
       const [first, second] = await Promise.all([
-        h.call('ask.answer', { askId, answers: { q1: { value: 'first', source: 'input' } }, skipped: [] }),
-        h.call('ask.answer', { askId, answers: { q1: { value: 'second', source: 'input' } }, skipped: [] })
+        h.call('ask.answer', {
+          askId,
+          answers: { q1: { value: 'first', source: 'input' } },
+          skipped: []
+        }),
+        h.call('ask.answer', {
+          askId,
+          answers: { q1: { value: 'second', source: 'input' } },
+          skipped: []
+        })
       ])
       const results = [first, second] as { committed: boolean }[]
       const wins = results.filter((result) => result.committed)

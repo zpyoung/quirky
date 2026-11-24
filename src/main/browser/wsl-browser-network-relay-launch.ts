@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { relayBundleCandidates } from '../ssh/relay-bundle-paths'
@@ -80,13 +80,13 @@ export function buildWslBrowserNetworkGuestInstallScript(bundle: Buffer, version
     'umask 077',
     `d="${guestRelayDir(version)}"`,
     'mkdir -p "$d"',
-    'base64 -d > "$d/bundle.$$.tmp" << \'ORCA_EOF_BUNDLE\'',
+    'base64 -d > "$d/bundle.$$.tmp" << \'QUIRKY_EOF_BUNDLE\'',
     encoded,
-    'ORCA_EOF_BUNDLE',
+    'QUIRKY_EOF_BUNDLE',
     `mv "$d/bundle.$$.tmp" "$d/${WSL_BROWSER_NETWORK_RELAY_BUNDLE_NAME}"`,
-    'cat > "$d/launch.$$.tmp" << \'ORCA_EOF_LAUNCH\'',
+    'cat > "$d/launch.$$.tmp" << \'QUIRKY_EOF_LAUNCH\'',
     buildWslBrowserNetworkGuestLaunchScript(version).trimEnd(),
-    'ORCA_EOF_LAUNCH',
+    'QUIRKY_EOF_LAUNCH',
     'mv "$d/launch.$$.tmp" "$d/launch.sh"',
     'chmod 700 "$d/launch.sh"',
     `printf '%s' '${version}' > "$d/${WSL_BROWSER_NETWORK_RELAY_VERSION_FILE}"`,

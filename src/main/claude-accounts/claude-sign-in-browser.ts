@@ -7,7 +7,7 @@ import {
 } from '../../shared/claude-sign-in-link'
 import type { ClaudeCommandConfig } from './claude-command-process'
 
-const HELPER_NAME = '.orca-sign-in-browser'
+const HELPER_NAME = '.quirky-sign-in-browser'
 const LINK_SUFFIX = '.link'
 const POLL_INTERVAL_MS = 250
 // Why a deadline: Claude runs BROWSER as soon as it listens, so silence means it never ran.
@@ -41,7 +41,7 @@ export function isClaudeLocalSignInLink(signInLink: string): boolean {
   }
 }
 
-/** A BROWSER stand-in in the account's folder that hands Claude's sign-in link to Orca instead of
+/** A BROWSER stand-in in the account's folder that hands Claude's sign-in link to Quirky instead of
  *  opening it. */
 export async function prepareClaudeSignInBrowser(
   folder: ClaudeCommandConfig

@@ -2,7 +2,7 @@
 // creation registry while it runs, and names its workspace before the host announces it.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+vi.mock('../../shared/sidebar-inputs-switch', () => ({ QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true }))
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
   webContents: { fromId: vi.fn(() => null) },
@@ -43,7 +43,7 @@ vi.mock('../ipc/registered-worktree-roots-scoped-invalidation', () => ({
   invalidateAuthorizedRootsCacheForRepo: vi.fn()
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 const gitRepo = {
   id: 'repo-1',
@@ -66,13 +66,13 @@ type RuntimeInternals = {
   emitWorktreeLifecycle: (event: unknown) => void
 }
 
-function makeRuntime(repo: Record<string, unknown> = gitRepo): OrcaRuntimeService {
+function makeRuntime(repo: Record<string, unknown> = gitRepo): QuirkyRuntimeService {
   const store = {
     getSettings: () => ({ disabledTuiAgents: ['codex'], workspaceDir: '/worktrees' }),
     getProjectHostSetups: () => []
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every store method this create path reaches is supplied above.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the named members all exist on the service; the cast only exposes non-public ones to the spies.
   const internals = runtime as unknown as RuntimeInternals
   vi.spyOn(internals, 'resolveRepoSelector').mockResolvedValue(repo)
@@ -93,7 +93,7 @@ function makeRuntime(repo: Record<string, unknown> = gitRepo): OrcaRuntimeServic
 
 type LocalCreateArgs = { onWorktreeMetadataPersisted: (created: { id: string }) => unknown }
 
-function creationsOf(runtime: OrcaRuntimeService): Record<string, unknown> {
+function creationsOf(runtime: QuirkyRuntimeService): Record<string, unknown> {
   if (!runtime.workspaceCreations) {
     throw new Error('the switch is mocked on')
   }

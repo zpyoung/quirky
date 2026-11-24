@@ -25,7 +25,7 @@ export const UI_STATE_DISPOSITIONS = {
   acknowledgedAgentsByPaneKey: moveDisposition(38, { note: 'Pane keys are kept.' }),
   activityClearedAtByPaneKey: moveDisposition(38, { note: 'Pane keys are kept.' }),
   manuallyUnreadTurnsByPaneKey: moveDisposition(38, { note: 'Pane keys are kept.' }),
-  trustedOrcaHooks: {
+  trustedQuirkyHooks: {
     disposition: 'rewrite-desktop',
     item: 40,
     note: 'Kept by repoId; the trust prune must not drop it while the repo is between hosts.'

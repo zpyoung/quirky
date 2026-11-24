@@ -22,7 +22,7 @@ const appDir = join(projectDir, 'mobile', 'app')
 const itBundling = mobileWebAppDependenciesPresent() ? it : it.skip
 
 async function withScratch(run) {
-  const scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-routes-test-'))
+  const scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-routes-test-'))
   try {
     return await run(scratch)
   } finally {
@@ -230,7 +230,7 @@ describe('the synthesized RequireContext', () => {
     expect(context.keys()).toEqual(['./h/index.tsx'])
     expect(context('./h/index.tsx')).toEqual({ default: 'screen' })
     expect(context.resolve('./h/index.tsx')).toBe('./h/index.tsx')
-    expect(context.id).toBe('orca-mobile-web-app-routes')
+    expect(context.id).toBe('quirky-mobile-web-app-routes')
   })
 
   it('hands out a copy of keys, so a caller cannot mutate the route tree', () => {

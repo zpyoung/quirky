@@ -162,7 +162,7 @@ export class ClaudeOpenTurn {
     this.deps.sink.setActivity?.(null)
   }
 
-  /** Orca asked the provider to stop the command `turnId` names. */
+  /** Quirky asked the provider to stop the command `turnId` names. */
   commandInterruptRequested(turnId: string): void {
     if (this.current?.command && this.current.turnId === turnId) {
       this.current.command.interruptRequested = true

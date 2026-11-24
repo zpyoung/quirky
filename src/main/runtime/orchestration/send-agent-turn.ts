@@ -1,5 +1,5 @@
 /**
- * The one way Orca sends a message into an agent on another agent's behalf.
+ * The one way Quirky sends a message into an agent on another agent's behalf.
  *
  * Built only from the paths a user's own message already takes: a structured chat gets
  * `host.send` (the composer's `sendStructuredAgentSessionTurn`, queue decision included) with the

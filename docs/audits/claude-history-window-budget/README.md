@@ -5,7 +5,7 @@ Restart reconciliation's Claude history reader declares a 16 MiB source quota, b
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/claude-history-window-budget/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/claude-history-window-budget/reproduce.mjs
 ```
 
 The seven-case fixture calls the actual history reader, branch proof and bounded reader against real temporary files. It injects an append immediately after the relevant size snapshot. The baseline reverses only `fix.patch` in a temporary Vite transform, leaving the checkout unchanged. Each child has a 45-second timeout and a 512 MiB old-space ceiling. No application window or provider process starts.

@@ -1,5 +1,5 @@
 import type { OrchestrationCompatibilityEvidence } from '../../../../../../shared/orchestration-compatibility-evidence'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { isEquivalentPaneKey } from '../../../../orchestration/db/pane-key-match'
@@ -12,7 +12,7 @@ import { isEquivalentPaneKey } from '../../../../orchestration/db/pane-key-match
  * server started from a live coordinator or worker pane is refused.
  */
 export function assertLifecycleCallerIsNotAnotherParty(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   args: {
     from: string
     fromPaneKey: string | undefined

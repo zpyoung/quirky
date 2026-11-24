@@ -31,9 +31,9 @@ const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = `tab-1:${LEAF_ID}`
 
 beforeEach(() => {
-  vi.stubEnv('ORCA_BACKGROUND_LAUNCH', undefined)
-  vi.stubEnv('ORCA_E2E_HEADLESS', undefined)
-  vi.stubEnv('ORCA_E2E_HEADFUL', undefined)
+  vi.stubEnv('QUIRKY_BACKGROUND_LAUNCH', undefined)
+  vi.stubEnv('QUIRKY_E2E_HEADLESS', undefined)
+  vi.stubEnv('QUIRKY_E2E_HEADFUL', undefined)
 })
 afterEach(() => vi.unstubAllEnvs())
 

@@ -32,7 +32,7 @@ describe('modifier routing across link source owners', () => {
     vi.unstubAllGlobals()
   })
 
-  it('still lets the inverting modifier pull a local link into Orca', () => {
+  it('still lets the inverting modifier pull a local link into Quirky', () => {
     storeState.settings = { openLinksInApp: false, openLinksInAppModifierInverts: true }
 
     openHttpLink('https://example.com/', {
@@ -46,7 +46,7 @@ describe('modifier routing across link source owners', () => {
     })
   })
 
-  it('lets an inverting modifier reach Orca on the owning runtime', () => {
+  it('lets an inverting modifier reach Quirky on the owning runtime', () => {
     storeState.settings = {
       openLinksInApp: false,
       openLinksInAppModifierInverts: true,

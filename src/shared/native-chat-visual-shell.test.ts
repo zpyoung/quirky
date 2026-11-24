@@ -99,7 +99,7 @@ describe('buildNativeChatVisualDocument', () => {
     const baseAt = document.indexOf('<base href="about:srcdoc">')
     expect(baseAt).toBeGreaterThan(0)
     expect(baseAt).toBeLessThan(document.indexOf('http-equiv="Content-Security-Policy"'))
-    // A srcdoc page otherwise resolves '#x' against Orca's own URL and navigates away.
+    // A srcdoc page otherwise resolves '#x' against Quirky's own URL and navigates away.
     expect(new URL('#overview', 'about:srcdoc').href).toBe('about:srcdoc#overview')
     expect(() => new URL('page-2.html', 'about:srcdoc')).toThrow()
   })
@@ -208,8 +208,8 @@ describe('readNativeChatVisualFrameMessage', () => {
       'unknown input',
       { type: NATIVE_CHAT_VISUAL_READER_SCROLL_TYPE, channel: 'c', input: 'key', deltaY: -3 }
     ],
-    ['unknown type', { type: 'orca-panel-action', channel: 'c' }],
-    ['a string', 'orca-visual-size'],
+    ['unknown type', { type: 'quirky-panel-action', channel: 'c' }],
+    ['a string', 'quirky-visual-size'],
     ['null', null]
   ])('refuses %s', (_name, data) => {
     expect(readNativeChatVisualFrameMessage(data, 'c')).toBeNull()

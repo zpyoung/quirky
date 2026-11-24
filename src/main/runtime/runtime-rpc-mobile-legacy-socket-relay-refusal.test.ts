@@ -2,15 +2,15 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { createMobileRpcSurfaceRuntime } from './runtime-rpc-mobile-method-allowlist-fixtures'
 
 describe('a server-targeted phone call on a legacy (non-E2EE) socket', () => {
   it('is refused, never run on this desktop', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-legacy-relay-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-legacy-relay-'))
     const { runtime, mocks } = createMobileRpcSurfaceRuntime()
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
     server['deviceRegistry'] = new DeviceRegistry(userDataPath)
     const device = server['deviceRegistry']!.addDevice('phone', 'mobile')
     const replies: Record<string, unknown>[] = []

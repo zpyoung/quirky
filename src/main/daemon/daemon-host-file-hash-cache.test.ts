@@ -80,7 +80,7 @@ beforeEach(() => {
     getAppMetrics: () => []
   })
   setProcessProp('platform', 'win32')
-  setProcessProp('execPath', join(installDir, 'Orca.exe'))
+  setProcessProp('execPath', join(installDir, 'Quirky.exe'))
   setProcessProp('resourcesPath', join(installDir, 'resources'))
 })
 
@@ -99,11 +99,11 @@ afterEach(() => {
 describe('daemon-host code hash cache', () => {
   it('validates a warm mirror without rereading source or mirror code', () => {
     const root = materializedRoot()
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Quirky.exe'))
     vi.mocked(readFileSync).mockClear()
 
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Orca.exe'))
-    expect(materializeRelocatedDaemonHost()?.execPath).toBe(join(root, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Quirky.exe'))
+    expect(materializeRelocatedDaemonHost()?.execPath).toBe(join(root, 'Quirky.exe'))
     expect(codeReads()).toEqual([])
   })
 
@@ -140,7 +140,7 @@ describe('daemon-host code hash cache', () => {
     const root = materializedRoot()
     rmSync(installDir, { recursive: true, force: true })
 
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Quirky.exe'))
     expect(() => hashDaemonHostFile(join(installDir, chunkRel))).toThrow()
   })
 

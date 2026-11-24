@@ -1,4 +1,4 @@
-// An approval subject of a kind this build cannot draw is a newer Orca's. It is carried as it was,
+// An approval subject of a kind this build cannot draw is a newer Quirky's. It is carried as it was,
 // its card shows the approval's `detail`, and only the card's cancel answers it: nobody approves
 // what this build cannot show. On Claude the cancel denies the request and the turn goes on; on
 // Codex it ends the turn.

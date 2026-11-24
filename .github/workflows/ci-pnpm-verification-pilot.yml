@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ORCA_BACKGROUND_LAUNCH: '1'
+  QUIRKY_BACKGROUND_LAUNCH: '1'
 
 jobs:
   seed:

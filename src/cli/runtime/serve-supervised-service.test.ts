@@ -27,7 +27,7 @@ function harness(overrides: Partial<SupervisedServeOptions> & { userDataPath: st
   const logs: string[] = []
   let stopListener: (() => void) | null = null
   const options: SupervisedServeOptions = {
-    executable: '/opt/orca/orca',
+    executable: '/opt/quirky/quirky',
     force: false,
     runOnce: async () => 1,
     readInstallEvidence: async () => ({ kind: 'clear' }),
@@ -64,7 +64,7 @@ describe('superviseServeService', () => {
   let userDataPath: string
 
   beforeEach(async () => {
-    userDataPath = await mkdtemp(join(tmpdir(), 'orca-supervise-'))
+    userDataPath = await mkdtemp(join(tmpdir(), 'quirky-supervise-'))
   })
 
   afterEach(async () => {
@@ -223,7 +223,7 @@ describe('superviseServeService', () => {
       runOnce: async () => {
         runs++
         if (runs === 1) {
-          throw new Error('Orca serve exited via SIGKILL.')
+          throw new Error('Quirky serve exited via SIGKILL.')
         }
         h.stop()
         return 0
@@ -231,7 +231,7 @@ describe('superviseServeService', () => {
     })
     await expect(superviseServeService(h.options)).resolves.toBe(0)
     expect(runs).toBe(2)
-    expect(h.logs).toContain('[serve] Orca serve exited via SIGKILL; restarting in 1s.')
+    expect(h.logs).toContain('[serve] Quirky serve exited via SIGKILL; restarting in 1s.')
   })
 
   it('restarts from a replaced AppImage before starting a child, not after it', async () => {

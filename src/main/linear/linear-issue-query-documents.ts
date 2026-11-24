@@ -99,7 +99,7 @@ export const LINEAR_ISSUE_NODE_FIELDS = `
 `
 
 export const SEARCH_ISSUES_QUERY = `
-  query OrcaLinearIssueSearch($term: String!, $first: Int) {
+  query QuirkyLinearIssueSearch($term: String!, $first: Int) {
     searchIssues(term: $term, first: $first) {
       nodes {
         ${LINEAR_ISSUE_NODE_FIELDS}
@@ -109,7 +109,7 @@ export const SEARCH_ISSUES_QUERY = `
 `
 
 export const ALL_ISSUES_QUERY = `
-  query OrcaLinearIssues(
+  query QuirkyLinearIssues(
     $first: Int,
     $after: String,
     $filter: IssueFilter,
@@ -128,7 +128,7 @@ export const ALL_ISSUES_QUERY = `
 `
 
 export const VIEWER_ASSIGNED_ISSUES_QUERY = `
-  query OrcaLinearViewerAssignedIssues(
+  query QuirkyLinearViewerAssignedIssues(
     $first: Int,
     $after: String,
     $filter: IssueFilter,
@@ -149,7 +149,7 @@ export const VIEWER_ASSIGNED_ISSUES_QUERY = `
 `
 
 export const VIEWER_CREATED_ISSUES_QUERY = `
-  query OrcaLinearViewerCreatedIssues(
+  query QuirkyLinearViewerCreatedIssues(
     $first: Int,
     $after: String,
     $filter: IssueFilter,
@@ -188,7 +188,7 @@ export const AGENT_ISSUE_WRITE_FIELDS = `
 `
 
 export const ISSUE_BY_UUID_QUERY = `
-  query OrcaLinearIssueByUuid($id: String!) {
+  query QuirkyLinearIssueByUuid($id: String!) {
     issue(id: $id) {
       ${AGENT_ISSUE_WRITE_FIELDS}
     }
@@ -196,7 +196,7 @@ export const ISSUE_BY_UUID_QUERY = `
 `
 
 export const COMMENT_BY_UUID_QUERY = `
-  query OrcaLinearCommentByUuid($id: String!) {
+  query QuirkyLinearCommentByUuid($id: String!) {
     comment(id: $id) {
       id
       url
@@ -208,7 +208,7 @@ export const COMMENT_BY_UUID_QUERY = `
 `
 
 export const ATTACHMENT_BY_UUID_QUERY = `
-  query OrcaLinearAttachmentByUuid($id: String!) {
+  query QuirkyLinearAttachmentByUuid($id: String!) {
     attachment(id: $id) {
       id
       title
@@ -224,7 +224,7 @@ export const ATTACHMENT_BY_UUID_QUERY = `
 // fetches, all sequential while holding a shared Linear concurrency slot).
 // first: 50 matches the SDK default page size the previous code relied on.
 export const ISSUE_COMMENTS_QUERY = `
-  query OrcaLinearIssueComments($id: String!) {
+  query QuirkyLinearIssueComments($id: String!) {
     issue(id: $id) {
       comments(first: 50) {
         nodes {

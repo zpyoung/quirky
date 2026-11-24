@@ -19,7 +19,7 @@ import { executeAgentLaunch } from '../agent-launch/agent-launch-executor'
 import type { Automation, AutomationRun } from '../../shared/automations-types'
 import { findReusableAutomationRun } from '../../shared/automation-session-reuse'
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { deliverTerminalAgentLaunchPrompt } from '../runtime/rpc/methods/agent-launch-terminal-prompt'
 import type { HeadlessAutomationDispatchLaunch } from './headless-dispatch'
 import { buildHeadlessAutomationWorktreeCreateArgs } from './headless-workspace-create'
@@ -40,7 +40,7 @@ export type HeadlessAutomationAgentLaunch = Omit<HeadlessAutomationDispatchLaunc
 }
 
 export async function launchHeadlessAutomationAgent(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   request: {
     automation: Automation
     run: Pick<AutomationRun, 'id' | 'title' | 'scheduledFor'>
@@ -155,7 +155,7 @@ export async function launchHeadlessAutomationAgent(
 
 /** Null when no previous run's agent is idle in its own PTY or it did not take the prompt. */
 async function sendToReusableSession(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   request: {
     automation: Automation
     run: Pick<AutomationRun, 'id'>
@@ -207,7 +207,7 @@ async function sendToReusableSession(
 }
 
 /** The run's pane handle while that pane still holds the run's own PTY; null otherwise. */
-export function runOwnHandle(runtime: OrcaRuntimeService, run: AutomationRun): string | null {
+export function runOwnHandle(runtime: QuirkyRuntimeService, run: AutomationRun): string | null {
   const handle = run.terminalPaneKey
     ? runtime.getTerminalHandleForPaneKey(run.terminalPaneKey)
     : null

@@ -38,12 +38,12 @@ describe('legacy relay endpoints', () => {
     const command = posixLegacyRelayConnectCommand(
       '/home/me',
       '/usr/bin/node',
-      '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock'
+      '/home/me/.quirky-remote/relay-0.1.0+abc/relay-1234.sock'
     )
     expect(command).toBe(
-      "cd '/home/me/.orca-remote/relay-0.1.0+abc' && '/usr/bin/node' relay.js --connect " +
-        "--sock-path '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock' " +
-        "--credential-file '/home/me/.orca-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
+      "cd '/home/me/.quirky-remote/relay-0.1.0+abc' && '/usr/bin/node' relay.js --connect " +
+        "--sock-path '/home/me/.quirky-remote/relay-0.1.0+abc/relay-1234.sock' " +
+        "--credential-file '/home/me/.quirky-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
     )
     expect(command).not.toContain('--detached')
   })
@@ -53,12 +53,12 @@ describe('legacy relay endpoints', () => {
       posixLegacyRelayConnectCommand(
         '/home/a-very-long-name',
         'node',
-        '/tmp/.orca-relay-1000/relay-0.1.0+abc/relay-1234.sock'
+        '/tmp/.quirky-relay-1000/relay-0.1.0+abc/relay-1234.sock'
       )
     ).toBe(
-      "cd '/home/a-very-long-name/.orca-remote/relay-0.1.0+abc' && 'node' relay.js --connect " +
-        "--sock-path '/tmp/.orca-relay-1000/relay-0.1.0+abc/relay-1234.sock' " +
-        "--credential-file '/home/a-very-long-name/.orca-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
+      "cd '/home/a-very-long-name/.quirky-remote/relay-0.1.0+abc' && 'node' relay.js --connect " +
+        "--sock-path '/tmp/.quirky-relay-1000/relay-0.1.0+abc/relay-1234.sock' " +
+        "--credential-file '/home/a-very-long-name/.quirky-remote/relay-0.1.0+abc/relay-1234.sock.credential'"
     )
   })
 
@@ -77,7 +77,7 @@ describe('legacy relay endpoints', () => {
 describe('legacy relay endpoints on a Windows host', () => {
   const host = getRemoteHostPlatform('win32-x64')
   const version = 'relay-0.1.0+aaaaaaaaaaaa'
-  const dir = joinRemotePath(host, 'C:\\Users\\dev', '.orca-remote', version)
+  const dir = joinRemotePath(host, 'C:\\Users\\dev', '.quirky-remote', version)
   const ours = relaySocketNameForInstanceId('desktop-a')
   const theirs = relaySocketNameForInstanceId('desktop-b')
   const [ourPipe] = windowsRelayPipePathsForSocketName(host, dir, ours)
@@ -105,7 +105,7 @@ describe('legacy relay endpoints on a Windows host', () => {
   it('never reads a pipe no directory accounts for as proof of absence', async () => {
     execCommand.mockImplementation(async (_c: unknown, command: string) =>
       command === 'INVENTORY'
-        ? JSON.stringify({ pipes: [bare(ourPipe), 'orca-relay-ffffffffffffffffffff'], dirs: {} })
+        ? JSON.stringify({ pipes: [bare(ourPipe), 'quirky-relay-ffffffffffffffffffff'], dirs: {} })
         : 'C:\\Users\\dev'
     )
     await expect(listLegacyRelayEndpoints(conn, 'desktop-a')).resolves.toMatchObject({

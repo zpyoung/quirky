@@ -18,7 +18,7 @@ import {
   closeTestJournalHostDatabase,
   closeTestJournalHostDatabases,
   openTestJournalHostDatabase,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import { openAgentSessionJournal } from '../native-chat/agent-session-journal/journal-store-factory'
 import { journalIdentityFor } from '../native-chat/agent-session-wire/structured-agent-session-attach'
@@ -31,7 +31,7 @@ import {
   seedTestAgentSessionRecordStore,
   seedTestAgentSessionStoreFromNewerBuild
 } from './agent-session-record-store-test-harness'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import {
   ensureStructuredAgentSessionHost,
   stopStructuredAgentSessionRuntime
@@ -66,7 +66,7 @@ const CLEARED = 'chat-s-0003'
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-startup-tab-restore-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-startup-tab-restore-'))
 })
 
 afterEach(async () => {
@@ -116,7 +116,7 @@ function chatRecord(
 }
 
 /** The chat records the last run left; `visible` is their saved tab index, absent on a legacy
- *  profile. `newer` leaves them in a database a newer Orca wrote. Then each chat's history as the
+ *  profile. `newer` leaves them in a database a newer Quirky wrote. Then each chat's history as the
  *  last run left it: one prompt, accepted, so nothing is left to send. */
 async function seedProfile(
   records: AgentSessionRecord[],
@@ -167,7 +167,7 @@ async function seedProfile(
 
 function startupRuntime(options: { afterInstall?: () => void; profileChats?: string[] } = {}) {
   const log = recordingStructuredAgentSessionLogger()
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root`, stubs the PTY daemon and gives it a profile.
   const internal = runtime as unknown as {
     hasPersistedStructuredAgentSessionStore(): boolean
@@ -241,10 +241,10 @@ async function tabIndexOnDisk(): Promise<string[] | undefined> {
 
 describe('restoring the chat tabs open at quit', () => {
   it.each([
-    { store: 'records a newer Orca wrote', newer: true, writesFail: false },
+    { store: 'records a newer Quirky wrote', newer: true, writesFail: false },
     { store: 'a store whose writes keep failing', newer: false, writesFail: true }
   ])(
-    'lists every chat from $store and writes nothing; it reads them unless a newer Orca saved them',
+    'lists every chat from $store and writes nothing; it reads them unless a newer Quirky saved them',
     async ({ newer, writesFail }) => {
       const records = [
         chatRecord(CHAT_A),
@@ -277,12 +277,12 @@ describe('restoring the chat tabs open at quit', () => {
           (tab) => tab.type !== 'agent-session' || tab.replacesSessionId === undefined
         )
       ).toBe(true)
-      // A newer Orca's leases are adjudicated in memory, so nothing fails there; its chats do not open.
+      // A newer Quirky's leases are adjudicated in memory, so nothing fails there; its chats do not open.
       if (newer) {
         for (const sessionId of [CHAT_A, CHAT_B]) {
           await expect(
             getStructuredAgentSessionHost()!.journalSnapshot(sessionId)
-          ).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+          ).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
         }
         expect(log.entries.map((entry) => entry.fields.scope)).not.toContain('lease-reconcile')
       } else {

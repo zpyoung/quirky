@@ -65,7 +65,7 @@ function userVisible(journal: AgentSessionJournal, liveFence: number | null) {
 }
 
 it('settles a refused Codex exit through the host in one commit, then permits a new send and reopens', async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-exit-convergence-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-exit-convergence-'))
   const options = {
     identity: {
       sessionId: SESSION,

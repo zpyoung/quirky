@@ -10,7 +10,7 @@ import { argvRequestsServeMode, normalizeServeModeArgv } from './serve-mode-argv
 import {
   configureDevUserDataPath,
   configureElectronNetworkCompatibility,
-  configureOrcaUserDataPathEnv,
+  configureQuirkyUserDataPathEnv,
   disableUnsupportedChromiumFeatures,
   enableMainProcessGpuFeatures,
   installDevParentDisconnectQuit,
@@ -44,7 +44,7 @@ import {
   recordSubprocessSpawn,
   startMainThreadChurnProbe
 } from '../diagnostics/main-thread-churn-probe'
-import { setSpawnObserver } from '@orca/process-host/spawn-observer'
+import { setSpawnObserver } from '@quirky/process-host/spawn-observer'
 import { settledDiffCache } from '../git/source-control/git-read-cache-invalidation'
 import { reserveServeStdoutForReadiness } from '../server/serve-stdout-boundary'
 import { createServeDesktopActivationGate } from './serve-desktop-activation'
@@ -77,9 +77,9 @@ import { setDefaultProxySessionResolver } from '../network/proxy-settings'
 import { initDataPath, getCanonicalUserDataPath } from '../persistence'
 import { applyMacPressAndHoldDefaultAtStartup } from '../macos-press-and-hold-default'
 import { configureSessionParseCachePersistence } from '../ai-vault/session-parse-cache-persistence'
-import { initOrcaProfilePaths } from '../orca-profiles/profile-index-store'
-import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
-import { recoverPendingProfileProjectMoves } from '../orca-profiles/profile-project-move-intent'
+import { initQuirkyProfilePaths } from '../quirky-profiles/profile-index-store'
+import { getProfileUserDataPath } from '../quirky-profiles/profile-storage-paths'
+import { recoverPendingProfileProjectMoves } from '../quirky-profiles/profile-project-move-intent'
 import { initStatsPath } from '../stats/collector'
 import { initClaudeUsagePath } from '../claude-usage/store'
 import { initCodexUsagePath } from '../codex-usage/store'
@@ -182,7 +182,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // Why (issue #9441): without this, one rejected background promise during startup restore kills main silently (exit 1, no crash report).
   installUnhandledRejectionLogging()
   // Why: expose the app version via process.env so main and the forked daemon can set TERM_PROGRAM_VERSION without importing electron.
-  process.env.ORCA_APP_VERSION = app.getVersion()
+  process.env.QUIRKY_APP_VERSION = app.getVersion()
   configureRemoteServerUpdater({
     getSnapshot: getRemoteServerUpdaterSnapshot,
     check: checkForRemoteServerUpdate,
@@ -210,15 +210,15 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // it can only reach the main-process guard and breadcrumb store once this is registered.
   installMainProcessTreeKillGate()
   configureDevUserDataPath(is.dev)
-  configureOrcaUserDataPathEnv()
+  configureQuirkyUserDataPathEnv()
   // Why these four lines are one step (#16761): the two above decide where userData lives, and
   // everything below may resolve a path. Installing the accessor any later leaves a window where an
-  // early resolve either throws — which is what killed `orca serve` — or, worse, memoizes the
+  // early resolve either throws — which is what killed `quirky serve` — or, worse, memoizes the
   // pre-override directory and silently writes user state to the wrong place for the whole session.
   // Safe this early: ElectronAppEnvironment holds no state and calls `app` lazily per accessor, so it
   // changes no timing, and initDataPath only joins strings.
   setAppEnvironment(new ElectronAppEnvironment())
-  // Why captured now: after the dev/E2E override above, and before app.setName('Orca') (whenReady)
+  // Why captured now: after the dev/E2E override above, and before app.setName('Quirky') (whenReady)
   // changes how userData resolves on a case-sensitive filesystem. See persistence.ts:20-28.
   initDataPath()
   startEventLoopDelayProbe('main', getCanonicalUserDataPath())
@@ -239,11 +239,11 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
       platform: process.platform,
       osRelease: os.release(),
       userData: app.getPath('userData'),
-      e2eUserData: Boolean(process.env.ORCA_E2E_USER_DATA_DIR)
+      e2eUserData: Boolean(process.env.QUIRKY_E2E_USER_DATA_DIR)
     })
     startEventLoopStallProbe()
   }
-  // Self-gated on ORCA_MAIN_THREAD_DIAGNOSTICS; runs the whole session to catch steady-state churn (issue #7576).
+  // Self-gated on QUIRKY_MAIN_THREAD_DIAGNOSTICS; runs the whole session to catch steady-state churn (issue #7576).
   // Why the diff-cache counters ride along: a stamp the filesystem reports unstably makes the cache
   // look exactly like a cold start, and only the hit/miss/unprovable split tells the two apart.
   if (isMainThreadDiagnosticsEnabled()) {
@@ -253,7 +253,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   }
   startMainThreadChurnProbe({ extraStats: () => ({ diffCache: settledDiffCache.stats() }) })
   // Why: acquire AFTER configureDevUserDataPath — Electron derives lock identity from `userData`, so dev/packaged lock in separate namespaces.
-  // Why dev locks too: two processes on one profile corrupt its stores (PR #1326 / #1312); parallel `pnpm dev` needs ORCA_DEV_USER_DATA_PATH per copy.
+  // Why dev locks too: two processes on one profile corrupt its stores (PR #1326 / #1312); parallel `pnpm dev` needs QUIRKY_DEV_USER_DATA_PATH per copy.
   const bypass = shouldBypassSingleInstanceLock({ isDev: is.dev, isServeMode: state.isServeMode })
   const skip = shouldSkipSingleInstanceLock({ isDev: is.dev, isServeMode: state.isServeMode })
   if (bypass) {
@@ -279,7 +279,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
     app.exit(SINGLE_INSTANCE_ALREADY_RUNNING_EXIT_CODE)
     return false
   }
-  // Why after Electron's lock: that one fences other desktops; this one fences orcad `orca serve`.
+  // Why after Electron's lock: that one fences other desktops; this one fences quirkyd `quirky serve`.
   if (!skip && !bypass && !acquireDesktopProfileLockOrExplain(getCanonicalUserDataPath())) {
     return false
   }
@@ -302,7 +302,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // Why at process level, not per-window: pty.ts registers against injected surfaces so
   // it can load without electron, and an Electron main process always has ipcMain —
   // whether a window exists is irrelevant. Installing this in attachMainWindowServices
-  // meant `orca serve` registered its PTY handlers against no-ops before any window
+  // meant `quirky serve` registered its PTY handlers against no-ops before any window
   // attached, so a paired desktop owner never received them.
   setPtyHostBindings({ ipc: ipcMain, power: powerMonitor })
   // Why also at process level: the runtime's notification, window-lookup and
@@ -326,14 +326,14 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
   // request in. A host without them rejects speech calls rather than pretending.
   setSpeechServiceFactories(electronSpeechServiceFactories)
   setWorktreeWatcherRemoval(desktopWorktreeWatcherRemoval)
-  // Why: couple to dev-parent only for electron-vite desktop runs; `orca serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
+  // Why: couple to dev-parent only for electron-vite desktop runs; `quirky serve`'s parent (CLI shim/background shell) isn't the intended server lifetime.
   const shouldCoupleToDevParent = is.dev && !state.isServeMode
   installDevParentDisconnectQuit(shouldCoupleToDevParent)
   installDevParentWatchdog(shouldCoupleToDevParent)
   installDevParentSignalQuit(shouldCoupleToDevParent)
   // Why not at module scope with the other lifetime couplings (#16761): this resolves the handoff
   // path, so it throws until setAppEnvironment() above installs the accessor — which killed every
-  // `orca serve` process before it could listen. After initDataPath() specifically, so the
+  // `quirky serve` process before it could listen. After initDataPath() specifically, so the
   // path-equality check against the CLI's env var uses the dir captured before app.setName().
   // Safe to defer, and must stay synchronous: no 'disconnect' can be delivered until this module
   // finishes evaluating, so moving this behind an await would open a real orphan window.
@@ -346,7 +346,7 @@ function initializeMainProcessPreflight(options: MainProcessPreflightOptions): b
     filePath: join(getCanonicalUserDataPath(), 'ai-vault', 'session-parse-cache.json'),
     appVersion: app.getVersion()
   })
-  initOrcaProfilePaths()
+  initQuirkyProfilePaths()
   // A crash can leave a cross-profile SQLite move between its two commits. Resolve
   // that journal before any Store opens a profile, so no reader observes a half-move.
   const profileUserDataPath = getProfileUserDataPath()

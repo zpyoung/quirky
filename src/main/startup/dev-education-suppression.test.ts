@@ -83,7 +83,7 @@ describe('shouldSuppressDevEducation', () => {
     expect(
       shouldSuppressDevEducation({
         isDev: true,
-        env: { ORCA_E2E_USER_DATA_DIR: '/tmp/orca-e2e' }
+        env: { QUIRKY_E2E_USER_DATA_DIR: '/tmp/quirky-e2e' }
       })
     ).toBe(false)
   })
@@ -137,7 +137,7 @@ describe('suppressDevEducationForStore', () => {
       'voice-dictation',
       'native-chat-upgrade',
       'agent-session-search',
-      'orca-cli',
+      'quirky-cli',
       'cmd-j-palette'
     ])
     expect(state.ui.contextualToursSeenIds).toEqual([

@@ -10,7 +10,7 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { APPIMAGE_NODE_RUNTIME_SEGMENTS } from './appimage-node-runtime'
 
 const CACHE_KEY_PATTERN = /^[0-9a-f]{24}$/u
-const LINUX_EXECUTABLE_NAME = 'orca-ide'
+const LINUX_EXECUTABLE_NAME = 'quirky-ide'
 // Why a versioned key: builds before generation leases prune every generation in
 // digest(appImagePath) except their own, including one a newer build still runs from. They never
 // scan this namespace. Rolling back to such a build reopens that window for its own namespace only.
@@ -55,7 +55,7 @@ export type AppImageGenerationLocation = {
   rootPath: string
 }
 
-/** The generation root an executable runs from: its `orca-ide`, or its bundled Node (the daemon). */
+/** The generation root an executable runs from: its `quirky-ide`, or its bundled Node (the daemon). */
 function generationRootOfExecutable(execPath: string): string | null {
   const resolved = resolve(execPath)
   if (basename(resolved) === LINUX_EXECUTABLE_NAME) {

@@ -64,7 +64,7 @@ export function registerJournalItemProvenanceTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-provenance-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-provenance-'))
     database = openTestJournalHostDatabase(root)
   })
 

@@ -1,8 +1,8 @@
-import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import type { PipedProcessSpawner } from '@quirky/process-host/process-spec'
 import { providerDiagnostic, withProviderDiagnostic } from '../../shared/agent-session-failure'
 import type * as ClaudeAgentSdk from '@anthropic-ai/claude-agent-sdk'
 import type { CanUseTool, OnUserDialog, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { buildClaudeChildProcessEnv } from './claude-child-process-environment'
 import { withoutInheritedClaudeConfigDir } from './claude-config-dir-pin'
 import {
@@ -49,12 +49,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export type ClaudeStreamJsonLaunch = {
-  /** Orca's resolved user CLI; the SDK falls back to a bundled binary that is not installed. */
+  /** Quirky's resolved user CLI; the SDK falls back to a bundled binary that is not installed. */
   pathToClaudeCodeExecutable: string
   options: ClaudeStructuredSdkOptions
   cwd: string
   env?: Record<string, string>
-  /** Removed after the child's env is built over Orca's own, as every provider child's are. */
+  /** Removed after the child's env is built over Quirky's own, as every provider child's are. */
   envToDelete?: readonly string[]
 }
 
@@ -84,7 +84,7 @@ export type ClaudeStreamJsonConnectionHandlers = {
 }
 
 /**
- * Two questions with their own evidence. The root's verdict is first-hand: Orca's
+ * Two questions with their own evidence. The root's verdict is first-hand: Quirky's
  * own child handle reported exit, or reported error then close before it ever had
  * a pid. The tree's comes from bounded descendant verification, and `unverifiable`
  * is never collapsed into either neighbour.
@@ -146,7 +146,7 @@ export async function openClaudeStreamJsonConnection(
       cwd: launch.cwd,
       // Why env is never omitted: the SDK inherits process.env when it is, which is
       // exactly the ambient ANTHROPIC_* auth leak this lane already shipped once.
-      // Orca's own CLAUDE_CONFIG_DIR is dropped for the same reason the launch drops the
+      // Quirky's own CLAUDE_CONFIG_DIR is dropped for the same reason the launch drops the
       // shell's: the record's pin in `launch.env` must be the only home the child sees.
       env: withoutKeys(
         buildClaudeChildProcessEnv(launch.env, {

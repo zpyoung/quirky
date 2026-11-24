@@ -22,7 +22,7 @@ import { isPtyExitReplacedByRestart } from '../pty-exit-delivery'
 import { armRestartReplacement } from './restart-replacement-on-show'
 import { noteHiddenAgentResumePtyEnded } from './hidden-agent-resume-deferral'
 import { expectExitedSplitPaneClose } from './exited-split-pane-close'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 // Why live+done arms too: kept from #16308's wake-sweep widening; hibernation itself only writes worktree-sleep notes.
 export function noteArmsHibernatedPaneWake(record: SleepingAgentSessionRecord): boolean {
@@ -358,7 +358,7 @@ export function installPtyExitHibernate(session: ConnectPanePtySession): void {
     }
     // Switch point: main closes the exited pane; the window removes it when main's frame does.
     if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      QUIRKY_LAYOUT_OWNER_IS_MAIN &&
       expectExitedSplitPaneClose({
         worktreeId: session.deps.worktreeId,
         tabId: session.deps.tabId,

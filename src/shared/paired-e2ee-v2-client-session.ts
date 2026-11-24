@@ -54,7 +54,7 @@ export class PairedE2EEV2ClientSession {
         clientNonceB64: primitives.encodeBase64(clientNonce),
         capabilities: { framing: [2], payloadKinds: ['text', 'binary'] },
         context: {
-          protocol: 'orca-mobile-e2ee',
+          protocol: 'quirky-mobile-e2ee',
           initiator: 'mobile',
           responder: 'desktop',
           transport: args.transport,

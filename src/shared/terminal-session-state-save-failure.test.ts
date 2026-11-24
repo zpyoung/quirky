@@ -25,7 +25,7 @@ describe('terminal save failure classification', () => {
 
   it('treats legacy and unknown host errors as unclassified', () => {
     for (const message of [
-      'ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED: local storage is unavailable.',
+      'QUIRKY_TERMINAL_SESSION_STATE_SAVE_FAILED: local storage is unavailable.',
       'Failed to save terminal session state',
       createTerminalSessionStateSaveFailureMessage(new Error('disk full'))
     ]) {

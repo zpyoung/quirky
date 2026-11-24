@@ -391,7 +391,7 @@ describe('NativeChatQueuedMessageList', () => {
       ])
     )
     const row = screen.getByRole('listitem')
-    expect(row.textContent).toContain('Orca restarted before this message was sent.')
+    expect(row.textContent).toContain('Quirky restarted before this message was sent.')
     expect(row.textContent).not.toContain('Your message was not sent.')
   })
 
@@ -767,7 +767,8 @@ describe('NativeChatQueuedMessageList', () => {
     const width = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(900)
     const box = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300)
     try {
-      const text = 'You have 1 orchestration message.\nRun `orca orchestration check --run run_e99`'
+      const text =
+        'You have 1 orchestration message.\nRun `quirky orchestration check --run run_e99`'
       renderList(controller([card({ messageId: 'mail', text })]))
       const open = screen.getByRole('button', { name: 'Show full message' })
       expect(open.getAttribute('aria-expanded')).toBe('false')

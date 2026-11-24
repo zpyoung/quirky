@@ -38,7 +38,7 @@ function installWorkspaceState(): void {
   )
 }
 
-/** The restored tab's file loaded under a sibling workspace, and Orca moved the tab there (F42). */
+/** The restored tab's file loaded under a sibling workspace, and Quirky moved the tab there (F42). */
 function openAndMoveToOwner(): void {
   const state = useAppStore.getState()
   const fileId = state.openFile(
@@ -64,7 +64,7 @@ function openAndMoveToOwner(): void {
   expect(moved.ok).toBe(true)
 }
 
-describe('an editor tab Orca moved to the workspace owning its file', () => {
+describe('an editor tab Quirky moved to the workspace owning its file', () => {
   it('is still open in that workspace after a restart', () => {
     installWorkspaceState()
     openAndMoveToOwner()

@@ -30,7 +30,7 @@ import {
 import { scheduleSave } from './write-scheduling'
 import { removeWorkspaceLineageForFolderParent } from './metadata-lineage-operations'
 import { bumpLocalWorktreeScanGeneration } from '../../local-worktree-scan-generation'
-import { dropOrcadTerminalRestoreHintsForWorktrees } from '../migrating-orcad-catalog/orcad-terminal-restore-hint-store'
+import { dropQuirkydTerminalRestoreHintsForWorktrees } from '../migrating-quirkyd-catalog/quirkyd-terminal-restore-hint-store'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 
 type ProjectCollectionOperationsRuntime = Pick<
@@ -40,7 +40,7 @@ type ProjectCollectionOperationsRuntime = Pick<
   | 'projectGroupOperations'
   | 'projectHostOperations'
   | 'state'
-  | 'orcadTerminalRestoreHints'
+  | 'quirkydTerminalRestoreHints'
 >
 
 const projectCollectionOperationsContext = Symbol('ProjectCollectionOperations')
@@ -157,8 +157,8 @@ export class ProjectCollectionOperations {
     const removed = getFolderWorkspaceOperations(this).removeFolderWorkspace(id)
     if (removed) {
       const workspaceKey = folderWorkspaceKey(id)
-      dropOrcadTerminalRestoreHintsForWorktrees(
-        this[projectCollectionOperationsContext].runtime.orcadTerminalRestoreHints,
+      dropQuirkydTerminalRestoreHintsForWorktrees(
+        this[projectCollectionOperationsContext].runtime.quirkydTerminalRestoreHints,
         (worktreeId) => worktreeId === workspaceKey
       )
     }

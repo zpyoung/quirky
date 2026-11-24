@@ -28,7 +28,7 @@ export function assertProfileStateCanInitialize(options: ProfileStateRecoveryLoc
   assertNoRetainedProfileStateExports(options)
   if (!existsSync(options.dataFile) && hasStateBackup(options.dataFile)) {
     throw new ProfileStateAuthorityBootstrapError(
-      `Legacy profile JSON is missing while its .bak.0–.bak.4 backups remain. Stop Orca and restore a selected backup to ${options.dataFile} before reopening.`
+      `Legacy profile JSON is missing while its .bak.0–.bak.4 backups remain. Stop Quirky and restore a selected backup to ${options.dataFile} before reopening.`
     )
   }
 }

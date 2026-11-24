@@ -23,7 +23,7 @@ import { getForcedHandoffPolicy } from '../../../../fork-ask-question-tool/force
 import type { OrchestrationDb } from '../../../orchestration/db'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
 import type { DispatchContextRow } from '../../../orchestration/types'
-import type { OrcaRuntimeService } from '../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { envelopeFromAskRow, unknownAskEnvelope } from './ask-envelope-from-row'
 import type { AskAttribution } from './ask-pane-attribution'
 
@@ -32,7 +32,7 @@ type HandoffListener = (event: AskRegistryEvent) => void
 
 const listenersByRuntime = new WeakMap<object, Set<HandoffListener>>()
 
-function listenersFor(runtime: OrcaRuntimeService): Set<HandoffListener> {
+function listenersFor(runtime: QuirkyRuntimeService): Set<HandoffListener> {
   let listeners = listenersByRuntime.get(runtime)
   if (!listeners) {
     listeners = new Set()
@@ -47,7 +47,7 @@ function listenersFor(runtime: OrcaRuntimeService): Set<HandoffListener> {
  * `ask.subscribe` merges alongside `AskRegistry.onAskChanged` (tech.md C7).
  */
 export function onHandoffAskChanged(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   listener: HandoffListener
 ): () => void {
   const listeners = listenersFor(runtime)
@@ -55,7 +55,7 @@ export function onHandoffAskChanged(
   return () => listeners.delete(listener)
 }
 
-function emitHandoff(runtime: OrcaRuntimeService, event: AskRegistryEvent): void {
+function emitHandoff(runtime: QuirkyRuntimeService, event: AskRegistryEvent): void {
   for (const listener of listenersFor(runtime)) {
     listener(event)
   }
@@ -109,7 +109,7 @@ function handoffOriginFor(
 /** Active-run lookup for the no-UI path (tech.md C3/C7): the identity `register` persists and the first `waitChunk` hands off to. */
 export function resolveHandoffDispatch(
   attribution: AskAttribution,
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): AskHandoffOrigin | null {
   const db = runtime.getOrchestrationDb()
   const dispatch =
@@ -124,7 +124,7 @@ export function resolveHandoffDispatch(
  * match cannot prove which process asked, so it never overrides a card.
  */
 export function resolveForcedHandoff(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   identity: { handle: string; paneKey: string | null }
 ): AskHandoffOrigin | null {
   const policy = getForcedHandoffPolicy()
@@ -148,7 +148,7 @@ export function resolveForcedHandoff(
 // row's terminal status outside this function, so a synchronous re-check-then-write here (no
 // await between them) is enough to make first-commit-wins hold with no separate lock.
 function commitHandoffTerminal(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string,
   status: Exclude<PersistedAskStatus, 'registered'>,
@@ -205,7 +205,7 @@ function findExistingHandoffQuestion(orchestrationDb: OrchestrationDb, row: AskR
 }
 
 function ensureHandoffQuestionCreated(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   row: AskRow
 ):
@@ -266,7 +266,7 @@ function ensureHandoffQuestionCreated(
  * liveness-based expiry, which cannot apply to a pane-less ask.
  */
 export async function waitHandoffChunk(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string,
   chunkMs: number,
@@ -336,7 +336,7 @@ export async function waitHandoffChunk(
 }
 
 export function cancelHandoff(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string
 ): AskEnvelope {
@@ -356,7 +356,7 @@ export function cancelHandoff(
 }
 
 export function commitHandoffAnswer(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string,
   answers: AskAnswers,
@@ -377,7 +377,7 @@ export function commitHandoffAnswer(
 }
 
 export function updatePartialHandoff(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   askDb: AskDb,
   askId: string,
   partial: AskPartial

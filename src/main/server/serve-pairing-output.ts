@@ -1,4 +1,4 @@
-/** Serve-readiness pieces shared by the desktop `--serve` host and orcad, so their stdout matches. */
+/** Serve-readiness pieces shared by the desktop `--serve` host and quirkyd, so their stdout matches. */
 import { statSync } from 'node:fs'
 import { isAbsolute } from 'node:path'
 

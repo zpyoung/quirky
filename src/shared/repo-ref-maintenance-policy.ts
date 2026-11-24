@@ -1,11 +1,11 @@
 import type { PackIndexMaintenanceOutcome } from './repo-pack-index-maintenance-policy'
 
 /**
- * Idle-time loose-ref packing for repositories Orca itself degrades.
+ * Idle-time loose-ref packing for repositories Quirky itself degrades.
  *
- * Orca strips git's auto-maintenance off its own frequent fetches
+ * Quirky strips git's auto-maintenance off its own frequent fetches
  * (`GIT_FETCH_SKIP_AUTO_MAINTENANCE_CONFIG_ARGS`) and never compensated, so an
- * Orca-driven checkout accumulates loose refs forever and every ref
+ * Quirky-driven checkout accumulates loose refs forever and every ref
  * enumeration -- `show-ref`, `for-each-ref`, worktree create -- pays for them.
  * This is the compensation: after a repo goes quiet, probe it, and pack only
  * when the backlog is real.
@@ -115,7 +115,7 @@ export type RepoRefMaintenanceTarget = {
   readonly key: string
   /** Absolute `refs/` path *on the host that runs the walk*, or undefined if unresolvable. */
   resolveRefsDirectory(signal: AbortSignal): Promise<string | undefined>
-  /** A user who told Git not to auto-maintain this repo has told Orca too. */
+  /** A user who told Git not to auto-maintain this repo has told Quirky too. */
   isOptedOut?(signal: AbortSignal): Promise<boolean>
   /** True while work on *this repo* is in flight -- a fetch, a create, a removal. */
   isBusy?(): boolean
@@ -154,7 +154,7 @@ export type RepoRefMaintenanceOptions = {
   onError?: (error: unknown) => void
 }
 
-/** Marks an abort Orca asked for, so the attempt is retried rather than blamed on the repo. */
+/** Marks an abort Quirky asked for, so the attempt is retried rather than blamed on the repo. */
 export class RefMaintenanceInterrupted extends Error {
   constructor(
     reason: string,

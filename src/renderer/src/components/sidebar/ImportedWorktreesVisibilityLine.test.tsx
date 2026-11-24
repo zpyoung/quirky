@@ -29,7 +29,7 @@ const hiddenWorktrees = [
   {
     id: 'hidden-4',
     displayName: 'ssh-worktree',
-    path: '/srv/repos/orca/ssh-worktree',
+    path: '/srv/repos/quirky/ssh-worktree',
     branch: 'refs/heads/ssh-worktree'
   }
 ]
@@ -40,7 +40,7 @@ function renderLine(
   return renderToStaticMarkup(
     <TooltipProvider>
       <ImportedWorktreesVisibilityLine
-        repoDisplayName="orca"
+        repoDisplayName="quirky"
         hiddenWorktrees={hiddenWorktrees}
         placement="repo-group"
         pending={false}
@@ -58,13 +58,13 @@ describe('ImportedWorktreesVisibilityLine', () => {
     const markup = renderLine()
 
     expect(markup).toContain('Hiding 4 discovered worktrees')
-    expect(markup).toContain('Expand hidden worktrees for orca')
+    expect(markup).toContain('Expand hidden worktrees for quirky')
     expect(markup).toContain(
-      'Keep 4 discovered worktrees hidden for orca; recover from the project menu'
+      'Keep 4 discovered worktrees hidden for quirky; recover from the project menu'
     )
     expect(markup).toContain('aria-expanded="false"')
     expect(markup).not.toContain('Imported 4 existing worktrees')
-    expect(markup).not.toContain('Orca found 4 worktrees')
+    expect(markup).not.toContain('Quirky found 4 worktrees')
     expect(markup).not.toContain('repo options')
     expect(markup).not.toContain('Reveal')
     expect(markup).not.toContain('Always show')
@@ -77,9 +77,9 @@ describe('ImportedWorktreesVisibilityLine', () => {
     const markup = renderLine({ hostContextLabel: 'openclaw' })
 
     expect(markup).toContain('openclaw')
-    expect(markup).toContain('Expand hidden worktrees for orca on openclaw')
+    expect(markup).toContain('Expand hidden worktrees for quirky on openclaw')
     expect(markup).toContain(
-      'Keep 4 discovered worktrees hidden for orca on openclaw; recover from the project menu'
+      'Keep 4 discovered worktrees hidden for quirky on openclaw; recover from the project menu'
     )
   })
 
@@ -90,13 +90,13 @@ describe('ImportedWorktreesVisibilityLine', () => {
       onKeepHidden: undefined
     })
 
-    expect(markup).toContain('Hiding 4 discovered worktrees in orca on openclaw')
+    expect(markup).toContain('Hiding 4 discovered worktrees in quirky on openclaw')
   })
 
   it('scopes pinned fallback copy to the repo name without a dismiss action', () => {
     const markup = renderLine({ placement: 'pinned-fallback', onKeepHidden: undefined })
 
-    expect(markup).toContain('Hiding 4 discovered worktrees in orca')
+    expect(markup).toContain('Hiding 4 discovered worktrees in quirky')
     expect(markup).not.toContain('Review')
     expect(markup).not.toContain('Keep hidden - recover from the project menu')
   })
@@ -106,12 +106,12 @@ describe('ImportedWorktreesVisibilityLine', () => {
       {
         id: 'windows-hidden',
         displayName: 'FeatureX',
-        path: 'C:\\Repos\\Orca\\FeatureX'
+        path: 'C:\\Repos\\Quirky\\FeatureX'
       }
     ])
 
-    expect(groups).toMatchObject([{ path: 'C:/Repos/Orca' }])
-    expect(groups[0]?.path).not.toBe('C:\\Repos\\Orca')
+    expect(groups).toMatchObject([{ path: 'C:/Repos/Quirky' }])
+    expect(groups[0]?.path).not.toBe('C:\\Repos\\Quirky')
   })
 
   it('keeps Windows drive roots as parent path labels', () => {

@@ -14,7 +14,7 @@ export type MobileNativeChatVisualHostMode = 'inline' | 'fullscreen'
 export const MOBILE_NATIVE_CHAT_VISUAL_INITIAL_HEIGHT = 160
 
 /** The host page's function the app calls to size the frame to a height it has decided. */
-export const MOBILE_NATIVE_CHAT_VISUAL_APPLY_HEIGHT = '__orcaVisualApplyHeight'
+export const MOBILE_NATIVE_CHAT_VISUAL_APPLY_HEIGHT = '__quirkyVisualApplyHeight'
 
 // The host forwards at most one size report per interval (the latest wins) and one link per window.
 const SIZE_FORWARD_INTERVAL_MS = 100

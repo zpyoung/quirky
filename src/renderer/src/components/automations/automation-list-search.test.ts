@@ -93,8 +93,8 @@ describe('automation-list-search', () => {
     expect(buildAutomationProjectSearchText({ displayName: '  ', path: null })).toBe(
       AUTOMATION_LIST_SEARCH_UNKNOWN_PROJECT
     )
-    expect(buildAutomationProjectSearchText({ displayName: 'orca', path: '/tmp/orca' })).toBe(
-      'orca /tmp/orca'
+    expect(buildAutomationProjectSearchText({ displayName: 'quirky', path: '/tmp/quirky' })).toBe(
+      'quirky /tmp/quirky'
     )
     const index = buildAutomationListSearchIndex({
       name: 'Orphan',
@@ -122,7 +122,7 @@ describe('automation-list-search', () => {
   })
 
   it('leaves absent workspace/agent/host axes empty rather than matching everything', () => {
-    const index = buildAutomationListSearchIndex({ name: 'Job', project: 'orca', prompt: 'hi' })
+    const index = buildAutomationListSearchIndex({ name: 'Job', project: 'quirky', prompt: 'hi' })
     expect(index.workspace).toBe('')
     expect(index.agent).toBe('')
     expect(index.host).toBe('')

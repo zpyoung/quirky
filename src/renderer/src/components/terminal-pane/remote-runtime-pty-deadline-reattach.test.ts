@@ -358,7 +358,7 @@ describe('remote runtime pty reattach after the bounded recovery window', () => 
             ok: false,
             error: {
               code: 'remote_runtime_unavailable',
-              message: 'Remote Orca runtime connection closed'
+              message: 'Remote Quirky runtime connection closed'
             }
           }
         }
@@ -477,7 +477,7 @@ describe('remote runtime pty reattach after the bounded recovery window', () => 
       await vi.advanceTimersByTimeAsync(REMOTE_RUNTIME_AUTO_RECOVERY_TIMEOUT_MS + 1)
       expect(transport.getRecoveryState?.().phase).toBe('disconnected')
 
-      streamOpen.reject?.(new Error('Could not connect to the remote Orca runtime.'))
+      streamOpen.reject?.(new Error('Could not connect to the remote Quirky runtime.'))
       await vi.advanceTimersByTimeAsync(0)
 
       expect(retryAllRemoteRuntimePtyRecoveriesNow()).toBe(1)

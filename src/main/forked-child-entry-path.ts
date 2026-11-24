@@ -19,8 +19,8 @@ export function resolveForkedChildEntryPath(
   const usesAsarArchive = isPackaged && appPath.includes('app.asar')
   const basePath = usesAsarArchive ? appPath.replace('app.asar', 'app.asar.unpacked') : appPath
   const adjacentBuildEntry = join(basePath, entryFileName)
-  // Why asar and not isPackaged: orcad is a packaged non-Electron host whose app root holds
-  // orcad.js and its children side by side; only the asar layout nests them under out/main.
+  // Why asar and not isPackaged: quirkyd is a packaged non-Electron host whose app root holds
+  // quirkyd.js and its children side by side; only the asar layout nests them under out/main.
   // electron-vite's unpackaged appPath is already out/main, so dev also lands here.
   if (!usesAsarArchive && pathExists(adjacentBuildEntry)) {
     return adjacentBuildEntry

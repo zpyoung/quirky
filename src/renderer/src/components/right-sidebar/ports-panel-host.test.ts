@@ -154,7 +154,7 @@ describe('Ports panel host', () => {
 describe('Ports tab visibility', () => {
   const managed = {
     id: 'env-managed',
-    orcadDeployment: { sshTargetId: 'box', sshTargetGeneration: 1 }
+    quirkydDeployment: { sshTargetId: 'box', sshTargetGeneration: 1 }
   } as const
   const environments = [{ id: 'env-paired' }, managed]
 
@@ -193,8 +193,8 @@ describe('Ports panel forwards', () => {
   const ports = { localPort: 41_000, remotePort: 6768 }
   const environments = [
     { id: 'env-paired' },
-    { id: 'env-ssh', orcadDeployment: { sshTargetId: 'box', sshTargetGeneration: 1, ...ports } },
-    { id: 'env-wsl', orcadDeployment: { kind: 'wsl' as const, distro: 'Ubuntu', ...ports } }
+    { id: 'env-ssh', quirkydDeployment: { sshTargetId: 'box', sshTargetGeneration: 1, ...ports } },
+    { id: 'env-wsl', quirkydDeployment: { kind: 'wsl' as const, distro: 'Ubuntu', ...ports } }
   ]
   const onServer = (environmentId: string): PortsPanelHost => ({
     kind: 'endpoint',

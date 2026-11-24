@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 
 /**
  * The record owns a structured session's Claude home and `claudeConfigDirEnvPatch` is its sole
- * emitter, so every base the child inherits (the shell snapshot, Orca's own process env) must
+ * emitter, so every base the child inherits (the shell snapshot, Quirky's own process env) must
  * arrive without one: a CLAUDE_CONFIG_DIR left there would flip the pin's comparison and force
  * an explicit pin to the CLI default, which moves the CLI off its default Keychain item.
  */

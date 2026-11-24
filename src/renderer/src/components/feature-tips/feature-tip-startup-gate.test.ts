@@ -36,13 +36,13 @@ function makeSettings(
 function makeCliStatus(overrides: Partial<CliInstallStatus> = {}): CliInstallStatus {
   return {
     platform: 'darwin',
-    commandName: 'orca',
+    commandName: 'quirky',
     supported: true,
     state: 'installed',
-    commandPath: '/usr/local/bin/orca',
+    commandPath: '/usr/local/bin/quirky',
     pathDirectory: '/usr/local/bin',
     pathConfigured: true,
-    launcherPath: '/Applications/Orca.app/Contents/MacOS/orca',
+    launcherPath: '/Applications/Quirky.app/Contents/MacOS/quirky',
     installMethod: 'symlink',
     currentTarget: null,
     unsupportedReason: null,
@@ -67,7 +67,7 @@ describe('feature tip startup gate', () => {
         suppressedByOnboardingThisSession: false,
         webClient: false
       })
-    ).toEqual({ kind: 'open', tipId: 'orca-cli' })
+    ).toEqual({ kind: 'open', tipId: 'quirky-cli' })
   })
 
   it('suppresses feature tips for first-time users while onboarding is showing', () => {
@@ -121,7 +121,7 @@ describe('feature tip startup gate', () => {
         suppressedByOnboardingThisSession: false,
         webClient: false
       })
-    ).toEqual({ kind: 'open', tipId: 'orca-cli' })
+    ).toEqual({ kind: 'open', tipId: 'quirky-cli' })
   })
 
   it('opens the CLI tip after voice dictation is already enabled', () => {
@@ -139,7 +139,7 @@ describe('feature tip startup gate', () => {
         suppressedByOnboardingThisSession: false,
         webClient: false
       })
-    ).toEqual({ kind: 'open', tipId: 'orca-cli' })
+    ).toEqual({ kind: 'open', tipId: 'quirky-cli' })
   })
 
   it('opens the command palette tip after the CLI tip was marked seen', () => {
@@ -147,7 +147,7 @@ describe('feature tip startup gate', () => {
       getFeatureTipsAppOpenDecision({
         activeModal: 'none',
         cliInstalled: true,
-        featureTipsSeenIds: ['orca-cli'],
+        featureTipsSeenIds: ['quirky-cli'],
         featureInteractions: {},
         onboarding: existingUserOnboarding,
         persistedUIReady: true,
@@ -165,7 +165,7 @@ describe('feature tip startup gate', () => {
       getFeatureTipsAppOpenDecision({
         activeModal: 'none',
         cliInstalled: false,
-        featureTipsSeenIds: ['voice-dictation', 'orca-cli', 'cmd-j-palette'],
+        featureTipsSeenIds: ['voice-dictation', 'quirky-cli', 'cmd-j-palette'],
         featureInteractions: {},
         onboarding: existingUserOnboarding,
         persistedUIReady: true,
@@ -290,7 +290,7 @@ describe('feature tip startup gate', () => {
   function decideForExistingUser(args: {
     sessionSearchEnabled: boolean
     webClient: boolean
-    featureTipsSeenIds?: ('agent-session-search' | 'orca-cli')[]
+    featureTipsSeenIds?: ('agent-session-search' | 'quirky-cli')[]
   }): ReturnType<typeof getFeatureTipsAppOpenDecision> {
     return getFeatureTipsAppOpenDecision({
       activeModal: 'none',
@@ -321,17 +321,17 @@ describe('feature tip startup gate', () => {
         webClient: false,
         featureTipsSeenIds: ['agent-session-search']
       })
-    ).toEqual({ kind: 'open', tipId: 'orca-cli' })
+    ).toEqual({ kind: 'open', tipId: 'quirky-cli' })
   })
 
   it('skips the session search tip when search is already on or on a web client', () => {
     expect(decideForExistingUser({ sessionSearchEnabled: true, webClient: false })).toEqual({
       kind: 'open',
-      tipId: 'orca-cli'
+      tipId: 'quirky-cli'
     })
     expect(decideForExistingUser({ sessionSearchEnabled: false, webClient: true })).toEqual({
       kind: 'open',
-      tipId: 'orca-cli'
+      tipId: 'quirky-cli'
     })
   })
 

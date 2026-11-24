@@ -88,7 +88,7 @@ describe('macOS build workflow policy', () => {
     const step = job.steps.find((step) => step.name === 'Publish release artifacts (macOS)')
     expect(step.with.command).not.toContain('build-mac-notarization-overlap')
     expect(step.with.command).toContain(
-      'ORCA_MAC_RELEASE=1 pnpm exec electron-builder --config config/electron-builder.config.cjs --mac'
+      'QUIRKY_MAC_RELEASE=1 pnpm exec electron-builder --config config/electron-builder.config.cjs --mac'
     )
     expect(step.with.max_attempts).toBeGreaterThan(1)
     for (const key of [
@@ -115,17 +115,17 @@ describe('macOS build workflow policy', () => {
       ref: '${{ github.sha }}'
     })
     expect(source.jobs['qualification-template'].uses).toBe(
-      './.github/workflows/qualified-orcad-template.yml'
+      './.github/workflows/qualified-quirkyd-template.yml'
     )
     const job = source.jobs['build-mac']
     expect(job.needs).toBe('qualification-template')
     expect(job.if).toContain('!cancelled()')
     expect(job.if).toContain("needs.qualification-template.result == 'success'")
     const publish = job.steps.find((step) => step.name === 'Publish release artifacts (macOS)')
-    expect(publish.env.ORCA_MAC_PUBLISH).toBe(
+    expect(publish.env.QUIRKY_MAC_PUBLISH).toBe(
       "${{ inputs.qualification_only && 'never' || 'always' }}"
     )
-    expect(publish.with.command.match(/--publish "\$ORCA_MAC_PUBLISH"/g)).toHaveLength(1)
+    expect(publish.with.command.match(/--publish "\$QUIRKY_MAC_PUBLISH"/g)).toHaveLength(1)
     for (const name of [
       'Abort if the parent release-cut run was cancelled',
       'Verify release remains draft after artifact upload'

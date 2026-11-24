@@ -82,7 +82,7 @@ describe('the phone list from the sidebar feed', () => {
     // The pinned parent carries its nested child.
     expect(lines[0]).toMatch(/ "Pinned" 2 pin$/)
     expect(lines.filter((line) => line.endsWith(' ACTIVE'))).toHaveLength(1)
-    expect(lines.some((line) => line.includes('orca::/w/child depth=1'))).toBe(true)
+    expect(lines.some((line) => line.includes('quirky::/w/child depth=1'))).toBe(true)
     expect(lines.some((line) => line.includes('"lab"'))).toBe(true)
   })
 
@@ -149,7 +149,7 @@ describe('the phone list from the sidebar feed', () => {
   it('draws each row with the live content worktree.ps served, matched by host', () => {
     const sections = sectionsFor(phoneView(), {
       live: [
-        liveRow({ worktreeId: 'orca::/w/child', liveTerminalCount: 2, status: 'working' }),
+        liveRow({ worktreeId: 'quirky::/w/child', liveTerminalCount: 2, status: 'working' }),
         liveRow({
           worktreeId: 'lab::/w/gpu',
           hostId: 'ssh:gpu',
@@ -159,7 +159,7 @@ describe('the phone list from the sidebar feed', () => {
       ]
     })
     const rows = sections.flatMap((section) => section.data)
-    expect(rows.find((row) => row.worktreeId === 'orca::/w/child')).toMatchObject({
+    expect(rows.find((row) => row.worktreeId === 'quirky::/w/child')).toMatchObject({
       liveTerminalCount: 2,
       status: 'working',
       lineageDepth: 1
@@ -168,8 +168,8 @@ describe('the phone list from the sidebar feed', () => {
       hasAttachedPty: true
     })
     // Not listed by worktree.ps yet: drawn from the feed alone.
-    expect(rows.find((row) => row.worktreeId === 'orca::/w/parent')).toMatchObject({
-      displayName: 'orca::/w/parent',
+    expect(rows.find((row) => row.worktreeId === 'quirky::/w/parent')).toMatchObject({
+      displayName: 'quirky::/w/parent',
       liveTerminalCount: 0,
       isPinned: true
     })
@@ -187,15 +187,15 @@ describe('the phone list from the sidebar feed', () => {
     const built = buildSidebarFeedRows(
       feedDomains({
         workspaces: new Map([
-          ['|orca::/w/parent', FEED_ROWS.parent],
-          ['|orca::/w/child', feedChild]
+          ['|quirky::/w/parent', FEED_ROWS.parent],
+          ['|quirky::/w/child', feedChild]
         ])
       }),
       catalog,
       phoneFeedView(phoneView())
     )
     const stale = liveRow({
-      worktreeId: 'orca::/w/child',
+      worktreeId: 'quirky::/w/child',
       displayName: 'old name',
       branch: 'old-branch',
       comment: 'old note',
@@ -213,7 +213,7 @@ describe('the phone list from the sidebar feed', () => {
     })
     expect(sections.flatMap((section) => section.data)).toEqual([
       expect.objectContaining({
-        worktreeId: 'orca::/w/child',
+        worktreeId: 'quirky::/w/child',
         displayName: 'new name',
         branch: 'new-branch',
         comment: 'new note',
@@ -261,10 +261,10 @@ describe('the phone list from the sidebar feed', () => {
 
   it('draws creations above every group when not grouped by project', () => {
     const [first] = sectionsFromDomains(
-      feedDomains({ creations: new Map([['c1', { repoId: 'orca' }]]) }),
+      feedDomains({ creations: new Map([['c1', { repoId: 'quirky' }]]) }),
       phoneView({ groupBy: 'none' })
     )
-    expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'orca' }] })
+    expect(first).toMatchObject({ title: '', pendingCreations: [{ repoName: 'quirky' }] })
   })
 
   it('drops a creation from a section search narrows to its matching rows', () => {
@@ -295,9 +295,9 @@ describe('the phone list from the sidebar feed', () => {
 
 describe('the phone list before the first feed read', () => {
   const cached = [
-    liveRow({ worktreeId: 'orca::/w/b', displayName: 'beta' }),
-    liveRow({ worktreeId: 'orca::/w/a', displayName: 'alpha' }),
-    liveRow({ worktreeId: 'orca::/w/old', displayName: 'old', isArchived: true })
+    liveRow({ worktreeId: 'quirky::/w/b', displayName: 'beta' }),
+    liveRow({ worktreeId: 'quirky::/w/a', displayName: 'alpha' }),
+    liveRow({ worktreeId: 'quirky::/w/old', displayName: 'old', isArchived: true })
   ]
   const preFeed = (search: string, rows = cached) =>
     buildPreFeedSections({ rows, view: phoneView(), search, repoHostIdByRepoId: new Map() })
@@ -307,7 +307,7 @@ describe('the phone list before the first feed read', () => {
   })
 
   it('narrows them by search, and draws nothing with none', () => {
-    expect(preFeed('alp')[0]?.data.map((row) => row.worktreeId)).toEqual(['orca::/w/a'])
+    expect(preFeed('alp')[0]?.data.map((row) => row.worktreeId)).toEqual(['quirky::/w/a'])
     expect(preFeed('', [])).toEqual([])
   })
 })

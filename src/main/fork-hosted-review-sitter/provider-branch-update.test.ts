@@ -45,7 +45,7 @@ describe('executeHostedReviewBranchUpdate', () => {
   let baseHead: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-sitter-update-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-sitter-update-'))
     bare = join(root, 'remote.git')
     review = join(root, 'review')
     producer = join(root, 'producer')

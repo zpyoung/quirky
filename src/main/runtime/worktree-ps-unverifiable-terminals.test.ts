@@ -8,7 +8,7 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp'), isPackaged: false }
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 // BUG-9: a network drop to a relay host made `worktree ps` print `live:0 pty:no` for a terminal
 // that was still running. Lost contact is `unverifiable`, never zero.
@@ -50,9 +50,9 @@ function makeStore() {
 function makeRuntime(controller: {
   hasPty: () => boolean | null
   listProcesses: () => Promise<{ id: string; worktreeId: string }[]>
-}): OrcaRuntimeService {
+}): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only the store methods this fixture defines.
-  const runtime = new OrcaRuntimeService(makeStore() as never)
+  const runtime = new QuirkyRuntimeService(makeStore() as never)
   runtime.setPtyController(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worktree.ps reaches only listProcesses and hasPty on this controller.
     {
@@ -68,7 +68,7 @@ function makeRuntime(controller: {
   return runtime
 }
 
-async function psRow(runtime: OrcaRuntimeService) {
+async function psRow(runtime: QuirkyRuntimeService) {
   const result = await runtime.getWorktreePs(100)
   return result.worktrees.find((row) => row.worktreeId === WORKTREE_ID)
 }

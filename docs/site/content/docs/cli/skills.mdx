@@ -1,48 +1,48 @@
 ---
-title: Orca skills registry & MCP
-description: Install Orca agent skills with npx skills add. Hybrid stubs stay thin; orca skills get serves the version-matched guide. Orca can update skills in the background.
+title: Quirky skills registry & MCP
+description: Install Quirky agent skills with npx skills add. Hybrid stubs stay thin; quirky skills get serves the version-matched guide. Quirky can update skills in the background.
 keywords:
-  - Orca skills
+  - Quirky skills
   - npx skills add
-  - orca-cli skill
+  - quirky-cli skill
   - orchestration skill
   - computer-use skill
-  - orca-linear skill
-  - orca-emulator skill
-  - orca-emulator-android skill
+  - quirky-linear skill
+  - quirky-emulator skill
+  - quirky-emulator-android skill
 ---
 
-Orca ships **skills** that agents install into their skill directories. Public install packages are **hybrid discovery stubs**: short `SKILL.md` files that tell the agent _when_ to engage Orca and how to load the full guide from the running CLI. Command flags live in the binary so they cannot drift from the app version.
+Quirky ships **skills** that agents install into their skill directories. Public install packages are **hybrid discovery stubs**: short `SKILL.md` files that tell the agent _when_ to engage Quirky and how to load the full guide from the running CLI. Command flags live in the binary so they cannot drift from the app version.
 
-## Installable Orca skills
+## Installable Quirky skills
 
-Use `npx skills add` with the public Orca repo and the skill name. Default agent setup usually installs `orca-cli`, `computer-use`, and `orchestration`.
+Use `npx skills add` with the public Quirky repo and the skill name. Default agent setup usually installs `quirky-cli`, `computer-use`, and `orchestration`.
 
-| Skill                                               | Install                                                                                   | Use it for                                                    |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [`orca-cli`](#orca-cli)                             | `npx skills add https://github.com/stablyai/orca --skill orca-cli --global`               | Worktrees, terminals, files, automations, embedded browser.   |
-| [`orchestration`](#orchestration)                   | `npx skills add https://github.com/stablyai/orca --skill orchestration --global`          | Multi-agent Runs, tasks, supervised workers, messages, gates. |
-| [`computer-use`](#computer-use)                     | `npx skills add https://github.com/stablyai/orca --skill computer-use --global`           | Desktop apps via accessibility trees and safe UI actions.     |
-| [`orca-linear`](#orca-linear)                       | `npx skills add https://github.com/stablyai/orca --skill orca-linear --global`            | Linear ticket read/write through `orca linear`.               |
-| [`orca-emulator`](#orca-emulator)                   | `npx skills add https://github.com/stablyai/orca --skill orca-emulator --global`          | iOS Simulator control.                                        |
-| [`orca-emulator-android`](#orca-emulator-android)   | `npx skills add https://github.com/stablyai/orca --skill orca-emulator-android --global`  | Android emulator/device via adb.                              |
-| [`orca-per-workspace-env`](#orca-per-workspace-env) | `npx skills add https://github.com/stablyai/orca --skill orca-per-workspace-env --global` | Per-workspace environment recipes (`orca.yaml`).              |
+| Skill                                                   | Install                                                                                     | Use it for                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [`quirky-cli`](#quirky-cli)                             | `npx skills add https://github.com/stablyai/orca --skill quirky-cli --global`               | Worktrees, terminals, files, automations, embedded browser.   |
+| [`orchestration`](#orchestration)                       | `npx skills add https://github.com/stablyai/orca --skill orchestration --global`            | Multi-agent Runs, tasks, supervised workers, messages, gates. |
+| [`computer-use`](#computer-use)                         | `npx skills add https://github.com/stablyai/orca --skill computer-use --global`             | Desktop apps via accessibility trees and safe UI actions.     |
+| [`quirky-linear`](#quirky-linear)                       | `npx skills add https://github.com/stablyai/orca --skill quirky-linear --global`            | Linear ticket read/write through `quirky linear`.             |
+| [`quirky-emulator`](#quirky-emulator)                   | `npx skills add https://github.com/stablyai/orca --skill quirky-emulator --global`          | iOS Simulator control.                                        |
+| [`quirky-emulator-android`](#quirky-emulator-android)   | `npx skills add https://github.com/stablyai/orca --skill quirky-emulator-android --global`  | Android emulator/device via adb.                              |
+| [`quirky-per-workspace-env`](#quirky-per-workspace-env) | `npx skills add https://github.com/stablyai/orca --skill quirky-per-workspace-env --global` | Per-workspace environment recipes (`quirky.yaml`).            |
 
 ## Hybrid stubs vs the live guide
 
 After `npx skills add`, agents see a short stub that says:
 
-1. Resolve the CLI executable for this session (`ORCA_CLI_COMMAND`, `orca-dev`, Linux `orca-ide`, else `orca`).
-2. Load the full guide: `orca skills get <topic>` (or `--full` for the long guide).
+1. Resolve the CLI executable for this session (`QUIRKY_CLI_COMMAND`, `quirky-dev`, Linux `quirky-ide`, else `quirky`).
+2. Load the full guide: `quirky skills get <topic>` (or `--full` for the long guide).
 3. Prefer `--json` and do not invent flags from memory.
 
 ```bash
-orca skills list
-orca skills get orca-cli
-orca skills get orchestration --references
-orca skills get orchestration --reference recovery-and-cleanup
-orca skills get orchestration --full
-orca skills get orca-linear --json
+quirky skills list
+quirky skills get quirky-cli
+quirky skills get orchestration --references
+quirky skills get orchestration --reference recovery-and-cleanup
+quirky skills get orchestration --full
+quirky skills get quirky-linear --json
 ```
 
 A guide's action gates name conditional references. `--reference <name>` prints one of them alone, so an agent pays for the kernel plus that document instead of the whole package; `--references` lists the names. The name may be bare (`recovery-and-cleanup`) or spelled as the guide writes it (`references/recovery-and-cleanup.md`). `--full` still prints the kernel plus every reference.
@@ -51,48 +51,48 @@ Add `--json` when an agent needs deterministic output for automation. `skills sh
 
 ## Keep skills up to date
 
-When Orca ships a newer skill package than the one installed globally, the app can:
+When Quirky ships a newer skill package than the one installed globally, the app can:
 
-- Show an **update available** nudge for skills Orca installed (and **Needs attention** when a copy is out of date somewhere the updater cannot safely rewrite).
-- Open **Update skills** — list of placements and skip reasons, with a checkbox per skill. Orca's own skills start ticked; a same-named skill installed from somewhere else is marked **Not from Orca** and starts unticked. The selected skills are reinstalled headlessly (no embedded terminal) with **`npx --yes skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill <name>… --global -y`**, pinned to the commit the running Orca build was made from (so it works on hourly, daily, RC and stable builds alike) and to a known skills CLI version.
+- Show an **update available** nudge for skills Quirky installed (and **Needs attention** when a copy is out of date somewhere the updater cannot safely rewrite).
+- Open **Update skills** — list of placements and skip reasons, with a checkbox per skill. Quirky's own skills start ticked; a same-named skill installed from somewhere else is marked **Not from Quirky** and starts unticked. The selected skills are reinstalled headlessly (no embedded terminal) with **`npx --yes skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill <name>… --global -y`**, pinned to the commit the running Quirky build was made from (so it works on hourly, daily, RC and stable builds alike) and to a known skills CLI version.
 - Keep the run in the **background**: closing the dialog does not cancel it. A status-bar segment shows progress (spinner while running, brief success check, persistent failure until you act). Click the segment to reopen the dialog.
 - Surface freshness on **Settings → Agents** for installed skills (global install rail), including **Details** when a row needs review.
 
 Manual equivalent (desktop Settings shows the same pinned form for the running build):
 
 ```bash
-npx skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill orca-cli --skill orchestration --global
+npx skills@1.7.2 add https://github.com/stablyai/orca/tree/<commit> --skill quirky-cli --skill orchestration --global
 ```
 
-On headless hosts (SSH, containers, CI, `orca serve`) with no Settings UI, use the local CLI wrappers — they resolve the same `npx` commands, add non-interactive flags, and do **not** need a running Orca runtime:
+On headless hosts (SSH, containers, CI, `quirky serve`) with no Settings UI, use the local CLI wrappers — they resolve the same `npx` commands, add non-interactive flags, and do **not** need a running Quirky runtime:
 
 ```bash
-orca skills install                                      # list installable names
-orca skills install --skill orca-cli --skill orchestration
-orca skills install --skill orca-cli --agent claude-code,codex
-orca skills install --all --dry-run
-orca skills update --all
-orca skills update --skill orca-cli --dry-run
+quirky skills install                                      # list installable names
+quirky skills install --skill quirky-cli --skill orchestration
+quirky skills install --skill quirky-cli --agent claude-code,codex
+quirky skills install --all --dry-run
+quirky skills update --all
+quirky skills update --skill quirky-cli --dry-run
 ```
 
 - Default scope is **global** (`--global`); pass `--local` for the current project only.
-- `install` targets agents Orca detects on the host (plus the shared `.agents/skills` directory). Use `--agent <name>[,<name>…]` or `--agent universal` to override; if no agent is detected, `--agent` is required.
+- `install` targets agents Quirky detects on the host (plus the shared `.agents/skills` directory). Use `--agent <name>[,<name>…]` or `--agent universal` to override; if no agent is detected, `--agent` is required.
 - `update` runs the same pinned `skills add` as `install`. With no agent detected it targets only `.agents/skills` instead of refusing.
 - `--dry-run` prints the resolved command; `--json` is only valid with listing / `--dry-run`.
 
-Prefer the in-app updater when Orca offers it so the same global placements the app scanned get rewritten. Rows marked **Skipped** explain why that skill cannot be updated automatically (for example a read-only folder or a link pointing outside Orca's skill folders) — fix the placement, then re-check.
+Prefer the in-app updater when Quirky offers it so the same global placements the app scanned get rewritten. Rows marked **Skipped** explain why that skill cannot be updated automatically (for example a read-only folder or a link pointing outside Quirky's skill folders) — fix the placement, then re-check.
 
 ## Delete from the Skills page
 
-To remove a scanned skill, open its actions menu and choose **Delete…**. For several skills, open the page's **More actions** menu, choose **Delete skills…**, and select the eligible results. Orca explains why a copy cannot be deleted—for example because it is bundled, plugin-managed, read-only, or outside a removable skill folder—before you confirm.
+To remove a scanned skill, open its actions menu and choose **Delete…**. For several skills, open the page's **More actions** menu, choose **Delete skills…**, and select the eligible results. Quirky explains why a copy cannot be deleted—for example because it is bundled, plugin-managed, read-only, or outside a removable skill folder—before you confirm.
 
-## orca-cli
+## quirky-cli
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-cli --global
+npx skills add https://github.com/stablyai/orca --skill quirky-cli --global
 ```
 
-After install, load the version-matched command guide with `orca skills get orca-cli`. See [Orca CLI](/docs/cli/overview).
+After install, load the version-matched command guide with `quirky skills get quirky-cli`. See [Quirky CLI](/docs/cli/overview).
 
 ## orchestration
 
@@ -100,7 +100,7 @@ After install, load the version-matched command guide with `orca skills get orca
 npx skills add https://github.com/stablyai/orca --skill orchestration --global
 ```
 
-Use this when an agent should coordinate other agents through Runs, tasks, supervised workers, and decision gates. See [Orchestration](/docs/cli/orchestration). Always load `orca skills get orchestration --full` before mutating orchestration state — the legacy `orchestration run` command is retired.
+Use this when an agent should coordinate other agents through Runs, tasks, supervised workers, and decision gates. See [Orchestration](/docs/cli/orchestration). Always load `quirky skills get orchestration --full` before mutating orchestration state — the legacy `orchestration run` command is retired.
 
 ## computer-use
 
@@ -110,41 +110,41 @@ npx skills add https://github.com/stablyai/orca --skill computer-use --global
 
 Use this when an agent needs to inspect and operate local desktop app windows. See [Computer use](/docs/cli/computer-use).
 
-## orca-linear
+## quirky-linear
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-linear --global
+npx skills add https://github.com/stablyai/orca --skill quirky-linear --global
 ```
 
-Agents should load `orca skills get orca-linear` before mutating tickets. Covers `issue --full`, `save-issue`, `list-issues`, relations, completion attach+comment flow, and untrusted-ticket rules. Existing `linear-tickets` installs still resolve. See [CLI reference → Linear](/docs/cli/reference#linear).
+Agents should load `quirky skills get quirky-linear` before mutating tickets. Covers `issue --full`, `save-issue`, `list-issues`, relations, completion attach+comment flow, and untrusted-ticket rules. Existing `linear-tickets` installs still resolve. See [CLI reference → Linear](/docs/cli/reference#linear).
 
-## orca-emulator
+## quirky-emulator
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-emulator --global
+npx skills add https://github.com/stablyai/orca --skill quirky-emulator --global
 ```
 
-Use this when an agent should control an iOS Simulator from inside Orca through `orca emulator` commands.
+Use this when an agent should control an iOS Simulator from inside Quirky through `quirky emulator` commands.
 
-## orca-emulator-android
+## quirky-emulator-android
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-emulator-android --global
+npx skills add https://github.com/stablyai/orca --skill quirky-emulator-android --global
 ```
 
-Use for adb-connected Android AVDs/devices: list/boot, tap/swipe/type, hardware buttons, install/launch, permissions, accessibility tree, logcat. Load details with `orca skills get orca-emulator-android`.
+Use for adb-connected Android AVDs/devices: list/boot, tap/swipe/type, hardware buttons, install/launch, permissions, accessibility tree, logcat. Load details with `quirky skills get quirky-emulator-android`.
 
-## orca-per-workspace-env
+## quirky-per-workspace-env
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-per-workspace-env --global
+npx skills add https://github.com/stablyai/orca --skill quirky-per-workspace-env --global
 ```
 
-Use when setting up or debugging per-workspace environment recipes in `orca.yaml`. See [Ways to run Orca](/docs/ways-to-run#4-cloud-vms-per-workspace-environments).
+Use when setting up or debugging per-workspace environment recipes in `quirky.yaml`. See [Ways to run Quirky](/docs/ways-to-run#4-cloud-vms-per-workspace-environments).
 
 ## Discovery sources
 
-Orca's skill UI scans installed skill homes for Claude, Codex, Agent Skills, and **OMP** (`~/.omp/agent/skills`), so skills placed there show up without a manual symlink.
+Quirky's skill UI scans installed skill homes for Claude, Codex, Agent Skills, and **OMP** (`~/.omp/agent/skills`), so skills placed there show up without a manual symlink.
 
 ## Add your own skills
 

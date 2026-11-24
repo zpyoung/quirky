@@ -14,9 +14,9 @@ export type BuildPtyHostEnvOptions = {
   selectedCodexHomePath: string | null
   skipCodexHomeEnv?: boolean
   /** System-default real-home routing (flag ON): inject no managed CODEX_HOME,
-   *  and strip only an inherited Orca-owned override so nested Orca panes do not
+   *  and strip only an inherited Quirky-owned override so nested Quirky panes do not
    *  leak the parent's managed home. A user-set CODEX_HOME is preserved. */
-  stripInheritedOrcaCodexHome?: boolean
+  stripInheritedQuirkyCodexHome?: boolean
   /** Launch command the renderer chose (e.g. 'pi', 'omp', 'claude'); resolves the per-agent
    *  extension target for Pi/OMP. Undefined for bare shells → defaults to Pi. NEVER infer from
    *  disk presence (cross-agent shadowing when both dirs exist). */
@@ -33,7 +33,7 @@ export type BuildPtyHostEnvOptions = {
   /** Per-agent opt-out; disabled agents must not receive managed extensions. */
   disabledTuiAgents?: Iterable<unknown> | null
   networkProxySettings?: NetworkProxySettings
-  /** Headless paired runtimes hand browser launches to the client-hosted Orca browser. */
+  /** Headless paired runtimes hand browser launches to the client-hosted Quirky browser. */
   routeBrowserOpensToClient?: boolean
   /** Keep indexed Git config off the sparse daemon wire; the daemon appends guard entries after merging its inherited env. */
   deferGitConfigGuardToDaemon?: boolean
@@ -41,7 +41,7 @@ export type BuildPtyHostEnvOptions = {
 
 export type CodexHomeLaunchContext = {
   unavailableManagedHomePath?: string
-  /** An Orca-launched Codex, which may wait briefly for its status hook; other spawns never do. */
+  /** An Quirky-launched Codex, which may wait briefly for its status hook; other spawns never do. */
   launchesCodex?: boolean
 }
 

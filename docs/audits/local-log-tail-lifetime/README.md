@@ -11,7 +11,7 @@ This is a reproduced native-handle and small metadata leak. Watchers do not reta
 From the repository root with existing dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/local-log-tail-lifetime/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/local-log-tail-lifetime/reproduce.mjs
 ```
 
 The script runs the actual IPC handlers against temporary files, real `fs.watch` handles, controlled authorization promises, and EventEmitter senders. The existing IPC tests use watcher doubles to deliver an error from a retired watcher. No Electron window, real user log, process inventory, or network request is used. Test cleanup releases all watchers.

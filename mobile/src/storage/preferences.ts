@@ -2,9 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { persistMirrored } from './mirrored-storage-keys'
 import { TERMINAL_TEXT_SCALES } from '../terminal/terminal-text-scales'
 
-const PINS_PREFIX = 'orca:pins:'
+const PINS_PREFIX = 'quirky:pins:'
 // Consent to the push service is separate from the old socket notification choice.
-const NOTIF_KEY = 'orca:pushServiceNotificationsEnabled'
+const NOTIF_KEY = 'quirky:pushServiceNotificationsEnabled'
 
 export type PushNotificationsPreference = {
   readonly value: boolean | null
@@ -33,7 +33,7 @@ export async function savePushNotificationsEnabled(enabled: boolean): Promise<vo
   await AsyncStorage.setItem(NOTIF_KEY, String(enabled))
 }
 
-const REMOTE_PUSH_HOST_REGISTRATIONS_KEY = 'orca:remotePushHostRegistrations'
+const REMOTE_PUSH_HOST_REGISTRATIONS_KEY = 'quirky:remotePushHostRegistrations'
 
 // Why persisted: switching off while a host is offline leaves a token the gateway
 // would still push to. The pending list is the phone's side of the desktop's
@@ -70,7 +70,7 @@ export async function saveRemotePushHostRegistrations(
   await AsyncStorage.setItem(REMOTE_PUSH_HOST_REGISTRATIONS_KEY, JSON.stringify(value))
 }
 
-const TEXT_SCALE_KEY = 'orca:terminalTextScale'
+const TEXT_SCALE_KEY = 'quirky:terminalTextScale'
 
 // Declared beside the terminal that applies them, because the document is bundled for the WebView
 // and must not reach this module's storage import; re-exported here for the settings screen.
@@ -99,7 +99,7 @@ export async function saveTerminalTextScale(scale: number): Promise<void> {
   await persistMirrored(TEXT_SCALE_KEY, value)
 }
 
-const AUTOCOMPLETE_KEY = 'orca:terminalAutocompleteEnabled'
+const AUTOCOMPLETE_KEY = 'quirky:terminalAutocompleteEnabled'
 
 // Why: terminal command inputs default to autocorrect/suggestions OFF so the
 // keyboard never mangles commands, flags, or paths. Users who want phone-style
@@ -118,7 +118,7 @@ export async function saveTerminalAutocompleteEnabled(enabled: boolean): Promise
   await persistMirrored(AUTOCOMPLETE_KEY, value)
 }
 
-const TERMINAL_LIVE_INPUT_DISABLED_PREFIX = 'orca:terminalLiveInputDisabled:'
+const TERMINAL_LIVE_INPUT_DISABLED_PREFIX = 'quirky:terminalLiveInputDisabled:'
 
 export type DisabledTerminalLiveInputHandlesPreference = {
   readonly handles: Set<string>
@@ -164,7 +164,7 @@ export async function saveDisabledTerminalLiveInputHandles(
   await persistMirrored(key, value)
 }
 
-const SIDEBAR_WIDTH_KEY = 'orca:hostSidebarWidth'
+const SIDEBAR_WIDTH_KEY = 'quirky:hostSidebarWidth'
 
 // Bounds for the draggable host worktree-list sidebar on tablet/foldable
 // layouts (mirrors the desktop's resizable sidebar). The caller additionally
@@ -197,7 +197,7 @@ export async function saveHostSidebarWidth(width: number): Promise<void> {
   await persistMirrored(SIDEBAR_WIDTH_KEY, value)
 }
 
-const DOCK_WIDTH_KEY = 'orca:hostDockWidth'
+const DOCK_WIDTH_KEY = 'quirky:hostDockWidth'
 
 // Bounds for the draggable right-hand session dock (Source Control / Files / PR)
 // on wide layouts. Mirrors the left worktree-list sidebar's bounds so the two
@@ -232,15 +232,17 @@ export async function saveHostDockWidth(width: number): Promise<void> {
   await persistMirrored(DOCK_WIDTH_KEY, value)
 }
 
-export type MobileTerminalLinkOpenMode = 'orca-browser' | 'phone-browser'
+export type MobileTerminalLinkOpenMode = 'quirky-browser' | 'phone-browser'
 
-const TERMINAL_LINK_OPEN_MODE_KEY = 'orca:terminalLinkOpenMode'
-export const DEFAULT_TERMINAL_LINK_OPEN_MODE: MobileTerminalLinkOpenMode = 'orca-browser'
+const TERMINAL_LINK_OPEN_MODE_KEY = 'quirky:terminalLinkOpenMode'
+export const DEFAULT_TERMINAL_LINK_OPEN_MODE: MobileTerminalLinkOpenMode = 'quirky-browser'
 
 export async function loadTerminalLinkOpenMode(): Promise<MobileTerminalLinkOpenMode> {
   try {
     const raw = await AsyncStorage.getItem(TERMINAL_LINK_OPEN_MODE_KEY)
-    return raw === 'phone-browser' || raw === 'orca-browser' ? raw : DEFAULT_TERMINAL_LINK_OPEN_MODE
+    return raw === 'phone-browser' || raw === 'quirky-browser'
+      ? raw
+      : DEFAULT_TERMINAL_LINK_OPEN_MODE
   } catch {
     return DEFAULT_TERMINAL_LINK_OPEN_MODE
   }

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict')
 const esbuild = require(path.join(process.cwd(), 'node_modules/esbuild'))
 const before = '09dbe227547fadaec8d9163f35fd127b0dc1c3ed'
 const prefix = 'src/main/crash-reporting/'
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orca-crash-stream-parity-'))
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'quirky-crash-stream-parity-'))
 const source = fs.readFileSync(`${prefix}minidump-crash-signature.test.ts`, 'utf8')
 const fixture = `const expect = (v) => ({toBe: (e) => {if(v!==e) throw new Error('fixture invariant')}});\n${source.slice(
   source.indexOf('const STREAM_TYPE_'),

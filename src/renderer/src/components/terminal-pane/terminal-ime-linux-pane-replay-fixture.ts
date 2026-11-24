@@ -5,7 +5,7 @@ import { installTerminalPaneInputHandling } from './terminal-pane-pane-input'
 import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 
 const LINUX_UA =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Orca Chrome/146.0.0.0 Electron/43.7.5 Safari/537.36'
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Quirky Chrome/146.0.0.0 Electron/43.7.5 Safari/537.36'
 
 /** One DOM event as recorded off the terminal's helper textarea. */
 export type RecordedDomEvent = {

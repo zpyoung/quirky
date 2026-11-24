@@ -56,7 +56,7 @@ async function launchOnRealHome(platform: NodeJS.Platform = 'win32'): Promise<vo
   expect(service.prepareForCodexLaunch()).toBeNull()
 }
 
-describe('copying a login made inside Orca into an empty ~/.codex on Windows', () => {
+describe('copying a login made inside Quirky into an empty ~/.codex on Windows', () => {
   beforeEach(() => {
     setupRuntimeHomeTest()
   })
@@ -139,7 +139,7 @@ describe('copying a login made inside Orca into an empty ~/.codex on Windows', (
 
     expect(existsSync(getSystemCodexAuthPath())).toBe(false)
   })
-  it("does not pull Orca's login in after a later logout when ~/.codex had its own", async () => {
+  it("does not pull Quirky's login in after a later logout when ~/.codex had its own", async () => {
     await launchOnMirror()
     writeFileSync(getRuntimeCodexAuthPath(), paneLogin, 'utf-8')
     const ownLogin = createCodexAuthJson('other@example.com', 'acct-other', 'own')

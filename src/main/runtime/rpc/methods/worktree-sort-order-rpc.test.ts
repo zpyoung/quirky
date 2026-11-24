@@ -1,7 +1,7 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { WORKTREE_METHODS } from './worktree'
 
 function dispatcherWith(persistManagedWorktreeSortOrder: ReturnType<typeof vi.fn>) {
@@ -9,7 +9,7 @@ function dispatcherWith(persistManagedWorktreeSortOrder: ReturnType<typeof vi.fn
   const runtime = {
     getRuntimeId: () => 'test-runtime',
     persistManagedWorktreeSortOrder
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return new RpcDispatcher({ runtime, methods: WORKTREE_METHODS })
 }
 

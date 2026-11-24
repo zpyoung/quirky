@@ -33,13 +33,13 @@ export function acpStructuredAgentDefinition(spec: AcpLaunchSpec): StructuredAge
       // An agent that does not also advertise images at its start has a message with one refused.
       imagePrompts: spec.imagePrompts === true,
       steering: 'queue',
-      // Orca answers every permission request the agent sends; the agent decides when it asks.
-      approvalEnforcement: 'orca'
+      // Quirky answers every permission request the agent sends; the agent decides when it asks.
+      approvalEnforcement: 'quirky'
     },
     ...(managedRuntime && { managedRuntime: () => managedRuntime.pin() !== null }),
     restingOptions: {
       acceptsKey: isAcpStructuredOptionKey,
-      // The agent lists its models over the protocol once it runs; Orca keeps no list of its own.
+      // The agent lists its models over the protocol once it runs; Quirky keeps no list of its own.
       fallbackModels: () => null,
       effortDefaultsToModel: false
     }

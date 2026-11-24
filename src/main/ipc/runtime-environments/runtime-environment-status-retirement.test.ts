@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import {
-  addManagedOrcadEnvironment,
-  refreshManagedOrcadPairing
-} from '../../../shared/runtime-environment-managed-orcad-store'
+  addManagedQuirkydEnvironment,
+  refreshManagedQuirkydPairing
+} from '../../../shared/runtime-environment-managed-quirkyd-store'
 import { pairingCode } from './runtime-environments-ipc-test-harness'
 import { REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY } from '../../../shared/protocol-version'
 import {
@@ -48,13 +48,13 @@ let envId: string
 beforeEach(() => {
   vi.clearAllMocks()
   resetRuntimeEnvironmentCapabilityEvidence()
-  directory = mkdtempSync(join(tmpdir(), 'orca-status-retirement-'))
-  envId = addManagedOrcadEnvironment(directory, {
+  directory = mkdtempSync(join(tmpdir(), 'quirky-status-retirement-'))
+  envId = addManagedQuirkydEnvironment(directory, {
     id: 'env-managed',
     name: 'Host',
     now: 1,
     pairingCode: pairingCode(),
-    orcadDeployment: {
+    quirkydDeployment: {
       sshTargetId: 'box',
       sshTargetGeneration: 1,
       localPort: 6768,
@@ -125,7 +125,7 @@ it('does not fence another environment or a fresh probe after retirement', async
 
 /** What a re-pair over SSH does mid-probe: store a new pairing and retire the old transports. */
 function repairMidProbe(now: number, keyByte = 1): void {
-  refreshManagedOrcadPairing(
+  refreshManagedQuirkydPairing(
     directory,
     envId,
     pairingCode(undefined, { deviceToken: `token-${now}`, keyByte }),

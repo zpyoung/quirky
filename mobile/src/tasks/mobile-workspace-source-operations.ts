@@ -60,7 +60,7 @@ export const localAgentDetectionRead = bindDeferredRpcOperation(
   })
 )
 
-/** The repo's orca.yaml hooks, which decide whether create must ask before running setup. */
+/** The repo's quirky.yaml hooks, which decide whether create must ask before running setup. */
 export const repoSetupHooksRead = bindDeferredRpcOperation(
   defineRpcOperation({
     name: 'repo.setup-hooks',

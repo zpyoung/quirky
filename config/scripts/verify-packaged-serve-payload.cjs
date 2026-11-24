@@ -18,9 +18,9 @@ function referencedAssets(html) {
 }
 
 /**
- * Why: orcad serves the browser client by path from the CLI's own app root, and it runs on plain
+ * Why: quirkyd serves the browser client by path from the CLI's own app root, and it runs on plain
  * Node, which cannot read app.asar. So the page and everything it loads must be unpacked beside
- * out/cli, or `orca serve` comes up with no web client (#30100).
+ * out/cli, or `quirky serve` comes up with no web client (#30100).
  */
 function assertPackagedWebClient(resourcesDir) {
   const outDir = join(resourcesDir, 'app.asar.unpacked', 'out')
@@ -28,7 +28,7 @@ function assertPackagedWebClient(resourcesDir) {
     throw failure(`no unpacked CLI at ${join(outDir, 'cli')}; the web client root resolves from it`)
   }
   const webRoot = join(outDir, 'renderer')
-  const manifestPath = join(webRoot, '.orca-web-client-files.json')
+  const manifestPath = join(webRoot, '.quirky-web-client-files.json')
   if (!existsSync(manifestPath)) {
     throw failure(`missing unpacked web file manifest at ${manifestPath}. ${REMEDY}`)
   }
@@ -74,8 +74,8 @@ function assertPackagedWebClient(resourcesDir) {
   console.log(`[verify-packaged-serve-payload] OK — ${String(assets.length)} asset(s) unpacked`)
 }
 
-// Relative to out/; mirrors ORCAD_LOCAL_SERVE_SELECTION_ENTRY, which a test pins.
-const SERVE_SELECTION_ENTRY = 'main/orcad/orcad-local-serve-selection-entry.js'
+// Relative to out/; mirrors QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY, which a test pins.
+const SERVE_SELECTION_ENTRY = 'main/quirkyd/quirkyd-local-serve-selection-entry.js'
 
 /** The file Node loads for a relative require, or null when none is unpacked. */
 function resolveRequiredFile(path) {
@@ -109,13 +109,13 @@ function missingRelativeRequires(entry) {
 }
 
 /**
- * Why: `orca serve` asks this entry which host to serve on, running it on the app's executable
+ * Why: `quirky serve` asks this entry which host to serve on, running it on the app's executable
  * as plain Node, which cannot read app.asar. A packed copy made every serve fall back (#27404).
  */
 function assertPackagedServeSelectionEntry(resourcesDir) {
   const entry = join(resourcesDir, 'app.asar.unpacked', 'out', ...SERVE_SELECTION_ENTRY.split('/'))
   if (!existsSync(entry)) {
-    throw failure(`missing unpacked ${entry}; orca serve runs it under ELECTRON_RUN_AS_NODE`)
+    throw failure(`missing unpacked ${entry}; quirky serve runs it under ELECTRON_RUN_AS_NODE`)
   }
   const missing = missingRelativeRequires(entry)
   if (missing.length > 0) {

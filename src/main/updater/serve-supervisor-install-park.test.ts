@@ -28,9 +28,9 @@ describe('parkServeSupervisorsForInstall', () => {
   let dir: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-install-park-'))
-    const bundle = join(root, 'Orca.app')
-    executable = join(bundle, 'Contents', 'MacOS', 'Orca')
+    root = await mkdtemp(join(tmpdir(), 'quirky-install-park-'))
+    const bundle = join(root, 'Quirky.app')
+    executable = join(bundle, 'Contents', 'MacOS', 'Quirky')
     await mkdir(join(bundle, 'Contents', 'MacOS'), { recursive: true })
     await writeFile(join(bundle, 'Contents', 'Info.plist'), 'v1')
     dir = bundleCoordinationDir(realpathSync(bundle), join(root, 'data'))
@@ -50,7 +50,7 @@ describe('parkServeSupervisorsForInstall', () => {
         pid: process.pid,
         childPid,
         heartbeatAt,
-        label: 'com.stablyai.orca.serve.default'
+        label: 'com.zpyoung.quirky.serve.default'
       })
     )
   }
@@ -189,7 +189,7 @@ describe('parkServeSupervisorsForInstall', () => {
   })
 
   it('a same-version reinstall still changes the bundle identity', async () => {
-    const plist = join(root, 'Orca.app', 'Contents', 'Info.plist')
+    const plist = join(root, 'Quirky.app', 'Contents', 'Info.plist')
     await register(CHILD)
     await parkServeSupervisorsForInstall(
       executable,

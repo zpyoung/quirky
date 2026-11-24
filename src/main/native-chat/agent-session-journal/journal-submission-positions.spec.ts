@@ -49,7 +49,7 @@ export function registerJournalSubmissionPositionsTests(): void {
 
   /** A send accepted for later handover, handed over, then taken back. */
   async function sendHandedOverThenWithdrawn() {
-    root = await mkdtemp(join(tmpdir(), 'orca-submission-positions-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-submission-positions-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     const submitted = await journal.appendSubmission({
       clientMessageId: 'send-1',
@@ -84,7 +84,7 @@ export function registerJournalSubmissionPositionsTests(): void {
 
   /** A send its turn ended without taking: the rejection names that turn. */
   async function sendWithdrawnByItsTurnEnd() {
-    root = await mkdtemp(join(tmpdir(), 'orca-submission-positions-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-submission-positions-'))
     const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
     await journal.appendSubmission({
       clientMessageId: 'send-1',

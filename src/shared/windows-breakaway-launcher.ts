@@ -1,15 +1,15 @@
 /**
- * One-shot launcher mode of `relay.js` and `orcad.js` on Windows SSH hosts: start the detached
+ * One-shot launcher mode of `relay.js` and `quirkyd.js` on Windows SSH hosts: start the detached
  * program outside the SSH session's job object, then exit.
  *
  * Win32-OpenSSH kills a session's job when the session ends. The job allows breakaway, but libuv
  * never asks for it, so the staged process-tree addon does the CreateProcessW. WMI, the old
  * route, is refused to a standard user's network logon, so it is only the relay script's
- * fallback for hosts whose relay predates this addon; orcad has no fallback.
+ * fallback for hosts whose relay predates this addon; quirkyd has no fallback.
  */
 import { closeSync, openSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { quoteWindowsArgument } from '@orca/process-host/windows-command-line'
+import { quoteWindowsArgument } from '@quirky/process-host/windows-command-line'
 import {
   formatWindowsBreakawayLaunchReport,
   WINDOWS_BREAKAWAY_ENV_FLAG,
@@ -22,10 +22,10 @@ import {
   type WindowsBreakawayLaunchContract,
   type WindowsBreakawayLaunchReport
 } from './windows-breakaway-launch'
-import { ORCAD_WINDOWS_PROCESS_TREE_FILENAME } from './orcad-artifacts'
+import { QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME } from './quirkyd-artifacts'
 
 /** Both bundles stage the addon under this name beside their entry script. */
-const WINDOWS_PROCESS_TREE_ADDON = `./${ORCAD_WINDOWS_PROCESS_TREE_FILENAME}`
+const WINDOWS_PROCESS_TREE_ADDON = `./${QUIRKYD_WINDOWS_PROCESS_TREE_FILENAME}`
 /** The kept previous log is its tail, so a crash loop cannot grow it without bound. */
 export const PREVIOUS_STDERR_LOG_MAX_BYTES = 1024 * 1024
 

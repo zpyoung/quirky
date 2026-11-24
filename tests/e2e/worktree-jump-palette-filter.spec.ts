@@ -2,7 +2,7 @@ import type { Locator, Page } from '@stablyai/playwright-test'
 import type { ExecutionHostId } from '../../src/shared/execution-host'
 import { getPaletteWorktreeIdentity } from '../../src/renderer/src/lib/palette-repo-resolution'
 import { encodePaletteIdentity } from '../../src/renderer/src/lib/palette-match/palette-ranking'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 const LOCAL_PROJECT = 'E2E Palette Local Project'
@@ -161,12 +161,12 @@ async function openComposerFromTypedName(page: Page): Promise<Locator> {
 }
 
 test.describe('Worktree jump-palette filters', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
-  test.afterEach(async ({ orcaPage }) => {
-    await orcaPage.evaluate(() => {
+  test.afterEach(async ({ quirkyPage }) => {
+    await quirkyPage.evaluate(() => {
       const store = window.__store?.getState()
       store?.setFilterRepoIds([])
       store?.closeModal()
@@ -174,94 +174,96 @@ test.describe('Worktree jump-palette filters', () => {
   })
 
   test('filters results, intersects fields, and reseeds from the sidebar on reopen', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const fixture = await seedPaletteFilterFixture(orcaPage)
-    await openPalette(orcaPage)
-    await searchFixtureWorkspaces(orcaPage, fixture)
+    const fixture = await seedPaletteFilterFixture(quirkyPage)
+    await openPalette(quirkyPage)
+    await searchFixtureWorkspaces(quirkyPage, fixture)
 
     // P1: keyboard focus reaches the control; its rendered selection narrows rows.
-    await selectRemoteHost(orcaPage, true)
-    await expect(filterTrigger(orcaPage)).toContainText('1')
-    await expect(palette(orcaPage).getByLabel(`Remove filter ${REMOTE_HOST}`)).toBeVisible()
+    await selectRemoteHost(quirkyPage, true)
+    await expect(filterTrigger(quirkyPage)).toContainText('1')
+    await expect(palette(quirkyPage).getByLabel(`Remove filter ${REMOTE_HOST}`)).toBeVisible()
     await expect(
-      worktreeRow(orcaPage, fixture.remoteWorktreeId, fixture.remoteHostId)
+      worktreeRow(quirkyPage, fixture.remoteWorktreeId, fixture.remoteHostId)
     ).toBeVisible()
-    await expect(worktreeRow(orcaPage, fixture.localWorktreeId)).toHaveCount(0)
+    await expect(worktreeRow(quirkyPage, fixture.localWorktreeId)).toHaveCount(0)
 
     // P2: host and repository fields intersect, with the filter-specific empty state.
-    await palette(orcaPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('')
-    await filterTrigger(orcaPage).click()
-    await palette(orcaPage).getByText('Projects', { exact: true }).click()
-    const projects = palette(orcaPage).getByRole('listbox', { name: 'Projects' })
+    await palette(quirkyPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('')
+    await filterTrigger(quirkyPage).click()
+    await palette(quirkyPage).getByText('Projects', { exact: true }).click()
+    const projects = palette(quirkyPage).getByRole('listbox', { name: 'Projects' })
     const localProject = projects.getByRole('option', { name: LOCAL_PROJECT })
     await expect(localProject).toBeVisible()
     await localProject.click()
-    await filterTrigger(orcaPage).click()
-    await expect(palette(orcaPage).getByText('No results match the active filter')).toBeVisible()
+    await filterTrigger(quirkyPage).click()
+    await expect(palette(quirkyPage).getByText('No results match the active filter')).toBeVisible()
     await expect(
-      palette(orcaPage).getByText('Clear the filter above, or widen it to more hosts and projects.')
+      palette(quirkyPage).getByText(
+        'Clear the filter above, or widen it to more hosts and projects.'
+      )
     ).toBeVisible()
 
     // P3: clear restores both rows; reopening replaces ephemeral state with the sidebar scope.
-    await filterTrigger(orcaPage).click()
-    await palette(orcaPage).getByRole('button', { name: 'Clear all' }).last().click()
-    await filterTrigger(orcaPage).click()
-    await expect(filterTrigger(orcaPage)).not.toContainText('1')
-    await searchFixtureWorkspaces(orcaPage, fixture)
+    await filterTrigger(quirkyPage).click()
+    await palette(quirkyPage).getByRole('button', { name: 'Clear all' }).last().click()
+    await filterTrigger(quirkyPage).click()
+    await expect(filterTrigger(quirkyPage)).not.toContainText('1')
+    await searchFixtureWorkspaces(quirkyPage, fixture)
 
-    await selectRemoteHost(orcaPage)
-    await orcaPage.evaluate((repoId) => {
+    await selectRemoteHost(quirkyPage)
+    await quirkyPage.evaluate((repoId) => {
       const store = window.__store?.getState()
       store?.closeModal()
       store?.setFilterRepoIds([repoId])
     }, fixture.localRepoId)
-    await expect(palette(orcaPage)).toBeHidden()
-    await openPalette(orcaPage)
-    await palette(orcaPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('E2E Palette')
-    await expect(filterTrigger(orcaPage)).toContainText('1')
-    await expect(worktreeRow(orcaPage, fixture.localWorktreeId)).toBeVisible()
-    await expect(worktreeRow(orcaPage, fixture.remoteWorktreeId, fixture.remoteHostId)).toHaveCount(
-      0
-    )
+    await expect(palette(quirkyPage)).toBeHidden()
+    await openPalette(quirkyPage)
+    await palette(quirkyPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('E2E Palette')
+    await expect(filterTrigger(quirkyPage)).toContainText('1')
+    await expect(worktreeRow(quirkyPage, fixture.localWorktreeId)).toBeVisible()
+    await expect(
+      worktreeRow(quirkyPage, fixture.remoteWorktreeId, fixture.remoteHostId)
+    ).toHaveCount(0)
   })
 
-  test('opens with the sidebar repository scope without widening it', async ({ orcaPage }) => {
-    const fixture = await seedPaletteFilterFixture(orcaPage)
-    await orcaPage.evaluate((repoId) => {
+  test('opens with the sidebar repository scope without widening it', async ({ quirkyPage }) => {
+    const fixture = await seedPaletteFilterFixture(quirkyPage)
+    await quirkyPage.evaluate((repoId) => {
       window.__store?.getState().setFilterRepoIds([repoId])
     }, fixture.localRepoId)
 
-    await openPalette(orcaPage)
-    await palette(orcaPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('E2E Palette')
+    await openPalette(quirkyPage)
+    await palette(quirkyPage).getByPlaceholder(SEARCH_PLACEHOLDER).fill('E2E Palette')
 
-    await expect(filterTrigger(orcaPage)).toContainText('1')
-    await expect(palette(orcaPage).getByLabel(`Remove filter ${LOCAL_PROJECT}`)).toBeVisible()
-    await expect(worktreeRow(orcaPage, fixture.localWorktreeId)).toBeVisible()
-    await expect(worktreeRow(orcaPage, fixture.remoteWorktreeId, fixture.remoteHostId)).toHaveCount(
-      0
-    )
+    await expect(filterTrigger(quirkyPage)).toContainText('1')
+    await expect(palette(quirkyPage).getByLabel(`Remove filter ${LOCAL_PROJECT}`)).toBeVisible()
+    await expect(worktreeRow(quirkyPage, fixture.localWorktreeId)).toBeVisible()
+    await expect(
+      worktreeRow(quirkyPage, fixture.remoteWorktreeId, fixture.remoteHostId)
+    ).toHaveCount(0)
   })
 
-  test('pressing Enter creates a worktree from a typed name', async ({ orcaPage }) => {
-    const createDialog = await openComposerFromTypedName(orcaPage)
+  test('pressing Enter creates a worktree from a typed name', async ({ quirkyPage }) => {
+    const createDialog = await openComposerFromTypedName(quirkyPage)
 
-    await orcaPage.keyboard.press('Escape')
+    await quirkyPage.keyboard.press('Escape')
 
     await expect(createDialog).toBeHidden()
   })
 
-  test('Escape closes the composer opened over the Automations page', async ({ orcaPage }) => {
+  test('Escape closes the composer opened over the Automations page', async ({ quirkyPage }) => {
     // Why this view: Cmd+J has no view guard, and a page mounted under the palette
     // keeps its own capture-phase Escape listener registered. Window capture runs
     // before Radix's document capture, so a preventDefault there vetoes dismissal.
-    await orcaPage.evaluate(() => window.__store?.getState().openAutomationsPage())
-    const automationsHeading = orcaPage.getByRole('heading', { name: 'Automations', level: 1 })
+    await quirkyPage.evaluate(() => window.__store?.getState().openAutomationsPage())
+    const automationsHeading = quirkyPage.getByRole('heading', { name: 'Automations', level: 1 })
     await expect(automationsHeading).toBeVisible()
 
-    const createDialog = await openComposerFromTypedName(orcaPage)
+    const createDialog = await openComposerFromTypedName(quirkyPage)
 
-    await orcaPage.keyboard.press('Escape')
+    await quirkyPage.keyboard.press('Escape')
 
     await expect(createDialog).toBeHidden()
     // The page declined the press rather than consuming it, so it is still open.

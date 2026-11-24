@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../shared/terminal-tab-types'
@@ -99,9 +99,9 @@ export function registerTerminalListSurfaceLostOrphanTests(): void {
   }
 
   /** Both PTYs stay live on the host throughout; only the graph changes. */
-  function makeRuntime(session?: WorkspaceSessionState): OrcaRuntimeService {
+  function makeRuntime(session?: WorkspaceSessionState): QuirkyRuntimeService {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: makeStore returns the repo and session reads this suite drives; the rest of Store is unreached.
-    const runtime = new OrcaRuntimeService(makeStore(session) as never)
+    const runtime = new QuirkyRuntimeService(makeStore(session) as never)
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub carries the four controller members this suite drives; both PTYs stay live throughout.
     runtime.setPtyController({
       spawn: vi.fn(async () => ({ id: 'never' })),
@@ -124,7 +124,7 @@ export function registerTerminalListSurfaceLostOrphanTests(): void {
   }
 
   /** The restart republishes a graph that kept one pane and dropped the other. */
-  function dropOnePane(runtime: OrcaRuntimeService): void {
+  function dropOnePane(runtime: QuirkyRuntimeService): void {
     runtime.syncWindowGraph(1, {
       tabs: [tab('tab-kept', KEPT_LEAF)],
       leaves: [leaf('tab-kept', KEPT_LEAF, KEPT_PTY)]

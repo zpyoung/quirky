@@ -9,7 +9,7 @@ import type {
   PublishFixAction
 } from '../../shared/fork-hosted-review-sitter/types'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { assertBranchAndHead, verifyPreparedCommit, type PublishAction } from './agent-execution'
 import {
   inspectHostedReviewSitterContention,
@@ -71,7 +71,7 @@ function preparationForPublication(
 }
 
 export async function publishHostedReviewPreparation(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   definition: HostedReviewSitterDefinition,
   action: PublishFixAction | PublishConflictResolutionAction,

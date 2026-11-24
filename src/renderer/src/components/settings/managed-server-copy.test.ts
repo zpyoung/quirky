@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ORCAD_MIGRATION_DEPENDENCY_KINDS } from '../../../../shared/orcad-migration/orcad-migration-preflight'
+import { QUIRKYD_MIGRATION_DEPENDENCY_KINDS } from '../../../../shared/quirkyd-migration/quirkyd-migration-preflight'
 import { conversionBlockerLabel, managedServerOutcomeLabel } from './managed-server-copy'
 import { dependencyKindLabel } from './managed-server-dependency-kinds'
 
@@ -7,14 +7,14 @@ describe('managed server blocker copy', () => {
   it('names dependent state in plain words, never the internal kind id', () => {
     expect(
       conversionBlockerLabel({
-        code: 'orcad_migration_dependent_state',
+        code: 'quirkyd_migration_dependent_state',
         category: 'client-owned-state',
         dependencies: [{ kind: 'workspace-session', count: 1 }]
       })
     ).toBe('State that cannot move yet: open tabs and layout (1).')
     expect(
       conversionBlockerLabel({
-        code: 'orcad_migration_dependency_unverifiable',
+        code: 'quirkyd_migration_dependency_unverifiable',
         category: 'live-or-unverifiable',
         sources: ['automation', 'ui-routing']
       })
@@ -22,7 +22,7 @@ describe('managed server blocker copy', () => {
   })
 
   it('has a label for every dependency kind', () => {
-    for (const kind of ORCAD_MIGRATION_DEPENDENCY_KINDS) {
+    for (const kind of QUIRKYD_MIGRATION_DEPENDENCY_KINDS) {
       expect(dependencyKindLabel(kind)).not.toBe(kind)
     }
   })
@@ -33,7 +33,7 @@ describe('managed server action refusals', () => {
     expect(
       managedServerOutcomeLabel({
         outcome: 'refused',
-        code: 'orcad_stop_active_environment',
+        code: 'quirkyd_stop_active_environment',
         verdict: 'live'
       })
     ).toBe(
@@ -42,8 +42,8 @@ describe('managed server action refusals', () => {
   })
 
   it.each([
-    { outcome: 'refused', code: 'orcad_stop_still_running', verdict: 'live' },
-    { outcome: 'deferred', code: 'orcad_update_terminals_running' },
+    { outcome: 'refused', code: 'quirkyd_stop_still_running', verdict: 'live' },
+    { outcome: 'deferred', code: 'quirkyd_update_terminals_running' },
     { outcome: 'refused', code: 'future_terminal_guard', verdict: 'live' }
   ])('keeps the running-terminal instruction for $code', (result) => {
     expect(managedServerOutcomeLabel(result)).toBe(

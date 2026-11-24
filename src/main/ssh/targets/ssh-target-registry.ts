@@ -11,7 +11,7 @@ import type {
 /**
  * The SSH target/state registry, split out of `ipc/ssh.ts`.
  *
- * Why: the Orca runtime reads registered SSH targets and state during normal
+ * Why: the Quirky runtime reads registered SSH targets and state during normal
  * operation, but `ipc/ssh.ts` also owns `ipcMain`, `powerMonitor` and a
  * `BrowserWindow` accessor. Importing four thin accessors dragged all of Electron
  * into the runtime's module graph.
@@ -23,9 +23,9 @@ import type {
  * rather than freeze one.
  */
 
-/** orcad has no SSH stack yet still advertises ssh.target-management.v1 (D3), so clients show this. */
+/** quirkyd has no SSH stack yet still advertises ssh.target-management.v1 (D3), so clients show this. */
 export const SSH_TARGET_MANAGEMENT_UNSERVED_MESSAGE =
-  "This Orca server runs without the desktop app, so it can't manage SSH hosts yet."
+  "This Quirky server runs without the desktop app, so it can't manage SSH hosts yet."
 
 export class SshTargetManagementUnservedError extends Error {
   constructor() {

@@ -54,7 +54,7 @@ import { EXTERNAL_EDITOR_CLI_COMMAND, registerShellHandlers } from './shell'
 import { resolveExternalEditorLaunchSpec } from '../external-editor-launch'
 import type { SshTarget } from '../../shared/ssh-types'
 
-// Why shell:false: hidden launches go through @orca/process-host, which pins it.
+// Why shell:false: hidden launches go through @quirky/process-host, which pins it.
 const HIDDEN_EDITOR_LAUNCH_OPTIONS = expect.objectContaining({
   detached: true,
   stdio: 'ignore',

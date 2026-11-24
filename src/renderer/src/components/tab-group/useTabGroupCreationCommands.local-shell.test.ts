@@ -32,7 +32,7 @@ vi.mock('../../lib/focus-terminal-tab-surface', () => ({
   focusTerminalTabSurface: mocks.focusTerminalTabSurface
 }))
 
-const WORKTREE_ID = 'repo::C:/Users/neil/orca/workspaces/orca/aug23-triage'
+const WORKTREE_ID = 'repo::C:/Users/neil/quirky/workspaces/quirky/aug23-triage'
 const GROUP_ID = 'group-1'
 const FOCUSED_ENVIRONMENT_ID = 'arch-dev'
 

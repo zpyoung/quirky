@@ -4,11 +4,11 @@ import {
   type ObservedAgentStatusPaneIdentity
 } from '../ipc/agent-status-ipc-boundary'
 import type { EnrichedAgentHookEventPayload } from '../agent-hooks/server/server-types'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 
 /** The runtime also links each conversation to the PTY execution that reported it. */
 type ObservedStatusRuntime = AgentStatusRuntimeEnrichment &
-  Partial<Pick<OrcaRuntimeService, 'recordCliWriterConversation'>>
+  Partial<Pick<QuirkyRuntimeService, 'recordCliWriterConversation'>>
 
 /** Bounded like the hook server's own per-pane maps; eviction only degrades a row to `unobserved`. */
 const MAX_OBSERVED_PANES = 1024

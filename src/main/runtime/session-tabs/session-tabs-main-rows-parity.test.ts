@@ -10,13 +10,13 @@ import {
   HEADLESS_SECOND_LEAF_ID,
   HEADLESS_THIRD_LEAF_ID,
   TEST_WORKTREE_ID
-} from '../orca-runtime-test-fixtures.spec'
+} from '../quirky-runtime-test-fixtures.spec'
 import {
   SURFACE_TAB_ID,
   surfaceRuntime
 } from '../terminal/surface/terminal-surface-replies.test-fixture'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const row = (leafId: string) => `${SURFACE_TAB_ID}::${leafId}`
 

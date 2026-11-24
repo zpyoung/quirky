@@ -9,10 +9,10 @@ import { applyCommandToSession } from '../persistence/terminal-topology/terminal
 import type { PersistedUIState } from '../../shared/persisted-ui-state-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { Store } from '../persistence'
-import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
+import { isFrozenQuirkydSourceSessionPartition } from '../ssh/quirkyd-retained-source'
 import { windowViewSaveForMain, type ReconnectFactsFor } from '../persistence/window-save-view'
 import { reportWindowSaveDrift } from '../persistence/window-save-divergence'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 
 type StageBeforeUnloadSyncArgs = {
   sessions: { state: WorkspaceSessionState; hostId?: ExecutionHostId }[]
@@ -112,9 +112,9 @@ export function registerRendererShutdownCheckpointHandler(
     let ok = true
     try {
       for (const { state, hostId } of args.sessions) {
-        if (!isFrozenOrcadSourceSessionPartition(store, hostId)) {
+        if (!isFrozenQuirkydSourceSessionPartition(store, hostId)) {
           store.stageWorkspaceSessionBeforeUnload(
-            ORCA_LAYOUT_OWNER_IS_MAIN
+            QUIRKY_LAYOUT_OWNER_IS_MAIN
               ? stagedSessionForMain(store, state, hostId, quitResumeRecordsFor, reconnectFactsFor)
               : state,
             hostId

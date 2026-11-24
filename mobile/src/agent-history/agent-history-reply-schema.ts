@@ -32,7 +32,7 @@ export const agentHistoryHostStatusSchema = z.looseObject({
  * next render, which is the defect this reader exists to name.
  *
  * The rows stay unknown, and that is deliberate rather than unfinished. A row is an AiVaultSession,
- * whose `agent` is a 21-arm vocabulary that grows with every agent CLI Orca learns to scan — and
+ * whose `agent` is a 21-arm vocabulary that grows with every agent CLI Quirky learns to scan — and
  * which this client echoes straight back to the host when it resumes a session. Declaring it would
  * either refuse a newer host's whole reply or silently drop the very sessions that host added, and
  * the remote-wire contract is explicit that a member a client sends back passes through as the host

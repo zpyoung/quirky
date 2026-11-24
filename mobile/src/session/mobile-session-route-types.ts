@@ -23,7 +23,7 @@ export type MobileSessionTab =
       status?: 'pending-handle' | 'ready'
       terminal: string | null
       agentStatus?: AgentStatusEntry | null
-      /** Agent Orca launched in this terminal, if any. This makes chat eligible
+      /** Agent Quirky launched in this terminal, if any. This makes chat eligible
        *  before the first live agent-status update reaches the mobile client. */
       launchAgent?: TuiAgent
       /** Host-provided launch context still parked as an unsent TUI-input draft. */
@@ -146,7 +146,7 @@ export type DirtyMarkdownDraft = {
   content: string
 }
 
-/** `other-runtime`: another Orca server owns the workspace, so the paired host cannot list its agents. */
+/** `other-runtime`: another Quirky server owns the workspace, so the paired host cannot list its agents. */
 export type MobileNewTabAgentLoadState = 'idle' | 'loading' | 'loaded' | 'error' | 'other-runtime'
 
 export type MobileDisplayMode = 'auto' | 'phone' | 'desktop'

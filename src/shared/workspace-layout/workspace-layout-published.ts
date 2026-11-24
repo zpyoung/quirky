@@ -44,7 +44,7 @@ export type PublishedPane = {
  * - 'sleeping': nothing runs; main starts it (resuming its agent, if it had one) on first view or
  *   the first command that needs it.
  * - 'resuming': main is starting it from its saved terminal or agent.
- * - 'held': a newer Orca build's terminal service may still run it, so main will not start it.
+ * - 'held': a newer Quirky build's terminal service may still run it, so main will not start it.
  */
 export type PaneStartStatus = 'starting' | 'failed' | 'sleeping' | 'resuming' | 'held'
 

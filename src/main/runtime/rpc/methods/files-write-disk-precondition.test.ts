@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
 import type { RpcRequest } from '../core'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { FILE_METHODS } from './files'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -15,7 +15,7 @@ describe('files.writeIfUnchanged', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       writeFileExplorerFile: vi.fn().mockResolvedValue({ ok: false, diskConflict: 'changed' })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const diskPrecondition = { expectedSignature: 'a-b-1', allowMissing: true }
 
@@ -46,7 +46,7 @@ describe('files.writeIfUnchanged', () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       writeFileExplorerFile: vi.fn().mockResolvedValue({ ok: true })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
 
     await dispatcher.dispatch(

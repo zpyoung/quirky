@@ -86,7 +86,7 @@ describe('the chat strip and the session list read the same host child records',
 
   beforeEach(async () => {
     _internals.resetCachesForTests()
-    root = await mkdtemp(join(tmpdir(), 'orca-child-records-switch-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-child-records-switch-'))
     server = new AgentHookServer()
   })
 

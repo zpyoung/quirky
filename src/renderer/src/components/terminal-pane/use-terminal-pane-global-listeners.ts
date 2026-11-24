@@ -86,7 +86,7 @@ export function useTerminalPaneGlobalListeners(controller: TerminalPaneCloseCont
     macOptionAsAltRef,
     paneKittyKeyboardModesRef,
     keybindings,
-    terminalShortcutPolicy: settings?.terminalShortcutPolicy ?? 'orca-first'
+    terminalShortcutPolicy: settings?.terminalShortcutPolicy ?? 'quirky-first'
   })
   useTerminalPaneGlobalEffects({
     tabId,
@@ -108,7 +108,7 @@ export function useTerminalPaneGlobalListeners(controller: TerminalPaneCloseCont
 
   useEffect(() => {
     if (
-      !(globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ ||
+      !(globalThis as { __QUIRKY_WEB_CLIENT__?: boolean }).__QUIRKY_WEB_CLIENT__ ||
       !isVisible ||
       !isActive
     ) {

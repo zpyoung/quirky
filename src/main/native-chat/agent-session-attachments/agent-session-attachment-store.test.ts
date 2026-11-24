@@ -11,7 +11,7 @@ let store: AgentSessionAttachmentStore
 const caller = 'client-a'
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-attachments-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-attachments-'))
   store = new AgentSessionAttachmentStore(join(root, 'agent-session-attachments'), {
     hasSession: (sessionId) => sessionId.startsWith('session-')
   })

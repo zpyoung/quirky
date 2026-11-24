@@ -30,14 +30,14 @@ function executionRefusal(host: NotebookExecutionHost, language: string): string
     case 'unresolved':
       return translate(
         'auto.components.editor.IpynbViewer.ownerUnresolved',
-        "Orca can't tell which computer this notebook is on yet, so its cells can't run."
+        "Quirky can't tell which computer this notebook is on yet, so its cells can't run."
       )
     case 'local':
       return language === 'python'
         ? null
         : translate(
             'auto.components.editor.IpynbViewer.pythonOnly',
-            'Only Python notebooks can run in Orca.'
+            'Only Python notebooks can run in Quirky.'
           )
   }
 }

@@ -40,8 +40,8 @@ describe('isWorktreeRemovalReplyLost', () => {
 
   it.each([
     "Error invoking remote method 'x': Error: Request timed out.",
-    "Error invoking remote method 'x': Error: Remote Orca runtime connection interrupted.",
-    "Error invoking remote method 'x': Error: Could not connect to the remote Orca runtime."
+    "Error invoking remote method 'x': Error: Remote Quirky runtime connection interrupted.",
+    "Error invoking remote method 'x': Error: Could not connect to the remote Quirky runtime."
   ])('treats the code-stripped message "%s" as a lost reply', (message) => {
     expect(isWorktreeRemovalReplyLost(new Error(message))).toBe(true)
   })

@@ -88,8 +88,8 @@ function clientChoosesStructuredLaunches(capabilities: readonly string[] | undef
 export function resolveStructuredNativeChatSupport(
   input: StructuredNativeChatSupportInput
 ): StructuredNativeChatSupport {
-  // A paired Orca server runs structured sessions itself and answers for them below. An SSH host
-  // has no Orca runtime of its own to run one.
+  // A paired Quirky server runs structured sessions itself and answers for them below. An SSH host
+  // has no Quirky runtime of its own to run one.
   const host = parseExecutionHostId(input.executionHostId)
   if (host?.kind !== 'local' && host?.kind !== 'runtime') {
     return { supported: false, blocker: 'remote-execution-host' }

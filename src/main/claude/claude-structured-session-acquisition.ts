@@ -216,7 +216,7 @@ export async function acquireClaudeSession({
           },
           onExit: (error, exit) => {
             if (exit?.expected) {
-              // The end of a close Orca began; that close settles it, or finishes it now.
+              // The end of a close Quirky began; that close settles it, or finishes it now.
               callbacks.finishClose(sessionId, attempt)
               return
             }

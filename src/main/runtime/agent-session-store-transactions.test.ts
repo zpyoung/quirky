@@ -24,7 +24,7 @@ let root: string
 let counter = 0
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-agent-session-store-transactions-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-agent-session-store-transactions-'))
 })
 
 afterEach(async () => {

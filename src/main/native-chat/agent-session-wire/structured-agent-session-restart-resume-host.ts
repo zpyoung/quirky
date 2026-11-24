@@ -10,7 +10,7 @@ import {
 } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionResumeMarker } from '../../../shared/agent-session-resume-marker'
 import {
-  createNewerOrcaChats,
+  createNewerQuirkyChats,
   createStructuredAgentSessionRestartCandidateReaders
 } from './structured-agent-session-restart-candidates'
 import {
@@ -82,20 +82,20 @@ export function createStructuredAgentSessionRestartResume(
     now: surfaces.now,
     enqueue: enqueueRecoveryOperation
   })
-  const newerOrca = createNewerOrcaChats(() => deps.journalDatabase.readOnly)
+  const newerQuirky = createNewerQuirkyChats(() => deps.journalDatabase.readOnly)
   const { derive, deriveAtSend } = createStructuredAgentSessionRestartCandidateReaders({
     sessions,
     getRecord: deps.store.getRecord,
     adapter: deps.adapter,
     agents: deps.agents,
     movedOn: withdrawal.movedOn,
-    savedByNewerOrca: newerOrca.has
+    savedByNewerQuirky: newerQuirky.has
   })
   const failures = createStructuredAgentSessionRestartFailureLedger({
     ...(deps.recoveryCapsule ? { capsule: deps.recoveryCapsule } : {}),
     getRecord: deps.store.getRecord,
     retryable: (marker) => derive([marker], 'may-be-held').candidates.length === 1,
-    savedByNewerOrca: newerOrca.has,
+    savedByNewerQuirky: newerQuirky.has,
     reveal: (markers) => revealMarkers(markers),
     logger: deps.logger,
     now: surfaces.now,
@@ -108,7 +108,7 @@ export function createStructuredAgentSessionRestartResume(
       readFailedMarkers: async () => (await failures.read()).map((failure) => failure.marker),
       hasSession: (sessionId) => sessions.has(sessionId),
       reveal: async (sessionId) => {
-        newerOrca.note(sessionId, await surfaces.revealSession(sessionId).catch(() => null))
+        newerQuirky.note(sessionId, await surfaces.revealSession(sessionId).catch(() => null))
       },
       logger: deps.logger,
       now: surfaces.now,
@@ -121,7 +121,7 @@ export function createStructuredAgentSessionRestartResume(
     const markers = await readMarkers()
     await revealMarkers(markers)
     // A live chat remains an offer. The user may have opened it to inspect the context and still
-    // explicitly choose whether Orca should ask the agent to continue.
+    // explicitly choose whether Quirky should ask the agent to continue.
     const { candidates, superseded } = derive(markers, 'may-be-held')
     retireSuperseded(superseded)
     return restartRowsFor(candidates, audience)

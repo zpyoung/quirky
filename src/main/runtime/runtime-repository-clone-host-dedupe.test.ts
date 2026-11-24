@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -64,7 +64,7 @@ describe('clone reuses only a project on this machine', () => {
   let sourceUrl: string
 
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(join(tmpdir(), 'orca-clone-host-dedupe-')))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-clone-host-dedupe-')))
     const source = join(root, 'origin', 'source')
     runGit(['init', '-q', source])
     runGit([

@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { probeOpenCodeCliVersion } from './opencode-cli-version'
 
-vi.mock('@orca/process-host', () => ({ runProcess: vi.fn() }))
+vi.mock('@quirky/process-host', () => ({ runProcess: vi.fn() }))
 beforeEach(() => vi.mocked(runProcess).mockReset())
 
 it('shares concurrent probes and isolates executable, host and environment identities', async () => {
@@ -78,13 +78,13 @@ it('shares probes across pane identities while preserving launch-affecting envir
     env: {
       PATH: '/runtime',
       OPENCODE_CONFIG_DIR: '/config',
-      ORCA_PANE_KEY: 'pane-1',
-      ORCA_TAB_ID: 'tab-1',
-      ORCA_TERMINAL_HANDLE: 'term-1',
-      ORCA_WORKTREE_ID: 'workspace-1',
-      ORCA_AGENT_LAUNCH_TOKEN: 'launch-1',
-      ORCA_AGENT_PANE: 'pane-1',
-      ORCA_AGENT_LAUNCH: 'launch-1'
+      QUIRKY_PANE_KEY: 'pane-1',
+      QUIRKY_TAB_ID: 'tab-1',
+      QUIRKY_TERMINAL_HANDLE: 'term-1',
+      QUIRKY_WORKTREE_ID: 'workspace-1',
+      QUIRKY_AGENT_LAUNCH_TOKEN: 'launch-1',
+      QUIRKY_AGENT_PANE: 'pane-1',
+      QUIRKY_AGENT_LAUNCH: 'launch-1'
     },
     hostIdentity: 'pane-cache-host'
   }
@@ -94,13 +94,13 @@ it('shares probes across pane identities while preserving launch-affecting envir
       ...options,
       env: {
         ...options.env,
-        ORCA_PANE_KEY: 'pane-2',
-        ORCA_TAB_ID: 'tab-2',
-        ORCA_TERMINAL_HANDLE: 'term-2',
-        ORCA_WORKTREE_ID: 'workspace-2',
-        ORCA_AGENT_LAUNCH_TOKEN: 'launch-2',
-        ORCA_AGENT_PANE: 'pane-2',
-        ORCA_AGENT_LAUNCH: 'launch-2'
+        QUIRKY_PANE_KEY: 'pane-2',
+        QUIRKY_TAB_ID: 'tab-2',
+        QUIRKY_TERMINAL_HANDLE: 'term-2',
+        QUIRKY_WORKTREE_ID: 'workspace-2',
+        QUIRKY_AGENT_LAUNCH_TOKEN: 'launch-2',
+        QUIRKY_AGENT_PANE: 'pane-2',
+        QUIRKY_AGENT_LAUNCH: 'launch-2'
       }
     })
   ])

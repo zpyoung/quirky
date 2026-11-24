@@ -64,21 +64,23 @@ describe('the setup run policy is a closed enum with the call site defaulting it
 
 describe('the trust record salvages per repo', () => {
   it('keeps the approvals isSetupHookTrusted reads', () => {
-    const ui = { trustedOrcaHooks: { 'repo-1': { setup: { contentHash: 'h', approvedAt: 1 } } } }
-    expect(reads(newWorkspaceUiTrustSchema, { ui })?.trustedOrcaHooks?.['repo-1']?.setup).toEqual({
-      contentHash: 'h',
-      approvedAt: 1
-    })
+    const ui = { trustedQuirkyHooks: { 'repo-1': { setup: { contentHash: 'h', approvedAt: 1 } } } }
+    expect(reads(newWorkspaceUiTrustSchema, { ui })?.trustedQuirkyHooks?.['repo-1']?.setup).toEqual(
+      {
+        contentHash: 'h',
+        approvedAt: 1
+      }
+    )
   })
 
   it('drops one unreadable repo without costing the others their trust', () => {
     const ui = {
-      trustedOrcaHooks: {
+      trustedQuirkyHooks: {
         'repo-1': { all: { approvedAt: 1 } },
         'repo-2': 'not-a-record'
       }
     }
-    const trust = reads(newWorkspaceUiTrustSchema, { ui })?.trustedOrcaHooks
+    const trust = reads(newWorkspaceUiTrustSchema, { ui })?.trustedQuirkyHooks
     expect(trust?.['repo-1']?.all).toEqual({ approvedAt: 1 })
     expect(trust?.['repo-2']).toBe(undefined)
   })
@@ -91,7 +93,7 @@ describe('the trust record salvages per repo', () => {
 
   // The call site interprets this reply inside an unawaited `void (async () => {})()` with no
   // catch, so a refusal here is an unhandled rejection that also skips the provider computation
-  // below it. Main cast the value and read `?.trustedOrcaHooks ?? {}`, which tolerated any shape.
+  // below it. Main cast the value and read `?.trustedQuirkyHooks ?? {}`, which tolerated any shape.
   it('reads a non-object ui.get result as absent rather than refusing it', () => {
     for (const value of ['not-an-object', 42, true, [], [{ ui: {} }]]) {
       expect(refuses(newWorkspaceUiTrustSchema, value)).toBe(false)

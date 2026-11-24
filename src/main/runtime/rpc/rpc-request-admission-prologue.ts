@@ -7,7 +7,7 @@ import type {
   RpcStreamingMethod
 } from './core'
 import { errorResponse } from './errors'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { orchestrationMigrationFence } from './orchestration-contract-fence'
 import { runtimeSourceFence } from './runtime-source-admission'
 import type { RpcDispatchStreamingOptions } from './dispatcher-stream-options'
@@ -25,7 +25,7 @@ import {
 } from './orchestration-session-caller'
 
 type RpcRequestAdmissionDeps = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   registry: RpcRegistry
   meta: RpcEnvelopeMeta
   pinnedCallerScope?: RpcCallerScope

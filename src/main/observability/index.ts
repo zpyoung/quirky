@@ -2,7 +2,7 @@
 // active tracer, and exposes a single init/shutdown pair the main process calls from
 // `src/main/index.ts`. Nothing here leaves the machine.
 //
-// ORCA_DIAGNOSTICS_DISABLED=1 disables local file writes; CI detection disables everything.
+// QUIRKY_DIAGNOSTICS_DISABLED=1 disables local file writes; CI detection disables everything.
 
 import { createLocalFileSink, type LocalFileSink } from './local-file-sink'
 import { getTraceFilePath } from './logs-directory'
@@ -23,7 +23,7 @@ const CI_ENV_VARS = [
 export type ObservabilityConsent = {
   /** Whether the local NDJSON sink is active. */
   readonly localFileEnabled: boolean
-  readonly disabledReason?: 'orca_diagnostics_disabled' | 'ci'
+  readonly disabledReason?: 'quirky_diagnostics_disabled' | 'ci'
 }
 
 function envOn(name: string): boolean {
@@ -45,8 +45,8 @@ export function resolveObservabilityConsent(): ObservabilityConsent {
   if (inCI()) {
     return { localFileEnabled: false, disabledReason: 'ci' }
   }
-  if (envOn('ORCA_DIAGNOSTICS_DISABLED')) {
-    return { localFileEnabled: false, disabledReason: 'orca_diagnostics_disabled' }
+  if (envOn('QUIRKY_DIAGNOSTICS_DISABLED')) {
+    return { localFileEnabled: false, disabledReason: 'quirky_diagnostics_disabled' }
   }
   return { localFileEnabled: true }
 }
@@ -76,7 +76,7 @@ function installLocalSink(filePath: string): void {
 export function initObservability(options?: { traceFilePath?: string }): ObservabilityConsent {
   const c = resolveObservabilityConsent()
   if (!c.localFileEnabled) {
-    // Disabled at the CI / ORCA_DIAGNOSTICS_DISABLED level — leave the
+    // Disabled at the CI / QUIRKY_DIAGNOSTICS_DISABLED level — leave the
     // tracer's active sink unset, so all spans are no-ops.
     return c
   }

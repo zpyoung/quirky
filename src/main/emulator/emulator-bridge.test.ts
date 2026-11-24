@@ -61,7 +61,7 @@ vi.mock('os', async (importOriginal) => {
 })
 
 import { EmulatorBridge } from './emulator-bridge'
-import { RuntimeEmulatorCommands } from '../runtime/orca-runtime-emulator'
+import { RuntimeEmulatorCommands } from '../runtime/quirky-runtime-emulator'
 
 function session(deviceUdid: string): EmulatorSessionInfo {
   return {
@@ -94,7 +94,7 @@ describe('EmulatorBridge helper ownership', () => {
     netFetchMock.mockReset()
   })
 
-  it('stops the previous Orca-managed helper when a worktree switches devices', async () => {
+  it('stops the previous Quirky-managed helper when a worktree switches devices', async () => {
     const bridge = new EmulatorBridge()
     bridge.registerActiveEmulator('wt-1', session('device-old'), { managed: true })
 
@@ -113,7 +113,7 @@ describe('EmulatorBridge helper ownership', () => {
     expect(bridge.getActiveForWorktree('wt-1')).toBeNull()
   })
 
-  it('shuts down the previous Orca-managed device when requested', async () => {
+  it('shuts down the previous Quirky-managed device when requested', async () => {
     const bridge = new EmulatorBridge()
     bridge.registerActiveEmulator('wt-1', session('device-old'), { managed: true })
 
@@ -168,7 +168,7 @@ describe('EmulatorBridge helper ownership', () => {
     expect(bridge.getActiveForWorktree('wt-1')).toBeNull()
   })
 
-  it('only kills Orca-managed helpers during app shutdown cleanup', async () => {
+  it('only kills Quirky-managed helpers during app shutdown cleanup', async () => {
     const bridge = new EmulatorBridge()
     bridge.registerActiveEmulator('wt-managed', session('device-managed'), { managed: true })
     bridge.registerActiveEmulator('wt-external', session('device-external'))

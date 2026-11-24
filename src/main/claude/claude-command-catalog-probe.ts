@@ -3,7 +3,7 @@ import { assertJsonTextStructureWithinLimits } from '../../shared/json-text-stru
 import { runClaudeListing, type ClaudeModelCatalogProbeDeps } from './claude-model-catalog-probe'
 import { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
 
-const REQUEST_ID = 'orca-command-discovery'
+const REQUEST_ID = 'quirky-command-discovery'
 
 // Why: `initialize` answers the session's `/` surface (built-ins, commands, skills, plugins) with
 // no API turn, the same list a live chat seeds its menu from.

@@ -61,7 +61,7 @@ function resumeOf(path: string) {
 // it on the byte after that record's newline. Off by one and every later
 // incremental scan folds a half-line into the session.
 it('keeps a byte-exact resume cursor across a skipped record', async () => {
-  const root = await tempRoot('orca-record-budget-')
+  const root = await tempRoot('quirky-record-budget-')
   const path = join(root, SESSION_FILE)
   const first = record('first')
   const second = record('second')
@@ -102,7 +102,7 @@ it('keeps a byte-exact resume cursor across a skipped record', async () => {
 })
 
 it('folds a cold read around a mid-file oversized record', async () => {
-  const root = await tempRoot('orca-record-budget-cold-')
+  const root = await tempRoot('quirky-record-budget-cold-')
   const path = join(root, SESSION_FILE)
   const first = record('first')
   const second = record('second')
@@ -118,7 +118,7 @@ it('folds a cold read around a mid-file oversized record', async () => {
 // Why: before this, the throw aborted the fold and the session vanished from
 // the history list and from search entirely.
 it('still lists a session with an oversized record and reports the loss', async () => {
-  const root = await tempRoot('orca-record-budget-scan-')
+  const root = await tempRoot('quirky-record-budget-scan-')
   const roots = isolatedScanRoots(root)
   const dir = join(roots.claudeProjectsDir, 'project')
   const path = join(dir, SESSION_FILE)

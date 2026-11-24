@@ -33,10 +33,10 @@ Both versions preserve PATH, startup-delivery metadata, raw foreground lookup, p
 From the repository root, run the Node proof:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/native-pty-spawn-env-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=128 docs/audits/native-pty-spawn-env-retention/reproduce.cjs
 ```
 
-For Electron, run the installed Electron executable with `--expose-gc --max-old-space-size=128 docs/audits/native-pty-spawn-env-retention/reproduce.cjs`. Set `ELECTRON_RUN_AS_NODE=1` and `ORCA_BACKGROUND_LAUNCH=1` in its environment. This keeps Electron in Node mode; it creates no windows.
+For Electron, run the installed Electron executable with `--expose-gc --max-old-space-size=128 docs/audits/native-pty-spawn-env-retention/reproduce.cjs`. Set `ELECTRON_RUN_AS_NODE=1` and `QUIRKY_BACKGROUND_LAUNCH=1` in its environment. This keeps Electron in Node mode; it creates no windows.
 
 ## Regression checks
 
@@ -45,7 +45,7 @@ The new lifetime regression measures collection before native exit, then confirm
 The fixed six-file run passed 114 tests with four existing platform skips. The reversible baseline overlay ran the new and existing lifecycle suites: one expected lifetime failure, 29 passing controls. To reproduce the overlay without editing product files:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/native-pty-spawn-env-retention/before.config.mjs src/main/daemon/pty-subprocess-env-retention.test.ts src/main/daemon/pty-subprocess-handle-lifecycle.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config docs/audits/native-pty-spawn-env-retention/before.config.mjs src/main/daemon/pty-subprocess-env-retention.test.ts src/main/daemon/pty-subprocess-handle-lifecycle.test.ts
 ```
 
 `validation.json` records the verification commands and outcomes. The pending-creation cancellation audit is separate and is not changed here.

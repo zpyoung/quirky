@@ -39,7 +39,7 @@ function windowsSources(): DaemonHostSources {
   const appDir = 'C:\\app'
   return {
     appDir,
-    execPath: `${appDir}\\Orca.exe`,
+    execPath: `${appDir}\\Quirky.exe`,
     resourcesPath: `${appDir}\\resources`,
     entrySourcePath: `${appDir}\\resources\\app.asar.unpacked\\out\\main\\daemon-entry.js`,
     entryRelPath: 'resources/app.asar.unpacked/out/main/daemon-entry.js',
@@ -56,7 +56,7 @@ function materializedHostRoot(): string {
 }
 
 function publishedBuilds(): string[] {
-  const versionRoot = join(localAppDataDir, 'Orca', 'daemon-host-profiles')
+  const versionRoot = join(localAppDataDir, 'Quirky', 'daemon-host-profiles')
   return readdirSync(versionRoot).flatMap((profile) => {
     const dir = join(versionRoot, profile, version)
     return existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith('build-')) : []
@@ -80,7 +80,7 @@ beforeEach(() => {
     getAppMetrics: () => []
   })
   setProcessProp('platform', 'win32')
-  setProcessProp('execPath', join(installDir, 'Orca.exe'))
+  setProcessProp('execPath', join(installDir, 'Quirky.exe'))
   setProcessProp('resourcesPath', join(installDir, 'resources'))
 })
 
@@ -113,7 +113,7 @@ describe('relocated daemon host path budget', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     useLocalAppData(join(tempDir, 'l'.repeat(DAEMON_HOST_NATIVE_PATH_BUDGET - tempDir.length)))
     expect(materializeRelocatedDaemonHost()).toBeNull()
-    expect(existsSync(join(localAppDataDir, 'Orca'))).toBe(false)
+    expect(existsSync(join(localAppDataDir, 'Quirky'))).toBe(false)
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('too deep for conpty.dll'))
   })
 

@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   PROFILE_STATE_RECOVERY_FLAG,
   PROFILE_STATE_RECOVERY_RESULT_PREFIX,
@@ -10,20 +10,20 @@ import {
 import {
   getExecutableAppArgs,
   resolveAppRoot,
-  resolveForegroundOrcaExecutable,
+  resolveForegroundQuirkyExecutable,
   stripElectronRunAsNode
-} from './orca-app-executable'
+} from './quirky-app-executable'
 import { RuntimeClientError } from './types'
-import { canStartOrcaServer } from './serve-app-launcher'
+import { canStartQuirkyServer } from './serve-app-launcher'
 
 export function canLaunchProfileStateRecovery(): boolean {
-  return canStartOrcaServer(process.env)
+  return canStartQuirkyServer(process.env)
 }
 
 export async function launchProfileStateRecovery(
   request: ProfileStateRecoveryRequest
 ): Promise<ProfileStateRollbackResult> {
-  const executable = resolveForegroundOrcaExecutable()
+  const executable = resolveForegroundQuirkyExecutable()
   const userDataPath = realpathSync(request.userDataPath)
   const response = await runProcess({
     program: executable,
@@ -36,8 +36,8 @@ export async function launchProfileStateRecovery(
     cwd: resolveAppRoot(),
     env: {
       ...stripElectronRunAsNode(process.env),
-      ORCA_BACKGROUND_LAUNCH: '1',
-      ORCA_USER_DATA_PATH: userDataPath
+      QUIRKY_BACKGROUND_LAUNCH: '1',
+      QUIRKY_USER_DATA_PATH: userDataPath
     },
     // Recovery may copy large backups; the lock owner must finish or be explicitly terminated.
     timeoutMs: null
@@ -52,7 +52,7 @@ export async function launchProfileStateRecovery(
     } catch {
       throw new RuntimeClientError(
         'runtime_error',
-        'Orca recovery returned an invalid response. Inspect retained recovery artifacts before retrying.'
+        'Quirky recovery returned an invalid response. Inspect retained recovery artifacts before retrying.'
       )
     }
     const result = profileStateRecoveryResponseSchema.safeParse(parsed)
@@ -67,7 +67,7 @@ export async function launchProfileStateRecovery(
   }
   throw new RuntimeClientError(
     'runtime_error',
-    'Orca recovery did not complete successfully. Inspect retained recovery artifacts before retrying.',
+    'Quirky recovery did not complete successfully. Inspect retained recovery artifacts before retrying.',
     {
       exitCode: response.code,
       signal: response.signal,

@@ -10,8 +10,8 @@ type GuideInvocation = {
   snippet: string
 }
 
-// Why: guides write examples as `orca ...`, `orca-dev ...`, or the `ORCA` placeholder.
-const CLI_INVOCATION = /(?:^|[\s`(])(?:orca|orca-dev|orca-ide|ORCA)\s+([^\n`]*)/g
+// Why: guides write examples as `quirky ...`, `quirky-dev ...`, or the `QUIRKY` placeholder.
+const CLI_INVOCATION = /(?:^|[\s`(])(?:quirky|quirky-dev|quirky-ide|QUIRKY)\s+([^\n`]*)/g
 
 // Longest path first so `orchestration worker-start` never resolves as `orchestration worker`.
 const SPECS_BY_DEPTH: CommandSpec[] = [...COMMAND_SPECS].sort(
@@ -34,9 +34,9 @@ function collectGuideInvocations(): GuideInvocation[] {
       if (!spec) {
         continue
       }
-      // Why: a quoted flag value belongs to the nested program (`--command 'codex --model ...'`), not to orca.
-      const orcaArgs = invocation.replace(/'[^']*'|"[^"]*"/g, ' ')
-      const flags = [...orcaArgs.matchAll(/(?:^|[\s[(])--([a-z][a-z0-9-]*)/g)].map(
+      // Why: a quoted flag value belongs to the nested program (`--command 'codex --model ...'`), not to quirky.
+      const quirkyArgs = invocation.replace(/'[^']*'|"[^"]*"/g, ' ')
+      const flags = [...quirkyArgs.matchAll(/(?:^|[\s[(])--([a-z][a-z0-9-]*)/g)].map(
         (flag) => flag[1]
       )
       for (const flag of flags) {

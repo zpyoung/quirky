@@ -232,7 +232,7 @@ describe('resolveHostCodexHomePathForLaunchReadOnly', () => {
     )
     // The home turns untrusted only after construction (the constructor sync
     // would otherwise clear the selection first): a foreign ownership marker.
-    writeFileSync(join(managedHomePath, '.orca-managed-home'), 'someone-else\n', 'utf-8')
+    writeFileSync(join(managedHomePath, '.quirky-managed-home'), 'someone-else\n', 'utf-8')
 
     const readOnlyHome = service.resolveHostCodexHomePathForLaunchReadOnly()
     // The probe-supported lane routes a cleared selection to the real ~/.codex.
@@ -259,7 +259,7 @@ describe('resolveHostCodexHomePathForLaunchReadOnly', () => {
       await import('./host-codex-managed-home-ownership')
     // Anchor: readable resolves the account home.
     expect(service.resolveHostCodexHomePathForLaunchReadOnly()).toBe(managedHomePath)
-    const markerPath = join(realpathSync(managedHomePath), '.orca-managed-home')
+    const markerPath = join(realpathSync(managedHomePath), '.quirky-managed-home')
     lstatFaults.hold(markerPath)
 
     // An unreadable home is doubt, not evidence: refuse, never fall through to

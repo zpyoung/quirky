@@ -2,7 +2,7 @@ import { defineConfig } from '@stablyai/playwright-test'
 import { resolveBuildSourceCommit } from '../config/scripts/build-source-commit.mjs'
 
 /**
- * Playwright config for Orca E2E tests.
+ * Playwright config for Quirky E2E tests.
  *
  * Run:
  *   pnpm run test:e2e              — build + run all tests (headless)
@@ -49,7 +49,7 @@ export default defineConfig({
       testMatch: '**/*.spec.ts',
       grepInvert: /@headful/,
       metadata: {
-        orcaHeadful: false
+        quirkyHeadful: false
       }
     },
     {
@@ -57,7 +57,7 @@ export default defineConfig({
       testMatch: '**/*.spec.ts',
       grep: /@headful/,
       metadata: {
-        orcaHeadful: true
+        quirkyHeadful: true
       }
     }
   ]

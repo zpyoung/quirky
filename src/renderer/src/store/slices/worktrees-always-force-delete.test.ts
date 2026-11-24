@@ -37,7 +37,7 @@ describe.each(['local', 'runtime:env-1'] as const)('consent on %s', (hostId) => 
     const gate = deferred<unknown>()
     const local = hostId === 'local'
     if (!local) {
-      store.setState({ trustedOrcaHooks: { repo1: { all: { approvedAt: 1 } } } })
+      store.setState({ trustedQuirkyHooks: { repo1: { all: { approvedAt: 1 } } } })
     }
     const preparation = local ? mockApi.hooks.check : runtimeEnvironmentTransportCall
     preparation.mockReturnValueOnce(gate.promise)

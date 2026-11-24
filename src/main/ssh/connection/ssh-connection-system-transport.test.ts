@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { clientInstances, ssh2Mock } from '../__tests__/ssh-connection-test-client'
 import {
   findSystemSshMock,
-  getOrcaControlSocketPathMock,
+  getQuirkyControlSocketPathMock,
   removeControlSocketPathMock,
   resetSshConnectionMocks,
   spawnSystemSshCommandMock
@@ -80,7 +80,7 @@ describe('SshConnection', () => {
     expect(clientInstances).toHaveLength(0)
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       {
         wrapCommand: false,
         resolvedConfig: expect.objectContaining({ proxyUseFdpass: true })
@@ -88,8 +88,8 @@ describe('SshConnection', () => {
     )
   })
 
-  it('allows concurrent exec commands for system SSH with an Orca ControlMaster socket', async () => {
-    getOrcaControlSocketPathMock.mockReturnValue('/tmp/orca-ssh-501/live-socket')
+  it('allows concurrent exec commands for system SSH with an Quirky ControlMaster socket', async () => {
+    getQuirkyControlSocketPathMock.mockReturnValue('/tmp/quirky-ssh-501/live-socket')
     vi.mocked(resolveWithSshG).mockResolvedValueOnce(createResolvedConfig())
     const conn = new SshConnection(createTarget({ configHost: 'fdpass-host' }), createCallbacks())
 
@@ -100,7 +100,7 @@ describe('SshConnection', () => {
   })
 
   it('keeps concurrent exec commands disabled for system SSH without a reusable socket', async () => {
-    getOrcaControlSocketPathMock.mockReturnValue(null)
+    getQuirkyControlSocketPathMock.mockReturnValue(null)
     vi.mocked(resolveWithSshG).mockResolvedValueOnce(createResolvedConfig())
     const conn = new SshConnection(
       createTarget({ configHost: 'fdpass-host', systemSshConnectionReuse: false }),
@@ -114,9 +114,9 @@ describe('SshConnection', () => {
   })
 
   it('retries a failed system SSH probe without ControlMaster and disables mux for the session', async () => {
-    getOrcaControlSocketPathMock.mockImplementation(
+    getQuirkyControlSocketPathMock.mockImplementation(
       (_target: SshTarget, options?: { disableControlMaster?: boolean }) =>
-        options?.disableControlMaster ? null : '/tmp/orca-ssh-501/stale-socket'
+        options?.disableControlMaster ? null : '/tmp/quirky-ssh-501/stale-socket'
     )
     spawnSystemSshCommandMock
       .mockImplementationOnce(() => createFailingSystemCommandChannel(255, 'mux client failed'))
@@ -128,11 +128,11 @@ describe('SshConnection', () => {
     await conn.exec('echo after-connect')
     await conn.writeFile('/tmp/after-connect', 'contents')
 
-    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/orca-ssh-501/stale-socket')
+    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/quirky-ssh-501/stale-socket')
     expect(spawnSystemSshCommandMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       expect.objectContaining({
         wrapCommand: false,
         resolvedConfig: expect.objectContaining({ proxyUseFdpass: true })
@@ -141,7 +141,7 @@ describe('SshConnection', () => {
     expect(spawnSystemSshCommandMock).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       expect.objectContaining({
         disableControlMaster: true,
         wrapCommand: false,
@@ -172,9 +172,9 @@ describe('SshConnection', () => {
   it('retries a generic system SSH probe timeout without ControlMaster', async () => {
     vi.useFakeTimers()
     try {
-      getOrcaControlSocketPathMock.mockImplementation(
+      getQuirkyControlSocketPathMock.mockImplementation(
         (_target: SshTarget, options?: { disableControlMaster?: boolean }) =>
-          options?.disableControlMaster ? null : '/tmp/orca-ssh-501/stale-socket'
+          options?.disableControlMaster ? null : '/tmp/quirky-ssh-501/stale-socket'
       )
       spawnSystemSshCommandMock
         .mockImplementationOnce(() => createHangingSystemCommandChannel())
@@ -187,11 +187,11 @@ describe('SshConnection', () => {
 
       await expect(settled).resolves.toBeUndefined()
       expect(spawnSystemSshCommandMock).toHaveBeenCalledTimes(2)
-      expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/orca-ssh-501/stale-socket')
+      expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/quirky-ssh-501/stale-socket')
       expect(spawnSystemSshCommandMock).toHaveBeenNthCalledWith(
         2,
         expect.anything(),
-        'echo ORCA-SYSTEM-SSH-OK',
+        'echo QUIRKY-SYSTEM-SSH-OK',
         expect.objectContaining({ disableControlMaster: true })
       )
     } finally {
@@ -200,7 +200,7 @@ describe('SshConnection', () => {
   })
 
   it('skips a second probe for a definite host failure', async () => {
-    getOrcaControlSocketPathMock.mockReturnValue('/tmp/orca-ssh-501/stale-socket')
+    getQuirkyControlSocketPathMock.mockReturnValue('/tmp/quirky-ssh-501/stale-socket')
     spawnSystemSshCommandMock.mockImplementation(() =>
       createFailingSystemCommandChannel(255, 'ssh: connect to host box port 22: No route to host')
     )
@@ -209,14 +209,14 @@ describe('SshConnection', () => {
 
     await expect(conn.connect()).rejects.toThrow('No route to host')
     expect(spawnSystemSshCommandMock).toHaveBeenCalledTimes(1)
-    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/orca-ssh-501/stale-socket')
+    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/quirky-ssh-501/stale-socket')
   })
 
   it.each([
     'Permission denied (publickey,password).',
     'Encrypted private key detected, but no passphrase given'
   ])('skips a second probe for terminal credential failures: %s', async (stderr) => {
-    getOrcaControlSocketPathMock.mockReturnValue('/tmp/orca-ssh-501/stale-socket')
+    getQuirkyControlSocketPathMock.mockReturnValue('/tmp/quirky-ssh-501/stale-socket')
     spawnSystemSshCommandMock.mockImplementation(() =>
       createFailingSystemCommandChannel(255, stderr)
     )
@@ -225,7 +225,7 @@ describe('SshConnection', () => {
 
     await expect(conn.connect()).rejects.toThrow(stderr)
     expect(spawnSystemSshCommandMock).toHaveBeenCalledTimes(1)
-    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/orca-ssh-501/stale-socket')
+    expect(removeControlSocketPathMock).toHaveBeenCalledWith('/tmp/quirky-ssh-501/stale-socket')
   })
 
   it('uses system SSH transport for ProxyCommand targets before ssh2 auth', async () => {
@@ -241,14 +241,14 @@ describe('SshConnection', () => {
     expect(clientInstances).toHaveLength(0)
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ proxyCommand: 'ssh -W %h:%p bastion.example.com' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       { wrapCommand: false }
     )
   })
 
   it('uses system SSH before ssh2 parses a security-key private key', async () => {
     findSystemSshMock.mockReturnValue('/usr/bin/ssh')
-    const directory = mkdtempSync(join(tmpdir(), 'orca-security-key-connect-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-security-key-connect-'))
     const keyPath = join(directory, 'id_ed25519_sk')
     writeFileSync(
       keyPath,
@@ -270,7 +270,7 @@ describe('SshConnection', () => {
 
   it('uses system SSH for an agent-backed security-key public identity', async () => {
     findSystemSshMock.mockReturnValue('/usr/bin/ssh')
-    const directory = mkdtempSync(join(tmpdir(), 'orca-security-key-agent-connect-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-security-key-agent-connect-'))
     const identityPath = join(directory, 'id_ed25519_sk')
     writeFileSync(
       `${identityPath}.pub`,
@@ -306,7 +306,7 @@ describe('SshConnection', () => {
     expect(clientInstances).toHaveLength(1)
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ host: '192.168.0.210' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       { wrapCommand: false }
     )
   })
@@ -357,7 +357,7 @@ describe('shouldUseSystemSshTransport', () => {
   })
 
   it('allows an environment override for e2e coverage', () => {
-    vi.stubEnv('ORCA_SSH_FORCE_SYSTEM_TRANSPORT', '1')
+    vi.stubEnv('QUIRKY_SSH_FORCE_SYSTEM_TRANSPORT', '1')
     expect(shouldUseSystemSshTransport(createTarget(), null)).toBe(true)
     vi.unstubAllEnvs()
   })

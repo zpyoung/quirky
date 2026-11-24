@@ -2,7 +2,7 @@
  * Paired remote server: a cold-parked remote terminal must not lose its scrollback when the host
  * cannot answer the restore the park was licensed against.
  *
- * Topology: headed Orca desktop host (remote server) + a separate paired Orca desktop client —
+ * Topology: headed Quirky desktop host (remote server) + a separate paired Quirky desktop client —
  * the "SSH into the box, open the workspace, switch away, come back" shape. A remote-runtime
  * pty's bytes never transit the client's main process, so the client's xterm buffer is the only
  * client-side copy, and the paired-parking capability that licenses the unmount is a static build
@@ -16,7 +16,7 @@
  *   - "host retains the buffer" is the control for the ordinary park. It fails if the harness never
  *     parks, never reveals, or never echoed the token in the first place — so a green regression
  *     case cannot be green for an unrelated reason.
- *   - "host retains nothing" is the ordinary-park regression. ORCA_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE
+ *   - "host retains nothing" is the ordinary-park regression. QUIRKY_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE
  *     makes the host answer `no-serializable-buffer` — the state a client cannot tell apart from a
  *     host that is merely slow. Pre-fix the reveal paints an empty pane.
  *   - "force-park" is the retention-budget park. It is the only park that still writes the shared
@@ -35,7 +35,7 @@ import { randomUUID } from 'node:crypto'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient
@@ -53,7 +53,7 @@ import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 
 const PARK_DELAY_MS = 2_000
 const PAINT_BUDGET_MS = 30_000
-const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-parked-scrollback-'))
+const scratch = mkdtempSync(path.join(os.tmpdir(), 'quirky-parked-scrollback-'))
 
 // Why the token arrives over stdin rather than argv or a startup write: a respawn of the same
 // command reprints anything baked into the command, and a startup write only reaches a client
@@ -310,23 +310,23 @@ async function runParkRevealScenario(args: {
 }
 
 async function runScenario(
-  orcaPage: Page,
+  quirkyPage: Page,
   testInfo: Parameters<Parameters<typeof test>[1]>[1],
   clientName: string,
   parkKind: ParkKind
 ): Promise<ParkRevealOutcome> {
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
   const client = await launchPairedElectronClient(offer, testInfo, clientName, {
     extraEnv: {
-      ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARK_DELAY_MS),
+      QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARK_DELAY_MS),
       // Why limit=1 on every client: it is inert for the ordinary park (that worktree is
       // ordinarily parkable, so the budget never ranks it) and is what makes the force-park cheap.
-      ORCA_E2E_TERMINAL_RETENTION_LIMIT: '1'
+      QUIRKY_E2E_TERMINAL_RETENTION_LIMIT: '1'
     }
   })
   const createdTerminals: string[] = []
   try {
-    const worktreeIds = await readHostWorktreeIds(orcaPage)
+    const worktreeIds = await readHostWorktreeIds(quirkyPage)
     await expect
       .poll(
         () =>
@@ -393,10 +393,10 @@ const FORCE_PARKED_SHARED: Omit<ParkRevealOutcome, 'tokenAfterReveal'> = {
 
 test.describe('host retains the buffer', () => {
   test('a cold-parked remote terminal restores its scrollback on reveal', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
     test.setTimeout(600_000)
-    expect(await runScenario(orcaPage, testInfo, 'host-retains', 'ordinary')).toEqual(
+    expect(await runScenario(quirkyPage, testInfo, 'host-retains', 'ordinary')).toEqual(
       RESTORED_LOCAL_ONLY
     )
   })
@@ -404,14 +404,14 @@ test.describe('host retains the buffer', () => {
 
 test.describe('host retains nothing', () => {
   test.use({
-    orcaAppExtraEnv: { ORCA_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1' }
+    quirkyAppExtraEnv: { QUIRKY_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1' }
   })
 
   test('a cold-parked remote terminal keeps its scrollback when the host cannot answer', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
     test.setTimeout(600_000)
-    expect(await runScenario(orcaPage, testInfo, 'host-empty', 'ordinary')).toEqual(
+    expect(await runScenario(quirkyPage, testInfo, 'host-empty', 'ordinary')).toEqual(
       RESTORED_LOCAL_ONLY
     )
   })
@@ -419,19 +419,19 @@ test.describe('host retains nothing', () => {
 
 test.describe('force-park with a host that cannot answer', () => {
   test.use({
-    orcaAppExtraEnv: {
-      ORCA_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1',
+    quirkyAppExtraEnv: {
+      QUIRKY_E2E_FORCE_REMOTE_TERMINAL_SNAPSHOT_UNAVAILABLE: '1',
       // Why: without the paired-parking capability the worktree is un-parkable, which is the class
       // the retention budget governs — the only way to reach a force-park on this topology.
-      ORCA_E2E_DISABLE_PAIRED_TERMINAL_PARKING: '1'
+      QUIRKY_E2E_DISABLE_PAIRED_TERMINAL_PARKING: '1'
     }
   })
 
   test('a force-parked remote terminal keeps its shared-layout capture across an inventory frame', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
     test.setTimeout(600_000)
-    const outcome = await runScenario(orcaPage, testInfo, 'force-park', 'force')
+    const outcome = await runScenario(quirkyPage, testInfo, 'force-park', 'force')
     expect({
       tokenBeforePark: outcome.tokenBeforePark,
       parked: outcome.parked,

@@ -24,10 +24,10 @@ describe('dismissPresentedPushNotification', () => {
   it('dismisses only the tray entries whose push payload carries the same notification id', async () => {
     vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([
       presented('tray-1', {
-        orca: { hostFingerprint: 'fp0123456789abcd', notificationId: 'agent:one' }
+        quirky: { hostFingerprint: 'fp0123456789abcd', notificationId: 'agent:one' }
       }),
       presented('tray-2', {
-        orca: { hostFingerprint: 'fp0123456789abcd', notificationId: 'agent:two' }
+        quirky: { hostFingerprint: 'fp0123456789abcd', notificationId: 'agent:two' }
       }),
       presented('other-host', { hostFingerprint: 'another-host', notificationId: 'agent:one' }),
       // Flat FCM shape for the same notification, presented on Android.

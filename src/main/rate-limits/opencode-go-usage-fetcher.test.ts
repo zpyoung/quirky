@@ -227,7 +227,7 @@ describe('fetchOpenCodeGoRateLimits', () => {
 
     await fetchOpenCodeGoRateLimits('auth=mytoken')
 
-    expect(fromPartitionMock).toHaveBeenCalledWith('orca-opencode-go-rate-limit-fetch')
+    expect(fromPartitionMock).toHaveBeenCalledWith('quirky-opencode-go-rate-limit-fetch')
     expect(clearStorageDataMock).toHaveBeenCalledTimes(2)
     expect(clearStorageDataMock).toHaveBeenLastCalledWith({
       origin: 'https://opencode.ai',

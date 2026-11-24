@@ -35,8 +35,8 @@ import {
   getMountedTerminalTabRegisteredAt,
   mountedTerminalTabEntries
 } from '../mounted-terminal-tab-registry'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { changedActiveGroups } from './active-group-publication'
 
 export async function syncRuntimeGraph(): Promise<void> {
@@ -70,11 +70,11 @@ export async function syncRuntimeGraph(): Promise<void> {
   const publication = partitionMobileSessionPublication(mobileSessionTabs)
   const gridSizes = measureTerminalGroupGridSizes(state.settings?.terminalFontSize ?? 14)
   // Switch point: main answers mobileRelay.projectSections from its own catalog.
-  const projectSectionCatalog = ORCA_SIDEBAR_INPUTS_IS_MAIN
+  const projectSectionCatalog = QUIRKY_SIDEBAR_INPUTS_IS_MAIN
     ? null
     : getProjectSectionCatalogFromState(state)
   // Switch point: main opens files in the group the window shows, so it hears of each change.
-  const activeGroupByWorkspace = ORCA_LAYOUT_OWNER_IS_MAIN
+  const activeGroupByWorkspace = QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? changedActiveGroups(state.activeGroupIdByWorktree, graphState.publishedActiveGroups)
     : undefined
   const graph: RuntimeRendererSyncWindowGraph = {
@@ -106,7 +106,10 @@ export async function syncRuntimeGraph(): Promise<void> {
     }
     const manager = registeredTab.getManager()
     // Switch point: main lists this workspace's panes; the window says only which it shows.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && mainListsWorkspaceTerminals(state, registeredTab.worktreeId)) {
+    if (
+      QUIRKY_LAYOUT_OWNER_IS_MAIN &&
+      mainListsWorkspaceTerminals(state, registeredTab.worktreeId)
+    ) {
       addMountedPanes(graph, registeredTab.tabId, manager?.getPanes() ?? [], state)
       continue
     }
@@ -184,7 +187,7 @@ export async function syncRuntimeGraph(): Promise<void> {
         continue
       }
       // Switch point: main lists this workspace's panes; the window says only which it parks.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && mainListsWorkspaceTerminals(state, worktreeId)) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && mainListsWorkspaceTerminals(state, worktreeId)) {
         addParkedPanes(graph, tab.id, liveLeaves, state)
         continue
       }

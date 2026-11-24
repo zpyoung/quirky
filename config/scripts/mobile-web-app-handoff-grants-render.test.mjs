@@ -72,7 +72,7 @@ beforeAll(async () => {
   cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-handoff-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-handoff-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   tasksChunk = built.routeChunks[TASKS_ROUTE_KEY]
   // The precondition the absence assertions below need: a chunk that cannot be named cannot be
@@ -81,7 +81,7 @@ beforeAll(async () => {
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 180_000)
 
@@ -135,7 +135,7 @@ async function openHostRoute({
     jsResponses.push({ status: response.status(), path })
   })
   await page.goto(`${origin}/`, { waitUntil: 'load' })
-  await page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
+  await page.waitForFunction(() => document.documentElement.dataset.quirkyWebEntry === 'mounted', {
     timeout: 30_000,
     polling: 250
   })
@@ -149,7 +149,7 @@ async function openHostRoute({
 /** Every `navigate` notify the page posted, in order. */
 function navigates(page) {
   return page.evaluate(() =>
-    (globalThis.__orcaRenderCheckNotifies ?? []).filter((frame) => frame.name === 'navigate')
+    (globalThis.__quirkyRenderCheckNotifies ?? []).filter((frame) => frame.name === 'navigate')
   )
 }
 

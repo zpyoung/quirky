@@ -31,7 +31,7 @@ describe('working tree snapshots', () => {
   let root = ''
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-loop-diff-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-loop-diff-'))
     await git(root, ['init', '-q'])
     await git(root, ['config', 'user.email', 'loop@example.com'])
     await git(root, ['config', 'user.name', 'Loop'])
@@ -117,7 +117,7 @@ describe('working tree snapshots', () => {
   })
 
   it('snapshots an unborn repository with a null head', async () => {
-    const empty = await mkdtemp(join(tmpdir(), 'orca-loop-diff-unborn-'))
+    const empty = await mkdtemp(join(tmpdir(), 'quirky-loop-diff-unborn-'))
     try {
       await git(empty, ['init', '-q'])
       await writeFile(join(empty, 'a.txt'), 'a\n')

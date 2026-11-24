@@ -4,7 +4,7 @@ import type * as DarwinUserTempDir from './darwin-user-temp-dir'
 
 const { runProcessMock } = vi.hoisted(() => ({ runProcessMock: vi.fn() }))
 
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 
 async function loadResolver(): Promise<typeof DarwinUserTempDir> {
   vi.resetModules()

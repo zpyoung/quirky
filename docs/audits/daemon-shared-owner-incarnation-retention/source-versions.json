@@ -507,7 +507,7 @@
     "src/main/shell-ready-marker-scanner.ts": [
       "a504be037d0ef1a19d3ce1ad608c279028132f0c91357c6dc1f2d5486d914a4d"
     ],
-    "src/shared/orca-cli-command-name.ts": [
+    "src/shared/quirky-cli-command-name.ts": [
       "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0"
     ],
     "src/main/wsl.ts": ["d888b67769461a7ba0a175db9775e2e2ab30601cbec53077a27351604a04882a"],
@@ -1019,7 +1019,7 @@
     "src/shared/ante-headless-command.ts": "710a59e55ab1dfa32a33f7df9b4ecac77f85e387dc93e740d0bc678c37e61620",
     "src/main/shell-startup-identity-scanner.ts": "37aa9dc4a6ed70c5b52aeda7c4204cffc5b0838808dbe65df4266033628088f6",
     "src/main/shell-ready-marker-scanner.ts": "a504be037d0ef1a19d3ce1ad608c279028132f0c91357c6dc1f2d5486d914a4d",
-    "src/shared/orca-cli-command-name.ts": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
+    "src/shared/quirky-cli-command-name.ts": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
     "src/main/wsl.ts": "d888b67769461a7ba0a175db9775e2e2ab30601cbec53077a27351604a04882a",
     "src/shared/worktree/id.ts": "d4da9e75db6f0d3301ef5f073d3136282dab4fc4fbd2978bdcdf0e142e7a9d30",
     "src/shared/process-table-snapshot.ts": "fe423af1745925a52b5d205a3cb20325220c39996e1c065d56fe2af1e69182e9",
@@ -1328,7 +1328,7 @@
     "src/main/pty/posix-shell-startup-command.ts": "f69611a77938cf13455f67728cf1a9fc1a67ff864919245787d659f3c1c6055c",
     "src/main/cli/bundled-cli-launcher-path.ts": "d18971de3491d0f678c99ab3fca72dd71c5b3e635bf258b7c8d1ba4584e358c4",
     "src/shared/powershell-command-encoding.ts": "405d7aa5cf55f0053a6ae84f92335446dde6c316f782761be5ce1c24967046a9",
-    "src/shared/orca-cli-command-name.ts": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
+    "src/shared/quirky-cli-command-name.ts": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
     "src/main/pty/omp-shell-wrapper.ts": "fcf15117265833933064f0315ce1b02473d8f5618efed09c0d3f8d4872395fcf",
     "src/shared/telemetry-events.ts": "40b800fdb343cd66801613dddfcacebc148adf864ceb65e6f70e250136e9f4b6",
     "src/main/daemon/daemon-audit-eligibility-event.ts": "11755c26094c81a82c72027eb5b96b97fbd686bca4f32c9fbc9ba1758fbfa137",

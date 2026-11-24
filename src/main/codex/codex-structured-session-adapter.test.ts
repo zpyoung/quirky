@@ -147,15 +147,15 @@ describe('CodexStructuredSessionAdapter.acquire', () => {
         approvalsReviewer: 'user',
         // A user's `inherit = "core"` policy would strip these from every command the chat runs.
         config: {
-          'shell_environment_policy.set.ORCA_AGENT_SESSION_ID': 'session-1',
-          'shell_environment_policy.set.ORCA_STRUCTURED_SESSION': '1',
-          'shell_environment_policy.set.ORCA_CLI_COMMAND': expect.stringMatching(
-            /^[^:;]*[\\/]cli[\\/]bin[\\/]orca-dev$/
+          'shell_environment_policy.set.QUIRKY_AGENT_SESSION_ID': 'session-1',
+          'shell_environment_policy.set.QUIRKY_STRUCTURED_SESSION': '1',
+          'shell_environment_policy.set.QUIRKY_CLI_COMMAND': expect.stringMatching(
+            /^[^:;]*[\\/]cli[\\/]bin[\\/]quirky-dev$/
           ),
-          'shell_environment_policy.set.ORCA_USER_DATA_PATH': expect.any(String),
-          'shell_environment_policy.set.ORCA_ENVIRONMENT': '',
-          'shell_environment_policy.set.ORCA_PAIRING_CODE': '',
-          'shell_environment_policy.set.ORCA_REMOTE_PAIRING': ''
+          'shell_environment_policy.set.QUIRKY_USER_DATA_PATH': expect.any(String),
+          'shell_environment_policy.set.QUIRKY_ENVIRONMENT': '',
+          'shell_environment_policy.set.QUIRKY_PAIRING_CODE': '',
+          'shell_environment_policy.set.QUIRKY_REMOTE_PAIRING': ''
         }
       }
     })

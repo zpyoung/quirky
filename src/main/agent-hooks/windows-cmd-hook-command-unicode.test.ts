@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as osModule from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { removeTree } from '../../shared/windows-transient-lock-removal'
 import {
   isPlainObject,
@@ -42,14 +42,14 @@ function decodeCommand(command: string): string {
 
 describe('Windows Unicode managed hook commands', () => {
   it('keeps the existing ASCII direct path', () => {
-    const scriptPath = 'C:\\Users\\ascii\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd'
+    const scriptPath = 'C:\\Users\\ascii\\.quirky\\agent-hooks\\antigravity-pre-tool-use.cmd'
     expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(scriptPath.replaceAll('\\', '/'))
   })
 
   it.each(PROFILES.slice(1))(
     'preserves the guarded launcher for %s without policy setup',
     (profile) => {
-      const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
+      const scriptPath = `C:\\Users\\${profile}\\.quirky\\agent-hooks\\antigravity-pre-tool-use.cmd`
       const decoded = decodeCommand(wrapWindowsBatchHookCommand(scriptPath))
       expect(decoded).toContain(`Test-Path -LiteralPath '${scriptPath}' -PathType Leaf`)
       expect(decoded).toContain('[Console]::In.ReadToEnd() | Out-Null; exit 0')
@@ -73,7 +73,7 @@ describe('Windows Unicode managed hook commands', () => {
     '用户`name',
     '用户\u2019name'
   ])('retains the encoded launcher for %s', (profile) => {
-    const scriptPath = `C:\\Users\\${profile}\\.orca\\agent-hooks\\antigravity-pre-tool-use.cmd`
+    const scriptPath = `C:\\Users\\${profile}\\.quirky\\agent-hooks\\antigravity-pre-tool-use.cmd`
     expect(wrapWindowsBatchHookCommand(scriptPath)).toBe(wrapWindowsHookCommand(scriptPath))
     expect(wrapWindowsDirectCmdHookCommand(scriptPath)).toBeNull()
   })
@@ -81,7 +81,7 @@ describe('Windows Unicode managed hook commands', () => {
 
 function installedCommand(configPath: string, eventName: string): string {
   const config = readHooksJson(configPath)
-  const bundle = config?.['orca-status']
+  const bundle = config?.['quirky-status']
   if (!isPlainObject(bundle) || !Array.isArray(bundle[eventName])) {
     throw new Error(`Missing ${eventName} hook`)
   }
@@ -103,16 +103,16 @@ describe.skipIf(
   it.each(PROFILES)(
     'delivers all events from %s after upgrading encoded commands',
     async (profile) => {
-      const home = mkdtempSync(join(tmpdir(), `orca-hook-${profile}-`))
+      const home = mkdtempSync(join(tmpdir(), `quirky-hook-${profile}-`))
       homedirMock.mockReturnValue(home)
       const service = new AntigravityHookService()
       service.setWindowsRuntimePathProvider(() => process.execPath)
       const configPath = join(home, '.gemini', 'config', 'hooks.json')
       const legacyCommand = wrapWindowsHookCommand(
-        join(home, '.orca', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
+        join(home, '.quirky', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
       )
       writeHooksJson(configPath, {
-        'orca-status': {
+        'quirky-status': {
           PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: legacyCommand }] }]
         }
       })
@@ -142,18 +142,18 @@ describe.skipIf(
         })
         const env = {
           ...Object.fromEntries(
-            Object.entries(process.env).filter(([key]) => !key.startsWith('ORCA_'))
+            Object.entries(process.env).filter(([key]) => !key.startsWith('QUIRKY_'))
           ),
-          ORCA_BACKGROUND_LAUNCH: '1',
-          ORCA_AGENT_HOOK_PORT: String(address.port),
-          ORCA_AGENT_HOOK_TOKEN: 'unicode-command-test',
-          ORCA_PANE_KEY: 'tab:leaf!bang',
-          ORCA_WORKTREE_ID: 'folder::C:/测试 repo',
-          ORCA_AGENT_HOOK_NODE: process.execPath
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_AGENT_HOOK_PORT: String(address.port),
+          QUIRKY_AGENT_HOOK_TOKEN: 'unicode-command-test',
+          QUIRKY_PANE_KEY: 'tab:leaf!bang',
+          QUIRKY_WORKTREE_ID: 'folder::C:/测试 repo',
+          QUIRKY_AGENT_HOOK_NODE: process.execPath
         }
         for (const event of ANTIGRAVITY_EVENTS) {
           const command = installedCommand(configPath, event.eventName)
-          const scriptPath = join(home, '.orca', 'agent-hooks', event.windowsWrapperFileName)
+          const scriptPath = join(home, '.quirky', 'agent-hooks', event.windowsWrapperFileName)
           const directCommand = wrapWindowsDirectCmdHookCommand(scriptPath)
           // Why: an ASCII profile registers the forward-slash path Git Bash can start too.
           expect(command).toBe(wrapWindowsBatchHookCommand(scriptPath))
@@ -191,12 +191,12 @@ describe.skipIf(
             expect(posts.slice(before)).toHaveLength(1)
             expect(posts[before].get('payload')).toBe(payload)
             expect(posts[before].get('hook_event_name')).toBe(event.eventName)
-            expect(posts[before].get('paneKey')).toBe(env.ORCA_PANE_KEY)
-            expect(posts[before].get('worktreeId')).toBe(env.ORCA_WORKTREE_ID)
+            expect(posts[before].get('paneKey')).toBe(env.QUIRKY_PANE_KEY)
+            expect(posts[before].get('worktreeId')).toBe(env.QUIRKY_WORKTREE_ID)
           }
         }
         const staleCommand = installedCommand(configPath, 'PreToolUse')
-        const scriptPath = join(home, '.orca', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
+        const scriptPath = join(home, '.quirky', 'agent-hooks', 'antigravity-pre-tool-use.cmd')
         rmSync(scriptPath)
         const beforeMissing = posts.length
         const invoke = () =>

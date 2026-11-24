@@ -204,7 +204,7 @@ export function throwAfterContinuationAccepted(): void {
   })
 }
 
-/** The continuation's submission commits but cannot fold: Orca took a message it cannot vouch
+/** The continuation's submission commits but cannot fold: Quirky took a message it cannot vouch
  *  for. Install it right before the continuation, the only submission written from then on. */
 export function continuationCannotFold(): void {
   const fold = reducer.applyJournalRow

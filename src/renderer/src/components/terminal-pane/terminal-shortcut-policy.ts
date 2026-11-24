@@ -69,7 +69,7 @@ export type TerminalShortcutAction =
   | { type: 'switchInputSource' }
 
 /**
- * `ESC CR` is both Orca's legacy Shift+Enter and xterm's Alt+Enter, and pi reads it as
+ * `ESC CR` is both Quirky's legacy Shift+Enter and xterm's Alt+Enter, and pi reads it as
  * one or the other depending on whether ITS kitty query was answered, which the pane
  * cannot observe (STA-7701, pi-0-74-*-esc-cr fixtures). An app that armed
  * modifyOtherKeys decodes xterm's `CSI 27 ; mod ; 13 ~` the same way in both states.
@@ -83,7 +83,7 @@ function encodeModifyOtherKeysEnter(
 
 /**
  * Resolves terminal keyboard events before xterm receives them, centralizing
- * Orca shortcuts and terminal byte fallbacks in one platform-aware policy.
+ * Quirky shortcuts and terminal byte fallbacks in one platform-aware policy.
  */
 export function resolveTerminalShortcutAction(
   event: TerminalShortcutEvent,
@@ -103,7 +103,7 @@ export function resolveTerminalShortcutAction(
   // Why: keybindings follow the client OS, but byte protocols follow the PTY host — they differ for macOS clients on Windows runtimes.
   isWindowsTerminalHost: () => boolean = () => isWindows,
   // Why: terminal-first yields editing and TUI chords before xterm encodes them.
-  terminalShortcutPolicy: TerminalShortcutPolicy = 'orca-first',
+  terminalShortcutPolicy: TerminalShortcutPolicy = 'quirky-first',
   // Why: query-only Droid/Grok consumers need CSI-u even when the live kitty flags remain inactive.
   hasCtrlEnterCsiUAuthority?: () => boolean,
   // Why: pi arms modifyOtherKeys when its kitty query goes unanswered; see encodeModifyOtherKeysEnter.

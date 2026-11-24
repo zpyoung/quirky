@@ -40,7 +40,7 @@ afterEach(async () => {
 })
 
 async function attachedHost(child: ScriptedAgentChild) {
-  root = await mkdtemp(join(tmpdir(), 'orca-scripted-codex-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-scripted-codex-'))
   const host = await ensureStructuredAgentSessionHost({
     logger: createStructuredAgentSessionLogger(),
     stateDirectory: root,

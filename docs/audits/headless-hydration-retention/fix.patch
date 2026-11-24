@@ -1,8 +1,8 @@
-diff --git a/src/main/runtime/orca-runtime-capture-provider-terminal-buffer.ts b/src/main/runtime/orca-runtime-capture-provider-terminal-buffer.ts
+diff --git a/src/main/runtime/quirky-runtime-capture-provider-terminal-buffer.ts b/src/main/runtime/quirky-runtime-capture-provider-terminal-buffer.ts
 index acf4f60532..fc9ba31964 100644
---- a/src/main/runtime/orca-runtime-capture-provider-terminal-buffer.ts
-+++ b/src/main/runtime/orca-runtime-capture-provider-terminal-buffer.ts
-@@ -31,7 +31,7 @@ export class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWit
+--- a/src/main/runtime/quirky-runtime-capture-provider-terminal-buffer.ts
++++ b/src/main/runtime/quirky-runtime-capture-provider-terminal-buffer.ts
+@@ -31,7 +31,7 @@ export class QuirkyRuntimeWithCaptureProviderTerminalBuffer extends QuirkyRuntimeWit
        // Why: daemon PTYs survive an app relaunch before any renderer mounts.
        // Mobile still needs their retained history without navigating desktop.
        const snapshot = await this.ptyController?.serializeProviderBuffer?.(ptyId, opts)
@@ -11,7 +11,7 @@ index acf4f60532..fc9ba31964 100644
          return null
        }
        const snapshotModeTracker = new TerminalKittyKeyboardModeTracker()
-@@ -73,7 +73,10 @@ export class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWit
+@@ -73,7 +73,10 @@ export class QuirkyRuntimeWithCaptureProviderTerminalBuffer extends QuirkyRuntimeWit
        return null
      } finally {
        liveModeTrackers.delete(liveModeTracker)
@@ -23,7 +23,7 @@ index acf4f60532..fc9ba31964 100644
          this.providerModeSnapshotScansByPtyId.delete(ptyId)
        }
      }
-@@ -163,7 +166,7 @@ export class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWit
+@@ -163,7 +166,7 @@ export class QuirkyRuntimeWithCaptureProviderTerminalBuffer extends QuirkyRuntimeWit
      if (snapshotOptions.visibleScreenOnly) {
        const projection = await this.parseVisibleSnapshot(snapshot)
        // Live bytes ordered after the provider frame make that frame stale.
@@ -32,7 +32,7 @@ index acf4f60532..fc9ba31964 100644
          this.getPtyOutputSequence(ptyId) <= snapshot.seq
          ? projection
          : { lines: [] }
-@@ -180,7 +183,7 @@ export class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWit
+@@ -180,7 +183,7 @@ export class QuirkyRuntimeWithCaptureProviderTerminalBuffer extends QuirkyRuntimeWit
      try {
        await emulator.write(data)
        const projection = projectTerminalTailLines(emulator, lineLimit)
@@ -41,11 +41,11 @@ index acf4f60532..fc9ba31964 100644
          this.getPtyOutputSequence(ptyId) <= snapshot.seq
          ? projection
          : { lines: [] }
-diff --git a/src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts b/src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts
+diff --git a/src/main/runtime/quirky-runtime-create-pty-headless-terminal-state.ts b/src/main/runtime/quirky-runtime-create-pty-headless-terminal-state.ts
 index da5d824ef6..b9f3547850 100644
---- a/src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts
-+++ b/src/main/runtime/orca-runtime-create-pty-headless-terminal-state.ts
-@@ -112,8 +112,11 @@ export class OrcaRuntimeWithCreatePtyHeadlessTerminalState extends OrcaRuntimeWi
+--- a/src/main/runtime/quirky-runtime-create-pty-headless-terminal-state.ts
++++ b/src/main/runtime/quirky-runtime-create-pty-headless-terminal-state.ts
+@@ -112,8 +112,11 @@ export class QuirkyRuntimeWithCreatePtyHeadlessTerminalState extends QuirkyRuntimeWi
      this.headlessTerminals.set(ptyId, state)
      state.writeChain = state.writeChain
        .then(async () => {
@@ -58,7 +58,7 @@ index da5d824ef6..b9f3547850 100644
            return
          }
          const data = `${snapshot.scrollbackAnsi ?? ''}${snapshot.data}`
-@@ -123,6 +126,9 @@ export class OrcaRuntimeWithCreatePtyHeadlessTerminalState extends OrcaRuntimeWi
+@@ -123,6 +126,9 @@ export class QuirkyRuntimeWithCreatePtyHeadlessTerminalState extends QuirkyRuntimeWi
            this.recordOsc7MetadataForPty(ptyId, data)
          }
          await state.emulator.write(data)
@@ -68,7 +68,7 @@ index da5d824ef6..b9f3547850 100644
          if (snapshot.cwd !== undefined) {
            state.emulator.setCwd(snapshot.cwd)
            if (!this.terminalCwdByPtyId.has(ptyId) && snapshot.cwd?.trim()) {
-@@ -141,7 +147,9 @@ export class OrcaRuntimeWithCreatePtyHeadlessTerminalState extends OrcaRuntimeWi
+@@ -141,7 +147,9 @@ export class QuirkyRuntimeWithCreatePtyHeadlessTerminalState extends QuirkyRuntimeWi
          // Best-effort: live bytes already chain behind this replacement state.
        })
        .finally(() => {
@@ -79,11 +79,11 @@ index da5d824ef6..b9f3547850 100644
        })
    }
  
-diff --git a/src/main/runtime/orca-runtime-maybe-hydrate-headless-from-renderer.ts b/src/main/runtime/orca-runtime-maybe-hydrate-headless-from-renderer.ts
+diff --git a/src/main/runtime/quirky-runtime-maybe-hydrate-headless-from-renderer.ts b/src/main/runtime/quirky-runtime-maybe-hydrate-headless-from-renderer.ts
 index 163ffaecdb..63135f261b 100644
---- a/src/main/runtime/orca-runtime-maybe-hydrate-headless-from-renderer.ts
-+++ b/src/main/runtime/orca-runtime-maybe-hydrate-headless-from-renderer.ts
-@@ -51,6 +51,9 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
+--- a/src/main/runtime/quirky-runtime-maybe-hydrate-headless-from-renderer.ts
++++ b/src/main/runtime/quirky-runtime-maybe-hydrate-headless-from-renderer.ts
+@@ -51,6 +51,9 @@ export class QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer extends QuirkyRuntime
      // setting headlessTerminals, the live byte would lazy-create a separate
      // state and the seed-resolve would overwrite it, dropping live bytes.
      state.writeChain = state.writeChain.then(async () => {
@@ -93,7 +93,7 @@ index 163ffaecdb..63135f261b 100644
        try {
          // Why the scrollback is not suppressed mid-TUI: the seed IS the model's
          // normal buffer, so zeroing it while an alt-screen agent was up left the
-@@ -58,7 +61,11 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
+@@ -58,7 +61,11 @@ export class QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer extends QuirkyRuntime
          const rendered = await controller.serializeBuffer!(ptyId, {
            scrollbackRows: MOBILE_SUBSCRIBE_SCROLLBACK_ROWS
          })
@@ -106,7 +106,7 @@ index 163ffaecdb..63135f261b 100644
            return
          }
          this.recordOsc7MetadataForPty(ptyId, rendered.data)
-@@ -70,6 +77,9 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
+@@ -70,6 +77,9 @@ export class QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer extends QuirkyRuntime
            state.emulator.resize(rendered.cols, rendered.rows)
          }
          await state.emulator.write(rendered.data)
@@ -116,7 +116,7 @@ index 163ffaecdb..63135f261b 100644
          const ptyDims = this.getTerminalSize(ptyId)
          if (ptyDims && (ptyDims.cols !== rendered.cols || ptyDims.rows !== rendered.rows)) {
            state.emulator.resize(ptyDims.cols, ptyDims.rows)
-@@ -91,7 +101,9 @@ export class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntime
+@@ -91,7 +101,9 @@ export class QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer extends QuirkyRuntime
          // Hydration is best-effort. Live writes continue via the same
          // writeChain that this catch-arm leaves intact.
        } finally {
@@ -127,11 +127,11 @@ index 163ffaecdb..63135f261b 100644
        }
      })
    }
-diff --git a/src/main/runtime/orca-runtime-serialize-main-terminal-buffer.ts b/src/main/runtime/orca-runtime-serialize-main-terminal-buffer.ts
+diff --git a/src/main/runtime/quirky-runtime-serialize-main-terminal-buffer.ts b/src/main/runtime/quirky-runtime-serialize-main-terminal-buffer.ts
 index 6559dbfd34..5b6da61d14 100644
---- a/src/main/runtime/orca-runtime-serialize-main-terminal-buffer.ts
-+++ b/src/main/runtime/orca-runtime-serialize-main-terminal-buffer.ts
-@@ -134,15 +134,24 @@ export class OrcaRuntimeWithSerializeMainTerminalBuffer extends OrcaRuntimeWithA
+--- a/src/main/runtime/quirky-runtime-serialize-main-terminal-buffer.ts
++++ b/src/main/runtime/quirky-runtime-serialize-main-terminal-buffer.ts
+@@ -134,15 +134,24 @@ export class QuirkyRuntimeWithSerializeMainTerminalBuffer extends QuirkyRuntimeWithA
      this.recordRecentPtyOutputForPathProvenance(ptyId, data)
      state.writeChain = state.writeChain
        .then(async () => {

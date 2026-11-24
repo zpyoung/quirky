@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcess } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import { encodeAntigravityKeychainValue } from './native-credential-codec'
 import {
   readAntigravityMacOSCredential,
   writeAntigravityMacOSCredential
 } from './native-macos-credentials'
 
-vi.mock('@orca/process-host', () => ({ runProcess: vi.fn() }))
+vi.mock('@quirky/process-host', () => ({ runProcess: vi.fn() }))
 
 const contents = JSON.stringify({ auth_method: 'consumer', token: { access_token: 'synthetic' } })
 const success: ProcessResult = {

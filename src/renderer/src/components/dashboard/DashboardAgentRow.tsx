@@ -57,7 +57,7 @@ function stateDotTooltipLabel(
     return agentVerdictStatusLine(agent.entry) ?? agentStateLabel(dotState)
   }
   // Why: report the observation, not a verdict on the agent — the elapsed gap is what
-  // lets the user apply context Orca has no way to know (a long build, a slow download).
+  // lets the user apply context Quirky has no way to know (a long build, a slow download).
   return dotState === 'unverifiable' ? rowNoUpdateLabel(agent, now) : agentStateLabel(dotState)
 }
 

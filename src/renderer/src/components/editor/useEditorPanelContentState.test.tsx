@@ -70,7 +70,7 @@ vi.mock('@/store', () => ({
 import { useEditorPanelContentState } from './useEditorPanelContentState'
 import { createTestStore } from '@/store/slices/store-test-helpers'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
-import { ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
+import { QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT } from './editor-autosave'
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -91,7 +91,7 @@ function createDeferred<T>(): Deferred<T> {
 function dispatchExternalFileChange(file: OpenFile, worktreePath: string): void {
   act(() => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
+      new CustomEvent(QUIRKY_EDITOR_EXTERNAL_FILE_CHANGE_EVENT, {
         detail: {
           worktreeId: file.worktreeId,
           worktreePath,

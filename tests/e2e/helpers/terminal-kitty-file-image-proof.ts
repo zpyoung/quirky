@@ -87,7 +87,7 @@ export async function proveWindowsKittyFileImage(
   runtime: 'native' | 'wsl',
   screenshotPath: string
 ): Promise<void> {
-  const name = `orca-kitty-file-${crypto.randomUUID()}.png`
+  const name = `quirky-kitty-file-${crypto.randomUUID()}.png`
   const fixture = kittyFileImageFixture()
   const marker = 'WINDOWS_KITTY_FILE_IMAGE_DONE'
   const expression = `require('node:path').join(require('node:os').tmpdir(), ${JSON.stringify(name)})`
@@ -99,7 +99,7 @@ export async function proveWindowsKittyFileImage(
           '-e',
           `const {writeFileSync} = require('node:fs'); ${kittyFileImageProducer(expression)} console.log('${marker}');`
         ])
-      : `printf '%s' '${fixture.png}' | base64 -d > ${quotePosixShell(linuxPath)}; orca_image_path=$(printf '%s' ${quotePosixShell(linuxPath)} | base64 -w0); orca_image_payload=$(printf '%s' '${payload}' | base64 -d); printf '%s' "\${orca_image_payload/FILE_PATH_BASE64/$orca_image_path}"; printf '\\r\\n%s\\r\\n' '${marker}'`
+      : `printf '%s' '${fixture.png}' | base64 -d > ${quotePosixShell(linuxPath)}; quirky_image_path=$(printf '%s' ${quotePosixShell(linuxPath)} | base64 -w0); quirky_image_payload=$(printf '%s' '${payload}' | base64 -d); printf '%s' "\${quirky_image_payload/FILE_PATH_BASE64/$quirky_image_path}"; printf '\\r\\n%s\\r\\n' '${marker}'`
   try {
     await execInTerminal(page, ptyId, command)
     await waitForTerminalOutput(page, marker, 30_000)

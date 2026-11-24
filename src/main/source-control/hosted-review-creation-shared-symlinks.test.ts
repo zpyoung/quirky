@@ -63,7 +63,7 @@ import { createHostedReview } from './hosted-review-creation'
 // Why: a directory-only ignore rule (`node_modules/`) never matches the
 // worktree's symlink, so Git reports it untracked. Without the exclusion the
 // dirty preflight blocks Create PR and tells the user to commit an entry they
-// cannot commit — it is a symlink Orca created.
+// cannot commit — it is a symlink Quirky created.
 describe('createHostedReview with shared symlinks', () => {
   let worktree: string
   let statusOutput: string
@@ -77,7 +77,7 @@ describe('createHostedReview with shared symlinks', () => {
     )
 
   beforeEach(() => {
-    worktree = mkdtempSync(join(tmpdir(), 'orca-hosted-shared-'))
+    worktree = mkdtempSync(join(tmpdir(), 'quirky-hosted-shared-'))
     mkdirSync(join(worktree, 'primary-node-modules'))
     symlinkSync(join(worktree, 'primary-node-modules'), join(worktree, 'node_modules'), 'dir')
     // Default: git reports only the shared symlink as untracked.
@@ -98,7 +98,7 @@ describe('createHostedReview with shared symlinks', () => {
     }
 
     getProjectSlugMock.mockResolvedValue(null)
-    getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'orca' })
+    getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'quirky' })
     getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
     getHostedReviewForBranchMock.mockResolvedValue(null)
     ghExecFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })
@@ -112,7 +112,7 @@ describe('createHostedReview with shared symlinks', () => {
     createGitHubPullRequestMock.mockResolvedValue({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
     gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'rev-parse') {
@@ -146,7 +146,7 @@ describe('createHostedReview with shared symlinks', () => {
     await expect(createPr(['node_modules'])).resolves.toEqual({
       ok: true,
       number: 12,
-      url: 'https://github.com/acme/orca/pull/12'
+      url: 'https://github.com/acme/quirky/pull/12'
     })
     expect(createGitHubPullRequestMock).toHaveBeenCalledOnce()
   })
@@ -182,7 +182,7 @@ describe('createHostedReview with shared symlinks', () => {
     expect(createGitHubPullRequestMock).not.toHaveBeenCalled()
   })
 
-  // Why: only an *untracked* record can be Orca's artifact. A tracked change at a
+  // Why: only an *untracked* record can be Quirky's artifact. A tracked change at a
   // declared path is committable work, so waving it through would create a review
   // off a branch missing it.
   it('still blocks on a tracked change at the declared shared path', async () => {

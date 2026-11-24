@@ -31,7 +31,7 @@ function readConfig(): ZCodeConfigFile {
 }
 
 beforeEach(() => {
-  hoisted.home = mkdtempSync(join(tmpdir(), 'orca-zcode-'))
+  hoisted.home = mkdtempSync(join(tmpdir(), 'quirky-zcode-'))
 })
 afterEach(() => {
   rmSync(hoisted.home, { recursive: true, force: true })
@@ -108,7 +108,7 @@ describe('ZCodeHookService', () => {
     expect(() => JSON.parse(readFileSync(getZCodeConfigPath(), 'utf-8'))).not.toThrow()
   })
 
-  it('removes only Orca-managed entries and leaves the user their hooks', () => {
+  it('removes only Quirky-managed entries and leaves the user their hooks', () => {
     const configPath = getZCodeConfigPath()
     mkdirSync(join(hoisted.home, '.zcode', 'cli'), { recursive: true })
     writeFileSync(
@@ -134,8 +134,8 @@ describe('ZCodeHookService', () => {
   it('leaves an unrelated empty event key alone while removing its own', () => {
     const configPath = getZCodeConfigPath()
     mkdirSync(join(hoisted.home, '.zcode', 'cli'), { recursive: true })
-    // Why: `Notification` is not an event Orca manages, and an empty list is a legitimate
-    // thing for a user to have written. Removing Orca's hooks must not take it with them.
+    // Why: `Notification` is not an event Quirky manages, and an empty list is a legitimate
+    // thing for a user to have written. Removing Quirky's hooks must not take it with them.
     writeFileSync(
       configPath,
       JSON.stringify({ hooks: { enabled: true, events: { Notification: [] } } })
@@ -166,10 +166,10 @@ describe('ZCodeHookService', () => {
 
   it('registers a forward-slash cmd path on Windows and replaces the legacy backslash entry', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const scriptPath = 'C:\\Users\\ada\\.orca\\agent-hooks\\zcode-hook.cmd'
+    const scriptPath = 'C:\\Users\\ada\\.quirky\\agent-hooks\\zcode-hook.cmd'
     const command = getZCodeManagedCommand(scriptPath)
     // Why: Git Bash strips backslashes from a bare path; forward slashes survive every host.
-    expect(command).toBe('C:/Users/ada/.orca/agent-hooks/zcode-hook.cmd')
+    expect(command).toBe('C:/Users/ada/.quirky/agent-hooks/zcode-hook.cmd')
 
     const next = applyZCodeManagedHooks(
       {
@@ -195,7 +195,7 @@ describe('ZCodeHookService', () => {
     zcodeHookService.install()
     const scriptPath = join(
       hoisted.home,
-      '.orca',
+      '.quirky',
       'agent-hooks',
       process.platform === 'win32' ? 'zcode-hook.cmd' : 'zcode-hook.sh'
     )

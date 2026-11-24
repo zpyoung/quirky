@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { openFileExplorer } from './helpers/file-explorer'
 import {
   createRuntimeDesktopPairingOffer,
@@ -28,7 +28,7 @@ async function openExplorerFile(page: Page, name: string): Promise<void> {
 }
 
 test('opens HTML and PDF files larger than one RPC reply on a paired runtime', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
@@ -55,10 +55,10 @@ test('opens HTML and PDF files larger than one RPC reply on a paired runtime', a
     )
     registerPostElectronShutdownCleanup(async () => rmSync(fixturePath, { force: true }))
   }
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
 
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
   let client: PairedElectronClient | null = null
   try {
     client = await launchPairedElectronClient(offer, testInfo, 'Remote large file open')

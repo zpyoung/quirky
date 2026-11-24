@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { getOrcaProfileBrowserSessionPartition } from '../../shared/orca-profiles'
+import { getQuirkyProfileBrowserSessionPartition } from '../../shared/quirky-profiles'
 import { inspectRetiredBrowserSessionProfileUserAgentModes } from './browser-session-persisted-profile-validation'
 
-const ORCA_PROFILE_ID = 'local-default'
+const QUIRKY_PROFILE_ID = 'local-default'
 const PROFILE_ID = '11111111-1111-4111-8111-111111111111'
 
 function profileWithMode(mode: unknown): Record<string, unknown> {
   return {
     id: PROFILE_ID,
     scope: 'isolated',
-    partition: getOrcaProfileBrowserSessionPartition(ORCA_PROFILE_ID, PROFILE_ID),
+    partition: getQuirkyProfileBrowserSessionPartition(QUIRKY_PROFILE_ID, PROFILE_ID),
     label: 'Existing',
     source: null,
     userAgentMode: mode
@@ -21,7 +21,7 @@ function unhydratableProfile(extra: Record<string, unknown> = {}): Record<string
   return {
     id: 'not-a-uuid',
     scope: 'isolated',
-    partition: 'persist:orca-browser-session-not-a-uuid',
+    partition: 'persist:quirky-browser-session-not-a-uuid',
     label: 'Unhydratable',
     source: null,
     ...extra
@@ -32,10 +32,12 @@ describe('retired browser profile identity inspection', () => {
   it('detects an inspectable old choice without removing its bytes', () => {
     const profile = profileWithMode('native')
 
-    expect(inspectRetiredBrowserSessionProfileUserAgentModes([profile], ORCA_PROFILE_ID)).toEqual({
-      noticePending: true,
-      degraded: false
-    })
+    expect(inspectRetiredBrowserSessionProfileUserAgentModes([profile], QUIRKY_PROFILE_ID)).toEqual(
+      {
+        noticePending: true,
+        degraded: false
+      }
+    )
     expect(profile.userAgentMode).toBe('native')
   })
 
@@ -51,7 +53,7 @@ describe('retired browser profile identity inspection', () => {
       entry: unhydratableProfile()
     }
   ])('stays silent about $scenario, which carries no identity choice', ({ entry }) => {
-    expect(inspectRetiredBrowserSessionProfileUserAgentModes([entry], ORCA_PROFILE_ID)).toEqual({
+    expect(inspectRetiredBrowserSessionProfileUserAgentModes([entry], QUIRKY_PROFILE_ID)).toEqual({
       noticePending: false,
       degraded: false
     })
@@ -65,9 +67,9 @@ describe('retired browser profile identity inspection', () => {
     }
   ])('turns $scenario into a degraded notice without throwing', ({ entry }) => {
     expect(() =>
-      inspectRetiredBrowserSessionProfileUserAgentModes([entry], ORCA_PROFILE_ID)
+      inspectRetiredBrowserSessionProfileUserAgentModes([entry], QUIRKY_PROFILE_ID)
     ).not.toThrow()
-    expect(inspectRetiredBrowserSessionProfileUserAgentModes([entry], ORCA_PROFILE_ID)).toEqual({
+    expect(inspectRetiredBrowserSessionProfileUserAgentModes([entry], QUIRKY_PROFILE_ID)).toEqual({
       noticePending: true,
       degraded: true
     })

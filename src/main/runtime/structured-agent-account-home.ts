@@ -3,7 +3,10 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
 import { normalizeCodexRuntimeSelection } from '../codex-accounts/runtime-selection'
-import { resolveOrcaManagedCodexHomePath, getSystemCodexHomePath } from '../codex/codex-home-paths'
+import {
+  resolveQuirkyManagedCodexHomePath,
+  getSystemCodexHomePath
+} from '../codex/codex-home-paths'
 import { resolveAbsoluteDirOverride } from '../../shared/absolute-dir-override'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -89,7 +92,7 @@ export function resolveStructuredCodexAccountKind(
   if (same(getSystemCodexHomePath())) {
     return 'system'
   }
-  if (same(resolveOrcaManagedCodexHomePath())) {
+  if (same(resolveQuirkyManagedCodexHomePath())) {
     return normalizeCodexRuntimeSelection(settings).host ? 'managed' : 'system'
   }
   return undefined

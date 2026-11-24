@@ -37,7 +37,7 @@ let directory: string
 
 beforeEach(async () => {
   writes.fail = false
-  directory = await mkdtemp(join(tmpdir(), 'orca-runtime-end-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-runtime-end-'))
 })
 
 afterEach(async () => {

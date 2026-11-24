@@ -6,7 +6,7 @@ import { codexHookService } from './hook-service'
 import { isAgentStatusHooksEnabledForAgent } from '../agent-hooks/managed-agent-hook-controls'
 import { reconcileCodexHooksForLaunch } from './codex-hook-reconcile'
 
-/** Codex launch prep against a host's runtime-home service; the desktop and orcad share it. */
+/** Codex launch prep against a host's runtime-home service; the desktop and quirkyd share it. */
 export function createCodexRuntimeHomeLaunchPreparation(deps: {
   getRuntimeHome: () => CodexRuntimeHomeService | null
   getSettings: () => GlobalSettings | undefined

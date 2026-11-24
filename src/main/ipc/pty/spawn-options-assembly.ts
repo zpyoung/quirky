@@ -36,7 +36,7 @@ export function assemblePtySpawnEnvDeletions(input: {
   isDaemonHostSpawn: boolean
   connectionId: string | null | undefined
   skipCodexHomeEnv: boolean
-  stripInheritedOrcaCodexHome: boolean
+  stripInheritedQuirkyCodexHome: boolean
   codexResumeHomeSelected: boolean
   settings: GlobalSettings | undefined
 }): { env: Record<string, string> | undefined; envToDelete: string[] } {
@@ -48,7 +48,7 @@ export function assemblePtySpawnEnvDeletions(input: {
       // Persistent daemons and older SSH hosts must not resurrect a parent Pi's ownership.
       PI_PROCESS_OWNER_ENV_KEYS,
       input.agentTeamsEnvToDelete,
-      // Why: disable old hosts without removing ORCA_REAL_* while their Windows shim remains on PATH.
+      // Why: disable old hosts without removing QUIRKY_REAL_* while their Windows shim remains on PATH.
       input.isDaemonHostSpawn || input.connectionId ? LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS : [],
       input.isDaemonHostSpawn ? getInheritedAgentHookEnvKeysToDelete(env) : [],
       // The daemon must judge its own inherited value; main may have a different config.
@@ -60,7 +60,7 @@ export function assemblePtySpawnEnvDeletions(input: {
       input.skipCodexHomeEnv ? CODEX_HOME_ENV_KEYS : [],
       // Why: the persistent daemon compares its own merged CODEX_HOME pair;
       // main cannot safely decide ownership for a process it may not parent.
-      input.stripInheritedOrcaCodexHome ? ['ORCA_CODEX_HOME'] : []
+      input.stripInheritedQuirkyCodexHome ? ['QUIRKY_CODEX_HOME'] : []
     ) ?? []
   if (input.codexResumeHomeSelected) {
     envToDelete = removeCodexHomeDeletionRequests(envToDelete) ?? []

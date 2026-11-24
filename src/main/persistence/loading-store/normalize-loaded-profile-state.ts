@@ -3,9 +3,9 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import { normalizeFeatureInteractionTelemetryBuckets } from '../../../shared/feature-interactions'
 import { normalizeFolderWorkspaceDiffComments } from '../../folder-workspace-diff-comments'
 import { normalizeFolderWorkspaces } from '../../../shared/folder-workspaces'
-import { normalizeOrcadMigrationEvictedReceipts } from '../../../shared/orcad-migration/orcad-migration-evicted-receipts'
-import { normalizeOrcadMigrationImportReceipts } from '../../../shared/orcad-migration/orcad-migration-manifest-validation'
-import { normalizeOrcadMigrationStagedCatalogs } from '../../../shared/orcad-migration/orcad-migration-staged-catalog-validation'
+import { normalizeQuirkydMigrationEvictedReceipts } from '../../../shared/quirkyd-migration/quirkyd-migration-evicted-receipts'
+import { normalizeQuirkydMigrationImportReceipts } from '../../../shared/quirkyd-migration/quirkyd-migration-manifest-validation'
+import { normalizeQuirkydMigrationStagedCatalogs } from '../../../shared/quirkyd-migration/quirkyd-migration-staged-catalog-validation'
 import { normalizeWorkspaceLineageByChildKey } from '../applying-settings/ui-interaction-merge'
 import {
   normalizeSshRemotePtyLease,
@@ -112,14 +112,14 @@ export function normalizeLoadedProfileState(
     legacyPaneKeyAliasEntries: normalizeLegacyPaneKeyAliasEntries(parsed.legacyPaneKeyAliasEntries),
     automations: Array.isArray(parsed.automations) ? parsed.automations : [],
     automationRuns: normalizeLoadedAutomationRuns(parsed, markNeedsSave),
-    orcadMigrationImportReceipts: normalizeOrcadMigrationImportReceipts(
-      parsed.orcadMigrationImportReceipts
+    quirkydMigrationImportReceipts: normalizeQuirkydMigrationImportReceipts(
+      parsed.quirkydMigrationImportReceipts
     ),
-    orcadMigrationEvictedReceipts: normalizeOrcadMigrationEvictedReceipts(
-      parsed.orcadMigrationEvictedReceipts
+    quirkydMigrationEvictedReceipts: normalizeQuirkydMigrationEvictedReceipts(
+      parsed.quirkydMigrationEvictedReceipts
     ),
-    orcadMigrationStagedCatalogs: normalizeOrcadMigrationStagedCatalogs(
-      parsed.orcadMigrationStagedCatalogs
+    quirkydMigrationStagedCatalogs: normalizeQuirkydMigrationStagedCatalogs(
+      parsed.quirkydMigrationStagedCatalogs
     ),
     onboarding: normalizedOnboarding
   }

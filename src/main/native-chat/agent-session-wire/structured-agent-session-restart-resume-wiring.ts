@@ -39,7 +39,7 @@ export type StructuredAgentSessionRestartResumeSurfaces = {
   now: () => number
 }
 
-/** The caller key the continuation sends under, so its writes are attributable to Orca itself. */
+/** The caller key the continuation sends under, so its writes are attributable to Quirky itself. */
 export const STRUCTURED_AGENT_SESSION_RESTART_CONTINUATION_CALLER =
   'trusted-local:restart-continuation'
 

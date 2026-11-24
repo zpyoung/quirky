@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
-import { ORCA_CLI_SKILL_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
+import { QUIRKY_CLI_SKILL_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
 import { CliSection } from './CliSection'
 
 type CapturedPanelProps = {
@@ -79,7 +79,7 @@ describe('CliSection project runtime defaults', () => {
   it('exposes freshness only for a resolved local host runtime', () => {
     const settings = getDefaultSettings('/tmp')
     renderToStaticMarkup(<CliSection currentPlatform="darwin" settings={settings} />)
-    expect(capturedPanel.props?.freshnessSkillName).toBe('orca-cli')
+    expect(capturedPanel.props?.freshnessSkillName).toBe('quirky-cli')
 
     capturedPanel.canUseLocalSkillFreshness = false
     renderToStaticMarkup(<CliSection currentPlatform="darwin" settings={settings} />)
@@ -130,13 +130,13 @@ describe('CliSection project runtime defaults', () => {
     )
 
     expect(capturedPanel.useInstalledAgentSkill).toHaveBeenCalledWith(
-      'orca-cli',
+      'quirky-cli',
       expect.objectContaining({
         discoveryTarget: { runtime: 'wsl', wslDistro: 'Ubuntu' },
         sourceKinds: ['global']
       })
     )
-    expect(capturedPanel.props?.command).toBe(ORCA_CLI_SKILL_INSTALL_COMMAND)
+    expect(capturedPanel.props?.command).toBe(QUIRKY_CLI_SKILL_INSTALL_COMMAND)
     // `skills add` re-copies, so the panel reuses the install command as its update.
     expect(capturedPanel.props?.installedCommand).toBeUndefined()
     expect(capturedPanel.props?.terminalRuntime).toEqual({
@@ -152,17 +152,17 @@ describe('CliSection project runtime defaults', () => {
   it('renders an inline unknown PATH state without offering a mutation', async () => {
     const getInstallStatus = vi.fn().mockResolvedValue({
       platform: 'win32',
-      commandName: 'orca',
-      commandPath: 'C:\\Program Files\\Orca\\resources\\bin\\orca.exe',
-      pathDirectory: 'C:\\Program Files\\Orca\\resources\\bin',
+      commandName: 'quirky',
+      commandPath: 'C:\\Program Files\\Quirky\\resources\\bin\\quirky.exe',
+      pathDirectory: 'C:\\Program Files\\Quirky\\resources\\bin',
       pathConfigured: null,
-      launcherPath: 'C:\\Program Files\\Orca\\resources\\bin\\orca.exe',
+      launcherPath: 'C:\\Program Files\\Quirky\\resources\\bin\\quirky.exe',
       installMethod: 'wrapper',
       supported: true,
       state: 'installed',
-      currentTarget: 'C:\\Program Files\\Orca\\resources\\bin\\orca.exe',
+      currentTarget: 'C:\\Program Files\\Quirky\\resources\\bin\\quirky.exe',
       unsupportedReason: null,
-      detail: 'Orca could not read the Windows user PATH registry value.'
+      detail: 'Quirky could not read the Windows user PATH registry value.'
     })
     Object.assign(window, {
       api: {

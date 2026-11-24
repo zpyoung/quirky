@@ -122,11 +122,11 @@ describe('a link to this computer printed in a paired-server terminal', () => {
   })
 
   it('keeps the host refusal when this computer does not have the file either', async () => {
-    hostDisowns('/etc/orca-missing')
+    hostDisowns('/etc/quirky-missing')
     statMock.mockRejectedValueOnce(new Error('ENOENT: no such file'))
     const onOpenFailure = vi.fn()
 
-    openDetectedFilePath('/etc/orca-missing', null, null, {
+    openDetectedFilePath('/etc/quirky-missing', null, null, {
       ...serverWorkspace,
       onOpenFailure
     })
@@ -135,7 +135,7 @@ describe('a link to this computer printed in a paired-server terminal', () => {
     expect(openFileMock).not.toHaveBeenCalled()
     expect(onOpenFailure).toHaveBeenCalledWith({
       verdict: 'unverifiable',
-      error: new Error('/etc/orca-missing is outside every workspace on its host')
+      error: new Error('/etc/quirky-missing is outside every workspace on its host')
     })
   })
 
@@ -182,7 +182,7 @@ describe('a link to this computer printed in a paired-server terminal', () => {
   })
 
   it('never treats a paired web client filesystem as this computer', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     hostDisowns('/Users/me/notes.md')
     const onOpenFailure = vi.fn()
 

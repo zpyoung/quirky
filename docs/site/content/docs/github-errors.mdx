@@ -1,28 +1,28 @@
 ---
 title: Troubleshooting GitHub errors
-description: Diagnose rate limits, auth failures, and other GitHub CLI errors in Orca PR checks, Tasks, and Source Control.
+description: Diagnose rate limits, auth failures, and other GitHub CLI errors in Quirky PR checks, Tasks, and Source Control.
 ---
 
-Orca talks to GitHub through the **GitHub CLI (`gh`)** on your machine (or remote Orca host). When PR status, checks, issues, or Tasks fail to refresh, the cause is almost always GitHub auth, permissions, or API rate limits — not a broken PR panel by itself.
+Quirky talks to GitHub through the **GitHub CLI (`gh`)** on your machine (or remote Quirky host). When PR status, checks, issues, or Tasks fail to refresh, the cause is almost always GitHub auth, permissions, or API rate limits — not a broken PR panel by itself.
 
 This page covers the errors you’ll see most often and how to fix them.
 
 ## Quick triage
 
-| What you see                                                      | Likely cause                                               | First thing to try                                                                                               |
-| ----------------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| “GitHub is rate-limiting requests” / “rate limit exceeded (core)” | GitHub REST (core) quota exhausted for your user           | Wait for reset; stop extra `gh` / agent / Orca usage; check [Settings → Git → GitHub API Budget](/docs/settings) |
-| “GitHub authentication is unavailable” / `gh auth` prompts        | `gh` not logged in, expired token, or bad `GITHUB_TOKEN`   | `gh auth status`, then `gh auth login`                                                                           |
-| “GitHub did not allow access” / HTTP 403 (not rate limit)         | Missing scopes or no access to the repo                    | Re-auth with `repo` (and needed org SSO); confirm you can open the PR in the browser                             |
-| “repository is unavailable” / HTTP 404                            | Wrong remote, private repo without access, or renamed repo | Check `git remote -v` and browser access                                                                         |
-| “GitHub is unreachable” / timeouts                                | Network, proxy, VPN, or GitHub outage                      | Check [githubstatus.com](https://www.githubstatus.com/); retry off VPN                                           |
-| “GitHub CLI is unavailable”                                       | `gh` missing from PATH Orca uses                           | Install `gh` and restart Orca                                                                                    |
+| What you see                                                      | Likely cause                                               | First thing to try                                                                                                 |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| “GitHub is rate-limiting requests” / “rate limit exceeded (core)” | GitHub REST (core) quota exhausted for your user           | Wait for reset; stop extra `gh` / agent / Quirky usage; check [Settings → Git → GitHub API Budget](/docs/settings) |
+| “GitHub authentication is unavailable” / `gh auth` prompts        | `gh` not logged in, expired token, or bad `GITHUB_TOKEN`   | `gh auth status`, then `gh auth login`                                                                             |
+| “GitHub did not allow access” / HTTP 403 (not rate limit)         | Missing scopes or no access to the repo                    | Re-auth with `repo` (and needed org SSO); confirm you can open the PR in the browser                               |
+| “repository is unavailable” / HTTP 404                            | Wrong remote, private repo without access, or renamed repo | Check `git remote -v` and browser access                                                                           |
+| “GitHub is unreachable” / timeouts                                | Network, proxy, VPN, or GitHub outage                      | Check [githubstatus.com](https://www.githubstatus.com/); retry off VPN                                             |
+| “GitHub CLI is unavailable”                                       | `gh` missing from PATH Quirky uses                         | Install `gh` and restart Quirky                                                                                    |
 
 ## Rate limits (most common)
 
-GitHub gives each **authenticated user** a shared hourly budget. **Every tool on that account shares it**: Orca, `gh` in terminals, Claude/Codex/Grok agents that call `gh`, CI scripts, browser extensions, and other apps.
+GitHub gives each **authenticated user** a shared hourly budget. **Every tool on that account shares it**: Quirky, `gh` in terminals, Claude/Codex/Grok agents that call `gh`, CI scripts, browser extensions, and other apps.
 
-### Buckets Orca cares about
+### Buckets Quirky cares about
 
 | Bucket          | What it covers                                                               | Typical limit (authenticated) |
 | --------------- | ---------------------------------------------------------------------------- | ----------------------------- |
@@ -30,7 +30,7 @@ GitHub gives each **authenticated user** a shared hourly budget. **Every tool on
 | **GraphQL**     | Project/Tasks and some richer PR queries                                     | 5,000 points / hour           |
 | **Search**      | Search-driven lists                                                          | 30 / minute                   |
 
-When a primary bucket is exhausted, GitHub returns HTTP **403** with a message like `API rate limit exceeded`. Orca classifies that as rate-limited, keeps the last known PR status when it can, and **stops spawning more `gh` calls** for a short window so a single limit doesn’t turn into a storm of failures.
+When a primary bucket is exhausted, GitHub returns HTTP **403** with a message like `API rate limit exceeded`. Quirky classifies that as rate-limited, keeps the last known PR status when it can, and **stops spawning more `gh` calls** for a short window so a single limit doesn’t turn into a storm of failures.
 
 ### Why Settings can look “OK” while the PR panel is blocked
 
@@ -58,7 +58,7 @@ If `gh api user` returns **403** with `API rate limit exceeded` and `X-Ratelimit
 
 ### What usually burns the quota
 
-- Many Orca windows or electron-dev builds open at once (each may refresh PRs / Tasks)
+- Many Quirky windows or electron-dev builds open at once (each may refresh PRs / Tasks)
 - Agents automating `gh` (assign PRs/issues, poll checks, bulk GraphQL)
 - Heavy Tasks / multi-repo fan-out while also refreshing PR panels
 - Other apps using the same GitHub user token
@@ -66,14 +66,14 @@ If `gh api user` returns **403** with `API rate limit exceeded` and `X-Ratelimit
 ### What to do
 
 1. **Wait** for the hourly reset shown in the error or in `X-Ratelimit-Reset`.
-2. **Reduce concurrent GitHub clients** — quit extra Orca instances and pause bulk `gh` automations.
-3. Avoid hammering refresh on the PR panel while limited; Orca is already backing off.
+2. **Reduce concurrent GitHub clients** — quit extra Quirky instances and pause bulk `gh` automations.
+3. Avoid hammering refresh on the PR panel while limited; Quirky is already backing off.
 4. Prefer batching GraphQL in scripts; don’t loop REST one-PR-at-a-time across large sets on a personal account.
 5. After reset, if PR refresh still fails, re-check auth (next section).
 
 ## Authentication problems
 
-Orca inherits whatever `gh` uses on that host.
+Quirky inherits whatever `gh` uses on that host.
 
 ### Check status
 
@@ -96,13 +96,13 @@ gh auth login -h github.com
 ```
 
 **Expired or revoked token**<br />
-`gh auth status` may show the token as invalid. Run `gh auth login` (or `gh auth refresh`) and restart Orca so it picks up the new credentials.
+`gh auth status` may show the token as invalid. Run `gh auth login` (or `gh auth refresh`) and restart Quirky so it picks up the new credentials.
 
 **Org SAML SSO**<br />
 Private org repos may need SSO authorization for the token. Open the org’s SSO authorize link from the GitHub token settings, then retry.
 
 **Remote / SSH worktrees**<br />
-GitHub auth is **per host**. Logging in on your laptop does not log in `gh` on a remote machine. SSH into the host and run `gh auth login` there, or use Orca’s remote-server GitHub budget view for that environment.
+GitHub auth is **per host**. Logging in on your laptop does not log in `gh` on a remote machine. SSH into the host and run `gh auth login` there, or use Quirky’s remote-server GitHub budget view for that environment.
 
 ## Permission and repository errors
 
@@ -128,30 +128,30 @@ Messages about timeouts, “could not resolve host”, or “GitHub is unreachab
 
 ## GitHub CLI missing
 
-If Orca reports the GitHub CLI is unavailable:
+If Quirky reports the GitHub CLI is unavailable:
 
 1. Install [`gh`](https://cli.github.com/)
 2. Confirm `which gh` works in a normal terminal
-3. Fully quit and reopen Orca (so PATH matches)
-4. On Windows, install for the same environment Orca launches (WSL vs native)
+3. Fully quit and reopen Quirky (so PATH matches)
+4. On Windows, install for the same environment Quirky launches (WSL vs native)
 
-## How Orca behaves when GitHub fails
+## How Quirky behaves when GitHub fails
 
 - **Rate limit / outage**: PR and Checks panels prefer **last known status** plus a short banner instead of wiping the UI.
 - **Hard auth / permission failures**: You’ll get clear empty-state or banner copy telling you to fix login or access.
-- **Circuit breaker**: After a primary rate-limit 403, Orca briefly refuses new `gh` spawns for that bucket (`core`, `search`, or `graphql`) so the app stays responsive and doesn’t dig a deeper hole.
+- **Circuit breaker**: After a primary rate-limit 403, Quirky briefly refuses new `gh` spawns for that bucket (`core`, `search`, or `graphql`) so the app stays responsive and doesn’t dig a deeper hole.
 
-## Check GitHub API Budget in Orca
+## Check GitHub API Budget in Quirky
 
 Open **[Settings → Git](/docs/settings)** and find **GitHub API Budget**:
 
 - **REST / Search / GraphQL** remaining counts from GitHub’s probe
 - Refresh after waiting out a limit
-- On remote Orca servers, use the remote advanced budget view for the **server-owned** `gh` identity (local Settings only shows the desktop client)
+- On remote Quirky servers, use the remote advanced budget view for the **server-owned** `gh` identity (local Settings only shows the desktop client)
 
 ## Still stuck?
 
-1. Reproduce once in a terminal with `gh pr view` or `gh api user` from the same machine/user Orca uses.
+1. Reproduce once in a terminal with `gh pr view` or `gh api user` from the same machine/user Quirky uses.
 2. Collect logs: **Help → Open Logs**.
 3. File an issue with the classified error text (not secrets), `gh auth status` redacted output, and whether terminal `gh` fails the same way.
 
@@ -163,4 +163,4 @@ Open **[Settings → Git](/docs/settings)** and find **GitHub API Budget**:
 - [Hosted reviews, issues & Actions](/docs/review/github) — PR and Checks features that depend on GitHub
 - [Settings reference](/docs/settings) — Integrations and Git panes
 - [Usage & rate-limit tracking](/docs/agents/usage-tracking) — AI provider limits (Claude/Codex), not GitHub API
-- [Troubleshooting & FAQ](/docs/troubleshooting) — general Orca issues
+- [Troubleshooting & FAQ](/docs/troubleshooting) — general Quirky issues

@@ -7,7 +7,7 @@ import { currentRequestsProjection } from './agent-session-current-requests'
 //  - the lease: the live or reserved generation's fence; none once it is released;
 //  - this host's own sight of that generation's root exit, which ends it even when the release
 //    write failed (`lastEndedChild`);
-//  - the Orca runtimes this one replaced (`AgentSessionRecordStore.replacedRuntime`): a generation
+//  - the Quirky runtimes this one replaced (`AgentSessionRecordStore.replacedRuntime`): a generation
 //    one of them held lost its pipes with it, so it is over before any startup write says so;
 //  - the journal's fold, where every item carries the generation that produced it (`ownerFence`).
 // So work an ended generation left holds nothing and is not Working whether or not its cleanup

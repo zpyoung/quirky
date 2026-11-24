@@ -222,8 +222,8 @@ export function resumableSet(input: {
   markers: AgentSessionResumeMarker[]
   items?: AgentJournalRenderItem[]
   chain?: AgentSessionRecord['providerHandleChain']
-  /** Sessions a newer Orca saved. */
-  savedByNewerOrca?: string[]
+  /** Sessions a newer Quirky saved. */
+  savedByNewerQuirky?: string[]
 }) {
   return structuredAgentSessionResumableSet({
     markers: input.markers,
@@ -231,6 +231,6 @@ export function resumableSet(input: {
     supportsRecord: () => true,
     latestPrompt: () => 'fix the auth bug',
     movedOn: () => false,
-    savedByNewerOrca: (sessionId) => input.savedByNewerOrca?.includes(sessionId) === true
+    savedByNewerQuirky: (sessionId) => input.savedByNewerQuirky?.includes(sessionId) === true
   })
 }

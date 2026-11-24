@@ -16,16 +16,16 @@ const CANONICAL_GUIDE_NAMES = [
   'computer-use',
   'jira-tickets',
   'linear-tickets',
-  'orca-ask',
-  'orca-cli',
-  'orca-emulator',
-  'orca-emulator-android',
-  'orca-heimdall',
-  'orca-jira',
-  'orca-ledger',
-  'orca-linear',
-  'orca-loop',
-  'orca-per-workspace-env',
+  'quirky-ask',
+  'quirky-cli',
+  'quirky-emulator',
+  'quirky-emulator-android',
+  'quirky-heimdall',
+  'quirky-jira',
+  'quirky-ledger',
+  'quirky-linear',
+  'quirky-loop',
+  'quirky-per-workspace-env',
   'orchestration'
 ]
 
@@ -35,21 +35,21 @@ const GUIDE_ALIASES = {
   'computer-use': [],
   'jira-tickets': [],
   'linear-tickets': [],
-  'orca-ask': [],
-  'orca-cli': [],
-  'orca-emulator': [],
-  'orca-emulator-android': [],
-  'orca-heimdall': [],
-  'orca-jira': [],
-  'orca-ledger': [],
-  'orca-linear': [],
-  'orca-loop': [],
-  'orca-per-workspace-env': [],
+  'quirky-ask': [],
+  'quirky-cli': [],
+  'quirky-emulator': [],
+  'quirky-emulator-android': [],
+  'quirky-heimdall': [],
+  'quirky-jira': [],
+  'quirky-ledger': [],
+  'quirky-linear': [],
+  'quirky-loop': [],
+  'quirky-per-workspace-env': [],
   orchestration: []
 }
 
 // Why: a stubbed topic ships a hybrid discovery stub as its installable projection while
-// `orca skills get <topic>` still serves the full version-matched guide from the binary.
+// `quirky skills get <topic>` still serves the full version-matched guide from the binary.
 // Migrating a topic here is effectively one-way — earlier fat installs rely on the stub
 // landing to converge — so entries are added as skills convert, never removed. The stub
 // body lives in skill-stubs/<topic>.md; the projection reuses the guide's own frontmatter.
@@ -57,16 +57,16 @@ const STUB_TOPICS = [
   'computer-use',
   'jira-tickets',
   'linear-tickets',
-  'orca-ask',
-  'orca-cli',
-  'orca-emulator',
-  'orca-emulator-android',
-  'orca-heimdall',
-  'orca-jira',
-  'orca-ledger',
-  'orca-linear',
-  'orca-loop',
-  'orca-per-workspace-env',
+  'quirky-ask',
+  'quirky-cli',
+  'quirky-emulator',
+  'quirky-emulator-android',
+  'quirky-heimdall',
+  'quirky-jira',
+  'quirky-ledger',
+  'quirky-linear',
+  'quirky-loop',
+  'quirky-per-workspace-env',
   'orchestration'
 ]
 

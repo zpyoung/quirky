@@ -6,7 +6,7 @@ import {
   LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH,
   LAYOUT_OWNER_WRITTEN_SESSION_WORKTREE_ID as WT
 } from '../../../../shared/__fixtures__/layout-owner-written-session-golden-paths'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { createTestStore, makeWorktree } from './store-test-helpers'
@@ -48,7 +48,7 @@ function restoredWindow(session: WorkspaceSessionState) {
 
 const leaf = (n: number): string => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`
 
-describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+describe.skipIf(QUIRKY_LAYOUT_OWNER_IS_MAIN)(
   'a switch-off window restoring the session a layout-owner build wrote (downgrade probe, L8)',
   () => {
     it('shows the same tabs, panes, groups, editor file and browser tab', () => {

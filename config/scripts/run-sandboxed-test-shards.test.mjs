@@ -38,8 +38,8 @@ describe('sandbox lane selection', () => {
   it('keeps the same shell contracts out of parallel shards as CI', () => {
     const command = laneCommand({ lane: 'unit', shardTotal: 16, extraArgs: [] }, 3)
 
-    expect(unitShardEnv.ORCA_BALANCE_UNIT_SHARDS).toBe('1')
-    expect(laneEnvArgs('unit')).toEqual(['--env', 'ORCA_BALANCE_UNIT_SHARDS=1'])
+    expect(unitShardEnv.QUIRKY_BALANCE_UNIT_SHARDS).toBe('1')
+    expect(laneEnvArgs('unit')).toEqual(['--env', 'QUIRKY_BALANCE_UNIT_SHARDS=1'])
     expect(command.some((arg) => arg.startsWith('--exclude='))).toBe(false)
     expect(command).toContain('--shard=3/16')
   })
@@ -70,7 +70,7 @@ describe('related and files selection modes', () => {
     expect(command[0]).toBe('sh')
     expect(command[2]).toContain('vitest')
     expect(command[2]).toContain('related')
-    expect(command[2]).toContain('.orca-sandbox/selection.txt')
+    expect(command[2]).toContain('.quirky-sandbox/selection.txt')
     expect(command[2]).toContain('--run')
     expect(command[2]).toContain('--bail=1')
     expect(command[2]).not.toContain('--exclude=')
@@ -81,7 +81,7 @@ describe('related and files selection modes', () => {
 
     expect(command[0]).toBe('sh')
     expect(command[2]).toContain('vitest')
-    expect(command[2]).toContain('.orca-sandbox/selection.txt')
+    expect(command[2]).toContain('.quirky-sandbox/selection.txt')
     expect(command[2]).not.toContain("'--run'")
   })
 
@@ -116,7 +116,7 @@ describe('related and files selection modes', () => {
     })
 
     it('reads a newline-delimited, repo-relative selection file', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-'))
       directories.push(directory)
       const listPath = join(directory, 'selection.txt')
       writeFileSync(listPath, 'config/scripts/run-sandboxed-test-shards.mjs\n\npackage.json\n')
@@ -128,7 +128,7 @@ describe('related and files selection modes', () => {
     })
 
     it('rejects a missing list file, an absolute path entry, and a path escaping the project', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-'))
       directories.push(directory)
 
       expect(() => readSelectionList(join(directory, 'missing.txt'))).toThrow('not found')
@@ -143,7 +143,7 @@ describe('related and files selection modes', () => {
     })
 
     it('rejects an entry starting with "-" so it cannot be parsed as a vitest flag', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-'))
       directories.push(directory)
       const listPath = join(directory, 'flag-like.txt')
       writeFileSync(listPath, 'package.json\n--coverage\n')
@@ -152,7 +152,7 @@ describe('related and files selection modes', () => {
     })
 
     it('rejects an empty selection file (blank lines only) instead of selecting the whole suite', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-'))
       directories.push(directory)
       const listPath = join(directory, 'empty.txt')
       writeFileSync(listPath, '\n\n  \n')
@@ -166,7 +166,7 @@ describe('related and files selection modes', () => {
         [
           resolve(projectDir, 'config/scripts/run-sandboxed-test-shards.mjs'),
           '--select=related',
-          '--files-from=/tmp/does-not-exist-orca-selection.txt'
+          '--files-from=/tmp/does-not-exist-quirky-selection.txt'
         ],
         { encoding: 'utf8' }
       )
@@ -176,7 +176,7 @@ describe('related and files selection modes', () => {
     })
 
     it('exits 2 via fail() for an empty --files-from list without reaching the Docker probe', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-'))
       directories.push(directory)
       const listPath = join(directory, 'empty.txt')
       writeFileSync(listPath, '\n')
@@ -233,8 +233,8 @@ describe('related and files selection modes', () => {
       }
     })
 
-    it('places the selection list inside the tar at .orca-sandbox/selection.txt, not in argv', () => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-selection-tar-'))
+    it('places the selection list inside the tar at .quirky-sandbox/selection.txt, not in argv', () => {
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-selection-tar-'))
       directories.push(directory)
       writeFileSync(join(directory, 'dummy.txt'), 'placeholder\n')
       const baseTarPath = join(directory, 'base.tar')
@@ -252,12 +252,12 @@ describe('related and files selection modes', () => {
       directories.push(resolve(selectionTarPath, '..'))
 
       const listing = spawnSync('tar', ['-tf', selectionTarPath], { encoding: 'utf8' })
-      expect(listing.stdout).toContain('.orca-sandbox/selection.txt')
+      expect(listing.stdout).toContain('.quirky-sandbox/selection.txt')
       expect(listing.stdout).toContain('dummy.txt')
 
       const contents = spawnSync(
         'tar',
-        ['-xO', '-f', selectionTarPath, '.orca-sandbox/selection.txt'],
+        ['-xO', '-f', selectionTarPath, '.quirky-sandbox/selection.txt'],
         {
           encoding: 'utf8'
         }

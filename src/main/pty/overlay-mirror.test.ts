@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('safeRemoveOverlay', () => {
   it('keeps missing owned paths a silent no-op', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-overlay-missing-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-overlay-missing-'))
     tempRoots.push(root)
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     safeRemoveOverlay(join(root, 'missing', 'leaf'), join(root, 'missing'))
@@ -28,7 +28,7 @@ describe('safeRemoveOverlay', () => {
   })
 
   it('refuses cleanup through an intermediate symlink and unlinks only a leaf symlink', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-overlay-symlink-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-overlay-symlink-'))
     tempRoots.push(root)
     const overlay = join(root, 'overlay')
     const outside = join(root, 'outside')
@@ -47,7 +47,7 @@ describe('safeRemoveOverlay', () => {
   })
 
   it('removes valid overlay children whose names start with dot-dot', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-overlay-root-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-overlay-root-'))
     tempRoots.push(root)
     const overlayDir = join(root, '..session-overlay')
     mkdirSync(overlayDir, { recursive: true })
@@ -61,7 +61,7 @@ describe('safeRemoveOverlay', () => {
   })
 
   it('refuses to remove the overlay root itself', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-overlay-root-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-overlay-root-'))
     tempRoots.push(root)
     const marker = join(root, 'marker.txt')
     writeFileSync(marker, 'root')
@@ -74,7 +74,7 @@ describe('safeRemoveOverlay', () => {
   })
 
   it('refuses parent traversal outside the overlay root', async () => {
-    const parent = await mkdtemp(join(tmpdir(), 'orca-overlay-parent-'))
+    const parent = await mkdtemp(join(tmpdir(), 'quirky-overlay-parent-'))
     tempRoots.push(parent)
     const root = join(parent, 'root')
     const outside = join(parent, 'outside')
@@ -115,10 +115,10 @@ describe('safeRemoveOverlay', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const { safeRemoveOverlay: safeRemoveOverlayWithWinPath } = await import('./overlay-mirror')
-    safeRemoveOverlayWithWinPath(String.raw`D:\users\me\config`, String.raw`C:\orca\overlays`)
+    safeRemoveOverlayWithWinPath(String.raw`D:\users\me\config`, String.raw`C:\quirky\overlays`)
 
     expect(warnSpy).toHaveBeenCalledWith(
-      '[overlay-mirror] refusing to remove overlay outside root: target=D:\\users\\me\\config root=C:\\orca\\overlays'
+      '[overlay-mirror] refusing to remove overlay outside root: target=D:\\users\\me\\config root=C:\\quirky\\overlays'
     )
     expect(lstatSyncMock).not.toHaveBeenCalled()
     expect(unlinkSyncMock).not.toHaveBeenCalled()

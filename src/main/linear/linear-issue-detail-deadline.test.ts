@@ -50,7 +50,7 @@ beforeEach(async () => {
     request.on('end', () => {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.flushHeaders()
-      if (answer && (!signingOnly || !body.includes('OrcaLinearDescriptionImages'))) {
+      if (answer && (!signingOnly || !body.includes('QuirkyLinearDescriptionImages'))) {
         response.end(
           JSON.stringify({
             data: { issue: { id: issue.id, sharedAccess: { sharedWithUsers: [] }, reactions: [] } }

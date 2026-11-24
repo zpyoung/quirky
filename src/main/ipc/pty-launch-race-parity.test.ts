@@ -39,7 +39,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -386,7 +386,7 @@ describe('launch race parity, both spawn lanes', () => {
 
         const spawn = lanes.spawn[lane]({ ...pane.args, ...SAVE_BINDING_ARGS[lane] })
 
-        await expect(spawn).rejects.toThrow('ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED')
+        await expect(spawn).rejects.toThrow('QUIRKY_TERMINAL_SESSION_STATE_SAVE_FAILED')
         await expect(spawn).rejects.toMatchObject({ agentSessionOperationOutcome: 'unknown' })
         expect(shutdown).toHaveBeenCalledWith(ptyId, {
           immediate: true,

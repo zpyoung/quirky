@@ -123,7 +123,7 @@ describe('validateAskSpec — id uniqueness', () => {
     expect(result).toMatchObject({
       ok: false,
       errors: expect.arrayContaining([
-        { path: "questions[1].id", message: "duplicate question id 'dup'" }
+        { path: 'questions[1].id', message: "duplicate question id 'dup'" }
       ])
     })
   })
@@ -137,21 +137,17 @@ describe('validateAskSpec — per-type default domain', () => {
     ['multiselect: unknown option value', multiselectQuestion({ default: ['z'] }), false],
     ['multiselect: not an array', multiselectQuestion({ default: 'a' }), false],
     ['text: plain string with no constraints', textQuestion({ default: 'anything' }), true],
-    [
-      'text: violates pattern',
-      textQuestion({ pattern: '^[a-z]+$', default: '123' }),
-      false
-    ],
-    [
-      'text: matches pattern',
-      textQuestion({ pattern: '^[a-z]+$', default: 'ok' }),
-      true
-    ],
+    ['text: violates pattern', textQuestion({ pattern: '^[a-z]+$', default: '123' }), false],
+    ['text: matches pattern', textQuestion({ pattern: '^[a-z]+$', default: 'ok' }), true],
     ['text: invalid email format', textQuestion({ format: 'email', default: 'nope' }), false],
     ['text: valid email format', textQuestion({ format: 'email', default: 'a@b.com' }), true],
     ['number: within min/max', numberQuestion({ default: 50 }), true],
     ['number: above max', numberQuestion({ default: 500 }), false],
-    ['number: non-integer when integer required', numberQuestion({ integer: true, default: 1.5 }), false],
+    [
+      'number: non-integer when integer required',
+      numberQuestion({ integer: true, default: 1.5 }),
+      false
+    ],
     ['date: valid ISO date', dateQuestion({ default: '2026-01-01' }), true],
     ['date: non-ISO date', dateQuestion({ default: '01/01/2026' }), false],
     ['date: last day of a short month', dateQuestion({ default: '2026-02-28' }), true],
@@ -174,9 +170,7 @@ describe('validateAskSpec — per-type default domain', () => {
     const result = validateAskSpec(specOf(textQuestion(), numberQuestion({ default: 500 })))
     expect(result).toMatchObject({
       ok: false,
-      errors: expect.arrayContaining([
-        expect.objectContaining({ path: 'questions[1].default' })
-      ])
+      errors: expect.arrayContaining([expect.objectContaining({ path: 'questions[1].default' })])
     })
   })
 })
@@ -195,16 +189,19 @@ describe('validateAskSpec — pattern safety (X2)', () => {
     })
   })
 
-  it.each(['^(a|a?)+$', '^(a|a)+$'])('rejects the overlapping-alternation pattern %s promptly instead of hanging', (pattern) => {
-    const start = performance.now()
-    const result = validateAskSpec(specOf(textQuestion({ pattern })))
-    const elapsedMs = performance.now() - start
-    expect(elapsedMs).toBeLessThan(1000)
-    expect(result.ok).toBe(false)
-    expect(result).toMatchObject({
-      errors: expect.arrayContaining([expect.objectContaining({ path: 'questions[0].pattern' })])
-    })
-  })
+  it.each(['^(a|a?)+$', '^(a|a)+$'])(
+    'rejects the overlapping-alternation pattern %s promptly instead of hanging',
+    (pattern) => {
+      const start = performance.now()
+      const result = validateAskSpec(specOf(textQuestion({ pattern })))
+      const elapsedMs = performance.now() - start
+      expect(elapsedMs).toBeLessThan(1000)
+      expect(result.ok).toBe(false)
+      expect(result).toMatchObject({
+        errors: expect.arrayContaining([expect.objectContaining({ path: 'questions[0].pattern' })])
+      })
+    }
+  )
 
   it('rejects a pattern longer than the length cap', () => {
     const result = validateAskSpec(specOf(textQuestion({ pattern: `^${'a'.repeat(201)}$` })))
@@ -230,29 +227,21 @@ describe('validateAskSpec — credential refusal', () => {
     expect(result.ok).toBe(false)
   })
 
-  it.each([
-    'db_password',
-    'auth_token',
-    'user_secret',
-    'my_api_key',
-    'my_private_key',
-    'apiKey'
-  ])('rejects previously-missed credential-shaped id %s', (id) => {
-    const result = validateAskSpec(specOf(textQuestion({ id })))
-    expect(result.ok).toBe(false)
-  })
+  it.each(['db_password', 'auth_token', 'user_secret', 'my_api_key', 'my_private_key', 'apiKey'])(
+    'rejects previously-missed credential-shaped id %s',
+    (id) => {
+      const result = validateAskSpec(specOf(textQuestion({ id })))
+      expect(result.ok).toBe(false)
+    }
+  )
 
-  it.each([
-    'password',
-    'api_key',
-    'db-password',
-    'secret',
-    'token',
-    'private_key'
-  ])('still rejects credential-shaped id %s (no regression)', (id) => {
-    const result = validateAskSpec(specOf(textQuestion({ id })))
-    expect(result.ok).toBe(false)
-  })
+  it.each(['password', 'api_key', 'db-password', 'secret', 'token', 'private_key'])(
+    'still rejects credential-shaped id %s (no regression)',
+    (id) => {
+      const result = validateAskSpec(specOf(textQuestion({ id })))
+      expect(result.ok).toBe(false)
+    }
+  )
 
   it.each(['DBPassword', 'SECRETKey', 'MYSECRET', 'XPassword', 'DBpassword', 'secretkey'])(
     'rejects acronym/all-caps credential-shaped id %s (X1)',
@@ -327,7 +316,7 @@ describe('AskEnvelope — pending variant', () => {
     const pending: AskPendingEnvelope = {
       status: 'pending',
       askId: 'ask_01J',
-      instruction: 'run `orca ask wait --id ask_01J`'
+      instruction: 'run `quirky ask wait --id ask_01J`'
     }
     expect(pending).not.toHaveProperty('answers')
     expect(pending).not.toHaveProperty('skipped')

@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { startLateExitHarness } from '../../../src/main/ipc/pty/daemon-late-exit-test-fixture'
-import { OrcaRuntimeService } from '../../../src/main/runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../../src/main/runtime/quirky-runtime'
 import { Store } from '../../../src/main/persistence/loading-store/store'
 import { resolveStablePaneOwner } from '../../../src/main/ipc/pty/pane/stable-owner'
 import {
@@ -17,7 +17,7 @@ import { syncRuntimeGraph } from '../../../src/renderer/src/runtime/sync-runtime
 import { makeState } from '../../../src/renderer/src/runtime/sync-runtime-graph-test-harness'
 import { advertisedUrlWatcher } from '../../../src/main/ports/advertised-url-watcher'
 
-class QueuedGraphExitRuntime extends OrcaRuntimeService {
+class QueuedGraphExitRuntime extends QuirkyRuntimeService {
   capture(id: string) {
     const pty = this.ptysById.get(id)
     return {
@@ -53,8 +53,8 @@ export async function runQueuedGraphExitScenario(
 ) {
   const h = await startLateExitHarness()
   const predecessor = h.subprocess
-  const dir = mkdtempSync(join(tmpdir(), 'orca-queued-owner-'))
-  const store = new Store({ dataFile: join(dir, 'orca-data.json') })
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-queued-owner-'))
+  const store = new Store({ dataFile: join(dir, 'quirky-data.json') })
   const runtime = new QueuedGraphExitRuntime(store)
   h.session.runtime = runtime
   const WT = 'repo::/tmp/late-exit-audit'

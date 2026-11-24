@@ -1,24 +1,26 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 const diagnostic =
-  'Close the other Orca instances (process IDs: 74451, 80932) before installing this update. Background orca serve instances also need to stop. Orca remains open; retry the update after closing them.'
+  'Close the other Quirky instances (process IDs: 74451, 80932) before installing this update. Background quirky serve instances also need to stop. Quirky remains open; retry the update after closing them.'
 
 test.use({ seedTestRepo: false })
 
 for (const theme of ['dark', 'light'] as const) {
   test(`blocked update keeps the download ready and explains background servers (${theme})`, async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    await orcaPage.setViewportSize({ width: 1200, height: 800 })
-    await orcaPage.evaluate(async (theme) => {
+    await waitForSessionReady(quirkyPage)
+    await quirkyPage.setViewportSize({ width: 1200, height: 800 })
+    await quirkyPage.evaluate(async (theme) => {
       await window.__store!.getState().updateSettingsOrThrow({ theme })
     }, theme)
-    await expect(orcaPage.locator('html')).toHaveClass(theme === 'dark' ? /\bdark\b/ : /\blight\b/)
+    await expect(quirkyPage.locator('html')).toHaveClass(
+      theme === 'dark' ? /\bdark\b/ : /\blight\b/
+    )
 
-    await orcaPage.evaluate((message) => {
+    await quirkyPage.evaluate((message) => {
       window.__store!.setState({
         updateStatus: {
           state: 'error',
@@ -31,14 +33,14 @@ for (const theme of ['dark', 'light'] as const) {
         updateReassuranceSeen: true
       })
     }, diagnostic)
-    const card = orcaPage.getByRole('complementary', { name: /^Update (error|waiting)$/ })
+    const card = quirkyPage.getByRole('complementary', { name: /^Update (error|waiting)$/ })
     await expect(card.getByRole('heading', { name: 'Update Error' })).toBeVisible()
     await card.screenshot({
       path: testInfo.outputPath(`before-${theme}.png`),
       animations: 'disabled'
     })
 
-    await orcaPage.evaluate((message) => {
+    await quirkyPage.evaluate((message) => {
       window.__store!.setState({
         updateStatus: {
           state: 'error',
@@ -63,7 +65,7 @@ for (const theme of ['dark', 'light'] as const) {
     const later = card.getByRole('button', { name: 'Later', exact: true })
     const bounds = await later.boundingBox()
     expect(bounds).not.toBeNull()
-    const laterIsUnobstructed = await orcaPage.evaluate(
+    const laterIsUnobstructed = await quirkyPage.evaluate(
       ({ x, y }) => {
         return document.elementFromPoint(x, y)?.closest('button')?.textContent?.trim() === 'Later'
       },
@@ -79,14 +81,14 @@ for (const theme of ['dark', 'light'] as const) {
     await expect(card.getByText(diagnostic, { exact: true })).toBeVisible()
     await card.getByRole('button', { name: 'Later', exact: true }).click()
     await expect(card).toBeHidden()
-    expect(await orcaPage.evaluate(() => window.__store!.getState().updateStatus)).toMatchObject({
+    expect(await quirkyPage.evaluate(() => window.__store!.getState().updateStatus)).toMatchObject({
       state: 'error',
       version: '1.4.200',
       retryAction: 'install'
     })
-    await orcaPage
+    await quirkyPage
       .getByRole('button', {
-        name: 'Update waiting for other Orca instances. Click to expand.',
+        name: 'Update waiting for other Quirky instances. Click to expand.',
         exact: true
       })
       .click()
@@ -104,12 +106,15 @@ for (const theme of ['dark', 'light'] as const) {
       })
     })
     await card.getByRole('button', { name: 'Retry installation', exact: true }).click()
-    const preparing = orcaPage.getByRole('heading', { name: 'Preparing your update', exact: true })
+    const preparing = quirkyPage.getByRole('heading', {
+      name: 'Preparing your update',
+      exact: true
+    })
     await expect(preparing).toBeVisible()
     await expect(
-      orcaPage.getByRole('button', { name: 'Restart to Update', exact: true })
+      quirkyPage.getByRole('button', { name: 'Restart to Update', exact: true })
     ).toHaveCount(0)
-    await orcaPage.getByRole('complementary').screenshot({
+    await quirkyPage.getByRole('complementary').screenshot({
       path: testInfo.outputPath(`preparing-${theme}.png`),
       animations: 'disabled'
     })
@@ -126,7 +131,7 @@ for (const theme of ['dark', 'light'] as const) {
         'Stop it from the terminal or service that started it, then retry. Connected devices will disconnect.'
       ]
     ] as const) {
-      await orcaPage.evaluate((reason) => {
+      await quirkyPage.evaluate((reason) => {
         window.__store!.setState({
           updateStatus: {
             state: 'error',
@@ -138,10 +143,12 @@ for (const theme of ['dark', 'light'] as const) {
           updateCardCollapsed: true
         })
       }, reason)
-      await orcaPage
-        .getByRole('button', { name: 'Update waiting for other Orca instances. Click to expand.' })
+      await quirkyPage
+        .getByRole('button', {
+          name: 'Update waiting for other Quirky instances. Click to expand.'
+        })
         .hover()
-      const tooltip = orcaPage.getByRole('tooltip', { name: guidance, exact: true })
+      const tooltip = quirkyPage.getByRole('tooltip', { name: guidance, exact: true })
       await expect(tooltip).toHaveText(guidance)
       const tooltipProof = testInfo.outputPath(`tooltip-${reason}-${theme}.png`)
       await tooltip.screenshot({ path: tooltipProof, animations: 'disabled' })
@@ -149,10 +156,10 @@ for (const theme of ['dark', 'light'] as const) {
         path: tooltipProof,
         contentType: 'image/png'
       })
-      await orcaPage.mouse.move(0, 0)
+      await quirkyPage.mouse.move(0, 0)
       await expect(tooltip).toBeHidden()
     }
-    await orcaPage.evaluate(async (message) => {
+    await quirkyPage.evaluate(async (message) => {
       await window.__store!.getState().updateSettingsOrThrow({ uiLanguage: 'es' })
       window.__store!.setState({
         updateCardCollapsed: false,
@@ -171,8 +178,8 @@ for (const theme of ['dark', 'light'] as const) {
         }
       })
     }, diagnostic)
-    const spanishCard = orcaPage.getByRole('complementary').filter({
-      has: orcaPage.getByRole('heading', { name: 'Tu actualización está lista', exact: true })
+    const spanishCard = quirkyPage.getByRole('complementary').filter({
+      has: quirkyPage.getByRole('heading', { name: 'Tu actualización está lista', exact: true })
     })
     await expect(spanishCard.getByText('Navegador en segundo plano', { exact: true })).toHaveCount(
       2

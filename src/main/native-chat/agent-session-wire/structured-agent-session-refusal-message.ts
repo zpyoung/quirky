@@ -2,7 +2,7 @@
  * Human-readable text for a lease refusal.
  *
  * A latched session is the one place a bare code is worst: the user is looking at a chat that will
- * not open, and `agent_session_ownership_unknown` tells them neither what Orca could not prove nor
+ * not open, and `agent_session_ownership_unknown` tells them neither what Quirky could not prove nor
  * what they can do about it. Every message here names the specific evidence that is missing and
  * the action that supplies it.
  */
@@ -24,8 +24,8 @@ function latchedMessage(record: AgentSessionRecord): string {
     return terminalOwnerRefusalMessage(record.lease)
   }
   return record.lease.ownerProcess
-    ? `Orca cannot prove that ${ownerDescription(record)} — the previous owner of this session — has exited, so it will not start a second agent on the same conversation. Quit that process and reopen this chat.`
-    : 'Orca cannot tell whether an agent started for this session before the app stopped, so it will not start a second one on the same conversation. Quit any leftover agent process for this workspace and reopen this chat.'
+    ? `Quirky cannot prove that ${ownerDescription(record)} — the previous owner of this session — has exited, so it will not start a second agent on the same conversation. Quit that process and reopen this chat.`
+    : 'Quirky cannot tell whether an agent started for this session before the app stopped, so it will not start a second one on the same conversation. Quit any leftover agent process for this workspace and reopen this chat.'
 }
 
 /**
@@ -34,9 +34,9 @@ function latchedMessage(record: AgentSessionRecord): string {
  */
 const SITUATION_MESSAGES: Partial<Record<AgentSessionAnyRefusalReason, string>> = {
   replaySuperseded: 'A newer start of this chat replaced this one. Try again.',
-  leaseMoved: 'This chat changed hands while Orca was starting it. Try again.',
+  leaseMoved: 'This chat changed hands while Quirky was starting it. Try again.',
   spawnIdentityMismatch:
-    'The agent that started was not the one Orca launched, so Orca did not use it. Try again.',
+    'The agent that started was not the one Quirky launched, so Quirky did not use it. Try again.',
   identityMismatch:
     'This chat belongs to a different workspace, agent or account. Start a new chat to continue.',
   sessionExists: 'This chat already exists. Open it to continue.',
@@ -45,7 +45,7 @@ const SITUATION_MESSAGES: Partial<Record<AgentSessionAnyRefusalReason, string>> 
     'Another chat is already working in this conversation. Open that chat to continue.',
   // Also a damaged record, which no update opens.
   recordUnreadable:
-    "Orca can't read this chat's saved state. If a newer version of Orca saved it, update Orca to open it; otherwise start a new chat."
+    "Quirky can't read this chat's saved state. If a newer version of Quirky saved it, update Quirky to open it; otherwise start a new chat."
 }
 
 /**
@@ -82,7 +82,7 @@ export function structuredAgentSessionRefusalMessage(
   if (code === 'execution_owner_reconciling') {
     return {
       message:
-        'Orca is still working out who owns this session on this machine. Reopen the chat in a moment.',
+        'Quirky is still working out who owns this session on this machine. Reopen the chat in a moment.',
       reference: { code, details: { reason: 'hostReconciling' } }
     }
   }

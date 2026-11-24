@@ -1,6 +1,6 @@
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 import type { SkillDiscoveryResult } from '../../src/shared/skills'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getStoreState, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 const CHECKLIST_TEXT = 'Onboarding checklist'
@@ -11,56 +11,56 @@ type SetupGuideFlashMonitor = {
 }
 
 test.describe('Setup guide sidebar entry', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
   test('does not flash while completed setup waits for capability readiness', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     await installBlockedCompletedCapabilityFakes(electronApp)
-    await orcaPage.reload()
-    await orcaPage.waitForFunction(() => Boolean(window.__store), null, { timeout: 30_000 })
-    await waitForSessionReady(orcaPage)
-    await seedCompletedSetupExceptCapabilityReadiness(orcaPage)
+    await quirkyPage.reload()
+    await quirkyPage.waitForFunction(() => Boolean(window.__store), null, { timeout: 30_000 })
+    await waitForSessionReady(quirkyPage)
+    await seedCompletedSetupExceptCapabilityReadiness(quirkyPage)
 
     await expect
-      .poll(async () => getStoreState<boolean>(orcaPage, 'setupGuideSidebarDismissed'), {
+      .poll(async () => getStoreState<boolean>(quirkyPage, 'setupGuideSidebarDismissed'), {
         timeout: 5_000
       })
       .toBe(false)
-    await expect(orcaPage.getByText(CHECKLIST_TEXT)).toHaveCount(0)
+    await expect(quirkyPage.getByText(CHECKLIST_TEXT)).toHaveCount(0)
 
-    await startSetupGuideFlashMonitor(orcaPage)
+    await startSetupGuideFlashMonitor(quirkyPage)
 
-    await setActiveViewForFlashProbe(orcaPage, 'tasks')
+    await setActiveViewForFlashProbe(quirkyPage, 'tasks')
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe('tasks')
-    await orcaPage.waitForTimeout(500)
+    await quirkyPage.waitForTimeout(500)
 
-    await setActiveViewForFlashProbe(orcaPage, 'automations')
+    await setActiveViewForFlashProbe(quirkyPage, 'automations')
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe('automations')
-    await orcaPage.waitForTimeout(500)
+    await quirkyPage.waitForTimeout(500)
 
-    await setActiveViewForFlashProbe(orcaPage, 'mobile')
+    await setActiveViewForFlashProbe(quirkyPage, 'mobile')
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe('mobile')
-    await orcaPage.waitForTimeout(500)
+    await quirkyPage.waitForTimeout(500)
 
-    const flashSamples = await stopSetupGuideFlashMonitor(orcaPage)
+    const flashSamples = await stopSetupGuideFlashMonitor(quirkyPage)
     expect(flashSamples, `setup guide sidebar flashed at ${flashSamples.join(', ')}`).toEqual([])
 
     // Unblock pending skill discovery IPC calls before teardown. Completion
     // after release is covered by the focused progress unit tests.
     await releaseBlockedSkillDiscovery(electronApp)
-    await orcaPage.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('orca:installed-agent-skills-changed'))
+    await quirkyPage.evaluate(() => {
+      window.dispatchEvent(new CustomEvent('quirky:installed-agent-skills-changed'))
     })
   })
 })
@@ -107,9 +107,9 @@ async function installBlockedCompletedCapabilityFakes(
       providers: ['agent-skills'],
       sourceKind: 'home',
       sourceLabel: 'E2E skill home',
-      rootPath: '/tmp/orca-e2e-skills',
-      directoryPath: `/tmp/orca-e2e-skills/${name}`,
-      skillFilePath: `/tmp/orca-e2e-skills/${name}/SKILL.md`,
+      rootPath: '/tmp/quirky-e2e-skills',
+      directoryPath: `/tmp/quirky-e2e-skills/${name}`,
+      skillFilePath: `/tmp/quirky-e2e-skills/${name}/SKILL.md`,
       installed: true,
       updatedAt: 1
     })
@@ -119,7 +119,7 @@ async function installBlockedCompletedCapabilityFakes(
       await waitForSkillDiscoveryRelease()
       return {
         skills: [
-          makeSkill('orca-cli', 'e2e-orca-cli'),
+          makeSkill('quirky-cli', 'e2e-quirky-cli'),
           makeSkill('computer-use', 'e2e-computer-use'),
           makeSkill('orchestration', 'e2e-orchestration')
         ],

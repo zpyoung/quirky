@@ -1,6 +1,6 @@
 import { Menu, Tray, nativeImage, nativeTheme, type NativeImage } from 'electron'
-import menuBarIconPath from '../../../resources/tray/orca-menu-barTemplate.png?asset&asarUnpack'
-import menuBarIconRetinaPath from '../../../resources/tray/orca-menu-barTemplate@2x.png?asset&asarUnpack'
+import menuBarIconPath from '../../../resources/tray/quirky-menu-barTemplate.png?asset&asarUnpack'
+import menuBarIconRetinaPath from '../../../resources/tray/quirky-menu-barTemplate@2x.png?asset&asarUnpack'
 import { deferAppKitSceneMutation } from '../appkit-scene-mutation'
 import { createAppIconImage } from '../app-icon'
 import { translateMain } from '../i18n/main-i18n'
@@ -20,7 +20,7 @@ export type SystemTrayOptions = {
   onOpenSettings: () => void
   /** Run the existing user-initiated update check. */
   onCheckForUpdates: () => void
-  /** Quit Orca for real (caller must set the quitting latch before quitting). */
+  /** Quit Quirky for real (caller must set the quitting latch before quitting). */
   onQuit: () => void
 }
 
@@ -48,9 +48,9 @@ let nativeThemeUpdatedListener: (() => void) | null = null
 // tooltip carries the worktree/branch label so hovering tells them apart.
 function baseTooltip(): string {
   if (!devIndicator) {
-    return 'Orca'
+    return 'Quirky'
   }
-  return devIndicator.label ? `Orca DEV (${devIndicator.label})` : 'Orca DEV'
+  return devIndicator.label ? `Quirky DEV (${devIndicator.label})` : 'Quirky DEV'
 }
 
 // Why: on Windows the notification area expects a 16px icon; the app icon PNG
@@ -89,7 +89,7 @@ function applyTrayImage(): void {
         tray.setToolTip(
           devIndicator
             ? `${baseTooltip()} - ${translateMain('tray.activityWaitingSuffix', 'activity waiting')}`
-            : translateMain('tray.activityWaiting', 'Orca - activity waiting')
+            : translateMain('tray.activityWaiting', 'Quirky - activity waiting')
         )
         return
       } catch (error) {
@@ -279,7 +279,7 @@ function buildTrayMenu(opts: SystemTrayOptions): Menu {
         ] satisfies Electron.MenuItemConstructorOptions[])
       : []),
     {
-      label: translateMain('tray.openOrca', 'Open Orca'),
+      label: translateMain('tray.openQuirky', 'Open Quirky'),
       click: safeMenuAction(() => opts.onOpen())
     },
     { type: 'separator' },

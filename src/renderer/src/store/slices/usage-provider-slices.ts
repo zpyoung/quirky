@@ -286,7 +286,7 @@ export const createClaudeUsageSlice = createUsageProviderSlice<
 >({
   prefix: 'claude',
   name: 'Claude',
-  initialScope: 'orca',
+  initialScope: 'quirky',
   initialRange: '30d',
   getApi: () => window.api.claudeUsage,
   hasCachedData: (state) => state.hasAnyClaudeData
@@ -295,7 +295,7 @@ export const createClaudeUsageSlice = createUsageProviderSlice<
 export const createCodexUsageSlice = createUsageProviderSlice<'codex', 'Codex', CodexUsageTypes>({
   prefix: 'codex',
   name: 'Codex',
-  initialScope: 'orca',
+  initialScope: 'quirky',
   initialRange: '30d',
   getApi: () => window.api.codexUsage,
   hasCachedData: (state) => state.hasAnyCodexData
@@ -308,7 +308,7 @@ export const createOpenCodeUsageSlice = createUsageProviderSlice<
 >({
   prefix: 'openCode',
   name: 'OpenCode',
-  initialScope: 'orca',
+  initialScope: 'quirky',
   initialRange: '30d',
   getApi: () => window.api.openCodeUsage,
   hasCachedData: (state) => state.hasAnyOpenCodeData
@@ -317,7 +317,7 @@ export const createOpenCodeUsageSlice = createUsageProviderSlice<
 export const createMuseUsageSlice = createUsageProviderSlice<'muse', 'Muse', MuseUsageTypes>({
   prefix: 'muse',
   name: 'Muse',
-  initialScope: 'orca',
+  initialScope: 'quirky',
   initialRange: '30d',
   getApi: () => window.api.museUsage,
   hasCachedData: (state) => state.hasAnyMuseData

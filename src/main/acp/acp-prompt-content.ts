@@ -34,7 +34,7 @@ export const ACP_PROMPT_IMAGE_MAX_BYTES = Math.floor((ACP_PROMPT_LINE_BUDGET * 3
 const MAX_IMAGE_COUNT = 20
 const READ_TIMEOUT_MS = 15_000
 
-/** Why Orca did not send a message; never the agent's refusal. */
+/** Why Quirky did not send a message; never the agent's refusal. */
 export class AcpPromptContentError extends Error {
   constructor(readonly failure: SubmissionRejectionFact) {
     super(`ACP prompt refused: ${failure.kind}`)
@@ -104,7 +104,7 @@ async function imageBlock(
   return { block: { type: 'image', mimeType, data: data.toString('base64') }, bytes: data.length }
 }
 
-/** The prompt for `body`; throws `AcpPromptContentError` for what Orca will not send. */
+/** The prompt for `body`; throws `AcpPromptContentError` for what Quirky will not send. */
 export async function acpPromptBlocks(
   body: AgentJournalMessageItem,
   acceptsImages: boolean
@@ -143,7 +143,7 @@ function isWithheldCommand(body: AgentJournalMessageItem, withheld: readonly str
   return text.startsWith('/') && withheld.includes(text.slice(1))
 }
 
-/** The prompt for `body` to `session`'s agent, or Orca's refusal of it in words that name the
+/** The prompt for `body` to `session`'s agent, or Quirky's refusal of it in words that name the
  *  agent. Images go only where `acpSessionAcceptsImages` allows them. */
 export async function acpDispatchPrompt(
   body: AgentJournalMessageItem,

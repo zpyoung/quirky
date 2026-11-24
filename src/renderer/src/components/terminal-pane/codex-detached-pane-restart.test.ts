@@ -38,7 +38,7 @@ function seedQueuedRestart(
   useAppStore.setState({
     settings: { activeRuntimeEnvironmentId: null } as never,
     worktreesByRepo: {
-      repo1: [{ id: 'wt1', path: '/Users/dev/code/orca' }]
+      repo1: [{ id: 'wt1', path: '/Users/dev/code/quirky' }]
     } as never,
     tabsByWorktree: {
       wt1: [
@@ -115,7 +115,7 @@ describe('codex detached pane restart executor', () => {
       expect.objectContaining({
         cols: 80,
         rows: 24,
-        cwd: '/Users/dev/code/orca',
+        cwd: '/Users/dev/code/quirky',
         command: 'codex',
         startupCommandDelivery: 'shell-ready',
         launchAgent: 'codex',
@@ -131,10 +131,10 @@ describe('codex detached pane restart executor', () => {
     expect(window.api.pty.getSize).not.toHaveBeenCalled()
     expect(vi.mocked(window.api.pty.spawn).mock.calls[0]?.[0]?.env).toEqual(
       expect.objectContaining({
-        ORCA_PANE_KEY: `tab-1:${LEAF_ID}`,
-        ORCA_TAB_ID: 'tab-1',
-        ORCA_WORKTREE_ID: 'wt1',
-        ORCA_WORKSPACE_ID: 'wt1'
+        QUIRKY_PANE_KEY: `tab-1:${LEAF_ID}`,
+        QUIRKY_TAB_ID: 'tab-1',
+        QUIRKY_WORKTREE_ID: 'wt1',
+        QUIRKY_WORKSPACE_ID: 'wt1'
       })
     )
     // Main stops the replaced PTY inside the spawn; a renderer kill would race its adoption.

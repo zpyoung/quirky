@@ -13,13 +13,13 @@ const { verifierEntry, compareVerifier } = require('./verifier.cjs')
 const { root, sourcePath, sourceRelativePath, baseline, candidate, windowCandidate } =
   require('./sources.cjs')()
 const { buildSync } = createRequire(path.join(root, 'package.json'))('esbuild')
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1' || !global.gc) {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1 and node --expose-gc.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1' || !global.gc) {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1 and node --expose-gc.')
 }
 const hash = (text) => createHash('sha256').update(text).digest('hex')
-const verifierPath = 'src/main/runtime/orca-runtime-stop-structured-session-process.ts'
+const verifierPath = 'src/main/runtime/quirky-runtime-stop-structured-session-process.ts'
 const verifierSource = fs.readFileSync(path.join(root, verifierPath), 'utf8')
-const scratch = fs.mkdtempSync(path.join(tmpdir(), 'orca-claude-branch-streaming-'))
+const scratch = fs.mkdtempSync(path.join(tmpdir(), 'quirky-claude-branch-streaming-'))
 const modulePaths = []
 
 async function capture(action) {

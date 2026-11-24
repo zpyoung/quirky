@@ -9,7 +9,7 @@ const {
 /**
  * Ship a dev install's per-ABI native build as build/Release.
  *
- * A package dir shared across worktrees (pnpm's global virtual store) holds Orca's source build
+ * A package dir shared across worktrees (pnpm's global virtual store) holds Quirky's source build
  * in build/<entry> rather than build/Release; see scripts/native-build-entry.cjs. Packaged
  * consumers (daemon relocation, the macOS terminal host, the job-ownership gate) all read
  * build/Release, so the packaged copy gets exactly the layout a CI install produces.

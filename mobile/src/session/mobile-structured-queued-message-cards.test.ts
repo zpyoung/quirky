@@ -253,7 +253,7 @@ describe('mobileQueuedMessageCards', () => {
       [draft({ messageId: 'a', ...returnedAs(agentSessionFailureFact('hostRestarted')) })],
       []
     )
-    expect(card?.caption).toBe('Orca restarted before this message was sent.')
+    expect(card?.caption).toBe('Quirky restarted before this message was sent.')
   })
 
   it("keeps a provider's log-only detail off the card", () => {

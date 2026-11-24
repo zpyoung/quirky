@@ -57,7 +57,7 @@ vi.mock('./cli-chat-resume-run', () => ({
 
 const CHAT_SUBJECT = {
   kind: 'chat',
-  sessionId: 'orca-chat-1',
+  sessionId: 'quirky-chat-1',
   workspaceId: 'wt-1',
   request: { scopePaths: ['/repo/wt'], executionHostScope: 'local', sessionLimit: 250 }
 }
@@ -113,7 +113,7 @@ describe('TabSessionSurfaceSwitchMenuItems', () => {
 
   it('offers the native chat action immediately while History never answers', async () => {
     mocks.subject = CHAT_SUBJECT
-    renderItemsNow('orca-chat-1')
+    renderItemsNow('quirky-chat-1')
     expect(mocks.listSessions).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('menuitem', { name: 'Continue with Terminal Agent' }))
     expect(mocks.runNativeChatCliFork).toHaveBeenCalledWith(
@@ -149,7 +149,7 @@ it('keeps an accepted native action visible with shared disabled spinner feedbac
     mocks.pending = true
     mocks.pendingListeners.forEach((listener) => listener())
   })
-  await renderItems('orca-chat-1')
+  await renderItems('quirky-chat-1')
   fireEvent.click(screen.getByRole('menuitem', { name: 'Continue with Terminal Agent' }))
   const item = screen.getByRole('menuitem', { name: 'Continue with Terminal Agent' })
   expect(item.getAttribute('aria-busy')).toBe('true')

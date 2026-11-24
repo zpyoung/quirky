@@ -243,7 +243,7 @@ export function defineSidebarListGoldens(goldenDir: string): void {
         visibleWorkspaceHostIds: ['local', 'ssh:gpu-vm', 'runtime:env-1']
       },
       'single-host-scope': { workspaceHostScope: 'ssh:gpu-vm' },
-      'repo-filter': { filterRepoIds: ['orca', 'lab'] },
+      'repo-filter': { filterRepoIds: ['quirky', 'lab'] },
       'hide-sleeping': { showSleepingWorkspaces: false, ...goldenLiveTerminalState() },
       'hide-default-branch': { hideDefaultBranchWorkspace: true },
       'new-external-inbox': goldenInboxState()
@@ -318,8 +318,8 @@ export function defineSidebarListGoldens(goldenDir: string): void {
       const repoMap = getRepoMapFromState(fullState)
       const options = buildVisibleWorktreeOptionsFromState(fullState, repoMap)
       const lines = [
-        [GOLDEN_WORKTREE_IDS.orcaFeatD, GOLDEN_WORKTREE_IDS.orcaFeatA],
-        [GOLDEN_WORKTREE_IDS.orcaFeatA],
+        [GOLDEN_WORKTREE_IDS.quirkyFeatD, GOLDEN_WORKTREE_IDS.quirkyFeatA],
+        [GOLDEN_WORKTREE_IDS.quirkyFeatA],
         []
       ].map(
         (sortedIds) =>

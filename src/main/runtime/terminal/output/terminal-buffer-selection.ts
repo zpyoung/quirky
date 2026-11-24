@@ -1,9 +1,9 @@
-import { OrcaRuntimeWithCreatePtyHeadlessTerminalState } from './headless-terminal-state'
+import { QuirkyRuntimeWithCreatePtyHeadlessTerminalState } from './headless-terminal-state'
 import type { TerminalOscLinkRange } from '../../../../shared/terminal-osc-link-ranges'
 import type { PtyProviderBufferSnapshot } from '../../../providers/pty-provider-contract'
 import { withTimeout } from '../../runtime-async-boundaries'
 
-export abstract class OrcaRuntimeWithSerializeTerminalBufferFromAvailableState extends OrcaRuntimeWithCreatePtyHeadlessTerminalState {
+export abstract class QuirkyRuntimeWithSerializeTerminalBufferFromAvailableState extends QuirkyRuntimeWithCreatePtyHeadlessTerminalState {
   protected abstract captureProviderTerminalBuffer(
     ptyId: string,
     opts: { scrollbackRows?: number },

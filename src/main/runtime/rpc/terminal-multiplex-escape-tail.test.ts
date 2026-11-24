@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
 import {
@@ -19,11 +19,11 @@ import {
 // SnapshotStart JSON frame, the tail is lost and the next live chunk renders
 // literally ("colors/garbage around what I type").
 
-function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
+function stubRuntime(overrides: Partial<QuirkyRuntimeService> = {}): QuirkyRuntimeService {
   return {
     getRuntimeId: () => 'test-runtime',
     ...overrides
-  } as OrcaRuntimeService
+  } as QuirkyRuntimeService
 }
 
 function makeRequest(method: string, params?: unknown): RpcRequest {

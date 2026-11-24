@@ -36,7 +36,7 @@ export async function isUnregisteredRemovalLeftover(
 /** The refusal when the path no longer holds the removed checkout's own leftover. */
 export function differentCheckoutAtPathError(worktreePath: string): Error {
   return new Error(
-    `A different checkout is now at ${worktreePath}; Orca left it in place. Delete it again to remove it.`
+    `A different checkout is now at ${worktreePath}; Quirky left it in place. Delete it again to remove it.`
   )
 }
 
@@ -51,7 +51,7 @@ export async function isCheckoutRegistered(record: {
 }
 
 /**
- * The refusal for a folder Git no longer registers: Orca deletes a checkout only through Git, so
+ * The refusal for a folder Git no longer registers: Quirky deletes a checkout only through Git, so
  * the user removes the folder, and the listing drops the workspace once it is gone.
  */
 export function unregisteredFolderRefusal(worktreePath: string): Error {

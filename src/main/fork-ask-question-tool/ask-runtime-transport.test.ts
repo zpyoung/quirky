@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { installFakeAppEnvironment } from '../../../config/scripts/vitest-host-ports-setup'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { readRuntimeMetadata } from '../runtime/runtime-metadata'
-import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
+import { QuirkyRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { classifyRuntimeLongPoll } from '../runtime/runtime-rpc/runtime-rpc-long-poll'
 import { openFramedSession, waitFor } from '../runtime/runtime-rpc-test-harness'
 import type { AskDb } from './ask-db'
@@ -23,11 +23,11 @@ function waiterCount(registry: AskRegistry, askId: string): number {
 
 describe('ask.wait runtime transport', () => {
   let userDataPath: string
-  let servers: OrcaRuntimeRpcServer[]
+  let servers: QuirkyRuntimeRpcServer[]
   let databases: AskDb[]
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-ask-runtime-transport-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-ask-runtime-transport-'))
     installFakeAppEnvironment({ getPath: () => userDataPath })
     servers = []
     databases = []
@@ -49,10 +49,10 @@ describe('ask.wait runtime transport', () => {
     endpoint: string
     authToken: string
   }> {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const { registry, db } = runtime.getAskServices()
     databases.push(db)
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, keepaliveIntervalMs })
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, keepaliveIntervalMs })
     servers.push(server)
     await server.start()
     const metadata = readRuntimeMetadata(userDataPath)

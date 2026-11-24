@@ -167,7 +167,7 @@ describe('NativeChatImageAttachmentPreview', () => {
         .hasAttribute('data-native-chat-copy-image-src')
     ).toBe(true)
 
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     renderPreview({ id: 'a3', path: '/tmp/shot.png' })
     expect(
       screen
@@ -209,7 +209,7 @@ describe('NativeChatImageAttachmentPreview', () => {
     render(
       <NativeChatImageAttachmentPreview
         number={1}
-        attachment={{ id: 'm1', path: '', unavailableName: 'orca-paste-1-ab.png' }}
+        attachment={{ id: 'm1', path: '', unavailableName: 'quirky-paste-1-ab.png' }}
         onRemove={onRemove}
       />
     )

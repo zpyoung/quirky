@@ -27,7 +27,7 @@ describe('remote server manual update help', () => {
         ...entry,
         support: { installMode: 'interactive', automatic: false, reason: 'updater-unavailable' }
       })
-    ).toBe('Remote updates are unavailable for this server. Update Orca on the server host.')
+    ).toBe('Remote updates are unavailable for this server. Update Quirky on the server host.')
   })
 
   it('preserves the specific instructions for unsupported installs and development builds', () => {

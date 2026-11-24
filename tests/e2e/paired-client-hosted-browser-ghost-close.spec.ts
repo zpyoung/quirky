@@ -1,7 +1,7 @@
 import { readdirSync, existsSync } from 'node:fs'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { readHostBrowserPageIds } from './helpers/host-session-tabs'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './helpers/electron-process-shutdown'
@@ -87,7 +87,7 @@ function forgetPersistedClientHostedPages(userDataDir: string): number {
  * What this pins is the CLIENT-side fallback: the X exits through session.tabs.close, which throws
  * tab_not_found before browserTabClose is ever reached, so the runtime's own ghost retirement never
  * runs here. Do not simplify the client fallback on the strength of this spec -- the server-side
- * retirement is covered by orca-runtime-browser-ghost-session-row-close.test.ts, and neither
+ * retirement is covered by quirky-runtime-browser-ghost-session-row-close.test.ts, and neither
  * covers the other.
  */
 test('closes a restored client-hosted row whose runtime has no record of it', async ({

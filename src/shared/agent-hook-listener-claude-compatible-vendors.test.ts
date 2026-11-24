@@ -300,7 +300,7 @@ describe('shared agent-hook-listener', () => {
       model_provider: 'meta'
     }
     // Why: this id is a real capture; keep the lookup off the developer's own Muse sessions.
-    vi.stubEnv('XDG_DATA_HOME', '/tmp/orca-muse-vendors-test-no-data')
+    vi.stubEnv('XDG_DATA_HOME', '/tmp/quirky-muse-vendors-test-no-data')
     const bash = { command: 'ls -la' }
     const submitted = normalizeAndAccept(state, 'muse', {
       ...base,

@@ -189,8 +189,8 @@ export async function acquireCodexStructuredSession(input: {
               sessionId,
               connection: acquisition.connection,
               error,
-              // The end of a close Orca began, even one that came back unproven before it.
-              ...(exit?.expected ? { closedByOrca: true as const } : {}),
+              // The end of a close Quirky began, even one that came back unproven before it.
+              ...(exit?.expected ? { closedByQuirky: true as const } : {}),
               ...(deps.logger ? { logger: deps.logger } : {}),
               prompts: acquisition.prompts,
               ...(deps.onEvent ? { onEvent: deps.onEvent } : {})

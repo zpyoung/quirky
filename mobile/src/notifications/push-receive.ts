@@ -4,7 +4,7 @@ import { shouldSuppressNotificationWhileViewing } from './notification-viewing-p
 import { loadPushNotificationsEnabled } from '../storage/preferences'
 import { loadHostCatalog } from '../transport/host-store'
 import { resolveHostIdForFingerprint } from './push-host-fingerprint'
-import { readOrcaPushPayload, type OrcaPushPayload } from './push-payload'
+import { readQuirkyPushPayload, type QuirkyPushPayload } from './push-payload'
 import type { Notification, NotificationBehavior } from 'expo-notifications'
 import { readNativeNotificationData } from './native-notification-data'
 import { loadNotificationDeliveryPreferences } from './notification-delivery-preferences'
@@ -12,7 +12,7 @@ import { loadNotificationDeliveryPreferences } from './notification-delivery-pre
 const RECENT_FOREGROUND_PUSH_CAP = 512
 const recentForegroundPushes = new Set<string>()
 
-function claimForegroundPush(payload: OrcaPushPayload): boolean {
+function claimForegroundPush(payload: QuirkyPushPayload): boolean {
   const seq = payload.notificationSeq
   if (
     !payload.notificationEpoch ||
@@ -49,7 +49,7 @@ export async function foregroundNotificationBehavior(
   notification: Pick<Notification, 'request'>
 ): Promise<NotificationBehavior> {
   const data = readNativeNotificationData(notification.request)
-  const payload = readOrcaPushPayload(data)
+  const payload = readQuirkyPushPayload(data)
   const preferences = await loadNotificationDeliveryPreferences()
   // Unrecognized notifications retain normal behavior; recognized pushes fail closed
   // when consent, host, viewing, or dismissal checks cannot complete.
@@ -66,18 +66,18 @@ export async function foregroundNotificationBehavior(
   }
 }
 
-export async function canPresentForegroundPush(payload: OrcaPushPayload): Promise<boolean> {
+export async function canPresentForegroundPush(payload: QuirkyPushPayload): Promise<boolean> {
   const preferences = await loadNotificationDeliveryPreferences()
   return !(await shouldSuppressForegroundPush(payload, preferences.suppressWhileViewing))
 }
 
-async function resolvePushHostId(payload: OrcaPushPayload): Promise<string | null> {
+async function resolvePushHostId(payload: QuirkyPushPayload): Promise<string | null> {
   const hosts = await loadHostCatalog().catch(() => [])
   return resolveHostIdForFingerprint(payload.hostFingerprint, hosts)
 }
 
 async function shouldSuppressForegroundPush(
-  payload: OrcaPushPayload | null,
+  payload: QuirkyPushPayload | null,
   suppressWhileViewing: boolean
 ): Promise<boolean> {
   if (!payload) {
@@ -127,7 +127,7 @@ export function isRemotePushTrigger(trigger: unknown): boolean {
  *
  * Why null and not the raw data when the fingerprint does not resolve: a gateway
  * payload is attacker-adjacent input, and passing it on would let a stray `hostId`
- * beside the `orca` block route a tap at a host the push never named. A remote
+ * beside the `quirky` block route a tap at a host the push never named. A remote
  * push with no fingerprint at all is the same input minus the block, so it is
  * unrouted too rather than handed to the local path as if this app scheduled it.
  */
@@ -136,7 +136,7 @@ export function pushNotificationRouteData(
   hosts: readonly { readonly id: string; readonly publicKeyB64: string }[],
   remote = false
 ): unknown {
-  const payload = readOrcaPushPayload(data)
+  const payload = readQuirkyPushPayload(data)
   if (!payload) {
     return remote ? null : data
   }

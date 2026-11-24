@@ -3,7 +3,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { VerifiedCodexResumeSource } from '../codex/codex-session-resume-preparation'
 
 /**
- * Turning Codex off in the per-agent hook settings removes Orca's Codex hook
+ * Turning Codex off in the per-agent hook settings removes Quirky's Codex hook
  * entry. Launch prep and session resume must read that same opt-out, or the
  * next Codex launch writes the entry straight back.
  */
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('electron', () => ({ app: { getPath: vi.fn(() => '/tmp/orca-user-data') } }))
+vi.mock('electron', () => ({ app: { getPath: vi.fn(() => '/tmp/quirky-user-data') } }))
 vi.mock('../agent-trust-presets', () => ({ markCodexProjectTrusted: vi.fn(async () => {}) }))
 vi.mock('../codex/hook-service', () => ({
   codexHookService: {
@@ -44,7 +44,7 @@ vi.mock(
 vi.mock('../wsl', () => ({ getDefaultWslDistro: () => 'Ubuntu' }))
 vi.mock('../codex/codex-home-paths', () => ({
   getSystemCodexHomePath: () => SYSTEM_HOME,
-  getOrcaManagedCodexHomePath: () => '/managed/.codex'
+  getQuirkyManagedCodexHomePath: () => '/managed/.codex'
 }))
 vi.mock('../codex/codex-session-resume-preparation', () => ({
   prepareCodexSessionResume: mocks.prepareCodexSessionResume

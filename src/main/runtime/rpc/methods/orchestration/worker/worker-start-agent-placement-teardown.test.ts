@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentLaunchModeReceipt } from '../../../../../agent-launch/agent-launch-mode'
 import type { AgentLaunchExecution } from '../../../../../agent-launch/agent-launch-executor'
 import { setStructuredAgentSessionHost } from '../../../../../native-chat/agent-session-wire/structured-agent-session-registry'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type * as StructuredWorkerSessionModule from '../../orchestration-structured-worker-session'
 import { structuredWorkerIdentities } from '../../../../structured-worker-identity'
@@ -77,7 +77,7 @@ describe('a worker launch that throws after its session exists', () => {
     await expect(
       placeWorkerAgent({
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the placement calls only the methods faked here.
-        runtime: runtime as unknown as OrcaRuntimeService,
+        runtime: runtime as unknown as QuirkyRuntimeService,
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the placement records only worker stages.
         db: db as unknown as OrchestrationDb,
         dispatchId: 'ctx_1',

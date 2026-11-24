@@ -47,7 +47,7 @@ type RemoveOptions = {
 export type StartupManagedHookAction = 'install' | 'skip'
 
 // Why never 'remove': this reads THIS instance's settings, but the managed hook files are
-// user-global (~/.claude/settings.json, ~/.cursor/hooks.json). A second Orca profile with the off
+// user-global (~/.claude/settings.json, ~/.cursor/hooks.json). A second Quirky profile with the off
 // switch set would delete the hooks every other instance depends on, and Cursor — the one agent
 // with no title-derived status fallback — then goes silently idle (STA-5679). Honoring the off
 // switch only requires skipping the install; explicit removal stays on the Settings toggle.
@@ -118,8 +118,8 @@ async function runInstaller(
 }
 
 // Why (#11549 aftermath): a CLI that falls off PATH keeps its user-wide config invoking
-// Orca's script, but the presence gate below then skips install() forever, freezing the
-// script at whatever Orca generated last. Existing scripts are Orca-owned, so bring them
+// Quirky's script, but the presence gate below then skips install() forever, freezing the
+// script at whatever Quirky generated last. Existing scripts are Quirky-owned, so bring them
 // current before any gating; creating new ones remains install()'s presence-gated job.
 async function refreshExistingManagedScripts(options: InstallOptions): Promise<void> {
   const allowed = options.agents ? new Set(options.agents) : null

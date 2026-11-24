@@ -19,7 +19,7 @@ export type SeveredDaemonRestartResult =
    *  prove the process is the one the caller saw, so nothing was killed. */
   | { status: 'refused'; reason: 'not-severed' | 'replaced' | 'unverifiable' }
 
-/** Supplied by the desktop daemon provider; hosts without one (orcad) report nothing severed. */
+/** Supplied by the desktop daemon provider; hosts without one (quirkyd) report nothing severed. */
 export type SeveredDaemonController = {
   countLiveSessions(): Promise<number | null>
   restart(expected: SeveredDaemonIncarnation): Promise<SeveredDaemonRestartResult>

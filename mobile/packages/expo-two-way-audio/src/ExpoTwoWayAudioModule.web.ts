@@ -33,7 +33,7 @@ const deniedMicrophonePermission: PermissionResponse = {
 const noop = () => undefined
 
 const ExpoTwoWayAudioModule: ExpoTwoWayAudioWebModule = {
-  // Why: this is what a browser outside the Orca shell can honestly say. Dictation on the page no
+  // Why: this is what a browser outside the Quirky shell can honestly say. Dictation on the page no
   // longer comes through here — `src/platform/dictation-capture.web.ts` asks the shell for the
   // microphone over `native.audio.start|read|stop`, so the only importer of this package is the
   // native half of that seam. What is left is the QA web build, which has no shell to ask.

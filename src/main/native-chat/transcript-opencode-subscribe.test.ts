@@ -45,7 +45,7 @@ function watchFixture(
   initialLimit = 300
 ) {
   vi.useFakeTimers()
-  const root = mkdtempSync(join(tmpdir(), 'orca-opencode-watch-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-opencode-watch-'))
   const path = join(root, 'opencode.db')
   const db = new Database(path)
   db.exec(

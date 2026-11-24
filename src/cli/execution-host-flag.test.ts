@@ -4,7 +4,7 @@ const { listEnvironmentsMock, resolveEnvironmentMock, getDefaultUserDataPathMock
   () => ({
     listEnvironmentsMock: vi.fn(),
     resolveEnvironmentMock: vi.fn(),
-    getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data')
+    getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data')
   })
 )
 
@@ -70,7 +70,7 @@ describe('parseHostFlag', () => {
     })
   })
 
-  // Why: `orca host list` prints the alias, so the alias is what gets typed. Rejecting it sent
+  // Why: `quirky host list` prints the alias, so the alias is what gets typed. Rejecting it sent
   // people hunting for a machine-generated id the listing showed in a different column.
   it('carries an unprefixed host name through as an alias', () => {
     expect(parseHostFlag(flags({ host: 'trader-local' }))).toEqual({
@@ -108,7 +108,7 @@ describe('resolveHostFlagEnvironmentId', () => {
 
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-missing' }), NO_SELECTION)
-    ).rejects.toThrow('no paired Orca server is named or has id env-missing')
+    ).rejects.toThrow('no paired Quirky server is named or has id env-missing')
   })
 
   // Why: the name is what a person or agent actually knows; requiring the raw uuid made the
@@ -136,7 +136,7 @@ describe('resolveHostFlagEnvironmentId', () => {
       resolveHostFlagEnvironmentId(flags({ host: 'runtime:env-1' }), {
         listSshTargets: listSshTargetsMock,
         verifySshTargets: listSshTargetsMock,
-        pairingCode: 'orca://pair?x',
+        pairingCode: 'quirky://pair?x',
         environmentSelector: null
       })
     ).rejects.toThrow('not both')
@@ -153,10 +153,10 @@ describe('resolveHostFlagEnvironmentId', () => {
         pairingCode: null,
         environmentSelector: { value: 'other', label: '--environment' }
       })
-    ).rejects.toThrow('name different Orca servers')
+    ).rejects.toThrow('name different Quirky servers')
   })
 
-  it('names the ambient variable when ORCA_ENVIRONMENT is the conflicting selector', async () => {
+  it('names the ambient variable when QUIRKY_ENVIRONMENT is the conflicting selector', async () => {
     listEnvironmentsMock.mockReturnValue([environment('env-1')])
     resolveEnvironmentMock.mockReturnValue(environment('env-2'))
 
@@ -165,9 +165,9 @@ describe('resolveHostFlagEnvironmentId', () => {
         listSshTargets: listSshTargetsMock,
         verifySshTargets: listSshTargetsMock,
         pairingCode: null,
-        environmentSelector: { value: 'staging', label: 'ORCA_ENVIRONMENT' }
+        environmentSelector: { value: 'staging', label: 'QUIRKY_ENVIRONMENT' }
       })
-    ).rejects.toThrow('ORCA_ENVIRONMENT staging name different Orca servers')
+    ).rejects.toThrow('QUIRKY_ENVIRONMENT staging name different Quirky servers')
   })
 
   it('hands an agent the known environment ids to retry with', async () => {
@@ -181,7 +181,7 @@ describe('resolveHostFlagEnvironmentId', () => {
     })
   })
 
-  it('accepts ORCA_ENVIRONMENT naming the runtime host in another case', async () => {
+  it('accepts QUIRKY_ENVIRONMENT naming the runtime host in another case', async () => {
     listEnvironmentsMock.mockReturnValue([environment('env-1', 'Build')])
     resolveEnvironmentMock.mockImplementation(() => {
       throw new Error('Unknown environment: build')
@@ -192,7 +192,7 @@ describe('resolveHostFlagEnvironmentId', () => {
         listSshTargets: listSshTargetsMock,
         verifySshTargets: listSshTargetsMock,
         pairingCode: null,
-        environmentSelector: { value: 'build', label: 'ORCA_ENVIRONMENT' }
+        environmentSelector: { value: 'build', label: 'QUIRKY_ENVIRONMENT' }
       })
     ).resolves.toBe('env-1')
     resolveEnvironmentMock.mockReset()
@@ -213,7 +213,7 @@ describe('resolveHostFlagEnvironmentId', () => {
   })
 })
 
-// Why: the reported failure. `orca host list` shows `trader-local`, so `--host trader-local` is
+// Why: the reported failure. `quirky host list` shows `trader-local`, so `--host trader-local` is
 // what gets typed, and only the machine-generated `ssh:ssh-1783599077486-fyasux` was accepted.
 describe('unprefixed --host aliases', () => {
   function clientWithTargets(targets: { id: string; label: string }[]): RuntimeClient {
@@ -311,7 +311,7 @@ describe('unprefixed --host aliases', () => {
 
     await expect(
       resolveHostFlagEnvironmentId(flags({ host: 'awin' }), NO_SELECTION)
-    ).rejects.toThrow('Ambiguous Orca server in --host awin')
+    ).rejects.toThrow('Ambiguous Quirky server in --host awin')
   })
 
   it('refuses to route an alias to a paired server when SSH targets cannot be read', async () => {
@@ -329,7 +329,7 @@ describe('unprefixed --host aliases', () => {
     })
   })
 
-  // Why: `orca host list` prints `this machine` as the local row's name, with a space.
+  // Why: `quirky host list` prints `this machine` as the local row's name, with a space.
   it('resolves the local row name to --host local', async () => {
     listEnvironmentsMock.mockReturnValue([environment('env-1', 'gpu')])
     await expect(
@@ -483,7 +483,7 @@ describe('resolveEnvironmentSelectorForStore', () => {
   })
 
   // Why: the store matches names exactly, so a loosely matched name has to leave here as the id;
-  // an exact one stays as typed, which `orca status` shows as the target.
+  // an exact one stays as typed, which `quirky status` shows as the target.
   it('hands back the id for a name typed in another case or quoted', async () => {
     listEnvironmentsMock.mockReturnValue([environment('env-1', 'Build')])
 
@@ -516,7 +516,7 @@ describe('resolveEnvironmentSelectorForStore', () => {
     listSshTargetsMock.mockResolvedValue([])
 
     await expect(resolveEnvironmentSelectorForStore('nowhere', listSshTargetsMock)).rejects.toThrow(
-      'no paired Orca server is named or has id nowhere'
+      'no paired Quirky server is named or has id nowhere'
     )
   })
 })

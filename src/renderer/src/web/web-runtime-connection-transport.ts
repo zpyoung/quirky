@@ -90,8 +90,8 @@ export class WebRuntimeConnectionTransport {
   close(options: { notifySubscriptions?: boolean } = {}): void {
     this.intentionallyClosed = true
     this.clearTimers()
-    this.requestRegistry.rejectAll('Remote Orca runtime connection closed.')
-    this.connectionWaiters.rejectAll(new Error('Remote Orca runtime connection closed.'))
+    this.requestRegistry.rejectAll('Remote Quirky runtime connection closed.')
+    this.connectionWaiters.rejectAll(new Error('Remote Quirky runtime connection closed.'))
     this.subscriptionRegistry.close(options.notifySubscriptions ?? true)
     this.ws?.close()
     this.ws = null
@@ -163,7 +163,7 @@ export class WebRuntimeConnectionTransport {
     this.timers.clear('connect')
     this.timers.clear('handshake')
     this.heartbeat.clear()
-    this.requestRegistry.rejectAll('Remote Orca runtime connection interrupted.')
+    this.requestRegistry.rejectAll('Remote Quirky runtime connection interrupted.')
     this.subscriptionRegistry.handleInterrupted()
     if (this.intentionallyClosed || this.state === 'auth-failed') {
       this.setState(this.state === 'auth-failed' ? 'auth-failed' : 'disconnected')

@@ -25,7 +25,7 @@ const MEMBER =
 /** `Class.param` first parameters whose id has no host twin, with the reason. */
 export const NOT_HOST_TWINNED_PARAMS = new Map([
   ['AutomationPersistence.automationId', 'automation ids are minted UUIDs'],
-  ['OrcadSourceExportPersistence.targetId', 'the id names the host itself'],
+  ['QuirkydSourceExportPersistence.targetId', 'the id names the host itself'],
   ['RemoteLayoutSnapshotPersistence.environmentId', 'the id names the host itself'],
   ['SessionHostPartitionOperations.hostId', 'the id names the host itself'],
   ['SshLeaseRecoveryOperations.targetId', 'the id names the host itself'],
@@ -33,7 +33,7 @@ export const NOT_HOST_TWINNED_PARAMS = new Map([
 ])
 
 // The store keeps one row per id: minted UUIDs, de-duplicated on load, and a conflicting
-// migration import is refused (orcad-catalog-row-identity.ts `selectNewRows`).
+// migration import is refused (quirkyd-catalog-row-identity.ts `selectNewRows`).
 const UNIQUE_GROUP_ID = 'group ids are minted UUIDs, one row per id in the store'
 const UNIQUE_FOLDER_ID = 'folder workspace ids are minted UUIDs, one row per id in the store'
 
@@ -47,7 +47,7 @@ export const NOT_HOST_TWINNED = new Map([
     'acts only on a row no host stamped; it refuses a stamped one'
   ],
   [
-    'OrcadMigrationBlobInstallPersistence.installDeferredOrcadMigrationShellHistory',
+    'QuirkydMigrationBlobInstallPersistence.installDeferredQuirkydMigrationShellHistory',
     'a retry trigger: the id only gates a store-wide reinstall; nothing is written under it'
   ],
   ['ProfilePreferences.recordFeatureInteraction', 'a feature id, not a row'],

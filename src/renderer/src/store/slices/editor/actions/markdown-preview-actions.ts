@@ -13,7 +13,7 @@ import { resolveEditorFileIdForOwner } from '../file-ids/editor-file-ids'
 import { buildEditorActiveResult } from '../tabs/editor-open-target-group'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 import type { Tab } from '../../../../../../shared/tab-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
 import {
   previewEditorTabsOf,
@@ -204,7 +204,7 @@ export function createMarkdownPreviewActions(
     makePreviewFilePermanent: (fileId, tabId) => {
       const promoted: Tab[] = []
       set((s) => {
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
           promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, fileId, tabId))
         }
         let changed = false
@@ -228,7 +228,7 @@ export function createMarkdownPreviewActions(
         return changed ? { openFiles, unifiedTabsByWorktree } : s
       })
       // Switch point: main records the preview tabs the user made permanent.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
         recordPromotedEditorTabsInLayoutOwner(get(), promoted)
       }
     },

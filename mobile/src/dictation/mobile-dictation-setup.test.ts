@@ -154,7 +154,7 @@ describe('rpc wrappers', () => {
     ])
 
     await expect(fetchDictationSetup(client)).rejects.toThrow(
-      'Update the paired desktop Orca app to use mobile voice settings.'
+      'Update the paired desktop Quirky app to use mobile voice settings.'
     )
   })
 
@@ -167,7 +167,7 @@ describe('rpc wrappers', () => {
     ])
 
     await expect(fetchDictationSetup(client)).rejects.toThrow(
-      'Update the paired desktop Orca app to use mobile voice settings.'
+      'Update the paired desktop Quirky app to use mobile voice settings.'
     )
   })
 
@@ -180,7 +180,7 @@ describe('rpc wrappers', () => {
     ])
 
     await expect(fetchDictationSetup(client)).rejects.toThrow(
-      'Update Orca on this server to use voice dictation.'
+      'Update Quirky on this server to use voice dictation.'
     )
   })
 

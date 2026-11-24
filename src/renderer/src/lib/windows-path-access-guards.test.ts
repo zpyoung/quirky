@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
     runtimeEnvironments: [
       {
         id: 'wsl:Ubuntu',
-        orcadDeployment: {
+        quirkydDeployment: {
           kind: 'wsl' as const,
           distro: 'Ubuntu',
           localPort: 4100,
@@ -56,7 +56,7 @@ describe('getWindowsPathAccess (renderer)', () => {
     vi.stubGlobal('navigator', { userAgent: 'Mozilla/5.0 (Macintosh)' })
     expect(getWindowsPathAccess(WSL_OWNER)).toBeNull()
     vi.stubGlobal('navigator', { userAgent: WINDOWS_UA })
-    vi.stubGlobal('window', { __ORCA_WEB_CLIENT__: true })
+    vi.stubGlobal('window', { __QUIRKY_WEB_CLIENT__: true })
     expect(getWindowsPathAccess(WSL_OWNER)).toBeNull()
   })
 

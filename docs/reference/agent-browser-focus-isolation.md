@@ -57,14 +57,14 @@ popup and copies every frame. It stays an experiment, not the fix.
 1. **No focus side effects from CDP.** The proxy answers `Page.bringToFront` and
    `Target.activateTarget` without focusing anything.
 2. **Keys and text go straight to the guest.** For an embedded guest, main-session
-   `Input.dispatchKeyEvent` / `Input.insertText` (from the proxy) and Orca's own `keypress` become
+   `Input.dispatchKeyEvent` / `Input.insertText` (from the proxy) and Quirky's own `keypress` become
    `sendInputEvent` key / `char` events with `skipIfUnhandled`, followed by a page round trip so
    the reply comes after the page handled them. When the page's focus sits in a cross-site
    frame, keys and text go to that frame's own CDP target session instead: main follows
    `document.activeElement` through frame elements (`DOM.describeNode` gives the frame id, which
    is the frame's target id), attaches with `Target.attachToTarget {flatten:true}`, enables focus
    emulation there and sends the input on that session. A same-site frame shares the guest's
-   renderer, so widget events already reach it. The proxy hides these Orca-owned sessions' events
+   renderer, so widget events already reach it. The proxy hides these Quirky-owned sessions' events
    from the agent's client. Offscreen and headless pages have no host frame tree and keep CDP.
 3. **Agent input that needs focus borrows it.** Before a press, or before input only CDP can
    express (a frame that cannot be reached, text with control characters, unmapped keys,
@@ -74,15 +74,15 @@ popup and copies every frame. It stays an experiment, not the fix.
    restored when the user already had focus in that page.
    If the pane does not answer, the input is refused with `browser_focus_guard_unavailable`
    rather than sent. Agent Tab keys take the same guard, because Tab from the page's last field
-   moves focus out of the guest into Orca's window.
+   moves focus out of the guest into Quirky's window.
    While the user's IME composition is open the pane answers `composing` and main refuses the
    input, because the blur would commit the unfinished text (into a terminal, that sends it to
    the shell). It is refused rather than held, so a press cannot outlive its agent or land in the
    user's next composition. Direct commands report `browser_user_composing`; commands run through
    the agent-browser helper, like `click`, report `browser_error` with the same retry message.
-4. **Agent keys are marked as the agent's.** While agent input is injected, the guest's Orca
+4. **Agent keys are marked as the agent's.** While agent input is injected, the guest's Quirky
    shortcut and grab handlers ignore keys and `setIgnoreMenuShortcuts` keeps unhandled keys
-   from Orca's app menu, so an agent's Cmd/Ctrl+T, W or Ctrl+Tab stays in the page. Measured:
+   from Quirky's app menu, so an agent's Cmd/Ctrl+T, W or Ctrl+Tab stays in the page. Measured:
    synthetic input never fired the guest's `before-input-event`; the mark is the guarantee.
 
 Known gaps: the user's element is blurred for the length of one agent press, so keys typed in that
@@ -101,6 +101,6 @@ two gaps.
 | Keys and text delivered to the guest directly                                                     | stack 2/3      | in review |
 | Presses and CDP-only input borrow focus and give it back; focus emulation                         | stack 3/3      | in review |
 | Regression spec: user typing in a terminal while an agent clicks, types and presses keys          | stack 2/3, 3/3 | in review |
-| Visible-window spec (`@headful`, isolated display only): native focus stays on Orca's window      | stack 3/3      | in review |
+| Visible-window spec (`@headful`, isolated display only): native focus stays on Quirky's window    | stack 3/3      | in review |
 | Main-session keys and text for a focused cross-site iframe go to its own session, no focus borrow | follow-up PR   | in review |
 | Agent presses are refused while the user's IME composition is open (#28700)                       | follow-up PR   | in review |

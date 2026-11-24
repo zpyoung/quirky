@@ -124,7 +124,7 @@ export function planStructuredAgentSessionDeadGeneration(
     // The turn the exit ended, and an error so no fold ever hides why it stopped.
     mutations.push({
       kind: 'item',
-      identity: { provider: 'orca', clientMessageId: input.settlementId },
+      identity: { provider: 'quirky', clientMessageId: input.settlementId },
       body: {
         kind: 'status',
         ...agentSessionFailureWords(

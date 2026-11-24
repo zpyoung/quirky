@@ -27,7 +27,7 @@ export const PR_CHECK_JOBS = [
   'xterm_patch_sync',
   'shell_contracts',
   'test',
-  'orcad_browser',
+  'quirkyd_browser',
   'mobile_web_app',
   'cross-version-wire',
   'managed_hook_node18',
@@ -69,14 +69,14 @@ const GIT_COMPAT_PREFIXES = [
 
 // Why narrow: the contract pins Codex's read-repair, so it runs when the heal that
 // depends on it, its app-server transport, or the contract itself changes. The same
-// job pins --no-daemon for Orca's codex shell wrapper, the project-trust key, and the
-// approval Orca writes for its hook entry in managed Codex homes and ~/.codex.
+// job pins --no-daemon for Quirky's codex shell wrapper, the project-trust key, and the
+// approval Quirky writes for its hook entry in managed Codex homes and ~/.codex.
 const CODEX_INDEX_HEAL_CONTRACT_PREFIXES = [
   'src/main/codex/codex-hook-file-entry-binary-contract',
   'src/main/codex/codex-hook-trust-',
   'src/main/codex/codex-hook-approval-first-write',
   'src/main/codex/codex-hook-hash-lookup',
-  'src/main/codex/codex-hook-orca-approvals',
+  'src/main/codex/codex-hook-quirky-approvals',
   'src/main/codex/codex-hook-reconcile',
   'src/main/codex/codex-hook-local-install',
   'src/main/codex/codex-hook-user-mirroring',
@@ -148,11 +148,11 @@ const SHELL_PREFIXES = [
   'config/scripts/node-pty-job-ownership'
 ]
 
-const ORCAD_BROWSER_PREFIXES = [
-  'src/main/orcad/external-chromium-',
-  'src/main/orcad/orcad-browser-provider',
-  'src/main/orcad/orcad-agent-browser-binary',
-  'src/main/orcad/electron-serve-browser-process'
+const QUIRKYD_BROWSER_PREFIXES = [
+  'src/main/quirkyd/external-chromium-',
+  'src/main/quirkyd/quirkyd-browser-provider',
+  'src/main/quirkyd/quirkyd-agent-browser-binary',
+  'src/main/quirkyd/electron-serve-browser-process'
 ]
 
 // The page bundle the desktop packages: the builder and verifier, the manifest writer and the
@@ -186,7 +186,7 @@ const MOBILE_WEB_APP_PREFIXES = [
   'mobile/packages/',
   'mobile/package.json',
   'mobile/pnpm-lock.yaml',
-  'mobile/modules/orca-mobile-web-shell/',
+  'mobile/modules/quirky-mobile-web-shell/',
   // Chat visuals on both mobile surfaces are built from it; their in-page links check runs here.
   'src/shared/native-chat-visual-shell'
 ]
@@ -569,8 +569,8 @@ function jobDetector(job) {
       return (files) => files.some((file) => matchesPrefix(file, XTERM_PREFIXES))
     case 'shell_contracts':
       return (files) => files.some((file) => matchesPrefix(file, SHELL_PREFIXES))
-    case 'orcad_browser':
-      return (files) => files.some((file) => matchesPrefix(file, ORCAD_BROWSER_PREFIXES))
+    case 'quirkyd_browser':
+      return (files) => files.some((file) => matchesPrefix(file, QUIRKYD_BROWSER_PREFIXES))
     // Not redundant with the lift below the jobs map: without a case here the default detector
     // returns true, which would run this job on every desktop-relevant PR.
     case 'mobile_web_app':

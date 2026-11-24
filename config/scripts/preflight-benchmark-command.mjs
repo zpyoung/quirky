@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 export async function measurePreflightCommand({
   program,

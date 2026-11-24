@@ -17,7 +17,7 @@ const journals = createTrackedJournalOpener()
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-context-restart-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-context-restart-'))
 })
 
 afterEach(async () => {
@@ -28,7 +28,7 @@ afterEach(async () => {
 function frame(message: Record<string, unknown>, observedAt: number, startsTurn = false) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     observedAt,
     ...(startsTurn ? { startsTurn: true as const } : {}),
     message: { session_id: 'claude-session', parent_tool_use_id: null, ...message }
@@ -101,14 +101,14 @@ const postCompactionReport = {
 async function openJournal(): Promise<AgentSessionJournal> {
   return journals.open({
     identity: {
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       workspaceId: 'workspace-1',
       hostId: 'local',
       agent: 'claude',
       providerHandle: claudeProviderHandle('claude-session', null)
     },
     now: () => 9_000,
-    stateDirectory: join(root, 'orca-session')
+    stateDirectory: join(root, 'quirky-session')
   })
 }
 
@@ -216,7 +216,7 @@ describe('context usage across a restart', () => {
 
     await settleStaleStructuredAgentSessionState({
       journal,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       fence: 2,
       acquisitionGeneration: 'next',
       deathEvidence: null
@@ -238,7 +238,7 @@ describe('context usage across a restart', () => {
     live.translator.handle(assistantFrame('reply-a2', 3_000, 30_000))
     await settleStaleStructuredAgentSessionState({
       journal,
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       fence: 1,
       acquisitionGeneration: 'next',
       deathEvidence: null

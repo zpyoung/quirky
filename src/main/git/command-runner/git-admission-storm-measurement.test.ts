@@ -2,7 +2,7 @@ import { existsSync, watch } from 'node:fs'
 import { chmod, mkdir, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { gitExecFileAsync } from './git-exec-file'
 import {
   GENERAL_CAP,
@@ -52,7 +52,7 @@ function waitForLiveChild(stateDir: string, id: string, signal: AbortSignal): Pr
 }
 
 async function verifySpawnContention(): Promise<void> {
-  delete process.env.ORCA_GIT_ADMISSION_DISABLED
+  delete process.env.QUIRKY_GIT_ADMISSION_DISABLED
   const admissionEvents: GitAdmissionEvent[] = []
   _resetGitAdmissionForTests(
     new GitAdmissionScheduler({
@@ -79,10 +79,10 @@ async function verifySpawnContention(): Promise<void> {
     stub,
     `#!/bin/sh
 set -eu
-live="$ORCA_STUB_STATE_DIR/$ORCA_STUB_ID.live"
+live="$QUIRKY_STUB_STATE_DIR/$QUIRKY_STUB_ID.live"
 : > "$live"
 trap 'rm -f "$live"' EXIT HUP INT TERM
-IFS= read -r release < "$ORCA_STUB_GATE_DIR/$ORCA_STUB_ID"
+IFS= read -r release < "$QUIRKY_STUB_GATE_DIR/$QUIRKY_STUB_ID"
 printf 'stub:%s\\n' "$*"
 `
   )
@@ -106,9 +106,9 @@ printf 'stub:%s\\n' "$*"
       env: {
         ...process.env,
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
-        ORCA_STUB_ID: id,
-        ORCA_STUB_STATE_DIR: stateDir,
-        ORCA_STUB_GATE_DIR: gateDir
+        QUIRKY_STUB_ID: id,
+        QUIRKY_STUB_STATE_DIR: stateDir,
+        QUIRKY_STUB_GATE_DIR: gateDir
       }
     })
     void command.catch(() => {})
@@ -170,7 +170,7 @@ describe.skipIf(process.platform === 'win32')('git admission storm measurement',
     verifySpawnContention
   )
 
-  it.runIf(process.env.ORCA_GIT_ADMISSION_STORM_MEASUREMENT === '1')(
+  it.runIf(process.env.QUIRKY_GIT_ADMISSION_STORM_MEASUREMENT === '1')(
     'reports bounded-concurrency before and after measurements',
     async () => {
       const disabled = await measureStorm('disabled')

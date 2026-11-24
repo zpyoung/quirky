@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
     repos: [] as Repo[],
     projects: [],
     projectHostSetups: [],
-    clearOrcaHookTrustForRepo: vi.fn(),
+    clearQuirkyHookTrustForRepo: vi.fn(),
     openModal: vi.fn(),
     sshStateByEnvironment: new Map()
   },
@@ -183,7 +183,7 @@ describe('useRemoteRepo', () => {
     it('shows why when the server cannot list them, with no local fallback', async () => {
       mocks.stateValues = [[], null, '~/', null, false]
       mocks.listServerTargets.mockRejectedValue(
-        new Error('Update this Orca server to manage its SSH hosts from here.')
+        new Error('Update this Quirky server to manage its SSH hosts from here.')
       )
 
       const result = await serverRemoteRepo()
@@ -191,7 +191,7 @@ describe('useRemoteRepo', () => {
 
       expect(mocks.listTargets).not.toHaveBeenCalled()
       expect(mocks.stateSetters[3]).toHaveBeenCalledWith(
-        'Update this Orca server to manage its SSH hosts from here.'
+        'Update this Quirky server to manage its SSH hosts from here.'
       )
     })
 

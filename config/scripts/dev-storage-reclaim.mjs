@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 
 export function startDevStorageReclaim({
   repoRoot,
@@ -7,7 +7,7 @@ export function startDevStorageReclaim({
   spawn = spawnProcess,
   report = console.error
 }) {
-  if (env.ORCA_SKIP_DEV_STORAGE_RECLAIM === '1') {
+  if (env.QUIRKY_SKIP_DEV_STORAGE_RECLAIM === '1') {
     return
   }
   try {
@@ -28,14 +28,14 @@ export function startDevStorageReclaim({
       detached: true,
       stdio: 'ignore'
     })
-    child.on('error', (error) => report(`[orca-dev] Storage cleanup skipped: ${error.message}`))
+    child.on('error', (error) => report(`[quirky-dev] Storage cleanup skipped: ${error.message}`))
     child.on('exit', (code) => {
       if (code !== 0) {
-        report('[orca-dev] Storage cleanup did not finish; retry with pnpm reclaim-space.')
+        report('[quirky-dev] Storage cleanup did not finish; retry with pnpm reclaim-space.')
       }
     })
     child.unref()
   } catch (error) {
-    report(`[orca-dev] Storage cleanup skipped: ${error.message}`)
+    report(`[quirky-dev] Storage cleanup skipped: ${error.message}`)
   }
 }

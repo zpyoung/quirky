@@ -5,17 +5,17 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { build } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { spawn } from 'node-pty'
 
 // Fault injection validates the failure boundary; the incident's workers were idle, not saturated.
 if (process.platform === 'win32' || process.env.UV_THREADPOOL_SIZE !== '1') {
   throw new Error(
-    'Run on macOS/Linux with ORCA_BACKGROUND_LAUNCH=1 UV_THREADPOOL_SIZE=1 node config/scripts/repro-daemon-async-io-stall.mjs'
+    'Run on macOS/Linux with QUIRKY_BACKGROUND_LAUNCH=1 UV_THREADPOOL_SIZE=1 node config/scripts/repro-daemon-async-io-stall.mjs'
   )
 }
 
-const dir = mkdtempSync(join(tmpdir(), 'orca-async-io-repro-'))
+const dir = mkdtempSync(join(tmpdir(), 'quirky-async-io-repro-'))
 const fifo = join(dir, 'blocked-open')
 let terminal
 let healthTerminal

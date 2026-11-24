@@ -173,7 +173,7 @@ describe('useDiffCommentDecorator range highlight', () => {
 
     hook.rerender({ pendingCommentTarget: { lineNumber: 14, startLine: 9 } })
     expect(paintedRange(fake)).toEqual({ startLine: 9, endLine: 14 })
-    expect(fake.decorations()[0].className).toBe('orca-diff-comment-range-highlight')
+    expect(fake.decorations()[0].className).toBe('quirky-diff-comment-range-highlight')
 
     hook.rerender({ pendingCommentTarget: null })
     expect(paintedRange(fake)).toBeNull()
@@ -225,7 +225,7 @@ describe('useDiffCommentDecorator drag affordance', () => {
   it('rides the "+" down to the growing end of the selection', () => {
     const fake = createFakeDiffCommentEditor()
     renderDecorator(fake)
-    const plus = fake.domNode.querySelector<HTMLElement>('.orca-diff-comment-add-btn')
+    const plus = fake.domNode.querySelector<HTMLElement>('.quirky-diff-comment-add-btn')
     expect(plus, 'add button was never mounted').not.toBeNull()
 
     fake.emitMouseMove(5)

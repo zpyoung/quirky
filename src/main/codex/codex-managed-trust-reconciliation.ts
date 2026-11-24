@@ -57,9 +57,9 @@ function addLedgerRecognizedHashes(
 
 /**
  * Per entry main's grant recorded in this home's ledger, the hash Codex gave
- * Orca's entry, when the recorded hook is Orca's `command`.
+ * Quirky's entry, when the recorded hook is Quirky's `command`.
  */
-export function readLedgerOrcaHashes(
+export function readLedgerQuirkyHashes(
   runtimeHomePath: string,
   command: string,
   timeoutSec: number
@@ -85,7 +85,7 @@ type CodexManagedHookTrustOwnershipOptions = {
   timeoutSec: number
   /** Explicit native homes resolve their parent before hook discovery. */
   sourceUsesExplicitCodexHome?: boolean
-  /** Codex's own hashes Orca may have approved its entry with, from any Codex version. */
+  /** Codex's own hashes Quirky may have approved its entry with, from any Codex version. */
   codexHashes?: readonly CodexHookHashes[]
 }
 

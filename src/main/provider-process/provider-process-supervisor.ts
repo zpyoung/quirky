@@ -23,7 +23,7 @@ export const PROVIDER_SUPERVISOR_MAX_STOP_MS =
 /** Inline supervisor source kept dependency-free for the spawned Node child. */
 export const POSIX_PROVIDER_SUPERVISOR_SCRIPT = `
 const { spawn } = require('node:child_process')
-const spec = JSON.parse(Buffer.from(process.env.ORCA_PROVIDER_SUPERVISOR_SPEC, 'base64').toString())
+const spec = JSON.parse(Buffer.from(process.env.QUIRKY_PROVIDER_SUPERVISOR_SPEC, 'base64').toString())
 // The provider's own argv, after this script's '--'.
 const [providerCommand, ...providerArgs] = process.argv.slice(1)
 // A detached supervisor is reparented when its owner exits. The new parent may
@@ -31,10 +31,10 @@ const [providerCommand, ...providerArgs] = process.argv.slice(1)
 const ownerGone = () => process.ppid !== spec.ownerPid
 // Registered before the spawn, so a stop that lands while the provider starts still reaps it.
 for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => stopProviderGroup(signal))
-// Orca can die before this runs; spawning then would start a provider nothing watches.
+// Quirky can die before this runs; spawning then would start a provider nothing watches.
 if (ownerGone()) process.exit(1)
 const childEnv = { ...process.env, ...spec.nodeEnv }
-delete childEnv.ORCA_PROVIDER_SUPERVISOR_SPEC
+delete childEnv.QUIRKY_PROVIDER_SUPERVISOR_SPEC
 delete childEnv.ELECTRON_RUN_AS_NODE
 // The owner sees only this pid's exit; this marked last stderr line says the provider never started.
 const exitWithSpawnFailure = (error, thrown) => {
@@ -42,7 +42,7 @@ const exitWithSpawnFailure = (error, thrown) => {
   try { require('node:fs').writeSync(2, ${JSON.stringify(PROVIDER_SPAWN_FAILURE_MARKER)} + JSON.stringify(report) + '\\n') } catch {}
   process.exit(127)
 }
-// Orca opens the report channel only when it will keep the group's identity. Linux children
+// Quirky opens the report channel only when it will keep the group's identity. Linux children
 // inherit its fd, so /dev/null takes that slot and only this pid holds the channel.
 const reports = typeof process.send === 'function'
 const reportShield = reports ? require('node:fs').openSync('/dev/null', 'r') : null
@@ -58,7 +58,7 @@ try {
   // Node throws most spawn failures (ENOEXEC, ENOTDIR, ...) rather than emitting them.
   exitWithSpawnFailure(error, true)
 }
-// With the group's identity in Orca, a SIGKILL of this pid cannot orphan the group.
+// With the group's identity in Quirky, a SIGKILL of this pid cannot orphan the group.
 if (reports) {
   try { require('node:fs').closeSync(reportShield) } catch {}
   const disconnect = () => { try { process.disconnect() } catch {} }
@@ -264,7 +264,7 @@ export function supervisedPosixLaunch(
     env: {
       ...supervisorEnv,
       ELECTRON_RUN_AS_NODE: '1',
-      ORCA_PROVIDER_SUPERVISOR_SPEC: supervisorSpec
+      QUIRKY_PROVIDER_SUPERVISOR_SPEC: supervisorSpec
     }
   }
 }

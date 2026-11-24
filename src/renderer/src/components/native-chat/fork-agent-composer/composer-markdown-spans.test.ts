@@ -43,7 +43,7 @@ describe('tokenizeComposerMarkdown', () => {
     }
   })
 
-  it('lets inline code suppress nested emphasis and Orca tokens', () => {
+  it('lets inline code suppress nested emphasis and Quirky tokens', () => {
     const text = 'run `**raw** @src/file.ts` now'
     const spans = expectFullCoverage(text)
     const rawPosition = text.indexOf('raw')

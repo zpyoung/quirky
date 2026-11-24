@@ -1,5 +1,5 @@
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import { execInTerminal, focusActiveTerminalInput } from './terminal'
 import { clearTerminalPtyWriteLog, readTerminalPtyWrites } from './terminal-pty-write-spy'
 
@@ -45,7 +45,7 @@ async function dispatchCtrlCToActiveTerminalTextarea(
     }
 
     // Why: Electron headless consumes real Ctrl+C before xterm in automation;
-    // synthetic DOM events still exercise Orca's installed xterm boundary.
+    // synthetic DOM events still exercise Quirky's installed xterm boundary.
     const keydown = createEvent('keydown', true)
     textarea.dispatchEvent(keydown)
     const keyup = createEvent('keyup', dispatchOptions.keyupCtrlKey !== false)

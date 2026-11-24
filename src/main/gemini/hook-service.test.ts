@@ -31,8 +31,8 @@ describe('GeminiHookService', () => {
   let userDataDir: string
 
   beforeAll(() => {
-    homeDir = mkdtempSync(join(tmpdir(), 'orca-gemini-home-'))
-    userDataDir = mkdtempSync(join(tmpdir(), 'orca-gemini-userdata-'))
+    homeDir = mkdtempSync(join(tmpdir(), 'quirky-gemini-home-'))
+    userDataDir = mkdtempSync(join(tmpdir(), 'quirky-gemini-userdata-'))
     homedirMock.mockReturnValue(homeDir)
     getPathMock.mockImplementation((name: string) => {
       if (name === 'userData') {
@@ -51,13 +51,13 @@ describe('GeminiHookService', () => {
     const managedHookFileName = process.platform === 'win32' ? 'gemini-hook.cmd' : 'gemini-hook.sh'
     const staleManagedHookPath =
       process.platform === 'win32'
-        ? `C:\\Users\\ramzi\\.orca\\agent-hooks\\${managedHookFileName}`
-        : `/Users/ramzi/.orca/agent-hooks/${managedHookFileName}`
+        ? `C:\\Users\\ramzi\\.quirky\\agent-hooks\\${managedHookFileName}`
+        : `/Users/ramzi/.quirky/agent-hooks/${managedHookFileName}`
     const staleManagedCommand =
       process.platform === 'win32'
         ? staleManagedHookPath
         : `if [ -x '${staleManagedHookPath}' ]; then /bin/sh '${staleManagedHookPath}'; fi`
-    const managedHookPath = join(homeDir, '.orca', 'agent-hooks', managedHookFileName)
+    const managedHookPath = join(homeDir, '.quirky', 'agent-hooks', managedHookFileName)
     const configDir = join(homeDir, '.gemini')
     mkdirSync(configDir, { recursive: true })
     writeFileSync(
@@ -117,7 +117,7 @@ describe('GeminiHookService', () => {
     try {
       expect(new GeminiHookService().install().state).toBe('installed')
       const command = wrapWindowsBatchHookCommand(
-        join(homeDir, '.orca', 'agent-hooks', 'gemini-hook.cmd')
+        join(homeDir, '.quirky', 'agent-hooks', 'gemini-hook.cmd')
       )
       const config = JSON.parse(readFileSync(join(homeDir, '.gemini', 'settings.json'), 'utf8'))
       for (const eventName of ['BeforeAgent', 'AfterAgent', 'AfterTool', 'BeforeTool']) {
@@ -132,8 +132,8 @@ describe('GeminiHookService', () => {
     const managedHookFileName = process.platform === 'win32' ? 'gemini-hook.cmd' : 'gemini-hook.sh'
     const staleManagedHookPath =
       process.platform === 'win32'
-        ? `C:\\Users\\ramzi\\.orca\\agent-hooks\\${managedHookFileName}`
-        : `/Users/ramzi/.orca/agent-hooks/${managedHookFileName}`
+        ? `C:\\Users\\ramzi\\.quirky\\agent-hooks\\${managedHookFileName}`
+        : `/Users/ramzi/.quirky/agent-hooks/${managedHookFileName}`
     const staleManagedCommand =
       process.platform === 'win32'
         ? staleManagedHookPath
@@ -171,7 +171,7 @@ describe('GeminiHookService', () => {
     expect(preToolCommands).toEqual(['echo user-authored'])
     expect(config.hooks.BeforeTool[0].hooks[0].command).toMatch(
       process.platform === 'win32'
-        ? wrapWindowsBatchHookCommand(join(homeDir, '.orca', 'agent-hooks', managedHookFileName))
+        ? wrapWindowsBatchHookCommand(join(homeDir, '.quirky', 'agent-hooks', managedHookFileName))
         : new RegExp(managedHookFileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
     )
   })

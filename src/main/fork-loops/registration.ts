@@ -9,7 +9,7 @@ import { agentHookServer } from '../agent-hooks/server'
 import { gitExecFileAsync } from '../git/command-runner/git-exec-file'
 import type { Store } from '../persistence'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { bindLoopService } from '../runtime/rpc/methods/fork-loops/service-binding'
 import { parseWslPath } from '../wsl'
 import { resolveWorktreeHostRouting } from '../runtime/worktree-launch-host-repo'
@@ -54,7 +54,7 @@ export async function resolveLoopTargets(
   if (!host || host.kind === 'runtime') {
     throw new LoopStoreError(
       'loop_check_unsupported_host',
-      'Loops cannot run on a paired Orca runtime host.'
+      'Loops cannot run on a paired Quirky runtime host.'
     )
   }
   if (host.kind === 'local') {
@@ -115,7 +115,7 @@ function createEvidenceTools(store: Store): LoopEvidenceTools {
 
 /** Builds the loop service for this runtime; the database opens on first use. */
 export function startLoops(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   isServeMode: boolean
 ): LoopService {

@@ -13,7 +13,7 @@ import { navigateBrowserRouteGuest } from '../../../src/main/browser/browser-rou
 import { closeBrowserClientHostComposition } from '../../../src/main/browser/paired-runtime-browser-client-host-teardown'
 import { BROWSER_CORE_METHODS } from '../../../src/main/runtime/rpc/methods/browser-core'
 
-const fixed = process.env.ORCA_BROWSER_CACHE_VARIANT !== 'before'
+const fixed = process.env.QUIRKY_BROWSER_CACHE_VARIANT !== 'before'
 const variant = fixed ? 'fixed' : 'before',
   reports = []
 const authority = {
@@ -71,7 +71,7 @@ async function appendSnapshot(dispatcher, index) {
 afterEach(() => {
   vi.restoreAllMocks()
   writeFileSync(
-    process.env.ORCA_BROWSER_CACHE_OUTPUT ??
+    process.env.QUIRKY_BROWSER_CACHE_OUTPUT ??
       `docs/audits/browser-closed-result-retention/${variant}-${process.versions.electron ? 'electron' : 'node'}-results.json`,
     `${JSON.stringify(
       {

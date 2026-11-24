@@ -63,7 +63,7 @@ export async function lookupReadyCheckRun(env, event, request = fetch) {
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: `Bearer ${env.GH_TOKEN}`,
-        'User-Agent': 'orca-pr-ready-check-reuse',
+        'User-Agent': 'quirky-pr-ready-check-reuse',
         'X-GitHub-Api-Version': '2022-11-28'
       },
       signal: AbortSignal.timeout(10_000)

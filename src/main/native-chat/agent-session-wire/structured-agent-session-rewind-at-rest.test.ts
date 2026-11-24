@@ -115,7 +115,7 @@ beforeEach(async () => {
       ordinal: 1
     }
   }))
-  directory = await mkdtemp(join(tmpdir(), 'orca-rewind-rest-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-rewind-rest-'))
   store = await openTestAgentSessionRecordStore(directory)
   host = openHost()
 })
@@ -163,7 +163,7 @@ function sendParams(text: string) {
   }
 }
 
-/** A chat whose rewind the provider applied, whose Orca side never finished, reopened at rest. */
+/** A chat whose rewind the provider applied, whose Quirky side never finished, reopened at rest. */
 async function interruptedRewindAtRest(): Promise<void> {
   expect(await host.attach(caller, hostTestAttachParams(null))).toMatchObject({ ok: true })
   const drop = { ...KEPT, turnId: 'drop' }

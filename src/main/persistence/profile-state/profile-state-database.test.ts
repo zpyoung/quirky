@@ -24,7 +24,7 @@ afterEach(() => {
 })
 
 function createDirectory(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-db-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-db-'))
   temporaryDirectories.push(directory)
   return directory
 }

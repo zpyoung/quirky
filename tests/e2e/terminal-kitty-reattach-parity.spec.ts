@@ -1,11 +1,11 @@
 /**
  * A live app's kitty keyboard flags survive park and reveal in both records:
- * xterm (which encodes keys) and the pane mirror (which Orca's shortcut policy
+ * xterm (which encodes keys) and the pane mirror (which Quirky's shortcut policy
  * reads). The reveal builds a fresh xterm, so without the replay epilogue's
  * restore xterm would sit at 0 while the mirror adopted the host's flags.
  */
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { parkHiddenTabBehindDecoy } from './helpers/terminal-hidden-parking'
 import {
   ensureTerminalVisible,
@@ -26,11 +26,11 @@ import {
 } from './helpers/terminal-pty-write-spy'
 import { waitForPtyShellEcho } from './terminal-pty-readiness'
 
-const PARKING_DELAY_MS = Number(process.env.ORCA_E2E_TERMINAL_PARKING_DELAY_MS) || 500
+const PARKING_DELAY_MS = Number(process.env.QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS) || 500
 const APP_FLAGS = 5
 
 test.use({
-  orcaAppExtraEnv: { ORCA_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
+  quirkyAppExtraEnv: { QUIRKY_E2E_TERMINAL_PARKING_DELAY_MS: String(PARKING_DELAY_MS) }
 })
 
 async function readXtermKittyFlags(page: Page): Promise<number | null> {
@@ -68,7 +68,7 @@ async function activateTerminalTab(page: Page, tabId: string): Promise<void> {
   await page.evaluate((tabId) => {
     const state = window.__store?.getState()
     if (!state) {
-      throw new Error('Orca store unavailable')
+      throw new Error('Quirky store unavailable')
     }
     state.setActiveTabType('terminal', window.__store?.getState().activeWorktreeId ?? null)
     state.setActiveTab(tabId)
@@ -78,42 +78,42 @@ async function activateTerminalTab(page: Page, tabId: string): Promise<void> {
 }
 
 test("park and reveal keep a live app's kitty flags in xterm and the mirror", async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
   test.skip(process.platform === 'win32', 'ConPTY panes withhold the kitty protocol')
   await installTerminalPtyWriteSpy(electronApp)
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
-  const tabId = await getActiveTabId(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
+  const tabId = await getActiveTabId(quirkyPage)
   if (!tabId) {
     throw new Error('no active terminal tab')
   }
-  const ptyId = await waitForActivePanePtyId(orcaPage)
-  await waitForPtyShellEcho(orcaPage, ptyId, 15_000)
+  const ptyId = await waitForActivePanePtyId(quirkyPage)
+  await waitForPtyShellEcho(quirkyPage, ptyId, 15_000)
 
   try {
     // The app stays alive through the park, so nothing grounds its flags.
-    await sendToTerminal(orcaPage, ptyId, `printf '\\033[=${APP_FLAGS}u'; sleep 120\r`)
-    await expect.poll(() => readXtermKittyFlags(orcaPage)).toBe(APP_FLAGS)
-    await expectShiftEnterWrite(orcaPage, electronApp, '\x1b[13;2u')
+    await sendToTerminal(quirkyPage, ptyId, `printf '\\033[=${APP_FLAGS}u'; sleep 120\r`)
+    await expect.poll(() => readXtermKittyFlags(quirkyPage)).toBe(APP_FLAGS)
+    await expectShiftEnterWrite(quirkyPage, electronApp, '\x1b[13;2u')
 
-    await parkHiddenTabBehindDecoy(orcaPage, worktreeId, tabId, {
+    await parkHiddenTabBehindDecoy(quirkyPage, worktreeId, tabId, {
       parkDelayMs: PARKING_DELAY_MS
     })
-    await activateTerminalTab(orcaPage, tabId)
-    await waitForActivePanePtyId(orcaPage)
+    await activateTerminalTab(quirkyPage, tabId)
+    await waitForActivePanePtyId(quirkyPage)
 
     await expect
-      .poll(() => readXtermKittyFlags(orcaPage), {
+      .poll(() => readXtermKittyFlags(quirkyPage), {
         timeout: 10_000,
         message: 'the revealed xterm did not get the live app kitty flags back'
       })
       .toBe(APP_FLAGS)
-    await expectShiftEnterWrite(orcaPage, electronApp, '\x1b[13;2u')
+    await expectShiftEnterWrite(quirkyPage, electronApp, '\x1b[13;2u')
   } finally {
-    await sendToTerminal(orcaPage, ptyId, '\x03').catch(() => undefined)
+    await sendToTerminal(quirkyPage, ptyId, '\x03').catch(() => undefined)
   }
 })

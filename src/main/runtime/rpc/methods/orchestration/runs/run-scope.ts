@@ -3,9 +3,9 @@ import { orchestrationSkillRecoveryData } from '../../../../../../shared/orchest
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import type { RunRow } from '../../../../orchestration/types'
 import type {
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   OrchestrationCompatibilityCallerAuthority
-} from '../../../../orca-runtime'
+} from '../../../../quirky-runtime'
 import {
   hasRunBindingKey,
   type OrchestrationCallerIdentity,
@@ -27,7 +27,7 @@ export type RunScopeParams = {
 
 // Why: declared handles select mutable Run bindings, so attested callers may only name themselves.
 export function assertCallerHandleMatchesEvidence(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   callerTerminalHandle: string,
   callerEvidence?: OrchestrationCompatibilityEvidence
 ): void {
@@ -49,7 +49,7 @@ export function assertCallerHandleMatchesEvidence(
  * caller outright; otherwise it is the party the declared handle names, at the pane it resolved to.
  */
 export function orchestrationCallerIdentity(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   caller: {
     handle: string
     paneKey: string | null | undefined
@@ -80,15 +80,15 @@ export type OrchestrationCallerParams = {
 
 /** Resolve the caller's identity and, by default, attest its declared handle. */
 export function resolveOrchestrationCaller(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: OrchestrationCallerParams & { requireStablePane: true }
 ): OrchestrationCallerIdentity
 export function resolveOrchestrationCaller(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: OrchestrationCallerParams
 ): OrchestrationCallerIdentity | null
 export function resolveOrchestrationCaller(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: OrchestrationCallerParams
 ): OrchestrationCallerIdentity | null {
   if (!params.evidenceAssertedByCaller) {
@@ -108,7 +108,7 @@ export function resolveOrchestrationCaller(
     if (params.requireStablePane) {
       throw new OrchestrationError(
         'stable_pane_required',
-        'The coordinator terminal has no stable pane identity. Run this command inside a live Orca terminal.'
+        'The coordinator terminal has no stable pane identity. Run this command inside a live Quirky terminal.'
       )
     }
     return null
@@ -117,7 +117,7 @@ export function resolveOrchestrationCaller(
 }
 
 // Why: task and gate mutations must share one Run-binding rule.
-export function resolveRunScope(runtime: OrcaRuntimeService, params: RunScopeParams): RunRow {
+export function resolveRunScope(runtime: QuirkyRuntimeService, params: RunScopeParams): RunRow {
   const db = runtime.getOrchestrationDb()
   const explicit = params.runId ? db.getRun(params.runId) : undefined
   if (params.runId && (!explicit || explicit.legacy === 1)) {

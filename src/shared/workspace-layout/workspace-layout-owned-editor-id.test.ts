@@ -15,7 +15,7 @@ import { tabExecutionHostId } from './workspace-layout-tab-host'
 
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 vi.mock('../layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))
@@ -81,7 +81,7 @@ describe('editor tabs under an owned id, layout-owner build', () => {
   })
 
   it('keeps it as the active file', () => {
-    const { session: stored, fileId } = previewUnderOwnedId(GIT_KEY, '/Users/dev/orca/README.md')
+    const { session: stored, fileId } = previewUnderOwnedId(GIT_KEY, '/Users/dev/quirky/README.md')
     stored.activeFileIdByWorktree = { [GIT_KEY]: fileId }
     stored.activeTabTypeByWorktree = { [GIT_KEY]: 'editor' }
 
@@ -91,7 +91,7 @@ describe('editor tabs under an owned id, layout-owner build', () => {
   })
 
   it('a stored disagreement still demotes the tab, as for a bare id', () => {
-    const { session } = previewUnderOwnedId(GIT_KEY, '/Users/dev/orca/README.md')
+    const { session } = previewUnderOwnedId(GIT_KEY, '/Users/dev/quirky/README.md')
     delete session.openFilesByWorktree?.[GIT_KEY]?.[0]?.isPreview
 
     const loaded = load(session)
@@ -118,7 +118,7 @@ describe('editor tabs under an owned id, layout-owner build', () => {
 
   it('match by path alone when the switch is off, as a headless host saves today', () => {
     mocks.layoutOwnerIsMain = false
-    const { session } = previewUnderOwnedId(GIT_KEY, '/Users/dev/orca/README.md')
+    const { session } = previewUnderOwnedId(GIT_KEY, '/Users/dev/quirky/README.md')
 
     const saved = saveWorkspaceLayout(load(session))
 

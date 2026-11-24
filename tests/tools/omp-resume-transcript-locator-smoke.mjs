@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { getAgentResumeArgv } from '../../src/shared/agent-session-resume.ts'
 
 assert.ok(process.argv[2], 'Pass a read-only OMP checkout path')
-const scratch = await mkdtemp(join(tmpdir(), 'orca-omp-resume-locator-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-omp-resume-locator-'))
 process.env.HOME = join(scratch, 'home')
 process.env.USERPROFILE = process.env.HOME
 for (const key of [
@@ -60,7 +60,7 @@ try {
   assert.equal(
     argv[2],
     original.getSessionFile(),
-    'Orca must retain the recorded transcript locator'
+    'Quirky must retain the recorded transcript locator'
   )
   const resumed = await createSessionManager(parseArgs(argv.slice(1)), cwd, settings)
   managers.push(resumed)

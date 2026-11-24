@@ -102,7 +102,7 @@ describe('CommentMarkdown link click handler', () => {
       anchor?.dispatchEvent(event)
     })
 
-    expect(onLinkClick).toHaveBeenCalledWith(expect.any(Object), expect.stringMatching(/^#orca-/))
+    expect(onLinkClick).toHaveBeenCalledWith(expect.any(Object), expect.stringMatching(/^#quirky-/))
     expect(event.defaultPrevented).toBe(true)
   })
 

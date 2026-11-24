@@ -1,5 +1,5 @@
 import { AGENT_LAUNCH_RUNTIME_CAPABILITY } from '../../../shared/agent-launch-runtime-capability'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { placeUnshownLiveTerminalsBestEffort } from '../terminal/adoption/unshown-live-terminal-placement'
 import type { RuntimeTransportMetadata } from '../../../shared/runtime-bootstrap'
 import { watchRuntimeMetadataOwnership } from '../runtime-metadata-ownership-watch'
@@ -154,14 +154,14 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
       },
       onReclaim: (previous) => {
         console.warn(
-          `[runtime] Reclaimed orca-runtime.json from a dead runtime (pid ${previous?.pid ?? 'none'}); republished pid ${this.pid}.`
+          `[runtime] Reclaimed quirky-runtime.json from a dead runtime (pid ${previous?.pid ?? 'none'}); republished pid ${this.pid}.`
         )
       }
     })
   }
 
   // Why: STA-2370 — a desktop with no previously-connected device stays on loopback until the user
-  // explicitly pairs; `orca serve`/E2E (exposeNetworkByDefault) and a reconnecting paired device bind wide.
+  // explicitly pairs; `quirky serve`/E2E (exposeNetworkByDefault) and a reconnecting paired device bind wide.
   // A grant minted for "This computer only" is excluded: its client is a browser on this machine, so
   // counting it would republish the runtime on every interface one restart after the user declined that.
   protected resolveInitialWebSocketBindHost(): string {
@@ -268,7 +268,7 @@ export class RuntimeRpcLifecycle extends RuntimeRpcWebSocketDispatch {
           socket.clientCapabilities
         )
         // Switch point: a client attaching sees every live terminal of this host in a tab.
-        if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
           void placeUnshownLiveTerminalsBestEffort(this.runtime)
         }
         // Why once per socket: only phones send runtime.clientCapabilities.update.

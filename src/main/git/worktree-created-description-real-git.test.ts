@@ -32,7 +32,7 @@ async function seedRepo(path: string, email: string): Promise<void> {
 
 beforeEach(async () => {
   // realpath: macOS hands out /var/... temp paths while Git reports /private/var/...
-  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-created-worktree-')))
+  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-created-worktree-')))
   repoPath = join(scratchDir, 'repo')
   worktreePath = join(scratchDir, 'workspaces', 'feature')
   await seedRepo(repoPath, 'created@example.invalid')

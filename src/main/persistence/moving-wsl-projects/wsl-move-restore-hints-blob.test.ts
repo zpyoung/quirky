@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { parseOrcadMigrationBlobDescriptor } from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
-import { parseOrcadMigrationTerminalRestoreHintsText } from '../../../shared/orcad-migration/orcad-migration-terminal-restore-hints'
+import { parseQuirkydMigrationBlobDescriptor } from '../../../shared/quirkyd-migration/quirkyd-migration-blob-transfer'
+import { parseQuirkydMigrationTerminalRestoreHintsText } from '../../../shared/quirkyd-migration/quirkyd-migration-terminal-restore-hints'
 import { buildWslMoveRestoreHintsBlob } from './wsl-move-restore-hints-blob'
 
 const hints = [
@@ -20,13 +20,13 @@ describe('WSL move restore hints blob', () => {
     if (!blob) {
       return
     }
-    expect(parseOrcadMigrationBlobDescriptor(blob.descriptor)).toEqual({
+    expect(parseQuirkydMigrationBlobDescriptor(blob.descriptor)).toEqual({
       blobKind: 'terminal-restore-hints',
       key: 'migration',
       sha256: createHash('sha256').update(blob.bytes).digest('hex'),
       byteLength: blob.bytes.length
     })
-    expect(parseOrcadMigrationTerminalRestoreHintsText(blob.bytes.toString('utf8'))).toEqual({
+    expect(parseQuirkydMigrationTerminalRestoreHintsText(blob.bytes.toString('utf8'))).toEqual({
       version: 1,
       hints
     })
@@ -35,19 +35,19 @@ describe('WSL move restore hints blob', () => {
     expect(Buffer.concat([head, rest])).toEqual(blob.bytes)
     await expect(
       blob.source.readChunk({ ...blob.descriptor, byteLength: 1 }, 0, 1)
-    ).rejects.toThrow('orcad_migration_source_blob_changed:terminal-restore-hints')
+    ).rejects.toThrow('quirkyd_migration_source_blob_changed:terminal-restore-hints')
   })
 
   it('refuses a hint the destination would refuse, and an oversize document', () => {
     expect(() => buildWslMoveRestoreHintsBlob([{ paneKey: 'tab-1:1', cwd: '/home' }])).toThrow(
-      'orcad_migration_terminal_restore_hint_pane_key_invalid'
+      'quirkyd_migration_terminal_restore_hint_pane_key_invalid'
     )
     const many = Array.from({ length: 1100 }, (_, index) => ({
       paneKey: `tab-${index}:11111111-1111-4111-8111-111111111111`,
       cwd: `/${'a'.repeat(4000)}`
     }))
     expect(() => buildWslMoveRestoreHintsBlob(many)).toThrow(
-      'orcad_migration_terminal_restore_hints_too_large'
+      'quirkyd_migration_terminal_restore_hints_too_large'
     )
   })
 })

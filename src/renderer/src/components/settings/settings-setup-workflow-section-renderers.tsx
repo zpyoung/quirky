@@ -16,7 +16,7 @@ export function renderSetupGuideSettingsSection(context: SettingsRenderContext):
       title={translate('auto.components.settings.Settings.6d119427ef', 'Onboarding checklist')}
       description={translate(
         'auto.components.settings.Settings.6855b0f77d',
-        'Finish the core workflows that make Orca useful for parallel agent work.'
+        'Finish the core workflows that make Quirky useful for parallel agent work.'
       )}
       searchEntries={navigation.getSectionSearchEntries('setup-guide')}
       bodyClassName="overflow-hidden rounded-none border-0 bg-transparent p-0 shadow-none"
@@ -126,7 +126,7 @@ export function renderSessionHistorySettingsSection(
       title={translate('sessionHistory.settings.title', 'Agent Session Search')}
       description={translate(
         'sessionHistory.settings.description',
-        'Search everything your agents have said and done, on this computer and on any paired Orca server.'
+        'Search everything your agents have said and done, on this computer and on any paired Quirky server.'
       )}
       searchEntries={navigation.getSectionSearchEntries('session-history')}
     >

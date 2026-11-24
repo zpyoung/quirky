@@ -17,7 +17,7 @@ let filePath: string
 let reader: JsonlFileReader | undefined
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-jsonl-reader-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-jsonl-reader-'))
   filePath = join(directory, 'transcript.jsonl')
 })
 

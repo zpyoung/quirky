@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 import { join, toNamespacedPath } from 'node:path'
-import { ORCAD_WINDOWS_SECURITY_FILENAME } from './orcad-artifacts'
+import { QUIRKYD_WINDOWS_SECURITY_FILENAME } from './quirkyd-artifacts'
 
 export type GrantAccessOptions = {
   inheritable: boolean
@@ -45,7 +45,7 @@ const requireFromHere = createRequire(__filename)
 let loaded: WindowsSecurity | { error: string } | null = null
 
 /**
- * The addon, or why it cannot load on this host. orcad ships the bare binary at its slot root,
+ * The addon, or why it cannot load on this host. quirkyd ships the bare binary at its slot root,
  * beside its server bundles and two levels above its CLI bundle (`out/cli/index.js`).
  */
 export function loadWindowsSecurity(): WindowsSecurity | { error: string } {
@@ -59,8 +59,8 @@ function loadOnce(): WindowsSecurity | { error: string } {
   }
   const failures: string[] = []
   const candidates = [
-    () => join(__dirname, ORCAD_WINDOWS_SECURITY_FILENAME),
-    () => join(__dirname, '..', '..', ORCAD_WINDOWS_SECURITY_FILENAME)
+    () => join(__dirname, QUIRKYD_WINDOWS_SECURITY_FILENAME),
+    () => join(__dirname, '..', '..', QUIRKYD_WINDOWS_SECURITY_FILENAME)
   ]
   for (const candidate of candidates) {
     try {

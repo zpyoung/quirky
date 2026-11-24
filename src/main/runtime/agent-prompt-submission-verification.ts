@@ -49,7 +49,7 @@ export function resolveAgentPromptEffectTimeoutMs(agent: TerminalAgent | null | 
     : AGENT_PROMPT_EFFECT_TIMEOUT_MS
 }
 
-/** Only these providers expose a turn-start signal Orca can settle a prompt receipt against. */
+/** Only these providers expose a turn-start signal Quirky can settle a prompt receipt against. */
 export function isTerminalSendSettlementAgent(
   agent: TerminalAgent | null | undefined
 ): agent is 'antigravity' | 'claude' | 'codex' {

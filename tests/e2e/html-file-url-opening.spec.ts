@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient
@@ -11,21 +11,21 @@ import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
 test('opens a local HTML file URL with encoded characters from the new-tab menu', async ({
   electronApp,
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }, testInfo) => {
   const filePath = path.join(testRepoPath, 'report 中%20.html')
   writeFileSync(filePath, '<title>Local file URL</title><h1>Local HTML rendered</h1>')
   const url = pathToFileURL(filePath).href
-  await waitForSessionReady(orcaPage)
-  const worktreeId = await waitForActiveWorktree(orcaPage)
-  await orcaPage.getByRole('button', { name: 'New tab', exact: true }).first().click()
-  const input = orcaPage.getByRole('combobox', {
+  await waitForSessionReady(quirkyPage)
+  const worktreeId = await waitForActiveWorktree(quirkyPage)
+  await quirkyPage.getByRole('button', { name: 'New tab', exact: true }).first().click()
+  const input = quirkyPage.getByRole('combobox', {
     name: 'Search open tabs, history, files, URLs, agents…',
     exact: true
   })
   await input.fill(url)
-  await expect(orcaPage.getByRole('option', { name: /Open file/ })).toBeVisible()
+  await expect(quirkyPage.getByRole('option', { name: /Open file/ })).toBeVisible()
   await input.press('Enter')
   await expect
     .poll(() =>
@@ -38,7 +38,7 @@ test('opens a local HTML file URL with encoded characters from the new-tab menu'
     )
     .toBe('Local HTML rendered')
   expect(
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ worktreeId, url }) =>
         window.__store
           ?.getState()
@@ -46,11 +46,11 @@ test('opens a local HTML file URL with encoded characters from the new-tab menu'
       { worktreeId, url }
     )
   ).toBe(true)
-  await orcaPage.screenshot({ path: testInfo.outputPath('local-html-file-url.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('local-html-file-url.png') })
 })
 
 test('opens a pasted HTML file URL from a paired host and reloads its assets', async ({
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }, testInfo) => {
   test.setTimeout(240_000)
@@ -64,9 +64,9 @@ test('opens a pasted HTML file URL from a paired host and reloads its assets', a
       '<p id="asset">pending</p><script src="./report-data.js"></script>'
   )
   writeFileSync(assetPath, 'document.querySelector("#asset").textContent = "host asset version 1"')
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
   const client = await launchPairedElectronClient(offer, testInfo, 'HTML file URL host')
   try {
     await expect
@@ -85,7 +85,7 @@ test('opens a pasted HTML file URL from a paired host and reloads its assets', a
       .toBe(true)
     const worktreeId = await client.page.evaluate(
       ({ root, environmentId }) => {
-        window.localStorage.setItem('orca.browser.markup-draw-hint-seen', 'true')
+        window.localStorage.setItem('quirky.browser.markup-draw-hint-seen', 'true')
         const state = window.__store?.getState()
         const worktree = state?.allWorktrees().find((candidate) => candidate.path === root)
         if (!state || !worktree) {
@@ -148,7 +148,7 @@ test('opens a pasted HTML file URL from a paired host and reloads its assets', a
       },
       { worktreeId, filePath }
     )
-    await expect(client.page.locator('[data-orca-browser-address-bar]:visible')).toBeFocused()
+    await expect(client.page.locator('[data-quirky-browser-address-bar]:visible')).toBeFocused()
     await client.page.getByRole('button', { name: 'New tab', exact: true }).first().click()
     await input.fill(pathToFileURL(filePath).href)
     await expect(client.page.getByRole('option', { name: /Open file/ })).toBeVisible()
@@ -163,7 +163,7 @@ test('opens a pasted HTML file URL from a paired host and reloads its assets', a
         activate: true
       })
     }, worktreeId)
-    const address = client.page.locator('[data-orca-browser-address-bar]:visible')
+    const address = client.page.locator('[data-quirky-browser-address-bar]:visible')
     await address.fill(pathToFileURL(filePath).href)
     await address.press('Enter')
     await expect

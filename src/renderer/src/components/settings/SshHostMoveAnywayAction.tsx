@@ -12,12 +12,12 @@ import {
   DialogHeader,
   DialogTitle
 } from '../ui/dialog'
-import { getManagedOrcadApi } from './use-managed-server-catalog'
+import { getManagedQuirkydApi } from './use-managed-server-catalog'
 
 /** Offered only for a refusal that saved state alone causes. */
 export function canMoveSshHostAnyway(status: SshManagedServerStatus | undefined): boolean {
   return Boolean(
-    getManagedOrcadApi() &&
+    getManagedQuirkydApi() &&
     status?.kind === 'relay' &&
     status.reason === 'refused' &&
     status.canLeaveBehind
@@ -41,7 +41,7 @@ export function SshHostMoveAnywayDialog({
   onOpenChange: (open: boolean) => void
   onChanged: () => void
 }): React.JSX.Element | null {
-  const api = getManagedOrcadApi()
+  const api = getManagedQuirkydApi()
   const mountedRef = useMountedRef()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,7 +84,7 @@ export function SshHostMoveAnywayDialog({
               <p>
                 {translate(
                   'auto.components.settings.moveAnyway.description',
-                  'Orca sets itself up on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.',
+                  'Quirky sets itself up on {{host}} without the saved items below. They stay on this computer and don’t appear on {{host}}. Unsaved edits are kept, never deleted.',
                   { host: target.label }
                 )}
               </p>

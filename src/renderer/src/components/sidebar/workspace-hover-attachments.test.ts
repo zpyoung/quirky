@@ -25,9 +25,9 @@ const local: WorkspaceAttachment = {
   provider: 'github',
   type: 'pr',
   number: 57,
-  url: 'https://github.com/acme/orca/pull/57'
+  url: 'https://github.com/acme/quirky/pull/57'
 }
-const other: WorkspaceAttachment = { ...local, url: 'https://github.com/other/orca/pull/57' }
+const other: WorkspaceAttachment = { ...local, url: 'https://github.com/other/quirky/pull/57' }
 describe('source-safe linked hover details', () => {
   it('uses matching review URL to disambiguate the same number across repositories', () => {
     const result = getWorkspaceHoverAttachments(
@@ -59,7 +59,7 @@ describe('source-safe linked hover details', () => {
       { ...workspace, linkedPR: null, linkedIssue: 2, linkedLinearIssue: 'ENG-3' },
       {
         review: null,
-        issue: { number: 2, title: 'GitHub task', url: 'https://github.com/acme/orca/issues/2' },
+        issue: { number: 2, title: 'GitHub task', url: 'https://github.com/acme/quirky/issues/2' },
         linearIssue: {
           identifier: 'ENG-3',
           title: 'Linear task',

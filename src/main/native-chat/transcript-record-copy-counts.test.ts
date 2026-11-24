@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 async function transcript(content: string | Buffer): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), 'orca-transcript-copy-counts-'))
+  const directory = await mkdtemp(join(tmpdir(), 'quirky-transcript-copy-counts-'))
   directories.push(directory)
   const path = join(directory, 'session.jsonl')
   await writeFile(path, content)

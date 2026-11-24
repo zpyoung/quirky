@@ -10,7 +10,7 @@ import type {
   AgentLaunchResult,
   AgentLaunchTarget
 } from '../../shared/agent-launch-intent'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type {
   readAgentLaunchModeSettings,
   AgentLaunchModeReceipt,
@@ -30,7 +30,7 @@ import type {
 export type AgentLaunchPublishedSurface = AgentLaunchResult
 
 type AgentLaunchExecutionBase = {
-  runtime: Pick<OrcaRuntimeService, 'getStructuredAgentSessionCreateSupport'> &
+  runtime: Pick<QuirkyRuntimeService, 'getStructuredAgentSessionCreateSupport'> &
     Parameters<typeof readAgentLaunchModeSettings>[0]
   vocabulary?: AgentLaunchModeVocabulary
   /** False when the calling client cannot show the agent's chat; absent for the host's own callers. */

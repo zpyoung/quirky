@@ -148,7 +148,7 @@ describe("a dead generation's leftovers, its settlement refused and its lease re
   })
 })
 
-describe('a close Orca asked for, its settlement refused', () => {
+describe('a close Quirky asked for, its settlement refused', () => {
   it('tells a watching client the turn and prompt are over, with no row to carry it', async () => {
     rig = await createQueuedMessageTestRig({ restartable: true })
     const current = rig
@@ -169,7 +169,7 @@ describe('a close Orca asked for, its settlement refused', () => {
       type: 'ended',
       sessionId: SESSION,
       cause: 'requested-close',
-      reason: 'closed by Orca',
+      reason: 'closed by Quirky',
       fence: child.fence,
       acquisitionGeneration: child.generation
     })
@@ -187,7 +187,7 @@ describe('a close Orca asked for, its settlement refused', () => {
 describe('a waiting card when the generation ahead of it ends', () => {
   it.each([
     ['an exit of its own, its settlement refused', 'unexpected-exit' as const],
-    ['a close Orca asked for', 'requested-close' as const]
+    ['a close Quirky asked for', 'requested-close' as const]
   ])('drains after %s, with no journal write in between', async (_name, cause) => {
     rig = await createQueuedMessageTestRig({ restartable: true })
     const current = rig

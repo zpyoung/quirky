@@ -13,7 +13,7 @@ import {
 describe('ripgrep Unicode match coordinates', () => {
   let root: string
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-rg-unicode-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-rg-unicode-'))
   })
   afterEach(async () => {
     vi.unstubAllEnvs()

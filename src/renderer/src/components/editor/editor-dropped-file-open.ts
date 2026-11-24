@@ -148,7 +148,7 @@ async function openEditorFileDropPaths(
     try {
       // Why: OS file drops provide client-local paths. Remote runtime and
       // SSH editors must upload into the server worktree before opening.
-      const destinationDir = joinPath(worktreePath, '.orca/drops')
+      const destinationDir = joinPath(worktreePath, '.quirky/drops')
       const { results } = await importExternalPathsToRuntime(
         fileContext,
         [...paths],

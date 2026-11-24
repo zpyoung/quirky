@@ -17,7 +17,7 @@ describe('virtual preview document search scope', () => {
       <p>First needle.</p>
       <div class="markdown-annotation-controls">Saved note quoting needle.</div>
       <button class="code-block-copy-btn">needle</button>
-      <div data-orca-export-hide="true">needle</div>
+      <div data-quirky-export-hide="true">needle</div>
       <p>Second needle.</p>
     </blockquote>`
     const instance = {}

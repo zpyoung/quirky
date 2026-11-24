@@ -1,9 +1,9 @@
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
-import type { OrcaRuntimeWithListManagedWorktrees } from './managed-workspace-operations'
-import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from '../session-graph/session-graph-authority'
-import type { OrcaRuntimeWithBindPtyIncarnationHandle } from '../terminal/identity/terminal-handle-bindings'
-import type { OrcaRuntimeWithInvalidateAllHandlesForPty } from '../terminal/lifecycle/pty-handle-invalidation'
-import { OrcaRuntimeWithPersistHeadlessTerminalTitle } from './workspace-file-session-targets'
+import type { QuirkyRuntimeWithListManagedWorktrees } from './managed-workspace-operations'
+import type { QuirkyRuntimeWithTransitionGraphReloadToTerminalState } from '../session-graph/session-graph-authority'
+import type { QuirkyRuntimeWithBindPtyIncarnationHandle } from '../terminal/identity/terminal-handle-bindings'
+import type { QuirkyRuntimeWithInvalidateAllHandlesForPty } from '../terminal/lifecycle/pty-handle-invalidation'
+import { QuirkyRuntimeWithPersistHeadlessTerminalTitle } from './workspace-file-session-targets'
 import {
   getConnectionExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
@@ -16,42 +16,44 @@ import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-typ
 import { randomUUID } from 'node:crypto'
 import type { PtyIncarnationId } from '../../../shared/pty-incarnation'
 
-export abstract class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends OrcaRuntimeWithPersistHeadlessTerminalTitle {
+export abstract class QuirkyRuntimeWithResolveKnownWorkspaceFileTarget extends QuirkyRuntimeWithPersistHeadlessTerminalTitle {
   protected abstract listResolvedWorktrees(
     ...args: Parameters<RuntimeWorkspaceCatalog['listResolvedWorktrees']>
   ): ReturnType<RuntimeWorkspaceCatalog['listResolvedWorktrees']>
   protected abstract buildRuntimeVisibilitySourceMatchersByRepoId(
     ...args: Parameters<
-      OrcaRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']
+      QuirkyRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']
     >
-  ): ReturnType<OrcaRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']>
+  ): ReturnType<
+    QuirkyRuntimeWithListManagedWorktrees['buildRuntimeVisibilitySourceMatchersByRepoId']
+  >
   protected abstract isRuntimeWorktreeVisible(
-    ...args: Parameters<OrcaRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
-  ): ReturnType<OrcaRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
+    ...args: Parameters<QuirkyRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
+  ): ReturnType<QuirkyRuntimeWithListManagedWorktrees['isRuntimeWorktreeVisible']>
   protected abstract resolveFolderWorkspaceConnectionId(
     ...args: Parameters<
-      OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
+      QuirkyRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
     >
   ): ReturnType<
-    OrcaRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
+    QuirkyRuntimeWithTransitionGraphReloadToTerminalState['resolveFolderWorkspaceConnectionId']
   >
   protected abstract invalidatePtyIncarnationHandle(
-    ...args: Parameters<OrcaRuntimeWithBindPtyIncarnationHandle['invalidatePtyIncarnationHandle']>
-  ): ReturnType<OrcaRuntimeWithBindPtyIncarnationHandle['invalidatePtyIncarnationHandle']>
+    ...args: Parameters<QuirkyRuntimeWithBindPtyIncarnationHandle['invalidatePtyIncarnationHandle']>
+  ): ReturnType<QuirkyRuntimeWithBindPtyIncarnationHandle['invalidatePtyIncarnationHandle']>
   protected abstract invalidateAllHandlesForPty(
-    ...args: Parameters<OrcaRuntimeWithInvalidateAllHandlesForPty['invalidateAllHandlesForPty']>
-  ): ReturnType<OrcaRuntimeWithInvalidateAllHandlesForPty['invalidateAllHandlesForPty']>
+    ...args: Parameters<QuirkyRuntimeWithInvalidateAllHandlesForPty['invalidateAllHandlesForPty']>
+  ): ReturnType<QuirkyRuntimeWithInvalidateAllHandlesForPty['invalidateAllHandlesForPty']>
   protected abstract isTerminalHandleAdoptionBlocked(
     ...args: Parameters<
-      OrcaRuntimeWithInvalidateAllHandlesForPty['isTerminalHandleAdoptionBlocked']
+      QuirkyRuntimeWithInvalidateAllHandlesForPty['isTerminalHandleAdoptionBlocked']
     >
-  ): ReturnType<OrcaRuntimeWithInvalidateAllHandlesForPty['isTerminalHandleAdoptionBlocked']>
+  ): ReturnType<QuirkyRuntimeWithInvalidateAllHandlesForPty['isTerminalHandleAdoptionBlocked']>
   protected abstract replaceSyntheticTerminalHandlesForRestoredPty(
     ...args: Parameters<
-      OrcaRuntimeWithInvalidateAllHandlesForPty['replaceSyntheticTerminalHandlesForRestoredPty']
+      QuirkyRuntimeWithInvalidateAllHandlesForPty['replaceSyntheticTerminalHandlesForRestoredPty']
     >
   ): ReturnType<
-    OrcaRuntimeWithInvalidateAllHandlesForPty['replaceSyntheticTerminalHandlesForRestoredPty']
+    QuirkyRuntimeWithInvalidateAllHandlesForPty['replaceSyntheticTerminalHandlesForRestoredPty']
   >
 
   protected async resolveKnownWorkspaceFileTarget(
@@ -149,7 +151,7 @@ export abstract class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends Orc
   }
 
   // Why: terminal handles are normally created lazily when first referenced via
-  // RPC, but agents need their own handle at spawn time (via ORCA_TERMINAL_HANDLE
+  // RPC, but agents need their own handle at spawn time (via QUIRKY_TERMINAL_HANDLE
   // env var) so they can self-identify in orchestration messages without an
   // extra RPC round-trip. Pre-allocating by ptyId lets issueHandle reuse it.
   preAllocateHandleForPty(ptyId: string): string {
@@ -245,7 +247,7 @@ export abstract class OrcaRuntimeWithResolveKnownWorkspaceFileTarget extends Orc
       }
     }
     // Why: after an app/runtime restart, the live PTY child still has its
-    // original ORCA_TERMINAL_HANDLE, but the runtime's in-memory map is gone.
+    // original QUIRKY_TERMINAL_HANDLE, but the runtime's in-memory map is gone.
     this.registerPreAllocatedHandleForPty(ptyId, trimmed)
   }
 }

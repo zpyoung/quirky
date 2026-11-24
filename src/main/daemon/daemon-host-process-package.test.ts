@@ -11,7 +11,7 @@ import {
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import { dirname, join } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { setAppEnvironment } from '../../shared/app-environment'
 import { buildInstallFixture } from './daemon-host-relocation.test-fixture'
@@ -26,7 +26,7 @@ const originalExecPath = process.execPath
 const originalResourcesPath = process.resourcesPath
 const originalLocalAppData = process.env.LOCALAPPDATA
 const originalElectronVersion = Object.getOwnPropertyDescriptor(process.versions, 'electron')
-const packageRel = join('resources', 'node_modules', '@orca', 'process-host')
+const packageRel = join('resources', 'node_modules', '@quirky', 'process-host')
 let tempDir: string
 let installDir: string
 let hostRoot: string
@@ -58,7 +58,7 @@ beforeEach(() => {
     getAppMetrics: () => []
   })
   setProcessProp('platform', 'win32')
-  setProcessProp('execPath', join(installDir, 'Orca.exe'))
+  setProcessProp('execPath', join(installDir, 'Quirky.exe'))
   setProcessProp('resourcesPath', join(installDir, 'resources'))
   hostRoot = join(getDaemonHostRootDir(), '9.9.9')
 })
@@ -90,10 +90,10 @@ describe('relocated process-host package', () => {
     expect(existsSync(join(copiedPackage, 'dist', 'run-process.d.ts'))).toBe(true)
     expect(existsSync(join(copiedPackage, 'src'))).toBe(false)
     const entry = join(root, 'resources', 'app.asar.unpacked', 'out', 'main', 'daemon-entry.js')
-    expect(createRequire(entry).resolve('@orca/process-host')).toBe(
+    expect(createRequire(entry).resolve('@quirky/process-host')).toBe(
       realpathSync(join(copiedPackage, 'dist', 'run-process.js'))
     )
-    expect(createRequire(entry).resolve('@orca/process-host/spawn-observer')).toBe(
+    expect(createRequire(entry).resolve('@quirky/process-host/spawn-observer')).toBe(
       realpathSync(join(copiedPackage, 'dist', 'spawn-observer.js'))
     )
   })
@@ -150,7 +150,7 @@ describe('relocated process-host package', () => {
       const current = materializedRoot()
       expect(current).not.toBe(previous)
       expect(dirname(current)).toBe(hostRoot)
-      expect(existsSync(join(previous, 'Orca.exe'))).toBe(true)
+      expect(existsSync(join(previous, 'Quirky.exe'))).toBe(true)
       expect(
         readFileSync(
           join(
@@ -171,12 +171,12 @@ describe('relocated process-host package', () => {
     Object.defineProperty(process.versions, 'electron', { value: '41.0.1', configurable: true })
     expect(getRelocatedDaemonHost()).toBeNull()
     expect(materializedRoot()).not.toBe(previous)
-    expect(existsSync(join(previous, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(previous, 'Quirky.exe'))).toBe(true)
   })
 
   it('preserves a legacy version directory while publishing the new dependency layout', () => {
     mkdirSync(hostRoot, { recursive: true })
-    writeFileSync(join(hostRoot, 'Orca.exe'), 'live-legacy-exe')
+    writeFileSync(join(hostRoot, 'Quirky.exe'), 'live-legacy-exe')
     writeFileSync(
       join(hostRoot, '.materialized.json'),
       JSON.stringify({
@@ -188,13 +188,13 @@ describe('relocated process-host package', () => {
     expect(getRelocatedDaemonHost()).toBeNull()
     const current = materializedRoot()
     expect(dirname(current)).toBe(hostRoot)
-    expect(readFileSync(join(hostRoot, 'Orca.exe'), 'utf8')).toBe('live-legacy-exe')
+    expect(readFileSync(join(hostRoot, 'Quirky.exe'), 'utf8')).toBe('live-legacy-exe')
   })
 
   it('keeps the copied code ready after the entire install tree disappears', () => {
     const root = materializedRoot()
     rmSync(installDir, { recursive: true, force: true })
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(root, 'Quirky.exe'))
   })
 
   it('retains the build observed by this process when a newer same-version mirror exists', () => {
@@ -204,9 +204,9 @@ describe('relocated process-host package', () => {
     writeFileSync(modulePath, 'module.exports = { changed: true }')
     expect(materializedRoot()).not.toBe(initial)
     writeFileSync(modulePath, initialBytes)
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(initial, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(initial, 'Quirky.exe'))
     rmSync(installDir, { recursive: true, force: true })
-    expect(getRelocatedDaemonHost()?.execPath).toBe(join(initial, 'Orca.exe'))
+    expect(getRelocatedDaemonHost()?.execPath).toBe(join(initial, 'Quirky.exe'))
   })
 
   it('declines an existing mirror when this installation has never identified its unavailable build', () => {
@@ -214,16 +214,16 @@ describe('relocated process-host package', () => {
     installDir = join(tempDir, 'unobserved-app')
     buildInstallFixture(installDir)
     rmSync(join(installDir, packageRel, 'dist', 'run-process.js'))
-    setProcessProp('execPath', join(installDir, 'Orca.exe'))
+    setProcessProp('execPath', join(installDir, 'Quirky.exe'))
     setProcessProp('resourcesPath', join(installDir, 'resources'))
     expect(getRelocatedDaemonHost()).toBeNull()
     expect(materializeRelocatedDaemonHost()).toBeNull()
-    expect(existsSync(join(previous, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(previous, 'Quirky.exe'))).toBe(true)
   })
 
   it('runs emitted bare imports from the relocated entry after removing the install tree', () => {
     const require = createRequire(import.meta.url)
-    const actualPackage = dirname(dirname(require.resolve('@orca/process-host')))
+    const actualPackage = dirname(dirname(require.resolve('@quirky/process-host')))
     const installedPackage = join(installDir, packageRel)
     cpSync(join(actualPackage, 'package.json'), join(installedPackage, 'package.json'))
     cpSync(join(actualPackage, 'dist'), join(installedPackage, 'dist'), {
@@ -235,8 +235,8 @@ describe('relocated process-host package', () => {
     writeFileSync(
       join(mainDir, 'chunks', 'a.js'),
       `module.exports = {
-      runner: require('@orca/process-host'),
-      observer: require('@orca/process-host/spawn-observer')
+      runner: require('@quirky/process-host'),
+      observer: require('@quirky/process-host/spawn-observer')
     }`
     )
     writeFileSync(
@@ -264,14 +264,14 @@ describe('relocated process-host package', () => {
       throw new Error('fixture host was not materialized')
     }
     const result = runProcessSync({
-      program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? originalExecPath,
+      program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? originalExecPath,
       args: [host.entryPath],
       cwd: tempDir,
       env: {
         ...process.env,
         NODE_PATH: undefined,
         NODE_OPTIONS: undefined,
-        ORCA_BACKGROUND_LAUNCH: '1'
+        QUIRKY_BACKGROUND_LAUNCH: '1'
       },
       timeoutMs: 15_000
     })

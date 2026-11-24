@@ -54,7 +54,7 @@ const POPULAR_SEARCHES: {
   url: string
 }[] = [
   {
-    breadcrumb: ['Documentation', 'The Orca Model', 'Worktrees'],
+    breadcrumb: ['Documentation', 'The Quirky Model', 'Worktrees'],
     title: 'Worktrees',
     description:
       "Every feature or bug gets its own on-disk copy of the repo via git worktree — parallel agents never step on each other's files.",
@@ -71,7 +71,7 @@ const POPULAR_SEARCHES: {
     breadcrumb: ['Browser & Design Mode', 'Design Mode'],
     title: 'Design Mode',
     description:
-      'Click any UI element in the Orca browser — its HTML, computed styles, and screenshot drop straight into the agent chat.',
+      'Click any UI element in the Quirky browser — its HTML, computed styles, and screenshot drop straight into the agent chat.',
     url: '/docs/browser/design-mode'
   },
   {
@@ -92,14 +92,14 @@ const POPULAR_SEARCHES: {
     breadcrumb: ['Working with Agents', 'Agent hooks & memory'],
     title: 'Agent hooks & memory',
     description:
-      "Orca reads each repo's .claude/ and .codex/ config, runs your hooks on worktree create, and surfaces CLAUDE.md / AGENTS.md inline.",
+      "Quirky reads each repo's .claude/ and .codex/ config, runs your hooks on worktree create, and surfaces CLAUDE.md / AGENTS.md inline.",
     url: '/docs/agents/hooks-memory'
   },
   {
     breadcrumb: ['Recipes', 'Work on a remote machine over SSH'],
     title: 'Work on a remote machine over SSH',
     description:
-      'Point Orca at any SSH target — a dev box, a GPU host, a cloud sandbox — and open remote repos or just folders. Same editor, same diff view, different compute.',
+      'Point Quirky at any SSH target — a dev box, a GPU host, a cloud sandbox — and open remote repos or just folders. Same editor, same diff view, different compute.',
     url: '/docs/recipes/remote-worktrees'
   }
 ]

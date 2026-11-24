@@ -1,8 +1,8 @@
 import {
   clearShutdownCheckpointFailureReason,
   formatShutdownCheckpointFailureReason,
-  ORCA_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT,
-  ORCA_RENDERER_UNLOAD_PREVENTED_EVENT,
+  QUIRKY_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT,
+  QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT,
   publishShutdownCheckpointFailureReason
 } from '../../../shared/renderer-shutdown-events'
 import { recordRendererCrashBreadcrumb } from './crash-breadcrumb-recorder'
@@ -59,7 +59,9 @@ export function createShutdownCheckpointBeforeUnloadHandler(
 ): (event: Event) => void {
   return (event): void => {
     if (!guard.persistOnce()) {
-      event.currentTarget?.dispatchEvent(new Event(ORCA_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT))
+      event.currentTarget?.dispatchEvent(
+        new Event(QUIRKY_RENDERER_SHUTDOWN_CHECKPOINT_FAILED_EVENT)
+      )
       event.preventDefault()
     }
   }
@@ -73,6 +75,6 @@ export function preventUnloadAndScheduleShutdownCheckpointReset(
   // Why: paired web has no Electron will-prevent-unload callback. Defer until
   // all beforeunload listeners finish so their successful checkpoint is reset.
   queueMicrotask(() => {
-    eventTarget.dispatchEvent(new Event(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT))
+    eventTarget.dispatchEvent(new Event(QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT))
   })
 }

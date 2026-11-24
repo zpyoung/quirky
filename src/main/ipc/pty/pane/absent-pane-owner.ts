@@ -1,14 +1,14 @@
 import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { UNVERIFIED_PROCESS_EXIT_CODE } from '../../../../shared/terminal-exit-cause'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { ptyIncarnationById, ptyOwnership } from '../provider/ownership-state'
 import { clearProviderPtyState } from '../provider/state-cleanup'
 import { retireReplacedPaneBinding } from './pane-owner-replacement'
 import type { ReplacedPaneOwner } from './replaced-pane-owner'
 
 type AbsentPaneContext = {
-  runtime: OrcaRuntimeService | undefined
+  runtime: QuirkyRuntimeService | undefined
   store?: Store
   worktreeId?: string
   connectionId?: string | null
@@ -30,7 +30,7 @@ function isSupersededAbsentOwner(owner: AbsentPaneOwner): boolean {
 
 /** Ends the dead process's in-memory state; its durable binding is the caller's to clear. */
 function releaseAbsentPaneProcess(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   owner: AbsentPaneOwner
 ): void {
   const settleStop = runtime?.intentionalPtyStops?.mark(

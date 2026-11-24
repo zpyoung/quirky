@@ -86,16 +86,16 @@ afterEach(() => {
 })
 
 async function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-recovery-admission-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-recovery-admission-'))
   roots.push(root)
   const directory = join(root, 'profiles', profileId)
   mkdirSync(directory, { recursive: true })
   writeFileSync(
-    join(root, 'orca-profile-index.json'),
+    join(root, 'quirky-profile-index.json'),
     JSON.stringify({ activeProfileId: profileId, profiles: [{ id: profileId }] })
   )
   const databasePath = join(directory, 'profile-state.db')
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const backupId = createProfileStateDatabaseBackupId()
   const backupPath = profileStateDatabaseBackupPath(databasePath, backupId)
   const source = openProfileStateDatabase(databasePath, profileId)
@@ -202,9 +202,9 @@ describe('offline recovery excludes runtime admission', () => {
     }
     const archived = join(profile.directory, quarantine)
     expect(readFileSync(join(archived, 'profile-state.db'))).toEqual(original)
-    expect(readFileSync(join(archived, 'orca-data.json'), 'utf8')).toBe(staleJson)
+    expect(readFileSync(join(archived, 'quirky-data.json'), 'utf8')).toBe(staleJson)
     expect(
-      JSON.parse(readFileSync(join(archived, 'orca-data.json.sqlite-export.2.json'), 'utf8'))
+      JSON.parse(readFileSync(join(archived, 'quirky-data.json.sqlite-export.2.json'), 'utf8'))
     ).toEqual(liveState)
     acquireProfileStateRuntimeAdmission(profile.root).release()
   })
@@ -254,7 +254,7 @@ describe('offline recovery excludes runtime admission', () => {
         for (let revision = 1; revision <= 5; revision++) {
           expect(
             readFileSync(
-              join(profile.directory, archive, `orca-data.json.sqlite-export.${revision}.json`),
+              join(profile.directory, archive, `quirky-data.json.sqlite-export.${revision}.json`),
               'utf8'
             )
           ).toBe(retained[revision - 1].content)

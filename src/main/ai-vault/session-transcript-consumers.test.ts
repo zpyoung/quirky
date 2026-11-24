@@ -108,7 +108,7 @@ async function writeClaudeFixture(): Promise<{
   roots: ReturnType<typeof isolatedScanRoots>
   transcript: string
 }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-consumers-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-consumers-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   const transcript = join(roots.claudeProjectsDir, 'project', 'claude-session.jsonl')
@@ -344,7 +344,7 @@ it('serializes overlapping parses of one path so no consumer read is orphaned', 
 })
 
 it('publishes an OpenCode SQLite session over the channel and reports it complete', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-opencode-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-opencode-'))
   tempRoots.push(root)
   const dbPath = join(root, 'opencode.db')
   await writeFile(dbPath, '')
@@ -372,7 +372,7 @@ it('publishes an OpenCode SQLite session over the channel and reports it complet
 })
 
 it('reports the transcript size, not the cache key, as a whole-file read offset', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-cline-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-cline-'))
   tempRoots.push(root)
   const roots = isolatedScanRoots(root)
   // Cline is whole-file and declares a sibling content dependency, so its cache

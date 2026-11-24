@@ -1,6 +1,6 @@
 /**
- * Gives a plain fish pane Orca's `codex` function without changing how fish
- * starts: the spawn env prepends an Orca data dir to XDG_DATA_DIRS, fish sources
+ * Gives a plain fish pane Quirky's `codex` function without changing how fish
+ * starts: the spawn env prepends an Quirky data dir to XDG_DATA_DIRS, fish sources
  * that dir's fish/vendor_conf.d, and the snippet's first act is to undo it.
  */
 import { getFishCodexShellLaunchPreflight } from '../shared/codex-shell-function'
@@ -8,8 +8,8 @@ import { getFishClaudeShellFunction } from '../shared/claude-shell-function'
 import { MANAGED_DATA_ACCOUNT_FISH_RESTORE } from '../shared/managed-data-account-shell'
 import type { ShellWrapperFile } from './shell-wrapper-file-writer'
 
-/** Exactly what Orca prepended, so the snippet can remove that and nothing else. */
-export const FISH_XDG_DATA_DIRS_PREFIX_ENV = 'ORCA_FISH_XDG_DATA_DIRS_PREFIX'
+/** Exactly what Quirky prepended, so the snippet can remove that and nothing else. */
+export const FISH_XDG_DATA_DIRS_PREFIX_ENV = 'QUIRKY_FISH_XDG_DATA_DIRS_PREFIX'
 
 // Why: the XDG spec default, which fish 4.7+ also scans when XDG_DATA_DIRS is unset or empty.
 const XDG_DATA_DIRS_DEFAULT = '/usr/local/share:/usr/share'
@@ -19,7 +19,7 @@ export function getFishXdgDataDir(wrapperRoot: string): string {
 }
 
 export function getFishVendorConfSnippetPath(wrapperRoot: string): string {
-  return `${getFishXdgDataDir(wrapperRoot)}/fish/vendor_conf.d/orca-shell-integration.fish`
+  return `${getFishXdgDataDir(wrapperRoot)}/fish/vendor_conf.d/quirky-shell-integration.fish`
 }
 
 // Why: -N/--no-config (also abbreviated or in a flag cluster) skips vendor_conf.d,
@@ -53,9 +53,9 @@ export function getFishXdgDataDirsLaunchEnv(
 // Why they wait for fish_prompt: config.fish has not run yet, and the user's
 // own codex/claude function or PATH entry must be seen first, as in wrapped panes.
 export function getFishVendorConfSnippet(): string {
-  return `# Orca-generated. Loaded only because Orca put this directory on
+  return `# Quirky-generated. Loaded only because Quirky put this directory on
 # XDG_DATA_DIRS for one fish launch; the first thing it does is take it off.
-function __orca_fish_xdg_handoff
+function __quirky_fish_xdg_handoff
     set -q ${FISH_XDG_DATA_DIRS_PREFIX_ENV}; or return 0
     set -l prefix "$${FISH_XDG_DATA_DIRS_PREFIX_ENV}"
     set -e -g ${FISH_XDG_DATA_DIRS_PREFIX_ENV}
@@ -69,14 +69,14 @@ function __orca_fish_xdg_handoff
 
 
     status is-interactive; or return 0
-    function __orca_define_codex --on-event fish_prompt
-        functions -e __orca_define_codex
+    function __quirky_define_codex --on-event fish_prompt
+        functions -e __quirky_define_codex
 ${MANAGED_DATA_ACCOUNT_FISH_RESTORE}
 ${getFishCodexShellLaunchPreflight()}${getFishClaudeShellFunction()}
     end
 end
-__orca_fish_xdg_handoff
-functions -e __orca_fish_xdg_handoff
+__quirky_fish_xdg_handoff
+functions -e __quirky_fish_xdg_handoff
 `
 }
 

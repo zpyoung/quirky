@@ -15,7 +15,7 @@ type TerminalPushTargetStore = WorktreePushTargetStore & ProjectRuntimeResolutio
 
 // Why (#17828): a fork-PR remote deferred at worktree-create time must exist before an
 // autonomous agent's raw git commands run in a freshly opened terminal -- "sync through
-// Orca first" isn't an option mid-task. Fires on every terminal spawn into the worktree;
+// Quirky first" isn't an option mid-task. Fires on every terminal spawn into the worktree;
 // materialize() is already a no-op once the remote exists, so repeat spawns cost one probe.
 // Never awaited by callers: terminal spawn must not block on remote-add/fetch network I/O.
 export function triggerTerminalSpawnPushTargetMaterialization(

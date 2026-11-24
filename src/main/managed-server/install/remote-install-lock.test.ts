@@ -42,7 +42,7 @@ describe('acquireInstallLock', () => {
     await expect(
       acquireInstallLock(
         {} as SshConnection,
-        '/home/u/.orca-remote/relay-0.1.0',
+        '/home/u/.quirky-remote/relay-0.1.0',
         getRemoteHostPlatform('linux-x64'),
         { signal: controller.signal }
       )
@@ -61,7 +61,7 @@ describe('acquireInstallLock', () => {
     })
     const acquired = acquireInstallLock(
       {} as SshConnection,
-      '/home/u/.orca-remote/.orcad-activation-transaction',
+      '/home/u/.quirky-remote/.quirkyd-activation-transaction',
       getRemoteHostPlatform('linux-x64'),
       { relayGcClaim: false, allowStaleTakeover: allow, waitTimeoutMs: 0 }
     ).then(
@@ -85,7 +85,7 @@ describe('acquireInstallLock', () => {
     await expect(
       acquireInstallLock(
         {} as SshConnection,
-        '/home/u/.orca-remote/.orcad-activation-transaction',
+        '/home/u/.quirky-remote/.quirkyd-activation-transaction',
         getRemoteHostPlatform('linux-x64'),
         { relayGcClaim: false, allowStaleTakeover: false, waitTimeoutMs: 0 }
       )

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 export function registerSessionTabsEmptyWorktreePublicationTests(): void {
   const WORKTREE = 'repo::/never-opened'
@@ -12,15 +12,15 @@ export function registerSessionTabsEmptyWorktreePublicationTests(): void {
     ) => RuntimeMobileSessionTabsResult
   }
 
-  function createHeadedRuntime(): OrcaRuntimeService {
-    const runtime = new OrcaRuntimeService()
+  function createHeadedRuntime(): QuirkyRuntimeService {
+    const runtime = new QuirkyRuntimeService()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these tests only reach listProcesses.
     runtime.setPtyController({ listProcesses: vi.fn(async () => []) } as never)
     runtime.attachWindow(1)
     return runtime
   }
 
-  function answerFor(runtime: OrcaRuntimeService, clientNavigationId?: string) {
+  function answerFor(runtime: QuirkyRuntimeService, clientNavigationId?: string) {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: reads the runtime's own per-worktree answer.
     return (runtime as unknown as WorktreeAnswerInternals).getMobileSessionTabsForWorktree(
       WORKTREE,
@@ -28,7 +28,7 @@ export function registerSessionTabsEmptyWorktreePublicationTests(): void {
     )
   }
 
-  function recordAnswers(runtime: OrcaRuntimeService): RuntimeMobileSessionTabsResult[] {
+  function recordAnswers(runtime: QuirkyRuntimeService): RuntimeMobileSessionTabsResult[] {
     const answers: RuntimeMobileSessionTabsResult[] = []
     runtime.onMobileSessionTabsChanged((snapshot) => {
       if (snapshot.worktree === WORKTREE) {
@@ -38,7 +38,7 @@ export function registerSessionTabsEmptyWorktreePublicationTests(): void {
     return answers
   }
 
-  function publishGraphWithoutWorktree(runtime: OrcaRuntimeService): void {
+  function publishGraphWithoutWorktree(runtime: QuirkyRuntimeService): void {
     runtime.syncWindowGraph(1, { tabs: [], leaves: [], mobileSessionTabs: [] })
   }
 

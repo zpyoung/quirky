@@ -1,18 +1,18 @@
 import { openSidebarWorkspaceComposer } from './helpers/sidebar-project-dialog'
 import { writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 
-test.use({ orcaAppExtraEnv: { ORCA_BACKGROUND_LAUNCH: '1' } })
+test.use({ quirkyAppExtraEnv: { QUIRKY_BACKGROUND_LAUNCH: '1' } })
 
 test('Create more clears the GitHub PR source before the next worktree', async ({
   electronApp,
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], {
     cwd: testRepoPath,
     encoding: 'utf8'
@@ -21,13 +21,13 @@ test('Create more clears the GitHub PR source before the next worktree', async (
     ipcMain.removeHandler('worktrees:resolvePrBase')
     ipcMain.handle('worktrees:resolvePrBase', () => ({ baseBranch }))
   }, sha)
-  await orcaPage.evaluate(() => {
+  await quirkyPage.evaluate(() => {
     const store = window.__store!
     const state = store.getState()
     store.setState({ settings: { ...state.settings!, defaultTuiAgent: 'blank' } })
   })
-  await openSidebarWorkspaceComposer(orcaPage)
-  await orcaPage.evaluate(() => {
+  await openSidebarWorkspaceComposer(quirkyPage)
+  await quirkyPage.evaluate(() => {
     const store = window.__store!
     const repoId = store.getState().repos[0].id
     const item = {
@@ -53,10 +53,10 @@ test('Create more clears the GitHub PR source before the next worktree', async (
       })
     })
   })
-  const dialog = orcaPage.getByRole('dialog', { name: /Create (Workspace|Worktree)/i })
+  const dialog = quirkyPage.getByRole('dialog', { name: /Create (Workspace|Worktree)/i })
   const input = dialog.locator('[data-workspace-name-input="true"]')
   await input.click()
-  await orcaPage
+  await quirkyPage
     .getByRole('option', { name: '#4242 Fix workspace task reset', exact: true })
     .click()
   const pill = dialog.locator('[data-workspace-source-pill="true"]')
@@ -67,7 +67,7 @@ test('Create more clears the GitHub PR source before the next worktree', async (
   await expect(input).toHaveValue('')
   await expect
     .poll(() =>
-      orcaPage.evaluate(() =>
+      quirkyPage.evaluate(() =>
         window
           .__store!.getState()
           .allWorktrees()
@@ -75,7 +75,7 @@ test('Create more clears the GitHub PR source before the next worktree', async (
       )
     )
     .toBe(true)
-  const cdp = await orcaPage.context().newCDPSession(orcaPage)
+  const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
   const screenshot = await cdp.send('Page.captureScreenshot')
   const proofPath = testInfo.outputPath('create-more-result.png')
   writeFileSync(proofPath, Buffer.from(screenshot.data, 'base64'))
@@ -93,7 +93,7 @@ test('Create more clears the GitHub PR source before the next worktree', async (
   await dialog.getByRole('button', { name: /^Create/ }).click()
   await expect
     .poll(() =>
-      orcaPage.evaluate(() => {
+      quirkyPage.evaluate(() => {
         const worktree = window
           .__store!.getState()
           .allWorktrees()

@@ -32,7 +32,7 @@ function server(
     runtimeId: null,
     endpoints: [{ id: 'ws', kind: 'websocket', label: 'Box', endpoint: 'ws://127.0.0.1:46768/' }],
     preferredEndpointId: 'ws',
-    orcadDeployment: {
+    quirkydDeployment: {
       sshTargetId: 'box',
       sshTargetGeneration: 1,
       localPort: 46_768,
@@ -109,7 +109,7 @@ describe('an on-connect update re-pairs a managed server', () => {
 
 describe('Settings refreshes a hand-paired server with a new code for it', () => {
   function handPaired(pairingRevision: number, hostKeyFingerprint: string) {
-    const { orcadDeployment: _managed, ...rest } = server(pairingRevision, hostKeyFingerprint)
+    const { quirkydDeployment: _managed, ...rest } = server(pairingRevision, hostKeyFingerprint)
     return rest
   }
 

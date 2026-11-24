@@ -62,7 +62,7 @@ describe('prepareAiVaultSessionContinuation', () => {
         transcriptPath: '/home/ada/.claude/session.jsonl'
       },
       worktreeId: 'folder:folder-1',
-      workspacePath: '/srv/orca',
+      workspacePath: '/srv/quirky',
       initialCwd: '/source',
       launchSource: 'sidebar'
     })
@@ -70,7 +70,7 @@ describe('prepareAiVaultSessionContinuation', () => {
     const result = prepareAiVaultSessionContinuation({
       session,
       targetWorktreeId: 'folder:folder-1',
-      targetWorkspacePath: '/srv/orca'
+      targetWorkspacePath: '/srv/quirky'
     })
 
     expect(result).toEqual({
@@ -80,7 +80,7 @@ describe('prepareAiVaultSessionContinuation', () => {
         transcriptPath: '/home/ada/.claude/session.jsonl'
       },
       worktreeId: 'folder:folder-1',
-      workspacePath: '/srv/orca',
+      workspacePath: '/srv/quirky',
       initialCwd: '/source',
       launchSource: 'sidebar',
       forkSource: {

@@ -1,9 +1,9 @@
 /**
- * A switch-on desktop paired to a switch-on `orca serve` reports the group it shows in each server
+ * A switch-on desktop paired to a switch-on `quirky serve` reports the group it shows in each server
  * workspace its frames draw (`layout.reportView`), so a file the CLI opens on the server lands in
  * that group, whichever of the workspace's groups the server's saved view names (H5c-v).
  *
- * Run (switch-on build: ORCA_LAYOUT_OWNER=main ... --mode e2e):
+ * Run (switch-on build: QUIRKY_LAYOUT_OWNER=main ... --mode e2e):
  *   pnpm exec playwright test tests/e2e/paired-desktop-server-file-open-group.spec.ts \
  *     --config tests/playwright.config.ts --project electron-headless --workers=2
  */
@@ -16,7 +16,7 @@ import { HOST_TERMINAL_SURFACE_SEPARATOR } from '../../src/shared/terminal-surfa
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
 import type { PublishedWorkspaceLayout } from '../../src/shared/workspace-layout/workspace-layout-published'
 import { readWorkspaceLayoutStreamFrame } from '../../src/shared/workspace-layout/workspace-layout-stream-frames'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
@@ -27,7 +27,7 @@ import {
 } from './helpers/paired-electron-client'
 
 const LAYOUT_OWNER_BUILD = existsSync(
-  path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')
+  path.join(process.cwd(), 'out', 'main', 'QUIRKY_LAYOUT_OWNER_MAIN')
 )
 
 /** The server's own layout of the workspace: the first snapshot of a stream of the test's own. */
@@ -156,7 +156,7 @@ async function showGroupOnDesktop(
 }
 
 test.describe('a file opened on a switch-on server lands in the group a paired desktop shows', () => {
-  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (ORCA_LAYOUT_OWNER=main)')
+  test.skip(!LAYOUT_OWNER_BUILD, 'Needs a layout-owner build (QUIRKY_LAYOUT_OWNER=main)')
 
   test('each CLI open follows the group the desktop switched to', async ({
     testRepoPath

@@ -59,7 +59,7 @@ afterEach(async () => {
 
 describe('objective observed workspace changes', () => {
   it('does not blame preexisting Git dirt and accepts the reported in-territory change', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-git-')
+    const root = await temporaryDirectory('quirky-objective-observed-git-')
     await git(root, ['init'])
     await mkdir(join(root, 'src'))
     await writeFile(join(root, 'src', 'preexisting.ts'), 'clean\n')
@@ -94,7 +94,7 @@ describe('objective observed workspace changes', () => {
 
   it('accepts an existing ignored report without allowing an observed tracked change to be omitted', async () => {
     const root = await gitRepositoryWithIgnore(
-      'orca-objective-observed-ignored-',
+      'quirky-objective-observed-ignored-',
       'generated/*.json'
     )
     const target = gitTarget(root)
@@ -131,7 +131,7 @@ describe('objective observed workspace changes', () => {
 
   it('rejects a reported ignored path that does not exist', async () => {
     const root = await gitRepositoryWithIgnore(
-      'orca-objective-observed-missing-ignored-',
+      'quirky-objective-observed-missing-ignored-',
       'generated/*.json'
     )
     const target = gitTarget(root)
@@ -153,7 +153,7 @@ describe('objective observed workspace changes', () => {
 
   it('rejects an existing ignored report outside write territory', async () => {
     const root = await gitRepositoryWithIgnore(
-      'orca-objective-observed-ignored-territory-',
+      'quirky-objective-observed-ignored-territory-',
       'docs/*.cache'
     )
     const target = gitTarget(root)
@@ -176,7 +176,10 @@ describe('objective observed workspace changes', () => {
   })
 
   it('rejects an unsafe reported path before checking whether it is ignored', async () => {
-    const root = await gitRepositoryWithIgnore('orca-objective-observed-unsafe-ignored-', '*.cache')
+    const root = await gitRepositoryWithIgnore(
+      'quirky-objective-observed-unsafe-ignored-',
+      '*.cache'
+    )
     const target = gitTarget(root)
     await captureObjectiveWorkspaceBaseline(target, 'unsafe-ignored-attempt')
 
@@ -198,10 +201,10 @@ describe('objective observed workspace changes', () => {
     'rejects an ignored symlink that resolves outside the workspace',
     async () => {
       const root = await gitRepositoryWithIgnore(
-        'orca-objective-observed-ignored-symlink-',
+        'quirky-objective-observed-ignored-symlink-',
         'generated/*.json'
       )
-      const outside = await temporaryDirectory('orca-objective-observed-ignored-outside-')
+      const outside = await temporaryDirectory('quirky-objective-observed-ignored-outside-')
       await writeFile(join(outside, 'outside.json'), '{"outside":true}\n')
       const target = gitTarget(root)
       await captureObjectiveWorkspaceBaseline(target, 'ignored-symlink-attempt')
@@ -224,7 +227,7 @@ describe('objective observed workspace changes', () => {
   )
 
   it('does not accept an unchanged tracked path merely because it matches an ignore rule', async () => {
-    const root = await gitRepository('orca-objective-observed-tracked-ignore-')
+    const root = await gitRepository('quirky-objective-observed-tracked-ignore-')
     await writeFile(join(root, '.gitignore'), 'src/*.log\n')
     await writeFile(join(root, 'src', 'tracked.log'), 'tracked\n')
     await git(root, ['add', '-f', '.gitignore', 'src/tracked.log'])
@@ -249,7 +252,7 @@ describe('objective observed workspace changes', () => {
   it.skipIf(process.platform === 'win32')(
     'reports a Git executable-mode-only change even when file content is unchanged',
     async () => {
-      const root = await temporaryDirectory('orca-objective-observed-mode-')
+      const root = await temporaryDirectory('quirky-objective-observed-mode-')
       await git(root, ['init'])
       await mkdir(join(root, 'src'))
       const script = join(root, 'src', 'script.sh')
@@ -301,7 +304,7 @@ describe('objective observed workspace changes', () => {
   it.skipIf(process.platform === 'win32')(
     'reports a tracked file-to-symlink type change even when the Git object content is unchanged',
     async () => {
-      const root = await temporaryDirectory('orca-objective-observed-type-')
+      const root = await temporaryDirectory('quirky-objective-observed-type-')
       await git(root, ['init'])
       await mkdir(join(root, 'src'))
       const changedPath = join(root, 'src', 'linkish')
@@ -337,7 +340,7 @@ describe('objective observed workspace changes', () => {
   )
 
   it('fingerprints a dirty submodule from superproject metadata without hashing its directory', async () => {
-    const child = await temporaryDirectory('orca-objective-observed-submodule-child-')
+    const child = await temporaryDirectory('quirky-objective-observed-submodule-child-')
     await git(child, ['init'])
     await writeFile(join(child, 'child.txt'), 'before\n')
     await git(child, ['add', 'child.txt'])
@@ -352,7 +355,7 @@ describe('objective observed workspace changes', () => {
       '-m',
       'child'
     ])
-    const root = await temporaryDirectory('orca-objective-observed-submodule-parent-')
+    const root = await temporaryDirectory('quirky-objective-observed-submodule-parent-')
     await git(root, ['init'])
     await git(root, ['-c', 'protocol.file.allow=always', 'submodule', 'add', child, 'vendor/child'])
     await git(root, ['add', '.'])
@@ -383,7 +386,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('detects both additions and deletions in a folder workspace', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-folder-')
+    const root = await temporaryDirectory('quirky-objective-observed-folder-')
     await mkdir(join(root, 'src'))
     await writeFile(join(root, 'src', 'deleted.ts'), 'delete me\n')
     const target = folderTarget(root)
@@ -403,7 +406,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('rejects a host-observed change outside write territory', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-territory-')
+    const root = await temporaryDirectory('quirky-objective-observed-territory-')
     await mkdir(join(root, 'docs'))
     const target = folderTarget(root)
     await captureObjectiveWorkspaceBaseline(target, 'outside-attempt')
@@ -424,7 +427,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('rejects an in-territory host change omitted from reported files', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-unreported-')
+    const root = await temporaryDirectory('quirky-objective-observed-unreported-')
     await mkdir(join(root, 'src'))
     const target = folderTarget(root)
     await captureObjectiveWorkspaceBaseline(target, 'unreported-attempt')
@@ -445,7 +448,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('fails closed when the originating baseline is missing', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-missing-')
+    const root = await temporaryDirectory('quirky-objective-observed-missing-')
     await expect(
       validateObjectiveWorkspaceChanges({
         target: folderTarget(root),
@@ -457,12 +460,12 @@ describe('objective observed workspace changes', () => {
   })
 
   it('fails closed when the stored baseline is malformed', async () => {
-    const root = await temporaryDirectory('orca-objective-observed-malformed-')
+    const root = await temporaryDirectory('quirky-objective-observed-malformed-')
     const target = folderTarget(root)
     await captureObjectiveWorkspaceBaseline(target, 'malformed-attempt')
     const baselineDirectory = join(
       root,
-      '.orca',
+      '.quirky',
       'heimdall',
       'objective',
       'reports',
@@ -482,7 +485,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('does not report a path that was dirty at capture and is then committed unchanged', async () => {
-    const root = await gitRepository('orca-objective-observed-commit-')
+    const root = await gitRepository('quirky-objective-observed-commit-')
     await writeFile(join(root, 'src', 'staged.ts'), 'before\n')
     await commitAll(root, 'initial')
     await writeFile(join(root, 'src', 'staged.ts'), 'worker edit\n')
@@ -502,7 +505,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('reports a path that was dirty at capture and is then restored to HEAD', async () => {
-    const root = await gitRepository('orca-objective-observed-revert-')
+    const root = await gitRepository('quirky-objective-observed-revert-')
     await writeFile(join(root, 'src', 'reverted.ts'), 'committed\n')
     await commitAll(root, 'initial')
     await writeFile(join(root, 'src', 'reverted.ts'), 'dirty at capture\n')
@@ -522,7 +525,7 @@ describe('objective observed workspace changes', () => {
   })
 
   it('reports a file created and committed without being dirty at either observation', async () => {
-    const root = await gitRepository('orca-objective-observed-added-')
+    const root = await gitRepository('quirky-objective-observed-added-')
     await writeFile(join(root, 'src', 'existing.ts'), 'existing\n')
     await commitAll(root, 'initial')
     const target = gitTarget(root)
@@ -544,7 +547,7 @@ describe('objective observed workspace changes', () => {
   it.skipIf(process.platform === 'win32')(
     'observes a dirty symlink that points at a missing file instead of failing on it',
     async () => {
-      const root = await gitRepository('orca-objective-observed-broken-link-')
+      const root = await gitRepository('quirky-objective-observed-broken-link-')
       await writeFile(join(root, 'src', 'kept.ts'), 'kept\n')
       await commitAll(root, 'initial')
       await symlink('does-not-exist.ts', join(root, 'src', 'dangling.ts'))
@@ -567,7 +570,7 @@ describe('objective observed workspace changes', () => {
   it.skipIf(process.platform === 'win32')(
     'reports a retargeted symlink whose old and new targets hold identical content',
     async () => {
-      const root = await gitRepository('orca-objective-observed-retarget-')
+      const root = await gitRepository('quirky-objective-observed-retarget-')
       await writeFile(join(root, 'src', 'first.ts'), 'same\n')
       await writeFile(join(root, 'src', 'second.ts'), 'same\n')
       await symlink('first.ts', join(root, 'src', 'link.ts'))
@@ -590,7 +593,7 @@ describe('objective observed workspace changes', () => {
   )
 
   it('validates a baseline captured in the legacy whole-manifest format', async () => {
-    const root = await gitRepository('orca-objective-observed-legacy-')
+    const root = await gitRepository('quirky-objective-observed-legacy-')
     await writeFile(join(root, 'src', 'legacy.ts'), 'before\n')
     await commitAll(root, 'initial')
     const target = gitTarget(root)
@@ -599,7 +602,7 @@ describe('objective observed workspace changes', () => {
     const baselineDirectory = join(
       root,
       '.git',
-      'orca-heimdall',
+      'quirky-heimdall',
       'objective',
       'reports',
       'workspace-baselines'

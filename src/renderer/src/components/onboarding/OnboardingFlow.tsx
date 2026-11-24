@@ -27,7 +27,7 @@ const stepCopy = {
     get subtitle() {
       return translate(
         'auto.components.onboarding.OnboardingFlow.322fc50a18',
-        "Orca works with every CLI agent. Choose the one you'll reach for most. Switch any time."
+        "Quirky works with every CLI agent. Choose the one you'll reach for most. Switch any time."
       )
     }
   },
@@ -55,7 +55,7 @@ const stepCopy = {
     get subtitle() {
       return translate(
         'auto.components.onboarding.OnboardingFlow.ff92d15436',
-        'Orca will notify you when agents are done or need help.'
+        'Quirky will notify you when agents are done or need help.'
       )
     }
   },
@@ -214,7 +214,7 @@ export default function OnboardingFlow({
           role="dialog"
           aria-label={translate(
             'auto.components.onboarding.OnboardingFlow.277ba45540',
-            'Orca onboarding'
+            'Quirky onboarding'
           )}
           aria-modal="true"
           data-onboarding-modal
@@ -232,7 +232,7 @@ export default function OnboardingFlow({
                 className="h-7 w-auto shrink-0 invert dark:invert-0"
               />
               <span>
-                {translate('auto.components.onboarding.OnboardingFlow.a249f81538', 'Orca')}
+                {translate('auto.components.onboarding.OnboardingFlow.a249f81538', 'Quirky')}
               </span>
             </div>
 
@@ -283,7 +283,7 @@ export default function OnboardingFlow({
                 <div className="mb-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   {translate(
                     'auto.components.onboarding.OnboardingFlow.1b5e182e9f',
-                    'Welcome to Orca'
+                    'Welcome to Quirky'
                   )}
                 </div>
               )}

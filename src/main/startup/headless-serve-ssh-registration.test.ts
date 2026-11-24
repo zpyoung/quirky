@@ -34,7 +34,7 @@ const target: SshTarget = {
   username: 'deploy'
 }
 
-describe('SSH registration on a headless `orca serve`', () => {
+describe('SSH registration on a headless `quirky serve`', () => {
   const harness = createSshIpcHarness(mocks)
 
   beforeEach(async () => {

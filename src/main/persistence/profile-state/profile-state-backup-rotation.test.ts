@@ -45,7 +45,7 @@ afterEach(async () => {
 })
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-sqlite-backup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sqlite-backup-'))
   directories.push(directory)
   const databasePath = join(directory, 'profile-state.db')
   const opened = openProfileStateDatabase(databasePath, 'backup-profile')
@@ -84,7 +84,7 @@ describe('automatic SQLite recovery generations', () => {
     const backups = profileStateDatabaseBackups(databasePath)
     expect(backups).toHaveLength(1)
     expect(readBackup(backups[0].path)).toEqual({ settings: { generation: 2 } })
-    expect(existsSync(join(directory, 'orca-data.json'))).toBe(false)
+    expect(existsSync(join(directory, 'quirky-data.json'))).toBe(false)
     expect(readdirSync(directory).filter((name) => name.includes('.backup.'))).toEqual([
       backups[0].path.slice(directory.length + 1)
     ])

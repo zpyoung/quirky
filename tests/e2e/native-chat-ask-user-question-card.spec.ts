@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { waitForActivePaneHookDescriptor, waitForActiveTerminalManager } from './helpers/terminal'
 import type { GlobalSettings } from '../../src/shared/global-settings-types'
@@ -103,18 +103,18 @@ function pendingAskTranscript(args: { sessionId: string; userText: string }): st
 
 test.describe('Desktop chat AskUserQuestion card (#11761)', () => {
   test('renders the answerable question card from the transcript when live status carries no ask', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
-    await waitForActiveTerminalManager(orcaPage, 30_000)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
+    await waitForActiveTerminalManager(quirkyPage, 30_000)
 
-    const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
+    const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
     const [tabId] = descriptor.paneKey.split(':')
     const sessionId = `e2e-ask-card-${randomUUID()}`
 
-    const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-ask-card-'))
+    const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-ask-card-'))
     const transcriptPath = path.join(scratchDir, `${sessionId}.jsonl`)
     const screenshotDir = path.join(process.cwd(), 'validation-screenshots', 'ask-user-question')
     mkdirSync(screenshotDir, { recursive: true })
@@ -123,41 +123,41 @@ test.describe('Desktop chat AskUserQuestion card (#11761)', () => {
       const userText = 'Reformat the config file for me'
       writeFileSync(transcriptPath, pendingAskTranscript({ sessionId, userText }))
 
-      await enableNativeChatSetting(orcaPage)
-      await seedStatusWithoutAskPayload(orcaPage, {
+      await enableNativeChatSetting(quirkyPage)
+      await seedStatusWithoutAskPayload(quirkyPage, {
         paneKey: descriptor.paneKey,
         worktreeId: descriptor.worktreeId,
         sessionId,
         transcriptPath
       })
-      await toggleTerminalTabToChatView(orcaPage, { tabId, worktreeId: descriptor.worktreeId })
+      await toggleTerminalTabToChatView(quirkyPage, { tabId, worktreeId: descriptor.worktreeId })
 
-      await expect(orcaPage.locator('[data-native-chat-root="true"]')).toBeVisible({
+      await expect(quirkyPage.locator('[data-native-chat-root="true"]')).toBeVisible({
         timeout: 15_000
       })
-      await expect(orcaPage.getByText(userText)).toBeVisible({ timeout: 30_000 })
+      await expect(quirkyPage.getByText(userText)).toBeVisible({ timeout: 30_000 })
 
       // The pre-fix build leaves the composer mounted here and never renders a
       // card, so this assertion is what actually gates the regression.
       // Why (#20724): the transcript row renders the pending question in an
       // awaiting-input row as well as the card, so gate on the card's own
       // title node instead of any text match.
-      const cardQuestion = orcaPage
+      const cardQuestion = quirkyPage
         .getByTestId('native-chat-question-card-title')
         .filter({ hasText: QUESTION })
       await expect(cardQuestion).toBeVisible({ timeout: 10_000 })
-      await expect(orcaPage.getByRole('button', { name: /Spaces/ })).toBeVisible()
-      await orcaPage.screenshot({ path: path.join(screenshotDir, '01-question-card.png') })
+      await expect(quirkyPage.getByRole('button', { name: /Spaces/ })).toBeVisible()
+      await quirkyPage.screenshot({ path: path.join(screenshotDir, '01-question-card.png') })
 
       // A single-select pick on the last question submits on its own after a short
       // beat (#26288); that is what proves the card is answerable rather than merely rendered.
-      await orcaPage.getByRole('button', { name: /Spaces/ }).click()
+      await quirkyPage.getByRole('button', { name: /Spaces/ }).click()
       // The card owns the composer slot, so its disappearance is the visible
       // signal that the answer was accepted and chat input came back. The
       // resolution receipt keeps the question in the transcript row, so only
       // the card paragraph is expected to leave.
       await expect(cardQuestion).toHaveCount(0, { timeout: 20_000 })
-      await orcaPage.screenshot({ path: path.join(screenshotDir, '03-answered.png') })
+      await quirkyPage.screenshot({ path: path.join(screenshotDir, '03-answered.png') })
     } finally {
       rmSync(scratchDir, { recursive: true, force: true })
     }

@@ -1,7 +1,7 @@
-// The one way any Orca send that speaks for another agent records who it is from: the sender's
+// The one way any Quirky send that speaks for another agent records who it is from: the sender's
 // party as orchestration resolves its address, and a bounded snapshot of its name.
 
-import { parseOrcaSessionAddress } from '../../../shared/orca-session-address'
+import { parseQuirkySessionAddress } from '../../../shared/quirky-session-address'
 import {
   agentMessageSenderName,
   type AgentMessageSender
@@ -9,7 +9,7 @@ import {
 import type { OrchestrationDb } from './db'
 import { resolveOrchestrationParty } from './orchestration-party'
 
-/** A name from Orca's records for a party (never an agent-painted title); null when it has none.
+/** A name from Quirky's records for a party (never an agent-painted title); null when it has none.
  *  `reportedDispatchId`: the dispatch the sender's own `worker_done` in the message names. */
 export type SenderNameResolver = (
   party: AgentMessageSender['party'],
@@ -33,7 +33,7 @@ function senderParty(address: string, db: OrchestrationDb | null): AgentMessageS
     return party
   } catch {
     // A worker this host lost the identity of: what the address itself says.
-    return { address, terminalHandle: null, orcaSessionId: parseOrcaSessionAddress(address) }
+    return { address, terminalHandle: null, quirkySessionId: parseQuirkySessionAddress(address) }
   }
 }
 

@@ -14,21 +14,21 @@ const BUILD_PREFIXES = [
   '.github/actions/install-node-dependencies/',
   '.github/actions/restore-pnpm-verification/',
   '.github/actions/prepare-native-runtime/',
-  '.github/actions/prepare-orcad-prebuilds/'
+  '.github/actions/prepare-quirkyd-prebuilds/'
 ]
 // A remote target's OS does not identify the client platform that builds its commands.
 const CROSS_HOST_PREFIXES = [
   'src/main/ssh/',
   'src/main/managed-server/',
   'src/main/node-runtime/',
-  'src/main/orcad/orcad-artifact-materializer.ts',
-  'src/main/orcad/orcad-host-unavailable.ts',
+  'src/main/quirkyd/quirkyd-artifact-materializer.ts',
+  'src/main/quirkyd/quirkyd-host-unavailable.ts',
   'src/main/providers/'
 ]
 const PLATFORM_PREFIXES = [
   'src/main/persistence/',
   'src/main/sqlite/',
-  'src/main/orcad/',
+  'src/main/quirkyd/',
   'src/main/daemon/',
   'src/packages/process-host/'
 ]

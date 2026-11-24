@@ -1,123 +1,123 @@
 ---
-title: Orca CLI overview
-description: Use the Orca CLI to script Orca from a terminal, manage worktrees, control agent terminals, automate the built-in browser, and install agent skills.
+title: Quirky CLI overview
+description: Use the Quirky CLI to script Quirky from a terminal, manage worktrees, control agent terminals, automate the built-in browser, and install agent skills.
 keywords:
-  - orca cli
-  - Orca CLI
-  - orca command line
-  - Orca skills
+  - quirky cli
+  - Quirky CLI
+  - quirky command line
+  - Quirky skills
   - npx skills add
   - agent CLI
 ---
 
 import { Callout } from '@/components/docs/prose'
 
-The Orca CLI is the `orca` command-line interface for scripting a running Orca editor from any shell. Use it to create and inspect worktrees, drive agent terminals, open files and diffs, automate the built-in browser, run scheduled automations, share HTML/Markdown artifacts, and control Orca-native tools from scripts or AI agents.
+The Quirky CLI is the `quirky` command-line interface for scripting a running Quirky editor from any shell. Use it to create and inspect worktrees, drive agent terminals, open files and diffs, automate the built-in browser, run scheduled automations, share HTML/Markdown artifacts, and control Quirky-native tools from scripts or AI agents.
 
-It ships with the desktop app; register it under [Settings → General → Orca CLI](/docs/settings). On Linux the command is `orca-ide`, because GNOME Orca's screen reader already owns `/usr/bin/orca` — see [Install → Linux](/docs/install#linux).
+It ships with the desktop app; register it under [Settings → General → Quirky CLI](/docs/settings). On Linux the command is `quirky-ide`, because GNOME Quirky's screen reader already owns `/usr/bin/quirky` — see [Install → Linux](/docs/install#linux).
 
-Agents can install the matching Orca CLI skill with:
+Agents can install the matching Quirky CLI skill with:
 
 ```bash
-npx skills add https://github.com/stablyai/orca --skill orca-cli
+npx skills add https://github.com/stablyai/orca --skill quirky-cli
 # headless / no Settings UI:
-orca skills install --skill orca-cli
+quirky skills install --skill quirky-cli
 ```
 
-See [Skills registry & MCP](/docs/cli/skills) for every installable Orca skill, including `orca skills install` / `orca skills update`.
+See [Skills registry & MCP](/docs/cli/skills) for every installable Quirky skill, including `quirky skills install` / `quirky skills update`.
 
 ## Install & verify
 
 ```
-command -v orca
-orca status --json
+command -v quirky
+quirky status --json
 ```
 
 ## Worktree commands
 
 ```
-orca worktree ps --json
-orca worktree create --repo id:<repoId> --name my-task --issue 123 --json
-orca worktree create --repo id:<repoId> --name review-pr-123 --pr 123 --json
-orca worktree current --json
-orca worktree set --worktree active --comment "reproduced bug" --json
-orca worktree set --worktree active --gitlab-issue 42 --gitlab-mr 77 --json
-orca worktree set --worktree active --pr null --json
-orca worktree rm --worktree id:<id> --force --json
+quirky worktree ps --json
+quirky worktree create --repo id:<repoId> --name my-task --issue 123 --json
+quirky worktree create --repo id:<repoId> --name review-pr-123 --pr 123 --json
+quirky worktree current --json
+quirky worktree set --worktree active --comment "reproduced bug" --json
+quirky worktree set --worktree active --gitlab-issue 42 --gitlab-mr 77 --json
+quirky worktree set --worktree active --pr null --json
+quirky worktree rm --worktree id:<id> --force --json
 ```
 
-For selectors, setup flags, parent/child worktrees, and the broader command map, see [Orca CLI reference](/docs/cli/reference).
+For selectors, setup flags, parent/child worktrees, and the broader command map, see [Quirky CLI reference](/docs/cli/reference).
 
 ## Terminal commands
 
 ```
-orca terminal list --json
-orca terminal read --json
-orca terminal send --text "continue" --enter --json
-orca terminal wait --for tui-idle --timeout-ms 30000 --json
-orca terminal create --worktree path:/projects/app --command "npm test" --json
-orca terminal split --direction vertical --command "npm run dev" --json
+quirky terminal list --json
+quirky terminal read --json
+quirky terminal send --text "continue" --enter --json
+quirky terminal wait --for tui-idle --timeout-ms 30000 --json
+quirky terminal create --worktree path:/projects/app --command "npm test" --json
+quirky terminal split --direction vertical --command "npm run dev" --json
 ```
 
 For tracked multi-agent work, use [Orchestration](/docs/cli/orchestration) instead of plain terminal prompts.
 
 ## File commands
 
-Open files and diffs as tabs in their Orca worktree from a shell. They open without changing what you are looking at; add `--focus` to be brought to the file:
+Open files and diffs as tabs in their Quirky worktree from a shell. They open without changing what you are looking at; add `--focus` to be brought to the file:
 
 ```
-orca file open src/App.tsx
-orca file diff src/App.tsx --staged
-orca file open-changed --mode both
+quirky file open src/App.tsx
+quirky file diff src/App.tsx --staged
+quirky file open-changed --mode both
 ```
 
 Use `--worktree <selector>` when the shell's current directory is not inside the target worktree.
 
 ## Browser profiles
 
-Browser profiles isolate tab session state, so a script or agent can test with different cookies, local storage, and logged-in identities. The CLI exposes profile commands under `orca tab profile`; start with `orca tab profile list --json`, then use `create`, `set`, `clone`, or `use-default` as needed.
+Browser profiles isolate tab session state, so a script or agent can test with different cookies, local storage, and logged-in identities. The CLI exposes profile commands under `quirky tab profile`; start with `quirky tab profile list --json`, then use `create`, `set`, `clone`, or `use-default` as needed.
 
 ## Scheduled automations
 
-Use `orca automations` to create, inspect, run, and remove scheduled Orca tasks from a shell. Start with [Scheduled automations](/docs/cli/automations) when you want a recurring prompt to run against a repo or an existing worktree.
+Use `quirky automations` to create, inspect, run, and remove scheduled Quirky tasks from a shell. Start with [Scheduled automations](/docs/cli/automations) when you want a recurring prompt to run against a repo or an existing worktree.
 
 ## Browser automation
 
 The CLI also drives the built-in browser with a snapshot-interact-re-snapshot loop:
 
 ```
-orca goto --url https://example.com --json
-orca snapshot --json     # returns refs like @e1, @e3
-orca click --element @e3 --json
-orca fill --element @e1 --value "user@example.com" --json
-orca screenshot --json
+quirky goto --url https://example.com --json
+quirky snapshot --json     # returns refs like @e1, @e3
+quirky click --element @e3 --json
+quirky fill --element @e1 --value "user@example.com" --json
+quirky screenshot --json
 ```
 
 For responsive browser checks, switch the active tab to a named device profile:
 
 ```
-orca set device --name "iPhone 12" --json
-orca screenshot --json
+quirky set device --name "iPhone 12" --json
+quirky screenshot --json
 ```
 
 ## Mobile emulator
 
-The CLI can also drive an iOS Simulator through Orca's mobile emulator bridge. It is scoped to the active worktree, so agents and scripts can attach a simulator from `orca emulator list`, tap normalized coordinates, type text, send gestures, rotate the device, and shut it down without leaving Orca.
+The CLI can also drive an iOS Simulator through Quirky's mobile emulator bridge. It is scoped to the active worktree, so agents and scripts can attach a simulator from `quirky emulator list`, tap normalized coordinates, type text, send gestures, rotate the device, and shut it down without leaving Quirky.
 
 ```
-orca emulator list --json
-orca emulator attach "<device-name-or-udid>" --json
-orca emulator tap 0.5 0.7 --json
-orca emulator type "hello" --json
-orca emulator gesture '[{"type":"begin","x":0.5,"y":0.8},{"type":"move","x":0.5,"y":0.4},{"type":"end","x":0.5,"y":0.2}]' --json
-orca emulator rotate landscape_left --json
-orca emulator kill --json
+quirky emulator list --json
+quirky emulator attach "<device-name-or-udid>" --json
+quirky emulator tap 0.5 0.7 --json
+quirky emulator type "hello" --json
+quirky emulator gesture '[{"type":"begin","x":0.5,"y":0.8},{"type":"move","x":0.5,"y":0.4},{"type":"end","x":0.5,"y":0.2}]' --json
+quirky emulator rotate landscape_left --json
+quirky emulator kill --json
 ```
 
 Use `--worktree <selector>`, `--device <udid-or-name>`, or `--emulator <id>` when a script needs an explicit target.
 
 <Callout>
-  For the full command surface including tabs, waits, cookies, and frames, see [Orca CLI
-  reference](/docs/cli/reference), then install the Orca CLI skill (see [Skills
+  For the full command surface including tabs, waits, cookies, and frames, see [Quirky CLI
+  reference](/docs/cli/reference), then install the Quirky CLI skill (see [Skills
   registry](/docs/cli/skills)) and point your agent at it.
 </Callout>

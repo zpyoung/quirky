@@ -8,7 +8,7 @@
  * worktree removal, and the checkout, its git registration and its files must all survive.
  *
  * Boots the BUILT headless runtime (`out/main/index.js --serve`), pairs the BUILT CLI to it,
- * and drives `orca worktree rm` end to end against real git worktrees on disk.
+ * and drives `quirky worktree rm` end to end against real git worktrees on disk.
  */
 import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, mkdirSync } from 'node:fs'
@@ -54,10 +54,12 @@ function ok(args) {
   const r = cli(args)
   const parsed = parseJsonLine(r)
   if (!parsed) {
-    throw new Error(`orca ${args.join(' ')} produced no JSON:\n${r.stdout}\n${r.stderr}`)
+    throw new Error(`quirky ${args.join(' ')} produced no JSON:\n${r.stdout}\n${r.stderr}`)
   }
   if (parsed.ok === false) {
-    throw new Error(`orca ${args.join(' ')} failed: ${parsed.error?.code} ${parsed.error?.message}`)
+    throw new Error(
+      `quirky ${args.join(' ')} failed: ${parsed.error?.code} ${parsed.error?.message}`
+    )
   }
   return parsed.result
 }
@@ -95,20 +97,20 @@ esac
 echo "unknown mode $mode" >&2; exit 99
 `
 
-/** A throwaway git repo with one commit; optionally an orca.yaml archive hook. */
+/** A throwaway git repo with one commit; optionally an quirky.yaml archive hook. */
 function seedGitRepo(label, withHook, githubSlug) {
   const dir = mkdtempSync(join(tmpdir(), `agh-repo-${label}-`))
   writeFileSync(join(dir, 'README.md'), `# ${label}\n`)
   if (withHook) {
     writeFileSync(
-      join(dir, 'orca.yaml'),
+      join(dir, 'quirky.yaml'),
       `scripts:\n  archive: |\n${ARCHIVE_HOOK.split('\n')
         .map((l) => `    ${l}`)
         .join('\n')}\n`
     )
   }
   git(dir, 'init', '-b', 'main')
-  git(dir, 'config', 'user.email', 'verify@orca.test')
+  git(dir, 'config', 'user.email', 'verify@quirky.test')
   git(dir, 'config', 'user.name', 'Archive Gate Verify')
   if (githubSlug) {
     git(dir, 'remote', 'add', 'origin', `https://github.com/agh-owner/${githubSlug}.git`)
@@ -139,7 +141,7 @@ function waitForReady(child) {
         }
         try {
           const p = JSON.parse(line)
-          if (p.type === 'orca_server_ready') {
+          if (p.type === 'quirky_server_ready') {
             clearTimeout(timer)
             res(p)
             return
@@ -156,7 +158,7 @@ function waitForReady(child) {
   })
 }
 
-/** Filesystem + git truth about a worktree, read directly rather than through Orca. */
+/** Filesystem + git truth about a worktree, read directly rather than through Quirky. */
 function evidence(repoPath, wtPath) {
   const ls = spawnSync('ls', ['-la', wtPath], { encoding: 'utf8' })
   const list = spawnSync('git', ['worktree', 'list'], { cwd: repoPath, encoding: 'utf8' })
@@ -206,7 +208,7 @@ async function main() {
     {
       cwd: projectDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
     }
   )
   const created = []
@@ -249,7 +251,7 @@ async function main() {
     out(`worktree: ${wt1.path}`)
     const before = evidence(wt1.repoPath, wt1.path)
 
-    out('\n$ orca worktree rm --worktree <id> --run-hooks     (human output)')
+    out('\n$ quirky worktree rm --worktree <id> --run-hooks     (human output)')
     const human = cli(['worktree', 'rm', '--worktree', wt1.id, '--run-hooks'], { json: false })
     out(`  exit code: ${human.status}`)
     out('  --- stdout ---')
@@ -270,7 +272,7 @@ async function main() {
     )
 
     out(
-      '\n$ orca worktree rm --worktree <id> --force --run-hooks --json   (--force must NOT waive)'
+      '\n$ quirky worktree rm --worktree <id> --force --run-hooks --json   (--force must NOT waive)'
     )
     const forced = cli(['worktree', 'rm', '--worktree', wt1.id, '--force', '--run-hooks'])
     const forcedJson = parseJsonLine(forced)
@@ -311,7 +313,7 @@ async function main() {
       before.dirExists === after1.dirExists && before.registered === after1.registered
     )
     const shown = ok(['worktree', 'show', '--worktree', wt1.id]).worktree
-    check('Orca still resolves the worktree', shown?.id === wt1.id)
+    check('Quirky still resolves the worktree', shown?.id === wt1.id)
     check(
       'the hook really ran (twice: plain + --force)',
       hookRuns().length >= 2,
@@ -476,7 +478,7 @@ async function main() {
     ]).worktree
     out(`folder workspace: ${folderChild.id}`)
     const runsBeforeFolder = hookRuns().length
-    out(`\n$ orca worktree rm --worktree <folder workspace> --force --run-hooks`)
+    out(`\n$ quirky worktree rm --worktree <folder workspace> --force --run-hooks`)
     const folderRm = cli(['worktree', 'rm', '--worktree', folderChild.id, '--force', '--run-hooks'])
     const folderJson = parseJsonLine(folderRm)
     out(`  exit code: ${folderRm.status}`)

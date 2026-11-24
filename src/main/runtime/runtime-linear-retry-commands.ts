@@ -28,7 +28,7 @@ export class RuntimeLinearRetryCommands extends RuntimeLinearCommandBase {
     const pinned =
       verb === 'create'
         ? [
-            'orca linear create',
+            'quirky linear create',
             `--workspace=${this.commandToken(workspaceId, 'WORKSPACE_ID')}`,
             `--write-id=${this.commandToken(writeId, 'WRITE_ID')}`,
             '--title TITLE_HERE',
@@ -42,7 +42,7 @@ export class RuntimeLinearRetryCommands extends RuntimeLinearCommandBase {
             ).concat(this.linearCreateFieldRetryTokens(extra.createFields))
           ].join(' ')
         : [
-            `orca linear ${verb === 'attach' ? 'attach' : 'comment add'}`,
+            `quirky linear ${verb === 'attach' ? 'attach' : 'comment add'}`,
             this.commandToken(target?.issue.identifier ?? '', 'ISSUE_ID'),
             `--workspace=${this.commandToken(workspaceId, 'WORKSPACE_ID')}`,
             `--write-id=${this.commandToken(writeId, 'WRITE_ID')}`,
@@ -61,7 +61,7 @@ export class RuntimeLinearRetryCommands extends RuntimeLinearCommandBase {
           : ''
     return linearError(
       'linear_write_unconfirmed',
-      'Linear may have applied the write, but Orca could not confirm it.',
+      'Linear may have applied the write, but Quirky could not confirm it.',
       {
         writeId,
         workspaceId,

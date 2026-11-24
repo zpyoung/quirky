@@ -440,7 +440,7 @@ describe('MobileNativeChatMessage', () => {
         kind: 'agent',
         senders: [
           {
-            party: { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null },
+            party: { address: 'term_a', terminalHandle: 'term_a', quirkySessionId: null },
             name: 'Coder'
           }
         ],
@@ -478,7 +478,7 @@ describe('MobileNativeChatMessage', () => {
           kind: 'agent',
           senders: [
             {
-              party: { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null },
+              party: { address: 'term_a', terminalHandle: 'term_a', quirkySessionId: null },
               name: 'Coder'
             }
           ],

@@ -4,14 +4,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'esbuild'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { runProcess, spawnProcess } from '@orca/process-host'
+import { runProcess, spawnProcess } from '@quirky/process-host'
 
 describe.skipIf(process.platform === 'win32')('real sidecar exit reaping', () => {
   let directory = ''
   let entry = ''
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-sidecar-reaping-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-sidecar-reaping-'))
     entry = join(directory, 'sidecar.cjs')
     await build({
       entryPoints: [join(__dirname, 'sidecar-entry.ts')],
@@ -30,7 +30,7 @@ describe.skipIf(process.platform === 'win32')('real sidecar exit reaping', () =>
               contents: `
               import { once } from 'node:events';
               import { writeFileSync } from 'node:fs';
-              import { spawnProcess } from '@orca/process-host';
+              import { spawnProcess } from '@quirky/process-host';
               import { reapMacOSProviderProcess } from './macos-native-provider-process-reaping';
               let child;
               export function currentComputerProvider() {
@@ -41,7 +41,7 @@ describe.skipIf(process.platform === 'win32')('real sidecar exit reaping', () =>
                     detached: true,
                     stdio: ['ignore', 'pipe', 'ignore']
                   });
-                  writeFileSync(process.env.ORCA_TEST_PROVIDER_PID_FILE, String(child.pid));
+                  writeFileSync(process.env.QUIRKY_TEST_PROVIDER_PID_FILE, String(child.pid));
                   child.unref();
                   await once(child.stdout, 'data');
                   child.stdout.destroy();
@@ -83,7 +83,11 @@ describe.skipIf(process.platform === 'win32')('real sidecar exit reaping', () =>
       const sidecar = spawnProcess({
         program: process.execPath,
         args: [entry],
-        env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', ORCA_TEST_PROVIDER_PID_FILE: pidFile },
+        env: {
+          ...process.env,
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_TEST_PROVIDER_PID_FILE: pidFile
+        },
         stdio: ['ignore', 'pipe', 'pipe', 'ipc']
       })
       const sidecarExit = once(sidecar, 'exit')

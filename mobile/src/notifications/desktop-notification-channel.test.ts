@@ -24,7 +24,7 @@ describe('ensureDesktopNotificationChannel', () => {
     await ensureDesktopNotificationChannel()
 
     expect(Notifications.setNotificationChannelAsync).toHaveBeenCalledWith(
-      'orca-desktop',
+      'quirky-desktop',
       expect.objectContaining({ importance: 'high' })
     )
   })

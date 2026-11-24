@@ -11,7 +11,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseLifecycleRejectionPayload(
   payload: Record<string, unknown>
 ): ParsedLifecycleRejection | null {
-  const marker = payload._orcaLifecycleRejection
+  const marker = payload._quirkyLifecycleRejection
   if (!isRecord(marker)) {
     return null
   }

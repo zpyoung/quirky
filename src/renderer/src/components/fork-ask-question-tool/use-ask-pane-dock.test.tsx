@@ -62,7 +62,7 @@ describe('useAskPaneDock — debounced partial updates', () => {
     act(() => {
       result.current.onDraftChange({ name: { draft: 'o' } })
       result.current.onDraftChange({ name: { draft: 'or' } })
-      result.current.onDraftChange({ name: { draft: 'orca' } })
+      result.current.onDraftChange({ name: { draft: 'quirky' } })
     })
     act(() => {
       vi.advanceTimersByTime(500)
@@ -71,7 +71,7 @@ describe('useAskPaneDock — debounced partial updates', () => {
     expect(call).toHaveBeenCalledTimes(1)
     expect(call).toHaveBeenCalledWith({
       method: 'ask.updatePartial',
-      params: { askId: 'ask-1', partial: { name: { draft: 'orca' } } }
+      params: { askId: 'ask-1', partial: { name: { draft: 'quirky' } } }
     })
   })
 })

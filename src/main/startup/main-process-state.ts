@@ -10,9 +10,9 @@ import type { CodexAccountService } from '../codex-accounts/service'
 import type { CodexRuntimeHomeService } from '../codex-accounts/runtime-home-service'
 import type { ClaudeAccountService } from '../claude-accounts/service'
 import type { ClaudeRuntimeAuthService } from '../claude-accounts/runtime-auth-service'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { RateLimitService } from '../rate-limits/service'
-import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
+import type { QuirkyRuntimeRpcServer } from '../runtime/runtime-rpc'
 import type { AgentAwakeService } from '../agent-awake-service'
 import type { CrashReportStore } from '../crash-reporting/crash-report-store'
 import type { AutomationService } from '../automations/service'
@@ -28,7 +28,7 @@ import type { GpuFallbackMarker, GpuFallbackEnvironment } from './gpu-fallback-m
 import type { createCodexSessionMigrationScheduler } from '../codex/codex-session-migration-scheduler'
 import type { getDevInstanceIdentity } from './dev-instance-identity'
 import type { createServeDesktopActivationGate } from './serve-desktop-activation'
-import type { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
+import type { ensureActiveQuirkyProfile } from '../quirky-profiles/profile-index-store'
 import type { ServeOptions } from './main-process-serve'
 import type { HangDetectionMarker } from '../hang-watchdog/hang-detection-marker'
 import { ServeReadinessPublisher } from '../server/serve-readiness'
@@ -46,7 +46,7 @@ import type { ProfileStateRuntimeAdmission } from '../persistence/profile-state/
 export type ProfileStateStartupMetadata = {
   backend: 'sqlite'
   classification: ProfileStateStorageClassification
-  runtime: 'desktop' | 'orcad'
+  runtime: 'desktop' | 'quirkyd'
   migrated: boolean
 }
 
@@ -77,9 +77,9 @@ export const mainProcessState = {
   codexSessionMigration: null as ReturnType<typeof createCodexSessionMigrationScheduler> | null,
   claudeAccounts: null as ClaudeAccountService | null,
   claudeRuntimeAuth: null as ClaudeRuntimeAuthService | null,
-  runtime: null as OrcaRuntimeService | null,
+  runtime: null as QuirkyRuntimeService | null,
   rateLimits: null as RateLimitService | null,
-  runtimeRpc: null as OrcaRuntimeRpcServer | null,
+  runtimeRpc: null as QuirkyRuntimeRpcServer | null,
   serveReadinessPublisher: new ServeReadinessPublisher(),
   pendingUnpairedDeviceAuthFailure: false,
   // Why: gates whether headless serve installs the offscreen browser backend (and advertises browser pane support).
@@ -139,7 +139,7 @@ export const mainProcessState = {
   devAgentHookEndpointNamespace: undefined as string | undefined,
   startupDiagnosticsEnabled: false,
   desktopActivationGate: null as ReturnType<typeof createServeDesktopActivationGate> | null,
-  activeOrcaProfile: null as ReturnType<typeof ensureActiveOrcaProfile> | null,
+  activeQuirkyProfile: null as ReturnType<typeof ensureActiveQuirkyProfile> | null,
   shellPathReady: Promise.resolve(),
   hangDetection: null as HangDetectionMarker | null,
   serveOptions: null as ServeOptions | null,

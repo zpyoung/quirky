@@ -15,40 +15,40 @@ import type { CodexEventLabel, CodexTrustEntry } from './config-toml-trust'
 type HooksByEvent = Record<string, HookDefinition[]>
 
 /**
- * Orca's entry in ~/.codex lives alone, in a group with no matcher, once per
+ * Quirky's entry in ~/.codex lives alone, in a group with no matcher, once per
  * event: Codex hashes the group's matcher, so a copy inside a user's group
  * would wait for review forever.
  */
 export type RealHomeCodexHookEntryPlan =
-  /** Drop every Orca copy but the one kept first: user hooks may shift, so their approvals move. */
+  /** Drop every Quirky copy but the one kept first: user hooks may shift, so their approvals move. */
   | { kind: 'prune'; hooks: HooksByEvent }
   | {
       kind: 'settle'
-      /** Orca's entry rewritten in place or appended last; no user hook moves. */
+      /** Quirky's entry rewritten in place or appended last; no user hook moves. */
       hooks: HooksByEvent
       /** Events whose hooks this plan changed; an approval read before the write may no longer fit them. */
       changedLabels: ReadonlySet<CodexEventLabel>
-      /** Orca's entry in each planned event, keyed by `sourcePath`. */
+      /** Quirky's entry in each planned event, keyed by `sourcePath`. */
       managedEntries: CodexTrustEntry[]
       /** Events left as they are: a newer build's entry, or an older one not up for conversion. */
       untouchedLabels: ReadonlySet<CodexEventLabel>
     }
 
-type OrcaHandler = {
+type QuirkyHandler = {
   groupIndex: number
   hook: HookCommandConfig
   form: number
 }
 
-function findOrcaHandlers(
+function findQuirkyHandlers(
   definitions: HookDefinition[],
-  isOrcaCommand: (command: string | undefined) => boolean,
+  isQuirkyCommand: (command: string | undefined) => boolean,
   command: string
-): OrcaHandler[] {
+): QuirkyHandler[] {
   return definitions.flatMap((definition, groupIndex) =>
     Array.isArray(definition.hooks)
       ? definition.hooks.flatMap((hook) =>
-          isOrcaCommand(hook.command)
+          isQuirkyCommand(hook.command)
             ? [{ groupIndex, hook, form: readCodexHookCommandForm(hook.command, command) }]
             : []
         )
@@ -56,20 +56,20 @@ function findOrcaHandlers(
   )
 }
 
-/** A group that holds only Orca's handlers, with no matcher and nothing else of the user's. */
-function isOrcaOnlyGroup(
+/** A group that holds only Quirky's handlers, with no matcher and nothing else of the user's. */
+function isQuirkyOnlyGroup(
   definition: HookDefinition,
-  isOrcaCommand: (command: string | undefined) => boolean
+  isQuirkyCommand: (command: string | undefined) => boolean
 ): boolean {
   return (
     Object.keys(definition).every((key) => key === 'hooks') &&
     Array.isArray(definition.hooks) &&
-    definition.hooks.every((hook) => isOrcaCommand(hook.command))
+    definition.hooks.every((hook) => isQuirkyCommand(hook.command))
   )
 }
 
 // Why every field: Codex hashes command, type, timeout, async and statusMessage, so an
-// edited copy kept in place would sit beside an approval for what Orca wrote.
+// edited copy kept in place would sit beside an approval for what Quirky wrote.
 function isSameHook(left: HookCommandConfig, right: HookCommandConfig): boolean {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)])
   return [...keys].every((key) => JSON.stringify(left[key]) === JSON.stringify(right[key]))
@@ -85,13 +85,13 @@ export function planRealHomeCodexHookEntries(args: {
   hooks: HooksByEvent
   sourcePath: string
   material: Pick<CodexManagedHookInstallMaterial, 'events' | 'command'>
-  isOrcaCommand: (command: string | undefined) => boolean
+  isQuirkyCommand: (command: string | undefined) => boolean
   /** App start and the setting turning on; a launch never fights a running older build. */
   convertOlderForms: boolean
 }): RealHomeCodexHookEntryPlan {
-  const { material, isOrcaCommand, sourcePath } = args
+  const { material, isQuirkyCommand, sourcePath } = args
   const command = material.command
-  // Why: events this build does not plan keep their Orca entries; a newer build
+  // Why: events this build does not plan keep their Quirky entries; a newer build
   // may subscribe to them, and Codex lists no hash for them here.
   const pruned: HooksByEvent = { ...args.hooks }
   const hooks: HooksByEvent = { ...args.hooks }
@@ -103,10 +103,10 @@ export function planRealHomeCodexHookEntries(args: {
   for (const eventName of material.events) {
     const label = CODEX_EVENT_LABEL[eventName]
     const current = Array.isArray(args.hooks[eventName]) ? args.hooks[eventName] : []
-    const handlers = findOrcaHandlers(current, isOrcaCommand, command)
+    const handlers = findQuirkyHandlers(current, isQuirkyCommand, command)
     const holdsOlderForm =
       current.some((definition) =>
-        [definition.command, definition.bash, definition.powershell].some(isOrcaCommand)
+        [definition.command, definition.bash, definition.powershell].some(isQuirkyCommand)
       ) || handlers.some((handler) => handler.hook.command !== command)
     if (
       handlers.some((handler) => handler.form > CODEX_HOOK_COMMAND_FORM) ||
@@ -117,12 +117,12 @@ export function planRealHomeCodexHookEntries(args: {
       continue
     }
     const keeper = handlers.find((handler) =>
-      isOrcaOnlyGroup(current[handler.groupIndex]!, isOrcaCommand)
+      isQuirkyOnlyGroup(current[handler.groupIndex]!, isQuirkyCommand)
     )
-    const rest = removeManagedCommands(current, isOrcaCommand)
+    const rest = removeManagedCommands(current, isQuirkyCommand)
     // Why the kept group where its copies were: the slot keeps its position, so no user approval key moves.
     const slot = keeper
-      ? removeManagedCommands(current.slice(0, keeper.groupIndex), isOrcaCommand).length
+      ? removeManagedCommands(current.slice(0, keeper.groupIndex), isQuirkyCommand).length
       : rest.length
     const keptGroup = keeper && current[keeper.groupIndex]!
     const prunedDefinitions = keptGroup

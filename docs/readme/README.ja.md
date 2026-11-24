@@ -1,13 +1,13 @@
 <h1 align="center">
-  <a href="https://onOrca.dev"><img src="../../resources/build/icon.png" alt="Orca" width="64" valign="middle" /></a> Orca
+  <a href="https://onOrca.dev"><img src="../../resources/build/icon.png" alt="Quirky" width="64" valign="middle" /></a> Quirky
 </h1>
 
 <p align="center">
   <a href="https://github.com/stablyai/orca"><img src="https://img.shields.io/github/stars/stablyai/orca?style=flat&amp;label=%E2%98%85&amp;color=08C" alt="GitHub スター数" /></a>
   <a href="https://github.com/stablyai/orca/releases"><img src="../assets/readme-downloads.svg" alt="全リリースの合計ダウンロード数" /></a>
   <img src="https://img.shields.io/badge/license-MIT-08C?style=flat" alt="ライセンス: MIT" />
-  <a href="https://discord.gg/fzjDKHxv8Q"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Orca の Discord に参加" /></a>
-  <a href="https://x.com/orca_build"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="X で Orca をフォロー" /></a>
+  <a href="https://discord.gg/fzjDKHxv8Q"><img src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white" alt="Quirky の Discord に参加" /></a>
+  <a href="https://x.com/quirky_build"><img src="https://img.shields.io/badge/X-000000?logo=x&logoColor=white" alt="X で Quirky をフォロー" /></a>
   <img src="https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-4493F8?style=flat-square" alt="対応プラットフォーム: macOS、Windows、Linux" />
 </p>
 
@@ -20,10 +20,10 @@
   Codex、Claude Code、OpenCode、Pi を並べて実行 — それぞれを専用のワークツリーで動かし、1 か所で追跡できます。
 </p>
 
-<h3 align="center"><a href="https://onorca.dev/download"><ins>Orca をダウンロード</ins></a></h3>
+<h3 align="center"><a href="https://onorca.dev/download"><ins>Quirky をダウンロード</ins></a></h3>
 
 <p align="center">
-  <img src="../assets/readme-hero.jpg" alt="並列ワークツリーでエージェントを実行する Orca デスクトップアプリと、隅に表示された Orca モバイル companion アプリ" width="960" />
+  <img src="../assets/readme-hero.jpg" alt="並列ワークツリーでエージェントを実行する Quirky デスクトップアプリと、隅に表示された Quirky モバイル companion アプリ" width="960" />
 </p>
 
 ## 機能
@@ -40,7 +40,7 @@
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/mobile"><picture><source srcset="../assets/feature-wall/mobile-companion-app-showcase.gif" type="image/gif"><img src="../assets/feature-wall/mobile-companion-app-showcase.jpg" alt="Orca デスクトップとモバイル companion アプリ" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/mobile"><picture><source srcset="../assets/feature-wall/mobile-companion-app-showcase.gif" type="image/gif"><img src="../assets/feature-wall/mobile-companion-app-showcase.jpg" alt="Quirky デスクトップとモバイル companion アプリ" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -82,7 +82,7 @@ WebGL レンダリング、無制限の分割、再起動後も残るスクロ�
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/browser/design-mode"><picture><source srcset="../site/public/docs/orca-design-mode.gif" type="image/gif"><img src="../../resources/onboarding/feature-wall/tile-05.poster.jpg" alt="組み込みブラウザとデザインモード" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/browser/design-mode"><picture><source srcset="../site/public/docs/quirky-design-mode.gif" type="image/gif"><img src="../../resources/onboarding/feature-wall/tile-05.poster.jpg" alt="組み込みブラウザとデザインモード" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -96,7 +96,7 @@ PR、Issue、プロジェクトボードをアプリ内で閲覧 — 任意の�
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/review/linear"><picture><source srcset="../../resources/onboarding/feature-wall/tile-03.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-03.poster.jpg" alt="Orca の GitHub と Linear タスクワークフロー" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/review/linear"><picture><source srcset="../../resources/onboarding/feature-wall/tile-03.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-03.poster.jpg" alt="Quirky の GitHub と Linear タスクワークフロー" width="100%" /></picture></a>
 </td>
 </tr>
 <tr>
@@ -118,7 +118,7 @@ PR、Issue、プロジェクトボードをアプリ内で閲覧 — 任意の�
 
 ### AI Diff に注釈
 
-任意の Diff 行にコメントを付けてエージェントへ送り返せます — Orca から離れずにレビュー、編集、コミットまで完結します。
+任意の Diff 行にコメントを付けてエージェントへ送り返せます — Quirky から離れずにレビュー、編集、コミットまで完結します。
 
 [ドキュメント →](https://www.onorca.dev/docs/review/annotate-ai-diff)
 
@@ -144,15 +144,15 @@ PR、Issue、プロジェクトボードをアプリ内で閲覧 — 任意の�
 <tr>
 <td width="50%" valign="middle">
 
-### Orca CLI
+### Quirky CLI
 
-エージェント自身も Orca を操作できます — `orca worktree create`、`snapshot`、`click`、`fill` であらゆるワークフローをスクリプト化できます。
+エージェント自身も Quirky を操作できます — `quirky worktree create`、`snapshot`、`click`、`fill` であらゆるワークフローをスクリプト化できます。
 
 [ドキュメント →](https://www.onorca.dev/docs/cli/overview)
 
 </td>
 <td width="50%">
-  <a href="https://www.onorca.dev/docs/cli/overview"><picture><source srcset="../../resources/onboarding/feature-wall/tile-09.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-09.poster.jpg" alt="CLI から Orca をスクリプト操作" width="100%" /></picture></a>
+  <a href="https://www.onorca.dev/docs/cli/overview"><picture><source srcset="../../resources/onboarding/feature-wall/tile-09.webp" type="image/webp"><img src="../../resources/onboarding/feature-wall/tile-09.poster.jpg" alt="CLI から Quirky をスクリプト操作" width="100%" /></picture></a>
 </td>
 </tr>
 </table>
@@ -170,7 +170,7 @@ PR、Issue、プロジェクトボードをアプリ内で閲覧 — 任意の�
 
 ## 対応するエージェント
 
-**あらゆる CLI エージェント**で動作します — ターミナルで動くものなら、Orca でも動きます。
+**あらゆる CLI エージェント**で動作します — ターミナルで動くものなら、Quirky でも動きます。
 
 <p>
   <a href="https://docs.anthropic.com/claude/docs/claude-code"><kbd><img src="../assets/claude-logo.svg" alt="Claude Code logo" width="16" valign="middle" /> Claude Code</kbd></a> &nbsp;
@@ -214,16 +214,16 @@ PR、Issue、プロジェクトボードをアプリ内で閲覧 — 任意の�
 ### デスクトップ — macOS, Windows, Linux
 
 - **[onOrca.dev からダウンロード](https://onorca.dev/download)**
-- またはビルドを直接入手: [macOS Apple Silicon](https://github.com/stablyai/orca/releases/latest/download/orca-macos-arm64.dmg) · [macOS Intel](https://github.com/stablyai/orca/releases/latest/download/orca-macos-x64.dmg) · [Windows (.exe)](https://github.com/stablyai/orca/releases/latest/download/orca-windows-setup.exe) · [Linux AppImage](https://github.com/stablyai/orca/releases/latest/download/orca-linux.AppImage) · [すべてのビルド](https://github.com/stablyai/orca/releases/latest)
+- またはビルドを直接入手: [macOS Apple Silicon](https://github.com/stablyai/orca/releases/latest/download/quirky-macos-arm64.dmg) · [macOS Intel](https://github.com/stablyai/orca/releases/latest/download/quirky-macos-x64.dmg) · [Windows (.exe)](https://github.com/stablyai/orca/releases/latest/download/quirky-windows-setup.exe) · [Linux AppImage](https://github.com/stablyai/orca/releases/latest/download/quirky-linux.AppImage) · [すべてのビルド](https://github.com/stablyai/orca/releases/latest)
 
 _パッケージマネージャーからもインストールできます:_
 
 ```bash
 # macOS (Homebrew)
-brew install --cask stablyai/orca/orca
+brew install --cask stablyai/orca/quirky
 
-# Arch Linux (AUR) — or stably-orca-git to build from source
-yay -S stably-orca-bin
+# Arch Linux (AUR) — or stably-quirky-git to build from source
+yay -S stably-quirky-bin
 ```
 
 ### モバイル Companion — iOS, Android
@@ -238,9 +238,9 @@ yay -S stably-orca-bin
 ## コミュニティとサポート
 
 - **Discord:** **[Discord](https://discord.gg/fzjDKHxv8Q)** のコミュニティに参加してください。
-- **Twitter / X:** アップデートやお知らせは **[@orca_build](https://x.com/orca_build)** をフォローしてください。
+- **Twitter / X:** アップデートやお知らせは **[@quirky_build](https://x.com/quirky_build)** をフォローしてください。
 - **フィードバックとアイデア:** 私たちは高速にリリースしています。足りない機能がありますか？[機能リクエストを送信](https://github.com/stablyai/orca/issues)してください。
-- **プライバシー:** Orca が収集する匿名の利用データとオプトアウトの方法については、[プライバシーとテレメトリーのドキュメント](https://www.onorca.dev/docs/telemetry)をご覧ください。
+- **プライバシー:** Quirky が収集する匿名の利用データとオプトアウトの方法については、[プライバシーとテレメトリーのドキュメント](https://www.onorca.dev/docs/telemetry)をご覧ください。
 - **応援する:** 毎日のリリースを追うために、このリポジトリに[スター](https://github.com/stablyai/orca)を付けてください。
 
 ---
@@ -250,9 +250,9 @@ yay -S stably-orca-bin
 貢献したい、またはローカルで実行したいですか？ [CONTRIBUTING.md](../../.github/CONTRIBUTING.md) ガイドをご覧ください。
 
 <a href="https://github.com/stablyai/orca/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=stablyai/orca" alt="Orca のコントリビューター" />
+  <img src="https://contrib.rocks/image?repo=stablyai/orca" alt="Quirky のコントリビューター" />
 </a>
 
 ## ライセンス
 
-Orca は [MIT License](../../LICENSE) の下で無料かつオープンソースです。
+Quirky は [MIT License](../../LICENSE) の下で無料かつオープンソースです。

@@ -40,19 +40,19 @@ const {
   finalizePackagedRipgrep
 } = require('./bundled-ripgrep-resources.cjs')
 const {
-  assertOrcadTemplateBuilt,
-  finalizePackagedOrcadTemplate,
-  orcadTemplateExtraResource,
-  orcadTemplateNodeModulesExtraResource,
-  orcadTemplateMacSignIgnore
-} = require('./scripts/packaged-orcad-template.cjs')
+  assertQuirkydTemplateBuilt,
+  finalizePackagedQuirkydTemplate,
+  quirkydTemplateExtraResource,
+  quirkydTemplateNodeModulesExtraResource,
+  quirkydTemplateMacSignIgnore
+} = require('./scripts/packaged-quirkyd-template.cjs')
 const { verifySkillsCliRuntime } = require('./scripts/verify-skills-cli-runtime.cjs')
 const { assertNotDarkBuild } = require('./dark-build-switches.cjs')
 const { buildMacShipItScheduling } = require('./scripts/macos-shipit-scheduling.cjs')
 
-const isMacRelease = process.env.ORCA_MAC_RELEASE === '1'
-const localBuildVersion = isMacRelease ? undefined : process.env.ORCA_LOCAL_BUILD_VERSION
-const appId = 'com.zpyoung.orca'
+const isMacRelease = process.env.QUIRKY_MAC_RELEASE === '1'
+const localBuildVersion = isMacRelease ? undefined : process.env.QUIRKY_LOCAL_BUILD_VERSION
+const appId = 'com.zpyoung.quirky'
 const featureWallResources = {
   from: 'resources/onboarding/feature-wall',
   to: 'onboarding/feature-wall'
@@ -95,8 +95,8 @@ const emojiShortcodeDatasetResource = {
 }
 const commonExtraResources = [
   relayExtraResource,
-  orcadTemplateExtraResource,
-  orcadTemplateNodeModulesExtraResource,
+  quirkydTemplateExtraResource,
+  quirkydTemplateNodeModulesExtraResource,
   ...bundledRipgrepExtraResources,
   bundledPluginResources,
   skillFreshnessResources,
@@ -117,19 +117,19 @@ const TABULAR_FILE_EXTENSIONS = ['csv', 'tsv']
 // Shared with the terminal host helper so its purpose strings cannot drift from the app's.
 const macUsageDescriptions = {
   NSAppleEventsUsageDescription:
-    'Orca allows terminal-launched developer tools to automate local apps when you request it.',
+    'Quirky allows terminal-launched developer tools to automate local apps when you request it.',
   NSBluetoothAlwaysUsageDescription:
-    'Orca allows terminal-launched developer tools to access Bluetooth devices when you request it.',
+    'Quirky allows terminal-launched developer tools to access Bluetooth devices when you request it.',
   NSBluetoothPeripheralUsageDescription:
-    'Orca allows terminal-launched developer tools to access Bluetooth devices when you request it.',
+    'Quirky allows terminal-launched developer tools to access Bluetooth devices when you request it.',
   NSCameraUsageDescription: "Application requests access to the device's camera.",
   NSLocationUsageDescription:
-    'Orca allows terminal-launched developer tools to access location when you request it.',
+    'Quirky allows terminal-launched developer tools to access location when you request it.',
   NSLocalNetworkUsageDescription:
-    'Orca allows terminal-launched developer tools to discover and connect to local development servers when you request it.',
+    'Quirky allows terminal-launched developer tools to discover and connect to local development servers when you request it.',
   NSMicrophoneUsageDescription: "Application requests access to the device's microphone.",
   NSAudioCaptureUsageDescription:
-    'Orca allows terminal-launched developer tools to capture desktop audio when you request it.',
+    'Quirky allows terminal-launched developer tools to capture desktop audio when you request it.',
   NSBonjourServices: ['_http._tcp', '_https._tcp'],
   ...MACOS_FOLDER_USAGE_DESCRIPTIONS
 }
@@ -145,8 +145,8 @@ function readReleaseMacTeamId() {
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
   appId,
-  productName: 'Orca Dev',
-  protocols: [{ name: 'Orca', schemes: ['orca'] }],
+  productName: 'Quirky',
+  protocols: [{ name: 'Quirky', schemes: ['quirky'] }],
   ...(localBuildVersion ? { extraMetadata: { version: localBuildVersion } } : {}),
   directories: {
     buildResources: 'resources/build'
@@ -156,11 +156,11 @@ module.exports = {
     // Why: these repo-only inputs are either bundled into out/ or copied via
     // extraResources. Shipping them in app.asar bloats the desktop bundle.
     '!src{,/**/*}',
-    '!out/orcad{,/**/*}',
-    // Never in app.asar: the template ships via orcadTemplateExtraResource; prebuilds are build inputs.
-    '!out/orcad-*{,/**/*}',
-    '!out/.orcad-*{,/**/*}',
-    // Why: the pinned Node a local orcad build references (~120 MB) and its download cache.
+    '!out/quirkyd{,/**/*}',
+    // Never in app.asar: the template ships via quirkydTemplateExtraResource; prebuilds are build inputs.
+    '!out/quirkyd-*{,/**/*}',
+    '!out/.quirkyd-*{,/**/*}',
+    // Why: the pinned Node a local quirkyd build references (~120 MB) and its download cache.
     '!out/runtimes{,/**/*}',
     '!out/node-runtime-cache{,/**/*}',
     '!config{,/**/*}',
@@ -182,7 +182,7 @@ module.exports = {
     // carries hostile-panel, the adversarial fixture the containment tests point at,
     // which must never reach a user's install.
     '!examples{,/**/*}',
-    // Why: pr-evidence/ is a local e2e screenshot output (ORCA_CAPTURE_EVIDENCE);
+    // Why: pr-evidence/ is a local e2e screenshot output (QUIRKY_CAPTURE_EVIDENCE);
     // it is gitignored, but exclude it defensively so a stray local capture at
     // package time never bloats app.asar.
     '!pr-evidence{,/**/*}',
@@ -249,7 +249,7 @@ module.exports = {
   // disappears from Agent Session History in packaged builds only. Worker
   // entries reached solely from the Electron main process stay packed, since
   // asar redirects their app.asar paths.
-  // Why: `orca serve` runs the orcad selection entry under ELECTRON_RUN_AS_NODE too (#27307).
+  // Why: `quirky serve` runs the quirkyd selection entry under ELECTRON_RUN_AS_NODE too (#27307).
   // Why out/renderer and out/mobile-web: their assets are opened by path, and opening a packed file
   // reads a /tmp extract Electron makes once and never remakes, so a /tmp sweep broke them (#27976).
   asarUnpack: [
@@ -269,7 +269,7 @@ module.exports = {
     'out/main/hermes/**',
     'out/main/asar-transparent-fs.js',
     'out/main/macos-tree-clone.js',
-    'out/main/orca-profiles/profile-index-store.js',
+    'out/main/quirky-profiles/profile-index-store.js',
     'out/main/persistence/profile-state/**',
     'out/main/startup/http1-compatibility-marker.js',
     'out/main/daemon-entry.js',
@@ -278,7 +278,7 @@ module.exports = {
     'out/main/plugin-host-entry.js',
     'out/main/computer-sidecar.js',
     'out/main/parcel-watcher-process-entry.js',
-    'out/main/orcad/orcad-local-serve-selection-entry.js',
+    'out/main/quirkyd/quirkyd-local-serve-selection-entry.js',
     'out/main/chunks/**',
     'out/renderer/**',
     'out/mobile-web/**',
@@ -293,14 +293,18 @@ module.exports = {
   beforePack: (
     context,
     mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR,
-    orcadTemplateDir = join(__dirname, '..', orcadTemplateExtraResource.from)
+    quirkydTemplateDir = join(__dirname, '..', quirkydTemplateExtraResource.from)
   ) => {
     // The template is the server every SSH host gets, so a dark test template must never ship.
-    assertNotDarkBuild([join(__dirname, '..', 'out', 'main'), mobileWebBundleDir, orcadTemplateDir])
+    assertNotDarkBuild([
+      join(__dirname, '..', 'out', 'main'),
+      mobileWebBundleDir,
+      quirkydTemplateDir
+    ])
     assertPackagedNativeVariantsInstalled(context.electronPlatformName, context.arch)
     assertBundledRipgrepInstalled()
     assertProcessHostOutputBuilt()
-    assertOrcadTemplateBuilt()
+    assertQuirkydTemplateBuilt()
     assertMobileWebBundleBuilt(mobileWebBundleDir)
   },
   afterPack: async (context) => {
@@ -325,7 +329,7 @@ module.exports = {
       const schedulingAddon = buildMacShipItScheduling(resourcesDir, architecture)
       await signMacStandaloneHelper(schedulingAddon, 'ShipIt scheduling', context.packager)
       const version = context.packager.appInfo.version
-      let commit = process.env.ORCA_BUILD_COMMIT || process.env.GITHUB_SHA || 'unknown'
+      let commit = process.env.QUIRKY_BUILD_COMMIT || process.env.GITHUB_SHA || 'unknown'
       if (commit === 'unknown') {
         try {
           commit = execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
@@ -373,10 +377,10 @@ module.exports = {
     assertPackagedWebClient(resourcesDir)
     assertPackagedServeSelectionEntry(resourcesDir)
     finalizePackagedRipgrep(resourcesDir)
-    await finalizePackagedOrcadTemplate(resourcesDir, {
+    await finalizePackagedQuirkydTemplate(resourcesDir, {
       platform: context.electronPlatformName,
       signMacBinary: (path) =>
-        signMacStandaloneHelper(path, 'orcad template binary', context.packager)
+        signMacStandaloneHelper(path, 'quirkyd template binary', context.packager)
     })
     chmodUnixCliLaunchers(resourcesDir)
     for (const filename of readdirSync(resourcesDir)) {
@@ -389,22 +393,25 @@ module.exports = {
       chmodSync(join(resourcesDir, filename), 0o755)
     }
     if (context.electronPlatformName === 'darwin') {
-      await signMacComputerUseHelper(join(resourcesDir, 'Orca Computer Use.app'), context.packager)
-      await signMacStandaloneHelper(
-        join(resourcesDir, '..', 'MacOS', 'orca-notification-status'),
-        'orca-notification-status',
+      await signMacComputerUseHelper(
+        join(resourcesDir, 'Quirky Computer Use.app'),
         context.packager
       )
       await signMacStandaloneHelper(
-        join(resourcesDir, '..', 'MacOS', 'orca-keyboard-layout'),
-        'orca-keyboard-layout',
+        join(resourcesDir, '..', 'MacOS', 'quirky-notification-status'),
+        'quirky-notification-status',
+        context.packager
+      )
+      await signMacStandaloneHelper(
+        join(resourcesDir, '..', 'MacOS', 'quirky-keyboard-layout'),
+        'quirky-keyboard-layout',
         context.packager
       )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
     }
   },
   mac: {
-    // Why rank Alternate: Orca joins Finder's "Open With" list without claiming
+    // Why rank Alternate: Quirky joins Finder's "Open With" list without claiming
     // LSHandlerRank ownership, so whichever editor the user already prefers stays the default.
     // Why one entry per extension: app-builder-lib globs `*.${ext}`, which an array would break.
     fileAssociations: [
@@ -429,7 +436,7 @@ module.exports = {
     ...(isMacRelease ? { sign: resolve(__dirname, 'scripts/sign-mac-app.mjs') } : {}),
     signIgnore: [
       ...bundledRipgrepMacSignIgnore,
-      ...orcadTemplateMacSignIgnore,
+      ...quirkydTemplateMacSignIgnore,
       ...macTerminalHostSignIgnore
     ],
     extendInfo: macUsageDescriptions,
@@ -444,16 +451,16 @@ module.exports = {
       ...createPackagedRuntimeNodeModuleResources('darwin'),
       macSpeechNativeResource,
       {
-        from: 'resources/darwin/bin/orca',
-        to: 'bin/orca'
+        from: 'resources/darwin/bin/quirky',
+        to: 'bin/quirky'
       },
       {
         from: 'node_modules/agent-browser/bin/agent-browser-darwin-${arch}',
         to: 'agent-browser-darwin-${arch}'
       },
       {
-        from: 'native/computer-use-macos/.build/release/Orca Computer Use.app',
-        to: 'Orca Computer Use.app'
+        from: 'native/computer-use-macos/.build/release/Quirky Computer Use.app',
+        to: 'Quirky Computer Use.app'
       },
       featureWallResources
     ],
@@ -462,12 +469,12 @@ module.exports = {
     // is nil) for executables launched out of Contents/Resources (#7929).
     extraFiles: [
       {
-        from: 'native/notification-status-macos/.build/release/orca-notification-status',
-        to: 'MacOS/orca-notification-status'
+        from: 'native/notification-status-macos/.build/release/quirky-notification-status',
+        to: 'MacOS/quirky-notification-status'
       },
       {
-        from: 'native/keyboard-layout-macos/.build/release/orca-keyboard-layout',
-        to: 'MacOS/orca-keyboard-layout'
+        from: 'native/keyboard-layout-macos/.build/release/quirky-keyboard-layout',
+        to: 'MacOS/quirky-keyboard-layout'
       }
     ],
     // Fork: arm64 only. Each arch is a separate ~40min notarization submission,
@@ -489,14 +496,14 @@ module.exports = {
   // silently downgrading to ad-hoc artifacts that look shippable in CI logs.
   forceCodeSigning: isMacRelease,
   dmg: {
-    artifactName: 'orca-macos-${arch}.${ext}'
+    artifactName: 'quirky-macos-${arch}.${ext}'
   },
   beforeBuild: electronBuilderNativeRebuild,
   // Why: must be true so that electron-builder rebuilds native modules
   // (node-pty) for each target architecture when producing dual-arch macOS
   // builds (x64 + arm64). With npmRebuild disabled, CI on an arm64 runner
   // packages arm64 binaries into the x64 DMG, causing "posix_spawnp failed"
-  // on Intel Macs. The beforeBuild hook performs Orca's targeted rebuild and
+  // on Intel Macs. The beforeBuild hook performs Quirky's targeted rebuild and
   // returns false so electron-builder does not rebuild optional cpu-features.
   npmRebuild: true,
   publish: {
@@ -522,7 +529,7 @@ function stampPackagedCliVersion(resourcesDir, version) {
 }
 
 function chmodUnixCliLaunchers(resourcesDir) {
-  for (const launcherName of ['orca', 'orca-ide']) {
+  for (const launcherName of ['quirky', 'quirky-ide']) {
     const launcherPath = join(resourcesDir, 'bin', launcherName)
     if (!existsSync(launcherPath)) {
       continue
@@ -536,7 +543,7 @@ function chmodUnixCliLaunchers(resourcesDir) {
 async function signMacComputerUseHelper(helperAppPath, packager) {
   if (!existsSync(helperAppPath)) {
     if (isMacRelease) {
-      throw new Error(`Missing Orca Computer Use helper app at ${helperAppPath}`)
+      throw new Error(`Missing Quirky Computer Use helper app at ${helperAppPath}`)
     }
     return
   }
@@ -545,15 +552,15 @@ async function signMacComputerUseHelper(helperAppPath, packager) {
       ? await packager.codeSigningInfo.value
       : null
   const identity =
-    process.env.ORCA_COMPUTER_MACOS_SIGN_IDENTITY ??
+    process.env.QUIRKY_COMPUTER_MACOS_SIGN_IDENTITY ??
     process.env.CSC_NAME ??
     findInstalledMacSigningIdentity(codeSigningInfo?.keychainFile) ??
     (isMacRelease ? null : '-')
   if (!identity) {
-    throw new Error('Missing signing identity for Orca Computer Use helper app')
+    throw new Error('Missing signing identity for Quirky Computer Use helper app')
   }
   // Why: TCC grants attach to this nested app's code identity. Sign it before
-  // the outer Orca.app is sealed so production builds preserve that identity.
+  // the outer Quirky.app is sealed so production builds preserve that identity.
   execFileSync('codesign', codesignArgs(identity, helperAppPath), { stdio: 'inherit' })
   execFileSync('codesign', ['--verify', '--deep', '--strict', helperAppPath], {
     stdio: 'inherit'

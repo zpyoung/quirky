@@ -369,7 +369,7 @@ function HostedReviewSitterPanelContent({
   const unavailableReason = !api
     ? translate(
         'fork.hostedReviewSitter.unavailable.missingApi',
-        'This Orca host does not provide the PR Sitter service.'
+        'This Quirky host does not provide the PR Sitter service.'
       )
     : entries === null
       ? serviceError
@@ -430,11 +430,11 @@ function HostedReviewSitterPanelContent({
               {reviewProvider === 'gitlab'
                 ? translate(
                     'fork.hostedReviewSitter.enrollment.descriptionGitLab',
-                    'Watch this merge request and choose which actions Orca may take.'
+                    'Watch this merge request and choose which actions Quirky may take.'
                   )
                 : translate(
                     'fork.hostedReviewSitter.enrollment.descriptionGitHub',
-                    'Watch this pull request and choose which actions Orca may take.'
+                    'Watch this pull request and choose which actions Quirky may take.'
                   )}
             </DialogDescription>
           </DialogHeader>

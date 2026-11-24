@@ -47,7 +47,7 @@ export function fileExplorerScreenMountAdapters(
           createElement(
             hostClientContext.Provider,
             { value: context },
-            createElement(Panel, { hostId: HOST, worktreeId: WORKTREE, name: 'orca-files' })
+            createElement(Panel, { hostId: HOST, worktreeId: WORKTREE, name: 'quirky-files' })
           ),
         effect
       )

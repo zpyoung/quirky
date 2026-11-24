@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from '../helpers/orca-app'
+import { test, expect } from '../helpers/quirky-app'
 import { waitForSessionReady } from '../helpers/store'
 import type { Page } from '@stablyai/playwright-test'
 
@@ -36,7 +36,7 @@ type SeededRepoPath = { path: string; expectedWorktreeCount: number }
 // Why: a repo needs >=2 worktrees before the sidebar's own reorder-drag gate
 // (rects.length > 1) lets a pointer drag start on any of its worktree rows.
 async function createRepoFixture(specs: readonly RepoFixtureSpec[]): Promise<SeededRepoPath[]> {
-  const root = realpathSync(await mkdtemp(path.join(os.tmpdir(), 'orca-e2e-cross-repo-group-')))
+  const root = realpathSync(await mkdtemp(path.join(os.tmpdir(), 'quirky-e2e-cross-repo-group-')))
   tempRoots.push(root)
   return specs.map((spec) => {
     const repoPath = path.join(root, spec.name)
@@ -53,7 +53,7 @@ async function createFolderBackedWorkspaceFixture(): Promise<{
   folderPath: string
 }> {
   const parentPath = realpathSync(
-    await mkdtemp(path.join(os.tmpdir(), 'orca-e2e-folder-workspace-'))
+    await mkdtemp(path.join(os.tmpdir(), 'quirky-e2e-folder-workspace-'))
   )
   tempRoots.push(parentPath)
   const folderPath = path.join(parentPath, 'task-alpha')
@@ -431,117 +431,129 @@ async function dragWorktreeOntoHeader(args: {
 
 test.describe('Cross-repo worktree groups', () => {
   test('does not offer group-membership actions on a folder-workspace row', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const { parentPath, folderPath } = await createFolderBackedWorkspaceFixture()
-    const { folderWorktreeId } = await seedFolderWorkspace(orcaPage, {
+    const { folderWorktreeId } = await seedFolderWorkspace(quirkyPage, {
       parentPath,
       folderPath,
       groupName: 'E2E XRepo Folder Group',
       workspaceName: 'E2E XRepo Folder Task'
     })
 
-    await expect(orcaPage.locator(`[data-worktree-id="${folderWorktreeId}"]`)).toBeVisible({
+    await expect(quirkyPage.locator(`[data-worktree-id="${folderWorktreeId}"]`)).toBeVisible({
       timeout: 10_000
     })
-    await openWorktreeContextMenu(orcaPage, folderWorktreeId)
+    await openWorktreeContextMenu(quirkyPage, folderWorktreeId)
 
     // Sanity: the menu actually opened, so the absence below is the gate — not a no-op menu.
-    await expect(orcaPage.getByRole('menuitem', { name: 'Copy Path', exact: true })).toBeVisible()
+    await expect(quirkyPage.getByRole('menuitem', { name: 'Copy Path', exact: true })).toBeVisible()
     await expect(
-      orcaPage.getByRole('menuitem', { name: 'Add worktree to group', exact: true })
+      quirkyPage.getByRole('menuitem', { name: 'Add worktree to group', exact: true })
     ).toHaveCount(0)
     await expect(
-      orcaPage.getByRole('menuitem', { name: 'Remove worktree from group', exact: true })
+      quirkyPage.getByRole('menuitem', { name: 'Remove worktree from group', exact: true })
     ).toHaveCount(0)
   })
 
   test('adding a worktree to a group via the context menu moves it out of its repo section', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-alpha', secondaryBranch: 'feature-a' }
     ])
-    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
     const groupName = 'E2E XRepo Group Alpha'
-    const groupId = await createProjectGroup(orcaPage, groupName)
+    const groupId = await createProjectGroup(quirkyPage, groupName)
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
 
     // Under its repo header the row needs no origin cue; the header supplies it.
-    const originChip = orcaPage.locator(
+    const originChip = quirkyPage.locator(
       `[data-worktree-id="${secondaryId}"] [aria-label^="Project "]`
     )
     await expect(originChip).toHaveCount(0)
 
-    await addWorktreeToGroupViaMenu(orcaPage, secondaryId, groupName)
+    await addWorktreeToGroupViaMenu(quirkyPage, secondaryId, groupName)
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupId })
 
     await expect(originChip).toHaveCount(1)
 
-    await expect(orcaPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
+    await expect(quirkyPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
     await expect
       .poll(
-        async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), mainWorktreeId),
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), mainWorktreeId),
         { timeout: 10_000 }
       )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test('deleting a group releases its worktree back to its repo without destroying it', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-bravo', secondaryBranch: 'feature-b' }
     ])
-    const [{ repoId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
     const groupName = 'E2E XRepo Group Bravo'
-    const groupId = await createProjectGroup(orcaPage, groupName)
-    await setWorktreeProjectGroup(orcaPage, secondaryId, groupId)
+    const groupId = await createProjectGroup(quirkyPage, groupName)
+    await setWorktreeProjectGroup(quirkyPage, secondaryId, groupId)
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupId })
 
-    await deleteProjectGroupViaMenu(orcaPage, { groupId, groupName })
+    await deleteProjectGroupViaMenu(quirkyPage, { groupId, groupName })
 
-    await expect(orcaPage.locator(`[data-project-group-header-id="${groupId}"]`)).toHaveCount(0)
-    await expect(orcaPage.locator(`[data-worktree-id="${secondaryId}"]`)).toBeVisible()
+    await expect(quirkyPage.locator(`[data-project-group-header-id="${groupId}"]`)).toHaveCount(0)
+    await expect(quirkyPage.locator(`[data-worktree-id="${secondaryId}"]`)).toBeVisible()
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test("grouping away a repo's only worktree leaves an empty placeholder for the repo", async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([{ name: 'e2e-xrepo-charlie' }])
-    const [{ repoId, mainWorktreeId }] = await seedRepos(orcaPage, [repo!])
-    const groupId = await createProjectGroup(orcaPage, 'E2E XRepo Group Charlie')
+    const [{ repoId, mainWorktreeId }] = await seedRepos(quirkyPage, [repo!])
+    const groupId = await createProjectGroup(quirkyPage, 'E2E XRepo Group Charlie')
 
     await expect
       .poll(
         async () =>
-          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(orcaPage), {
+          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(quirkyPage), {
             kind: 'repo-header',
             id: repoId
           }),
@@ -549,13 +561,13 @@ test.describe('Cross-repo worktree groups', () => {
       )
       .toBe(1)
 
-    await setWorktreeProjectGroup(orcaPage, mainWorktreeId, groupId)
+    await setWorktreeProjectGroup(quirkyPage, mainWorktreeId, groupId)
 
-    await expect(orcaPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
+    await expect(quirkyPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
     await expect
       .poll(
         async () =>
-          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(orcaPage), {
+          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(quirkyPage), {
             kind: 'repo-header',
             id: repoId
           }),
@@ -564,139 +576,162 @@ test.describe('Cross-repo worktree groups', () => {
       .toBe(0)
     await expect
       .poll(
-        async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), mainWorktreeId),
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), mainWorktreeId),
         { timeout: 10_000 }
       )
       .toEqual({ kind: 'group-header', id: groupId })
   })
 
   test('moving a repo to a different group does not move a worktree already grouped independently', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-delta', secondaryBranch: 'feature-d' }
     ])
-    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
     const groupBName = 'E2E XRepo Group B'
-    const groupBId = await createProjectGroup(orcaPage, groupBName)
-    const groupCId = await createProjectGroup(orcaPage, 'E2E XRepo Group C')
-    await setWorktreeProjectGroup(orcaPage, secondaryId, groupCId)
+    const groupBId = await createProjectGroup(quirkyPage, groupBName)
+    const groupCId = await createProjectGroup(quirkyPage, 'E2E XRepo Group C')
+    await setWorktreeProjectGroup(quirkyPage, secondaryId, groupCId)
 
     await expect
       .poll(
-        async () => isRepoUnderGroupSection(await getSidebarRowMarkers(orcaPage), groupBId, repoId),
+        async () =>
+          isRepoUnderGroupSection(await getSidebarRowMarkers(quirkyPage), groupBId, repoId),
         { timeout: 10_000 }
       )
       .toBe(false)
 
-    await moveRepoToGroupViaMenu(orcaPage, mainWorktreeId, groupBName)
+    await moveRepoToGroupViaMenu(quirkyPage, mainWorktreeId, groupBName)
 
     await expect
       .poll(
-        async () => isRepoUnderGroupSection(await getSidebarRowMarkers(orcaPage), groupBId, repoId),
+        async () =>
+          isRepoUnderGroupSection(await getSidebarRowMarkers(quirkyPage), groupBId, repoId),
         { timeout: 10_000 }
       )
       .toBe(true)
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupCId })
   })
 
   test('removing a worktree from its group via the context menu returns it to its repo section', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-echo', secondaryBranch: 'feature-e' }
     ])
-    const [{ repoId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
-    const groupId = await createProjectGroup(orcaPage, 'E2E XRepo Group Echo')
-    await setWorktreeProjectGroup(orcaPage, secondaryId, groupId)
+    const groupId = await createProjectGroup(quirkyPage, 'E2E XRepo Group Echo')
+    await setWorktreeProjectGroup(quirkyPage, secondaryId, groupId)
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupId })
 
-    await removeWorktreeFromGroupViaMenu(orcaPage, secondaryId)
+    await removeWorktreeFromGroupViaMenu(quirkyPage, secondaryId)
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test('dragging a worktree onto a group header joins it, and onto its repo header releases it', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-foxtrot', secondaryBranch: 'feature-f' }
     ])
-    const [{ repoId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
-    const groupId = await createProjectGroup(orcaPage, 'E2E XRepo Group Foxtrot')
+    const groupId = await createProjectGroup(quirkyPage, 'E2E XRepo Group Foxtrot')
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
 
     await dragWorktreeOntoHeader({
-      page: orcaPage,
+      page: quirkyPage,
       worktreeId: secondaryId,
       targetSelector: `[data-project-group-header-id="${groupId}"]`
     })
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupId })
 
     await dragWorktreeOntoHeader({
-      page: orcaPage,
+      page: quirkyPage,
       worktreeId: secondaryId,
       targetSelector: `[data-repo-header-id="${repoId}"]`
     })
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test('releasing a drag outside the sidebar does not join a group at the same height', async ({
-    orcaPage
+    quirkyPage
   }) => {
     // Regression: the membership hit-test is vertical-only and pointerup is a
     // window-capture listener, so a release far to the right of the sidebar used
     // to still commit a join whenever it shared a group header's y.
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-golf', secondaryBranch: 'feature-g' }
     ])
-    const [{ repoId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
-    const groupId = await createProjectGroup(orcaPage, 'E2E XRepo Group Golf')
+    const groupId = await createProjectGroup(quirkyPage, 'E2E XRepo Group Golf')
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
 
-    const source = orcaPage.locator(`[data-worktree-id="${secondaryId}"]`).first()
-    const groupHeader = orcaPage.locator(`[data-project-group-header-id="${groupId}"]`)
+    const source = quirkyPage.locator(`[data-worktree-id="${secondaryId}"]`).first()
+    const groupHeader = quirkyPage.locator(`[data-project-group-header-id="${groupId}"]`)
     await source.scrollIntoViewIfNeeded()
     await groupHeader.scrollIntoViewIfNeeded()
     const sourceBox = await source.boundingBox()
@@ -704,74 +739,86 @@ test.describe('Cross-repo worktree groups', () => {
     if (!sourceBox || !headerBox) {
       throw new Error('Worktree drag bounding box was not available')
     }
-    const viewport = orcaPage.viewportSize()
+    const viewport = quirkyPage.viewportSize()
     const outsideX = Math.max(
       headerBox.x + headerBox.width + 240,
       (viewport?.width ?? headerBox.x + headerBox.width + 400) - 40
     )
 
-    await orcaPage.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
-    await orcaPage.mouse.down()
-    await orcaPage.mouse.move(outsideX, headerBox.y + headerBox.height / 2, { steps: 8 })
-    await orcaPage.mouse.up()
+    await quirkyPage.mouse.move(
+      sourceBox.x + sourceBox.width / 2,
+      sourceBox.y + sourceBox.height / 2
+    )
+    await quirkyPage.mouse.down()
+    await quirkyPage.mouse.move(outsideX, headerBox.y + headerBox.height / 2, { steps: 8 })
+    await quirkyPage.mouse.up()
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test('creating a group from a worktree via the context menu does not move its repo', async ({
-    orcaPage
+    quirkyPage
   }) => {
     // Regression guard: the old create action built a group from the whole
     // repo, so this worktree-scoped one must leave the sibling worktree put.
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([
       { name: 'e2e-xrepo-hotel', secondaryBranch: 'feature-h' }
     ])
-    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, mainWorktreeId, secondaryWorktreeId }] = await seedRepos(quirkyPage, [repo!])
     const secondaryId = secondaryWorktreeId!
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'repo-header', id: repoId })
 
     const groupId = await createGroupFromWorktreeViaMenu(
-      orcaPage,
+      quirkyPage,
       secondaryId,
       'E2E XRepo Group Hotel'
     )
 
     await expect
-      .poll(async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), secondaryId), {
-        timeout: 10_000
-      })
+      .poll(
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), secondaryId),
+        {
+          timeout: 10_000
+        }
+      )
       .toEqual({ kind: 'group-header', id: groupId })
 
-    await expect(orcaPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
+    await expect(quirkyPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
     await expect
       .poll(
-        async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), mainWorktreeId),
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), mainWorktreeId),
         { timeout: 10_000 }
       )
       .toEqual({ kind: 'repo-header', id: repoId })
   })
 
   test("creating a group from a repo's only worktree via the context menu leaves an empty placeholder for the repo", async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const [repo] = await createRepoFixture([{ name: 'e2e-xrepo-india' }])
-    const [{ repoId, mainWorktreeId }] = await seedRepos(orcaPage, [repo!])
+    const [{ repoId, mainWorktreeId }] = await seedRepos(quirkyPage, [repo!])
 
     await expect
       .poll(
         async () =>
-          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(orcaPage), {
+          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(quirkyPage), {
             kind: 'repo-header',
             id: repoId
           }),
@@ -780,16 +827,16 @@ test.describe('Cross-repo worktree groups', () => {
       .toBe(1)
 
     const groupId = await createGroupFromWorktreeViaMenu(
-      orcaPage,
+      quirkyPage,
       mainWorktreeId,
       'E2E XRepo Group India'
     )
 
-    await expect(orcaPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
+    await expect(quirkyPage.locator(`[data-repo-header-id="${repoId}"]`)).toBeVisible()
     await expect
       .poll(
         async () =>
-          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(orcaPage), {
+          countWorktreeRowsUnderHeader(await getSidebarRowMarkers(quirkyPage), {
             kind: 'repo-header',
             id: repoId
           }),
@@ -798,33 +845,33 @@ test.describe('Cross-repo worktree groups', () => {
       .toBe(0)
     await expect
       .poll(
-        async () => findNearestHeaderAbove(await getSidebarRowMarkers(orcaPage), mainWorktreeId),
+        async () => findNearestHeaderAbove(await getSidebarRowMarkers(quirkyPage), mainWorktreeId),
         { timeout: 10_000 }
       )
       .toEqual({ kind: 'group-header', id: groupId })
   })
 
   test('a folder-workspace row with no repo offers no group-creation action', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     const { parentPath, folderPath } = await createFolderBackedWorkspaceFixture()
-    const { folderWorktreeId } = await seedFolderWorkspace(orcaPage, {
+    const { folderWorktreeId } = await seedFolderWorkspace(quirkyPage, {
       parentPath,
       folderPath,
       groupName: 'E2E XRepo Folder Group Juliet',
       workspaceName: 'E2E XRepo Folder Task Juliet'
     })
 
-    await expect(orcaPage.locator(`[data-worktree-id="${folderWorktreeId}"]`)).toBeVisible({
+    await expect(quirkyPage.locator(`[data-worktree-id="${folderWorktreeId}"]`)).toBeVisible({
       timeout: 10_000
     })
-    await openWorktreeContextMenu(orcaPage, folderWorktreeId)
+    await openWorktreeContextMenu(quirkyPage, folderWorktreeId)
 
     // Sanity: the menu actually opened, so the absence below is the gate — not a no-op menu.
-    await expect(orcaPage.getByRole('menuitem', { name: 'Copy Path', exact: true })).toBeVisible()
+    await expect(quirkyPage.getByRole('menuitem', { name: 'Copy Path', exact: true })).toBeVisible()
     await expect(
-      orcaPage.getByRole('menuitem', { name: 'New group from worktree', exact: true })
+      quirkyPage.getByRole('menuitem', { name: 'New group from worktree', exact: true })
     ).toHaveCount(0)
     // Why: this fixture's folder workspace has no associated repo (a plain
     // directory, never git-initialized), so showProjectCreate's hasRepo gate
@@ -833,7 +880,7 @@ test.describe('Cross-repo worktree groups', () => {
     // real repo, which would show the project-scoped "New group from
     // project" action instead).
     await expect(
-      orcaPage.getByRole('menuitem', { name: 'New group from project', exact: true })
+      quirkyPage.getByRole('menuitem', { name: 'New group from project', exact: true })
     ).toHaveCount(0)
   })
 })

@@ -10,13 +10,13 @@ import {
   setAppEnvironment,
   type AppEnvironment
 } from '../shared/app-environment'
-import { readOrcaChromiumProcessPids } from './orca-chromium-process-pids'
+import { readQuirkyChromiumProcessPids } from './quirky-chromium-process-pids'
 import {
   admitSelfInitiatedTreeKill,
   installMainProcessTreeKillGate
 } from './own-chromium-tree-kill-guard'
 import { killCodexAppServerProcessTree } from './codex/codex-app-server-process-tree-kill'
-import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gate'
+import { setProcessTreeKillGate } from '@quirky/process-host/process-tree-kill-gate'
 import { resetSelfInitiatedTreeKillLogForTest } from './crash-reporting/self-initiated-tree-kill-log'
 import {
   clearCrashBreadcrumbsForTest,
@@ -24,7 +24,7 @@ import {
 } from './crash-reporting/crash-breadcrumb-store'
 import { _resetTracerForTests, setActiveSink } from './observability/tracer'
 
-const ORCA_MAIN_PID = 1000
+const QUIRKY_MAIN_PID = 1000
 const RENDERER_PID = 1001
 function appEnvironment(): AppEnvironment {
   return {
@@ -44,7 +44,7 @@ beforeEach(() => {
   previousEnvironment = hasAppEnvironment() ? getAppEnvironment() : null
   setAppEnvironment(appEnvironment())
   appMetricsMock.mockReturnValue([
-    { pid: ORCA_MAIN_PID, type: 'Browser' },
+    { pid: QUIRKY_MAIN_PID, type: 'Browser' },
     { pid: RENDERER_PID, type: 'Tab' },
     { pid: 1002, type: 'GPU' }
   ])
@@ -66,7 +66,7 @@ afterEach(() => {
 
 describe('refusing to tree-kill our own Chromium processes', () => {
   it('reads the live Chromium pid set from the app environment', () => {
-    expect([...readOrcaChromiumProcessPids()]).toEqual([ORCA_MAIN_PID, RENDERER_PID, 1002])
+    expect([...readQuirkyChromiumProcessPids()]).toEqual([QUIRKY_MAIN_PID, RENDERER_PID, 1002])
   })
 
   it('refuses the codex app-server deadline kill against one of our own pids', () => {
@@ -102,7 +102,7 @@ describe('refusing to tree-kill our own Chromium processes', () => {
   })
 
   /**
-   * Fail-open is the deliberate choice — see `orca-chromium-process-pids.ts` for
+   * Fail-open is the deliberate choice — see `quirky-chromium-process-pids.ts` for
    * why refusing everything is worse — so the crumb is the only thing that keeps
    * an unreadable metrics table distinguishable from a host that has no Chromium.
    */
@@ -111,10 +111,10 @@ describe('refusing to tree-kill our own Chromium processes', () => {
       throw new Error('getAppMetrics unavailable')
     })
 
-    expect([...readOrcaChromiumProcessPids()]).toEqual([])
+    expect([...readQuirkyChromiumProcessPids()]).toEqual([])
     // Coalesced: the gate reads this set on every kill, so a broken table must
     // not evict the ring it shares with the refusal crumb.
-    expect([...readOrcaChromiumProcessPids()]).toEqual([])
+    expect([...readQuirkyChromiumProcessPids()]).toEqual([])
     expect(
       admitSelfInitiatedTreeKill({
         pid: RENDERER_PID,

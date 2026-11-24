@@ -41,7 +41,7 @@ describe('prepareLocalWorktreeRootForRepo', () => {
     })
     getWslHomeAsyncMock.mockReset().mockResolvedValue(null)
     store.getSettings.mockReset().mockReturnValue({
-      workspaceDir: '/Users/alice/orca/workspaces',
+      workspaceDir: '/Users/alice/quirky/workspaces',
       nestWorkspaces: false
     })
   })
@@ -49,7 +49,7 @@ describe('prepareLocalWorktreeRootForRepo', () => {
   it('creates the effective worktree root for local git repos', async () => {
     await prepareLocalWorktreeRootForRepo(store as never, repo)
 
-    expect(mkdirMock).toHaveBeenCalledWith('/Users/alice/orca/workspaces', { recursive: true })
+    expect(mkdirMock).toHaveBeenCalledWith('/Users/alice/quirky/workspaces', { recursive: true })
   })
 
   it('resolves a WSL repo root through the async probe instead of blocking on wsl.exe', async () => {
@@ -76,7 +76,7 @@ describe('prepareLocalWorktreeRootForRepo', () => {
 
       expect(getWslHomeMock).not.toHaveBeenCalled()
       expect(mkdirMock).toHaveBeenCalledWith(
-        '\\\\wsl.localhost\\Ubuntu\\home\\jin\\orca\\workspaces',
+        '\\\\wsl.localhost\\Ubuntu\\home\\jin\\quirky\\workspaces',
         { recursive: true }
       )
     } finally {

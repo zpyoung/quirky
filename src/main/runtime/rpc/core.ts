@@ -1,7 +1,10 @@
-// Why: single boundary between raw RPC frames and OrcaRuntimeService; keeps schema, handler, and result type on one object.
+// Why: single boundary between raw RPC frames and QuirkyRuntimeService; keeps schema, handler, and result type on one object.
 import { ZodError, type ZodType } from 'zod'
 import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protocol'
-import type { OrcaRuntimeService, OrchestrationCompatibilityCallerAuthority } from '../orca-runtime'
+import type {
+  QuirkyRuntimeService,
+  OrchestrationCompatibilityCallerAuthority
+} from '../quirky-runtime'
 import type { StructuredAgentCliSourceEvidence } from '../../native-chat/structured-agent-cli-source'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import type {
@@ -72,7 +75,7 @@ export type LegacyCoordinatorAuthorityProof = Readonly<{
 }>
 
 export type RpcContext = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   // Why: lets long-poll handlers release immediately on client disconnect instead of running down timeoutMs. See design doc §3.1.
   signal?: AbortSignal
   // Why: per-WebSocket key so the server reaps a closing socket's subscriptions without touching sibling sockets sharing the deviceToken.
@@ -113,7 +116,7 @@ export type RpcContext = {
   replayedMutationReceipt?: unknown
   // Why: Run-scoped handlers must compare declared handles with request attestation.
   orchestrationCompatibilityEvidence?: OrchestrationCompatibilityEvidence
-  // Why: resolved once at the dispatch entry from the caller's Orca session id; the session wins.
+  // Why: resolved once at the dispatch entry from the caller's Quirky session id; the session wins.
   orchestrationCaller?: OrchestrationSessionCaller
   // Why: only the compatibility authority router can set this trusted scope; user params cannot bypass Run consumer binding.
   legacyCoordinatorRunId?: string

@@ -57,7 +57,7 @@ export const AGENT_TRUST_INHERITS_FROM_A_HOME: Record<AgentTrustPreset, boolean>
 }
 
 /**
- * Agents whose lookup keys on the folder they start in, so Orca trusts that folder, not the
+ * Agents whose lookup keys on the folder they start in, so Quirky trusts that folder, not the
  * workspace root, even outside any workspace. Codex checks its start folder, then that folder's
  * repo root; a non-git workspace root above the start folder is neither.
  */

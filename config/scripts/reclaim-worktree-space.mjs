@@ -2,7 +2,7 @@
 import { mkdir } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { lock } from 'proper-lockfile'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 export async function reclaimWorktreeSpace({
   repoRoot = process.cwd(),
@@ -28,7 +28,7 @@ export async function reclaimWorktreeSpace({
     }
     commonDirectory = resolve(repoRoot, result.stdout.trim())
   }
-  const cacheRoot = join(commonDirectory, 'orca-cache')
+  const cacheRoot = join(commonDirectory, 'quirky-cache')
   const lockPath = join(cacheRoot, 'storage-cleanup')
   await mkdir(cacheRoot, { recursive: true })
   let release

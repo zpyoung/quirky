@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import { admitPaneToSession, applyCommandToSession } from './terminal-pane-admission'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: false }))
 
 const WORKTREE = 'repo-1::/workspace'
 const TAB = 'tab-1'

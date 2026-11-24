@@ -11,11 +11,11 @@ vi.mock('../shared/runtime-environment-store', () => ({
   listEnvironments: mocks.list,
   removeEnvironment: mocks.remove
 }))
-vi.mock('../shared/runtime-environment-managed-orcad-store', () => ({
-  removeManagedOrcadEnvironment: mocks.removeManaged
+vi.mock('../shared/runtime-environment-managed-quirkyd-store', () => ({
+  removeManagedQuirkydEnvironment: mocks.removeManaged
 }))
-vi.mock('./managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  closeOrcadManagedTunnel: mocks.closeTunnel
+vi.mock('./managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  closeQuirkydManagedTunnel: mocks.closeTunnel
 }))
 
 import { releaseEphemeralVmRuntimeEnvironments } from './ephemeral-vm-runtime-environment-release'
@@ -27,8 +27,8 @@ describe('releaseEphemeralVmRuntimeEnvironments', () => {
 
   it("closes a destroyed VM's managed server tunnel and forgets the server", async () => {
     mocks.list.mockReturnValue([
-      { id: 'env-vm', orcadDeployment: { sshTargetId: 'runtime-ssh-vm' } },
-      { id: 'env-other', orcadDeployment: { sshTargetId: 'ssh-builder' } }
+      { id: 'env-vm', quirkydDeployment: { sshTargetId: 'runtime-ssh-vm' } },
+      { id: 'env-other', quirkydDeployment: { sshTargetId: 'ssh-builder' } }
     ])
     await releaseEphemeralVmRuntimeEnvironments('/user-data', {
       runtimeEnvironmentId: 'env-vm',
@@ -43,7 +43,7 @@ describe('releaseEphemeralVmRuntimeEnvironments', () => {
 
   it('finds the server of a relay-era VM that converted without recording it', async () => {
     mocks.list.mockReturnValue([
-      { id: 'env-converted', orcadDeployment: { sshTargetId: 'runtime-ssh-vm' } }
+      { id: 'env-converted', quirkydDeployment: { sshTargetId: 'runtime-ssh-vm' } }
     ])
     await releaseEphemeralVmRuntimeEnvironments('/user-data', { sshTargetId: 'runtime-ssh-vm' })
     expect(mocks.removeManaged).toHaveBeenCalledWith('/user-data', 'env-converted')

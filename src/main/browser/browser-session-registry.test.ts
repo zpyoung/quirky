@@ -48,12 +48,12 @@ import { installBrowserSessionUserAgentPolicy } from './browser-session-ua'
 import { setBrowserNetworkProxySettingsResolver } from './browser-session-proxy'
 import { handleElectronProxyLogin } from '../network/electron-proxy-credentials'
 import { applyProxySettingsToSession } from '../network/proxy-settings'
-import { ORCA_BROWSER_PARTITION } from '../../shared/constants'
+import { QUIRKY_BROWSER_PARTITION } from '../../shared/constants'
 import {
-  DEFAULT_LOCAL_ORCA_PROFILE_ID,
-  getOrcaProfileBrowserDefaultPartition,
-  getOrcaProfileBrowserSessionPartition
-} from '../../shared/orca-profiles'
+  DEFAULT_LOCAL_QUIRKY_PROFILE_ID,
+  getQuirkyProfileBrowserDefaultPartition,
+  getQuirkyProfileBrowserSessionPartition
+} from '../../shared/quirky-profiles'
 
 describe('BrowserSessionRegistry', () => {
   beforeEach(() => {
@@ -86,11 +86,11 @@ describe('BrowserSessionRegistry', () => {
     const defaultProfile = browserSessionRegistry.getDefaultProfile()
     expect(defaultProfile.id).toBe('default')
     expect(defaultProfile.scope).toBe('default')
-    expect(defaultProfile.partition).toBe(ORCA_BROWSER_PARTITION)
+    expect(defaultProfile.partition).toBe(QUIRKY_BROWSER_PARTITION)
   })
 
   it('allows the default partition', () => {
-    expect(browserSessionRegistry.isAllowedPartition(ORCA_BROWSER_PARTITION)).toBe(true)
+    expect(browserSessionRegistry.isAllowedPartition(QUIRKY_BROWSER_PARTITION)).toBe(true)
   })
 
   it('rejects unknown partitions', () => {
@@ -101,8 +101,8 @@ describe('BrowserSessionRegistry', () => {
     const profile = await browserSessionRegistry.createProfile('isolated', 'Test Isolated')
     expect(profile).not.toBeNull()
     expect(profile!.scope).toBe('isolated')
-    expect(profile!.partition).toMatch(/^persist:orca-browser-session-/)
-    expect(profile!.partition).not.toBe(ORCA_BROWSER_PARTITION)
+    expect(profile!.partition).toMatch(/^persist:quirky-browser-session-/)
+    expect(profile!.partition).not.toBe(QUIRKY_BROWSER_PARTITION)
     expect(profile!.label).toBe('Test Isolated')
     expect(profile!.source).toBeNull()
   })
@@ -218,7 +218,7 @@ describe('BrowserSessionRegistry', () => {
     const profile = await browserSessionRegistry.createProfile('imported', 'My Import')
     expect(profile).not.toBeNull()
     expect(profile!.scope).toBe('imported')
-    expect(profile!.partition).toMatch(/^persist:orca-browser-session-/)
+    expect(profile!.partition).toMatch(/^persist:quirky-browser-session-/)
   })
 
   it('resolves partition for a known profile', async () => {
@@ -228,21 +228,21 @@ describe('BrowserSessionRegistry', () => {
   })
 
   it('resolves default partition for null/undefined profileId', () => {
-    expect(browserSessionRegistry.resolvePartition(null)).toBe(ORCA_BROWSER_PARTITION)
-    expect(browserSessionRegistry.resolvePartition(undefined)).toBe(ORCA_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolvePartition(null)).toBe(QUIRKY_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolvePartition(undefined)).toBe(QUIRKY_BROWSER_PARTITION)
   })
 
   it('resolves default partition for unknown profileId', () => {
-    expect(browserSessionRegistry.resolvePartition('nonexistent')).toBe(ORCA_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolvePartition('nonexistent')).toBe(QUIRKY_BROWSER_PARTITION)
   })
 
   it('strictly resolves known profile partitions without downgrading unknown profiles', async () => {
     const profile = await browserSessionRegistry.createProfile('isolated', 'Strict Resolve')
     expect(profile).not.toBeNull()
 
-    expect(browserSessionRegistry.resolveKnownPartition(null)).toBe(ORCA_BROWSER_PARTITION)
-    expect(browserSessionRegistry.resolveKnownPartition(undefined)).toBe(ORCA_BROWSER_PARTITION)
-    expect(browserSessionRegistry.resolveKnownPartition('default')).toBe(ORCA_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolveKnownPartition(null)).toBe(QUIRKY_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolveKnownPartition(undefined)).toBe(QUIRKY_BROWSER_PARTITION)
+    expect(browserSessionRegistry.resolveKnownPartition('default')).toBe(QUIRKY_BROWSER_PARTITION)
     expect(browserSessionRegistry.resolveKnownPartition(profile!.id)).toBe(profile!.partition)
     expect(browserSessionRegistry.resolveKnownPartition('missing-profile')).toBeNull()
   })
@@ -346,7 +346,7 @@ describe('BrowserSessionRegistry', () => {
     const fakeProfile = {
       id: '00000000-0000-0000-0000-000000000001',
       scope: 'imported' as const,
-      partition: 'persist:orca-browser-session-00000000-0000-0000-0000-000000000001',
+      partition: 'persist:quirky-browser-session-00000000-0000-0000-0000-000000000001',
       label: 'Hydrated',
       source: { browserFamily: 'manual' as const, importedAt: 1000 }
     }
@@ -357,7 +357,7 @@ describe('BrowserSessionRegistry', () => {
 
   it('rejects a persisted profile whose partition belongs to a different profile id', () => {
     const profileId = '00000000-0000-4000-8000-000000000021'
-    const claimedPartition = 'persist:orca-browser-session-00000000-0000-4000-8000-000000000022'
+    const claimedPartition = 'persist:quirky-browser-session-00000000-0000-4000-8000-000000000022'
 
     browserSessionRegistry.hydrateFromPersisted([
       {
@@ -384,7 +384,7 @@ describe('BrowserSessionRegistry', () => {
 
   it('applies and clears existing browser-profile policy on an opaque route partition', async () => {
     const partition =
-      'persist:orca-browser-v1-1111111111111111222222222222222233333333333333334444444444444444'
+      'persist:quirky-browser-v1-1111111111111111222222222222222233333333333333334444444444444444'
     setBrowserNetworkProxySettingsResolver(() => ({
       httpProxyUrl: 'http://app-proxy.example:8080',
       httpProxyBypassRules: ''
@@ -407,7 +407,7 @@ describe('BrowserSessionRegistry', () => {
 
   it('rejects route partitions for missing browser profiles', () => {
     const partition =
-      'persist:orca-browser-v1-aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbccccccccccccccccdddddddddddddddd'
+      'persist:quirky-browser-v1-aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbbccccccccccccccccdddddddddddddddd'
 
     expect(() =>
       browserSessionRegistry.setupRoutePartitionPolicies(partition, 'missing-profile')
@@ -449,7 +449,7 @@ describe('BrowserSessionRegistry', () => {
     // Why: verify the parallel fix to the default partition — isolated/imported
     // profiles must also defer media permission checks to macOS instead of
     // denying outright, otherwise pages inside them still hit NotAllowedError
-    // after the user grants Camera/Microphone to Orca.
+    // after the user grants Camera/Microphone to Quirky.
     await browserSessionRegistry.createProfile('isolated', 'Media Test')
     const mockSession = sessionFromPartitionMock.mock.results[0]?.value
     const requestHandler = mockSession.setPermissionRequestHandler.mock.calls[0][0]
@@ -524,26 +524,26 @@ describe('BrowserSessionRegistry', () => {
     expect(webAuthnCallback).toHaveBeenCalledWith('credential-1')
   })
 
-  it('uses profile-owned partitions for non-default Orca profiles', async () => {
-    const orcaProfileId = 'local-work'
-    browserSessionRegistry.configureForOrcaProfile({
-      orcaProfileId,
+  it('uses profile-owned partitions for non-default Quirky profiles', async () => {
+    const quirkyProfileId = 'local-work'
+    browserSessionRegistry.configureForQuirkyProfile({
+      quirkyProfileId,
       profileDirectory: '/profiles/local-work'
     })
 
     expect(browserSessionRegistry.getDefaultProfile().partition).toBe(
-      getOrcaProfileBrowserDefaultPartition(orcaProfileId)
+      getQuirkyProfileBrowserDefaultPartition(quirkyProfileId)
     )
-    expect(browserSessionRegistry.isAllowedPartition(ORCA_BROWSER_PARTITION)).toBe(false)
+    expect(browserSessionRegistry.isAllowedPartition(QUIRKY_BROWSER_PARTITION)).toBe(false)
 
     const profile = await browserSessionRegistry.createProfile('isolated', 'Work Browser')
     expect(profile).not.toBeNull()
     expect(profile!.partition).toBe(
-      getOrcaProfileBrowserSessionPartition(orcaProfileId, profile!.id)
+      getQuirkyProfileBrowserSessionPartition(quirkyProfileId, profile!.id)
     )
 
-    browserSessionRegistry.configureForOrcaProfile({
-      orcaProfileId: DEFAULT_LOCAL_ORCA_PROFILE_ID,
+    browserSessionRegistry.configureForQuirkyProfile({
+      quirkyProfileId: DEFAULT_LOCAL_QUIRKY_PROFILE_ID,
       profileDirectory: '/profiles/local-default'
     })
   })

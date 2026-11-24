@@ -2,7 +2,7 @@ import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
@@ -13,7 +13,7 @@ import {
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
 
-function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeService {
+function stubRuntime(overrides: Partial<QuirkyRuntimeService> = {}): QuirkyRuntimeService {
   const registry = createSubscriptionRegistryDouble()
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This partial runtime supplies the terminal RPC methods these tests invoke.
   return {
@@ -25,7 +25,7 @@ function stubRuntime(overrides: Partial<OrcaRuntimeService> = {}): OrcaRuntimeSe
     registerRemoteTerminalViewSubscriber: () => () => {},
     requestRendererTerminalTabMount: () => false,
     ...overrides
-  } as OrcaRuntimeService
+  } as QuirkyRuntimeService
 }
 
 const makeRequest = (method: string, params?: unknown): RpcRequest => ({

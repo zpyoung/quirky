@@ -66,7 +66,7 @@ describe('the editor document mounted in the page', () => {
   it('injects one sheet for the page, held entirely under the host class', () => {
     mount()
     mount()
-    const sheets = document.querySelectorAll('#orca-rich-markdown-document-style')
+    const sheets = document.querySelectorAll('#quirky-rich-markdown-document-style')
     expect(sheets).toHaveLength(1)
     const text = sheets[0]!.textContent ?? ''
     expect(text.length).toBeGreaterThan(1000)

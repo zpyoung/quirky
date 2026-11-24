@@ -1,4 +1,4 @@
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeTerminalSummary } from '../../../shared/runtime-types'
 import {
@@ -226,7 +226,7 @@ describe('live terminal surface owners', () => {
         requireFreshPtyLiveness: true,
         includeVisualLayouts: false,
         // Layout-owner build: main places the workspace's unshown live terminals first.
-        ...(ORCA_LAYOUT_OWNER_IS_MAIN ? { placeUnshownLiveTerminals: true } : {})
+        ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? { placeUnshownLiveTerminals: true } : {})
       }
     })
   })

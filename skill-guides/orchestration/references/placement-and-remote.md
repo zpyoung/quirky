@@ -1,7 +1,7 @@
 # Placement and remote execution
 
 Load this reference before creating a new worktree or placing work through SSH,
-WSL, or another connected Orca server.
+WSL, or another connected Quirky server.
 
 ## Placement choices
 
@@ -12,13 +12,13 @@ sharing unsafe.
 
 ```text
 # Current workspace; setup is not rerun.
-ORCA orchestration worker-start --task <task_id> --worktree current --agent codex --json
+QUIRKY orchestration worker-start --task <task_id> --worktree current --agent codex --json
 
 # Stacked child worktree.
-ORCA orchestration worker-start --task <task_id> --worktree new-child --name <name> --agent codex --setup run --json
+QUIRKY orchestration worker-start --task <task_id> --worktree new-child --name <name> --agent codex --setup run --json
 
 # Independent top-level worktree.
-ORCA orchestration worker-start --task <task_id> --worktree new-top-level --name <name> --agent codex --setup run --json
+QUIRKY orchestration worker-start --task <task_id> --worktree new-top-level --name <name> --agent codex --setup run --json
 ```
 
 Current and exact existing workspaces create a fresh terminal unless
@@ -29,17 +29,17 @@ Register a folder workspace through project setup. `repo add --path <dir>`
 requires a valid Git repository and rejects a plain directory:
 
 ```text
-ORCA project setup-existing-folder --project <project_id> --host <host_id> --path <abs_path> --kind folder --json
+QUIRKY project setup-existing-folder --project <project_id> --host <host_id> --path <abs_path> --kind folder --json
 ```
 
 Then place work on the returned workspace with an exact selector. A worktree
-selector needs the full `<repo-id>::<path>` value Orca returned, passed as
+selector needs the full `<repo-id>::<path>` value Quirky returned, passed as
 `id:<newFullWorktreeId>`; a bare repo id is not a worktree id. `new-child` and
 `new-top-level` are worktree creation and do not apply to a folder.
 
 New worktrees use agent-first creation and run setup by default. Preserve the
 repository's startup policy: `start-immediately` can report setup as `running`,
-while `wait-for-setup` gates prompt delivery on success. Orca lineage, Git base,
+while `wait-for-setup` gates prompt delivery on success. Quirky lineage, Git base,
 filesystem isolation, coordination parentage, UI grouping, and execution host
 are separate decisions.
 
@@ -49,7 +49,7 @@ The Run and Tasks remain authoritative on the current server. `--on` selects
 only the worker's execution server and appears only on `worker-start`:
 
 ```text
-ORCA orchestration worker-start --task <task_id> --on <environment> --worktree new-top-level --repo <exact_remote_repo_selector> --name <name> --agent codex --setup run --json
+QUIRKY orchestration worker-start --task <task_id> --on <environment> --worktree new-top-level --repo <exact_remote_repo_selector> --name <name> --agent codex --setup run --json
 ```
 
 Remote `current` and `new-child` are invalid because they are ambiguous across
@@ -59,10 +59,10 @@ stop, and cleanup by Dispatch ID; never repeat `--on` or substitute a remote
 terminal handle.
 
 ```text
-ORCA orchestration worker-show --dispatch <dispatch_id> --json
-ORCA orchestration worker-read --dispatch <dispatch_id> --limit 50 --json
-ORCA orchestration send --to dispatch:<dispatch_id> --subject "Follow-up" --body "<guidance>" --json
-ORCA orchestration worker-list --run <run_id> --include-remote --json
+QUIRKY orchestration worker-show --dispatch <dispatch_id> --json
+QUIRKY orchestration worker-read --dispatch <dispatch_id> --limit 50 --json
+QUIRKY orchestration send --to dispatch:<dispatch_id> --subject "Follow-up" --body "<guidance>" --json
+QUIRKY orchestration worker-list --run <run_id> --include-remote --json
 ```
 
 `worker-list` reads local fleet state only; enumerate remote workers with
@@ -85,6 +85,6 @@ documented older path, but must not broaden the target or cross the execution
 boundary. Changing host-published content reaches old clients even without a
 wire-shape change, so preserve established semantics or negotiate the behavior.
 
-For WSL, use the exact executable and arguments returned by Orca so the distro
-and packaged launcher remain bound. Do not translate a printed `orca-ide`
+For WSL, use the exact executable and arguments returned by Quirky so the distro
+and packaged launcher remain bound. Do not translate a printed `quirky-ide`
 recovery command into a PATH-resolved local command.

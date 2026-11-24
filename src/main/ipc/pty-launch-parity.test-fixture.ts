@@ -1,5 +1,5 @@
 import { createPaneBindingStore } from './pty-launch-race-test-fixture'
-// Test-only: one real OrcaRuntimeService wired into the real pty handlers, so both launch lanes
+// Test-only: one real QuirkyRuntimeService wired into the real pty handlers, so both launch lanes
 // reach the same fake provider. Window lane: pty:spawn. Host lane: createTerminal / createAgentSession
 // through the runtime controller registerPtyHandlers installs. Suites still declare the IPC vi.mock block.
 import { vi } from 'vitest'
@@ -7,7 +7,7 @@ import type { Mock } from 'vitest'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { existsSyncMock, statSyncMock } from './pty-ipc-mock-registry'
 import type { PtyIpcSuiteFixtures } from './pty-ipc-test-harness'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { TerminalWorkspaceLaunchScope } from '../runtime/runtime-legacy-worker-terminal-recovery-types'
 import {
   IDENTITY_ENV_KEYS,
@@ -129,7 +129,7 @@ type ScopeResolver = {
 
 export type ParityLanes = {
   store: ReturnType<typeof createPaneBindingStore>
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   /** The local daemon provider's spawn mock. */
   provider: Mock
   persistPtyBinding: Mock
@@ -177,7 +177,7 @@ export function startParityLanes(
     getProjectGroups: () => [{ id: 'pg-1', name: 'group', parentPath: null, connectionId: null }]
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: launches read only the store members defined above; the rest of the persistence store is unreachable here.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   const provider = vi.fn(async (options: { sessionId?: string }) => {
     if (args.spawnError) {
       throw args.spawnError
@@ -242,7 +242,7 @@ const PROVIDER_FACT_KEYS = [
 const CASE_ENV_KEYS = ['A', 'CUSTOM_FLAG']
 
 /**
- * The launch facts the plan names at the provider boundary: `orcaEnv` lists identity keys present,
+ * The launch facts the plan names at the provider boundary: `quirkyEnv` lists identity keys present,
  * `env` the case's own env values, `hidden` whether main marked the PTY hidden before a view.
  */
 export async function providerFacts(provider: Mock): Promise<Record<string, unknown>> {
@@ -253,7 +253,7 @@ export async function providerFacts(provider: Mock): Promise<Record<string, unkn
     ...Object.fromEntries(
       PROVIDER_FACT_KEYS.filter((k) => k in options).map((k) => [k, options[k]])
     ),
-    orcaEnv: IDENTITY_ENV_KEYS.filter((key) => key in env),
+    quirkyEnv: IDENTITY_ENV_KEYS.filter((key) => key in env),
     env: Object.fromEntries(CASE_ENV_KEYS.filter((key) => key in env).map((k) => [k, env[k]])),
     hidden: isHiddenRendererPty(String(spawned.id))
   }

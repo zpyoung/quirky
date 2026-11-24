@@ -139,7 +139,7 @@ function initialState(): Record<string, unknown> {
 async function loadStore(state: Record<string, unknown>) {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
-    join(testState.dir, 'orca-data.json'),
+    join(testState.dir, 'quirky-data.json'),
     JSON.stringify({ ...getDefaultPersistedState(testState.dir), ...state }),
     'utf-8'
   )
@@ -151,12 +151,12 @@ async function loadStore(state: Record<string, unknown>) {
   installFakeAppEnvironment({ getPath: () => testState.dir })
   const { Store, initDataPath } = await import('./persistence')
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 /** The workspace's execution host changes without any automation being edited. */
 function repinWorkspace(connectionId: string, sshTargets?: SshTarget[]): void {
-  const file = join(testState.dir, 'orca-data.json')
+  const file = join(testState.dir, 'quirky-data.json')
   const state = JSON.parse(readPersistedStateJson(file))
   state.folderWorkspaces = [folderWorkspace(connectionId)]
   if (sshTargets) {
@@ -168,7 +168,7 @@ function repinWorkspace(connectionId: string, sshTargets?: SshTarget[]): void {
 beforeEach(() => {
   hasCreatedStoreInCase = false
   resetRetirementCollisionKeyCacheForTests()
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-workspace-repin-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-workspace-repin-'))
 })
 
 afterEach(async () => {
@@ -198,7 +198,7 @@ describe('a workspace re-pinned outside the automation editor', () => {
     const { Store, initDataPath } = await import('./persistence')
     initDataPath()
     const reloaded = createSqliteTestStore(Store, {
-      dataFile: join(testState.dir, 'orca-data.json')
+      dataFile: join(testState.dir, 'quirky-data.json')
     })
 
     expect(reloaded.listAutomations()[0].executionTargetGeneration).toBe(STAGING_GENERATION)
@@ -222,7 +222,7 @@ describe('a workspace re-pinned outside the automation editor', () => {
     const { Store, initDataPath } = await import('./persistence')
     initDataPath()
     const reloaded = createSqliteTestStore(Store, {
-      dataFile: join(testState.dir, 'orca-data.json')
+      dataFile: join(testState.dir, 'quirky-data.json')
     })
 
     expect(reloaded.listAutomations()[0].executionTargetGeneration).toBe(PROD_GENERATION)

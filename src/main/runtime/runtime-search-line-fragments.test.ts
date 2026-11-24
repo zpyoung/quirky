@@ -1,28 +1,28 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { resolveAuthorizedPathMock, wslAwareSpawnMock } from './orca-runtime-files-mock-registry'
+import { resolveAuthorizedPathMock, wslAwareSpawnMock } from './quirky-runtime-files-mock-registry'
 import {
   createRuntimeFileCommands,
   useRuntimeFileCommandsLifecycle
-} from './orca-runtime-files-test-harness'
+} from './quirky-runtime-files-test-harness'
 
-vi.mock('fs', async () => (await import('./orca-runtime-files-mock-registry')).fsModuleMock())
+vi.mock('fs', async () => (await import('./quirky-runtime-files-mock-registry')).fsModuleMock())
 vi.mock('fs/promises', async () =>
-  (await import('./orca-runtime-files-mock-registry')).fsPromisesModuleMock()
+  (await import('./quirky-runtime-files-mock-registry')).fsPromisesModuleMock()
 )
 vi.mock(
   './file-watcher-host',
-  async () => (await import('./orca-runtime-files-mock-registry')).fileWatcherHostMock
+  async () => (await import('./quirky-runtime-files-mock-registry')).fileWatcherHostMock
 )
 vi.mock('../ipc/filesystem-auth', async () =>
-  (await import('./orca-runtime-files-mock-registry')).filesystemAuthModuleMock()
+  (await import('./quirky-runtime-files-mock-registry')).filesystemAuthModuleMock()
 )
 vi.mock('../git/runner', async () =>
-  (await import('./orca-runtime-files-mock-registry')).gitRunnerModuleMock()
+  (await import('./quirky-runtime-files-mock-registry')).gitRunnerModuleMock()
 )
 vi.mock(
   '../ipc/local-worktree-runtime-options',
-  async () => (await import('./orca-runtime-files-mock-registry')).localWorktreeRuntimeOptionsMock
+  async () => (await import('./quirky-runtime-files-mock-registry')).localWorktreeRuntimeOptionsMock
 )
 
 type MockRuntimeSearchChild = EventEmitter & {

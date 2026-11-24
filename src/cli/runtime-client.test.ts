@@ -5,17 +5,17 @@ import { createServer, type Socket } from 'node:net'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_RUNTIME_CAPABILITY } from '../shared/protocol-version'
 import { RuntimeClient, RuntimeClientError, RuntimeRpcFailureError } from './runtime-client'
-import { launchOrcaApp } from './runtime/launch'
+import { launchQuirkyApp } from './runtime/launch'
 
 vi.mock('./runtime/launch', () => ({
-  launchOrcaApp: vi.fn()
+  launchQuirkyApp: vi.fn()
 }))
 
 const servers = new Set<ReturnType<typeof createServer>>()
 const sockets = new Set<Socket>()
 
 afterEach(async () => {
-  vi.mocked(launchOrcaApp).mockClear()
+  vi.mocked(launchQuirkyApp).mockClear()
   for (const socket of sockets) {
     socket.destroy()
   }
@@ -32,7 +32,7 @@ afterEach(async () => {
 })
 
 function makeRuntimeClientFixture(): string {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-client-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-client-'))
   onTestFinished(() => rmSync(userDataPath, { recursive: true, force: true }))
   return userDataPath
 }
@@ -44,7 +44,7 @@ function writeMetadata(
   pid = 123
 ): void {
   writeFileSync(
-    join(userDataPath, 'orca-runtime.json'),
+    join(userDataPath, 'quirky-runtime.json'),
     JSON.stringify({
       runtimeId: 'runtime-1',
       pid,
@@ -109,8 +109,8 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     await new Promise<void>((resolve) => server.listen(endpoint, resolve))
     writeMetadata(userDataPath, endpoint)
 
-    const priorLaunchToken = process.env.ORCA_AGENT_LAUNCH_TOKEN
-    process.env.ORCA_AGENT_LAUNCH_TOKEN = 'launch-secret'
+    const priorLaunchToken = process.env.QUIRKY_AGENT_LAUNCH_TOKEN
+    process.env.QUIRKY_AGENT_LAUNCH_TOKEN = 'launch-secret'
     const client = new RuntimeClient(userDataPath, 500)
     try {
       await client.call(
@@ -125,9 +125,9 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
       await secondClient.call('orchestration.taskList', {})
     } finally {
       if (priorLaunchToken === undefined) {
-        delete process.env.ORCA_AGENT_LAUNCH_TOKEN
+        delete process.env.QUIRKY_AGENT_LAUNCH_TOKEN
       } else {
-        process.env.ORCA_AGENT_LAUNCH_TOKEN = priorLaunchToken
+        process.env.QUIRKY_AGENT_LAUNCH_TOKEN = priorLaunchToken
       }
     }
 
@@ -285,7 +285,7 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     expect(status.result.graph.state).toBe('unavailable')
   })
 
-  it('openOrca activates the app even when a desktop runtime is already reachable', async () => {
+  it('openQuirky activates the app even when a desktop runtime is already reachable', async () => {
     const userDataPath = makeRuntimeClientFixture()
     const endpoint = join(userDataPath, 'runtime.sock')
     const server = createServer((socket) => {
@@ -315,14 +315,14 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     writeMetadata(userDataPath, endpoint)
 
     const client = new RuntimeClient(userDataPath, 100)
-    const status = await client.openOrca(100)
+    const status = await client.openQuirky(100)
 
     expect(status.result.runtime.state).toBe('ready')
     expect(status.result.runtime.reachable).toBe(true)
-    expect(launchOrcaApp).toHaveBeenCalledOnce()
+    expect(launchQuirkyApp).toHaveBeenCalledOnce()
   })
 
-  it('openOrca waits for a reachable headless runtime to expose a desktop window', async () => {
+  it('openQuirky waits for a reachable headless runtime to expose a desktop window', async () => {
     const userDataPath = makeRuntimeClientFixture()
     const endpoint = join(userDataPath, 'runtime.sock')
     let statusRequests = 0
@@ -356,14 +356,14 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
     writeMetadata(userDataPath, endpoint)
 
     const client = new RuntimeClient(userDataPath, 100)
-    const status = await client.openOrca(1_000)
+    const status = await client.openQuirky(1_000)
 
-    expect(launchOrcaApp).toHaveBeenCalledOnce()
+    expect(launchQuirkyApp).toHaveBeenCalledOnce()
     expect(status.result.app.desktopWindowStatus).toBe('available')
     expect(statusRequests).toBeGreaterThan(1)
   })
 
-  it('openOrca fails explicitly when the serve owner cannot promote safely', async () => {
+  it('openQuirky fails explicitly when the serve owner cannot promote safely', async () => {
     const userDataPath = makeRuntimeClientFixture()
     const endpoint = join(userDataPath, 'runtime.sock')
     const server = createServer((socket) => {
@@ -395,11 +395,11 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
 
     const client = new RuntimeClient(userDataPath, 100)
 
-    await expect(client.openOrca(100)).rejects.toMatchObject({
+    await expect(client.openQuirky(100)).rejects.toMatchObject({
       code: 'desktop_activation_blocked'
     })
     // A blocked runtime can't promote, so we bail before spawning the app.
-    expect(launchOrcaApp).not.toHaveBeenCalled()
+    expect(launchQuirkyApp).not.toHaveBeenCalled()
   })
 
   it('times out if the runtime never responds', async () => {
@@ -445,7 +445,7 @@ describe.skipIf(process.platform === 'win32')('RuntimeClient', () => {
 
     expect(failure).toBeInstanceOf(RuntimeClientError)
     expect((failure as RuntimeClientError).message).toBe(
-      'The Orca runtime closed the connection before responding. Restart Orca and try again.'
+      'The Quirky runtime closed the connection before responding. Restart Quirky and try again.'
     )
     expect((failure as RuntimeClientError).data).toBeUndefined()
     expect(request).toMatchObject({ method: 'orchestration.workerShow' })

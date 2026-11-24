@@ -315,7 +315,7 @@ export function buildSecondaryCommitMessageAgentSpecs({
         parse: parseLineModels
       },
       // Why: `default` is not a jcode model id — it is the sentinel that omits
-      // --model so jcode uses the model from its own config.toml, rather than Orca
+      // --model so jcode uses the model from its own config.toml, rather than Quirky
       // pinning a provider the user may not be logged in to.
       models: [{ id: 'default', label: 'Config default' }],
       defaultModelId: 'default'

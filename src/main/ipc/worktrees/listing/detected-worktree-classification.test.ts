@@ -72,7 +72,7 @@ function settledMeta(overrides: Partial<WorktreeMeta> = {}): WorktreeMeta {
   return {
     ...ownershipMeta,
     instanceId: 'instance-settled',
-    orcaCreatedAt: 1,
+    quirkyCreatedAt: 1,
     lastActivityAt: 5,
     ...overrides
   } as WorktreeMeta
@@ -106,7 +106,7 @@ function buildDetectedGitWorktreesTwoPass(
   allMetaOverride?: Record<string, WorktreeMeta>
 ) {
   const settings = store.getSettings()
-  const knownOrcaLayouts = ownership.buildKnownOrcaWorkspaceLayouts(settings, target)
+  const knownQuirkyLayouts = ownership.buildKnownQuirkyWorkspaceLayouts(settings, target)
   const isLegacyRepoForVisibility = ownership.isLegacyRepoForExternalWorktreeVisibility(target)
   const liveWorktrees = dedupeWorktreesByPath(gitWorktrees.filter((info) => !info.prunable))
   const worktreeVisibilitySourceMatcher = createWorktreeVisibilitySourceMatcher(
@@ -129,7 +129,7 @@ function buildDetectedGitWorktreesTwoPass(
       worktree,
       meta,
       settings,
-      knownOrcaLayouts,
+      knownQuirkyLayouts,
       isLegacyRepoForVisibility,
       worktreeVisibilitySourceMatcher
     })
@@ -148,7 +148,7 @@ function buildDetectedGitWorktreesTwoPass(
       worktree: mergeWorktree(target.id, info, meta, target.displayName),
       meta,
       settings,
-      knownOrcaLayouts,
+      knownQuirkyLayouts,
       isLegacyRepoForVisibility,
       worktreeVisibilitySourceMatcher
     })
@@ -205,7 +205,7 @@ describe('buildDetectedGitWorktrees classification passes', () => {
 
   it.each([
     ['settled metadata', () => settledMeta()],
-    ['metadata needing discovery backfill', () => ({ orcaCreatedAt: 1 }) as WorktreeMeta],
+    ['metadata needing discovery backfill', () => ({ quirkyCreatedAt: 1 }) as WorktreeMeta],
     ['no metadata at all', () => undefined]
   ])('emits a catalog deep-equal to the two-pass build for %s', (_label, makeMeta) => {
     const worktreeId = `${repo.id}::/workspace/one`

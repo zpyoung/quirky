@@ -6,7 +6,7 @@ import type { Snapshot } from '../../shared/fork-heimdall/snapshot'
 import type { ObjectiveAction } from '../../shared/fork-heimdall-objective/objective-actions'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { createObjectiveActionExecutor } from './action-executor'
 import { findObjectiveWorkerEvidence, type ObjectiveSnapshotBinding } from './execution-context'
 import type { ObjectiveForgeAccess } from './objective-forge-access'
@@ -93,8 +93,8 @@ function harness(storeOverrides: Partial<ObjectiveStore> = {}) {
     objectiveStore,
     snapshotBindings: bindings,
     forge,
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService is a class with private fields; resolveOutcome only forwards it to dispatch resolution, never calling it in these tests.
-    runtime: {} as OrcaRuntimeService
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: QuirkyRuntimeService is a class with private fields; resolveOutcome only forwards it to dispatch resolution, never calling it in these tests.
+    runtime: {} as QuirkyRuntimeService
   })
   return { executor, fresh }
 }

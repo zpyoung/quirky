@@ -1,7 +1,7 @@
 // STA-8147: history, reload, zoom, and address-bar chords act on the split that sent them.
 
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { focusActiveTerminalInput } from './helpers/terminal'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
@@ -102,122 +102,124 @@ async function expectFirstSplitReloaded(page: Page, fixture: BrowserSplitFixture
 test.describe('browser split navigation shortcuts', () => {
   let server: BrowserSplitPageServer
 
-  test.beforeEach(async ({ orcaPage }) => {
+  test.beforeEach(async ({ quirkyPage }) => {
     server = await startBrowserSplitPageServer()
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
   test.afterEach(async () => {
     await server.close()
   })
 
-  test('Back and Forward typed in one guest move only that split', async ({ orcaPage }) => {
-    const fixture = await createBrowserSplitWithHistory(orcaPage, server)
+  test('Back and Forward typed in one guest move only that split', async ({ quirkyPage }) => {
+    const fixture = await createBrowserSplitWithHistory(quirkyPage, server)
 
-    await pressInGuest(orcaPage, fixture, backChord)
-    await waitForGuestUrl(orcaPage, fixture.firstBrowserTabId, server.pageUrl('a', 1))
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
+    await pressInGuest(quirkyPage, fixture, backChord)
+    await waitForGuestUrl(quirkyPage, fixture.firstBrowserTabId, server.pageUrl('a', 1))
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
 
-    await pressInGuest(orcaPage, fixture, forwardChord)
-    await waitForGuestUrl(orcaPage, fixture.firstBrowserTabId, server.pageUrl('a', 2))
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
+    await pressInGuest(quirkyPage, fixture, forwardChord)
+    await waitForGuestUrl(quirkyPage, fixture.firstBrowserTabId, server.pageUrl('a', 2))
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
   })
 
-  test('Reload and Hard Reload typed in one guest reload only that split', async ({ orcaPage }) => {
-    const fixture = await createBrowserSplitWithHistory(orcaPage, server)
+  test('Reload and Hard Reload typed in one guest reload only that split', async ({
+    quirkyPage
+  }) => {
+    const fixture = await createBrowserSplitWithHistory(quirkyPage, server)
 
-    await pressInGuest(orcaPage, fixture, reloadChord)
-    await expectFirstSplitReloaded(orcaPage, fixture)
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
+    await pressInGuest(quirkyPage, fixture, reloadChord)
+    await expectFirstSplitReloaded(quirkyPage, fixture)
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
 
-    await recordGuestLoadStarts(orcaPage, [fixture.firstBrowserTabId])
-    await pressInGuest(orcaPage, fixture, hardReloadChord)
-    await expectFirstSplitReloaded(orcaPage, fixture)
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
-    expect(await guestUrl(orcaPage, fixture.firstBrowserTabId)).toBe(server.pageUrl('a', 2))
+    await recordGuestLoadStarts(quirkyPage, [fixture.firstBrowserTabId])
+    await pressInGuest(quirkyPage, fixture, hardReloadChord)
+    await expectFirstSplitReloaded(quirkyPage, fixture)
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
+    expect(await guestUrl(quirkyPage, fixture.firstBrowserTabId)).toBe(server.pageUrl('a', 2))
   })
 
   // Ctrl+wheel is not covered: before-mouse-event only fires for OS input, not sendInputEvent.
-  test('page zoom typed in one guest zooms only that split', async ({ orcaPage }) => {
-    const fixture = await createBrowserSplitWithHistory(orcaPage, server)
+  test('page zoom typed in one guest zooms only that split', async ({ quirkyPage }) => {
+    const fixture = await createBrowserSplitWithHistory(quirkyPage, server)
     const firstZoom = (): Promise<number | null> =>
-      guestZoomLevel(orcaPage, fixture.firstBrowserTabId)
+      guestZoomLevel(quirkyPage, fixture.firstBrowserTabId)
     const secondZoom = (): Promise<number | null> =>
-      guestZoomLevel(orcaPage, fixture.secondBrowserTabId)
+      guestZoomLevel(quirkyPage, fixture.secondBrowserTabId)
     const initialFirstZoom = await firstZoom()
     const initialSecondZoom = await secondZoom()
     expect(initialFirstZoom).not.toBeNull()
 
-    await pressInGuest(orcaPage, fixture, { guestKeyCode: '=', guestModifiers: [guestModifier] })
+    await pressInGuest(quirkyPage, fixture, { guestKeyCode: '=', guestModifiers: [guestModifier] })
     await expect.poll(firstZoom).toBeGreaterThan(initialFirstZoom ?? 0)
     expect(await secondZoom()).toBe(initialSecondZoom)
 
-    await pressInGuest(orcaPage, fixture, { guestKeyCode: '-', guestModifiers: [guestModifier] })
-    await pressInGuest(orcaPage, fixture, { guestKeyCode: '-', guestModifiers: [guestModifier] })
+    await pressInGuest(quirkyPage, fixture, { guestKeyCode: '-', guestModifiers: [guestModifier] })
+    await pressInGuest(quirkyPage, fixture, { guestKeyCode: '-', guestModifiers: [guestModifier] })
     await expect.poll(firstZoom).toBeLessThan(initialFirstZoom ?? 0)
     expect(await secondZoom()).toBe(initialSecondZoom)
   })
 
-  test('Focus Address Bar typed in one guest focuses only that split', async ({ orcaPage }) => {
-    const fixture = await createBrowserSplitWithHistory(orcaPage, server)
+  test('Focus Address Bar typed in one guest focuses only that split', async ({ quirkyPage }) => {
+    const fixture = await createBrowserSplitWithHistory(quirkyPage, server)
 
-    await pressInGuest(orcaPage, fixture, { guestKeyCode: 'L', guestModifiers: [guestModifier] })
+    await pressInGuest(quirkyPage, fixture, { guestKeyCode: 'L', guestModifiers: [guestModifier] })
 
-    await expect(browserAddressBar(orcaPage, fixture.firstBrowserTabId)).toBeFocused()
-    await expect(browserAddressBar(orcaPage, fixture.secondBrowserTabId)).not.toBeFocused()
+    await expect(browserAddressBar(quirkyPage, fixture.firstBrowserTabId)).toBeFocused()
+    await expect(browserAddressBar(quirkyPage, fixture.secondBrowserTabId)).not.toBeFocused()
   })
 
   test('Back and Reload pressed from one split toolbar act on only that split', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const fixture = await createBrowserSplitWithHistory(orcaPage, server)
-    const reloadButton = browserOverlay(orcaPage, fixture.firstBrowserTabId).getByRole('button', {
+    const fixture = await createBrowserSplitWithHistory(quirkyPage, server)
+    const reloadButton = browserOverlay(quirkyPage, fixture.firstBrowserTabId).getByRole('button', {
       name: 'Reload',
       exact: true
     })
 
     await reloadButton.focus()
-    await waitForFocusedGroup(orcaPage, fixture.firstBrowserGroupId)
-    await orcaPage.keyboard.press(backChord.renderer)
-    await waitForGuestUrl(orcaPage, fixture.firstBrowserTabId, server.pageUrl('a', 1))
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
+    await waitForFocusedGroup(quirkyPage, fixture.firstBrowserGroupId)
+    await quirkyPage.keyboard.press(backChord.renderer)
+    await waitForGuestUrl(quirkyPage, fixture.firstBrowserTabId, server.pageUrl('a', 1))
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
 
-    await recordGuestLoadStarts(orcaPage, [fixture.firstBrowserTabId])
+    await recordGuestLoadStarts(quirkyPage, [fixture.firstBrowserTabId])
     await reloadButton.focus()
-    await orcaPage.keyboard.press(reloadChord.renderer)
-    await expectFirstSplitReloaded(orcaPage, fixture)
-    await expectSecondSplitUntouched(orcaPage, fixture, server)
+    await quirkyPage.keyboard.press(reloadChord.renderer)
+    await expectFirstSplitReloaded(quirkyPage, fixture)
+    await expectSecondSplitUntouched(quirkyPage, fixture, server)
   })
 
   test('Back and Reload pressed in a focused terminal leave the browser split alone', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const fixture = await createTerminalBrowserSplit(orcaPage, server.pageUrl('a', 1))
-    await waitForGuestUrl(orcaPage, fixture.browserTabId, server.pageUrl('a', 1))
-    await navigateGuest(orcaPage, fixture.browserTabId, server.pageUrl('a', 2))
-    await waitForGuestIdle(orcaPage, fixture.browserTabId)
-    await recordGuestLoadStarts(orcaPage, [fixture.browserTabId])
+    const fixture = await createTerminalBrowserSplit(quirkyPage, server.pageUrl('a', 1))
+    await waitForGuestUrl(quirkyPage, fixture.browserTabId, server.pageUrl('a', 1))
+    await navigateGuest(quirkyPage, fixture.browserTabId, server.pageUrl('a', 2))
+    await waitForGuestIdle(quirkyPage, fixture.browserTabId)
+    await recordGuestLoadStarts(quirkyPage, [fixture.browserTabId])
 
-    await focusBrowserGroup(orcaPage, fixture.terminalGroupId)
-    await focusActiveTerminalInput(orcaPage)
-    await waitForFocusedGroup(orcaPage, fixture.terminalGroupId)
-    await orcaPage.keyboard.press(backChord.renderer)
-    await orcaPage.keyboard.press(reloadChord.renderer)
-    await orcaPage.keyboard.press(hardReloadChord.renderer)
+    await focusBrowserGroup(quirkyPage, fixture.terminalGroupId)
+    await focusActiveTerminalInput(quirkyPage)
+    await waitForFocusedGroup(quirkyPage, fixture.terminalGroupId)
+    await quirkyPage.keyboard.press(backChord.renderer)
+    await quirkyPage.keyboard.press(reloadChord.renderer)
+    await quirkyPage.keyboard.press(hardReloadChord.renderer)
     // Why: the next toolbar press proves these chords reach the pane in this app; it only has to lose here.
-    const reloadButton = browserOverlay(orcaPage, fixture.browserTabId).getByRole('button', {
+    const reloadButton = browserOverlay(quirkyPage, fixture.browserTabId).getByRole('button', {
       name: 'Reload',
       exact: true
     })
-    await waitForGuestIdle(orcaPage, fixture.browserTabId)
-    expect(await guestLoadStarts(orcaPage, fixture.browserTabId)).toBe(0)
-    expect(await guestUrl(orcaPage, fixture.browserTabId)).toBe(server.pageUrl('a', 2))
+    await waitForGuestIdle(quirkyPage, fixture.browserTabId)
+    expect(await guestLoadStarts(quirkyPage, fixture.browserTabId)).toBe(0)
+    expect(await guestUrl(quirkyPage, fixture.browserTabId)).toBe(server.pageUrl('a', 2))
 
     await reloadButton.focus()
-    await waitForFocusedGroup(orcaPage, fixture.browserGroupId)
-    await orcaPage.keyboard.press(backChord.renderer)
-    await waitForGuestUrl(orcaPage, fixture.browserTabId, server.pageUrl('a', 1))
+    await waitForFocusedGroup(quirkyPage, fixture.browserGroupId)
+    await quirkyPage.keyboard.press(backChord.renderer)
+    await waitForGuestUrl(quirkyPage, fixture.browserTabId, server.pageUrl('a', 1))
   })
 })

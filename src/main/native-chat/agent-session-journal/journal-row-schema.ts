@@ -2,7 +2,7 @@
 //
 // The journal is append-only, so migration is upcasting on read and never an
 // in-place rewrite. A row whose version this build does not understand is
-// UNREADABLE, not skippable: the caller fails the load as a newer Orca's chat rather
+// UNREADABLE, not skippable: the caller fails the load as a newer Quirky's chat rather
 // than render a partial timeline or compact past a row it cannot interpret.
 //
 // A row whose KIND this build does not know is UNREADABLE the same way, and kept
@@ -171,7 +171,7 @@ export type JournalSubmissionRow = JournalRowBase & {
    *  the key and ignore it. */
   queuedMessageId?: string
   /** Who asked for this turn: `client` for a person's send over the client send RPC (typed, or
-   *  a queued card they sent now); `host` for Orca's own — orchestration mail, a restart
+   *  a queued card they sent now); `host` for Quirky's own — orchestration mail, a restart
    *  continuation, a launch prompt, the queue's automatic drain. Absent on rows from before it
    *  was recorded. Older readers keep the key and ignore it. */
   origin?: JournalSubmissionOrigin

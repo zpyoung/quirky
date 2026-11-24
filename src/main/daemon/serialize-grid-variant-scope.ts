@@ -1,6 +1,6 @@
 // Which serialized ranges each serialize variant covers, and what they hold, for the
 // I1 scope in serialize-grid-roundtrip.ts: a range with an overlong line or a trailing
-// background-only row is where the Orca patch changes bytes on purpose.
+// background-only row is where the Quirky patch changes bytes on purpose.
 import type { Terminal } from '@xterm/headless'
 
 type Buffer = Terminal['buffer']['active']

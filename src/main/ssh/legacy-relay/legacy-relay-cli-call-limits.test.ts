@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
 import { isRemoteCliControlAllowed } from '../../../shared/ssh-remote-cli-control'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { OrchestrationDb } from '../../runtime/orchestration/db'
 import {
   LEGACY_RELAY_CLI_BUSY,
@@ -18,17 +18,17 @@ const WORKER = 'term_relay_worker'
 const WORKER_PANE = 'tab_w:33333333-3333-4333-8333-333333333333'
 const COORDINATOR = 'term_local_coord'
 const PTY_ID = toAppSshPtyId(TARGET, 'pty-7')
-const ENV = { ORCA_TERMINAL_HANDLE: WORKER, ORCA_PANE_KEY: WORKER_PANE }
+const ENV = { QUIRKY_TERMINAL_HANDLE: WORKER, QUIRKY_PANE_KEY: WORKER_PANE }
 
 let dir: string
 let db: OrchestrationDb
-let runtime: OrcaRuntimeService
+let runtime: QuirkyRuntimeService
 let allowed: boolean
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-legacy-relay-limits-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-legacy-relay-limits-'))
   db = new OrchestrationDb(join(dir, 'orchestration.db'))
-  runtime = new OrcaRuntimeService()
+  runtime = new QuirkyRuntimeService()
   runtime.setOrchestrationDb(db)
   vi.spyOn(runtime, 'notifyMessageArrived').mockImplementation(() => {})
   allowed = true
@@ -203,7 +203,7 @@ describe('limits on relay-era CLI calls', () => {
 
   it('names nobody when two hosts claim one handle', () => {
     const terminal = { handle: WORKER, paneKey: WORKER_PANE, processIncarnation: 'p-1' }
-    const fresh = new OrcaRuntimeService()
+    const fresh = new QuirkyRuntimeService()
     const a = fresh.registerOrchestrationCompatibilitySshAttachment('host-a', 'c-1', terminal)
     expect(fresh.getTerminalPaneKey(WORKER)).toBe(WORKER_PANE)
     const b = fresh.registerOrchestrationCompatibilitySshAttachment('host-b', 'c-2', terminal)

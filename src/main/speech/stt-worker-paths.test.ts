@@ -14,17 +14,17 @@ afterEach(() => {
   }
 })
 
-// orcad: a packaged host with no Electron resources tree.
-describe('speech worker paths on orcad (#31174)', () => {
-  it('has no on-device recognizer unless orca serve names one', () => {
+// quirkyd: a packaged host with no Electron resources tree.
+describe('speech worker paths on quirkyd (#31174)', () => {
+  it('has no on-device recognizer unless quirky serve names one', () => {
     installFakeAppEnvironment({ isPackaged: () => true })
     expect(getSherpaModulePath()).toBeNull()
     expect(hasLocalSpeechRecognizer()).toBe(false)
   })
 
-  it("uses the installed app's recognizer that orca serve names", () => {
+  it("uses the installed app's recognizer that quirky serve names", () => {
     installFakeAppEnvironment({ isPackaged: () => true })
-    const dir = mkdtempSync(join(tmpdir(), 'orca-recognizer-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-recognizer-'))
     roots.push(dir)
     writeFileSync(join(dir, 'sherpa-onnx.node'), '')
     process.env[SPEECH_RECOGNIZER_DIR_ENV] = dir
@@ -33,7 +33,7 @@ describe('speech worker paths on orcad (#31174)', () => {
 
   it('ignores a named directory that holds no recognizer', () => {
     installFakeAppEnvironment({ isPackaged: () => true })
-    const dir = mkdtempSync(join(tmpdir(), 'orca-recognizer-'))
+    const dir = mkdtempSync(join(tmpdir(), 'quirky-recognizer-'))
     roots.push(dir)
     process.env[SPEECH_RECOGNIZER_DIR_ENV] = dir
     expect(getSherpaModulePath()).toBeNull()

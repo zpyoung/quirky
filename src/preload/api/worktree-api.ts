@@ -107,7 +107,7 @@ export type WorktreeApi = {
     allowFailedArchiveHook?: boolean
     snapshotPruneBatchId?: string
   }) => Promise<RemoveWorktreeResult>
-  // Forget a workspace from Orca only (no remote Git/FS work) — for workspaces pinned to a removed/disconnected SSH host.
+  // Forget a workspace from Quirky only (no remote Git/FS work) — for workspaces pinned to a removed/disconnected SSH host.
   forgetLocal: (args: {
     worktreeId: string
     hostId?: ExecutionHostId

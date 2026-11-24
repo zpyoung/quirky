@@ -96,8 +96,8 @@ export async function submitFolderWorkspaceCreate({
     throw new Error(launchHost.reason)
   }
   const launchPlatform = launchHost.kind === 'known' ? launchHost.platform : null
-  // Why: an SSH folder group runs the plain `orca` relay shim, so the Linux-only
-  // `orca-ide` rename must not be applied for remote launches.
+  // Why: an SSH folder group runs the plain `quirky` relay shim, so the Linux-only
+  // `quirky-ide` rename must not be applied for remote launches.
   const launchIsRemote = Boolean(projectGroup.connectionId)
   const launchShell = resolveExecutionHostAgentStartupShell(launchHost, terminalWindowsShell)
   const startupPlan =

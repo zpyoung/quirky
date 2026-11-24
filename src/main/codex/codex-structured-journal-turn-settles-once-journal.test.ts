@@ -29,7 +29,7 @@ afterEach(async () => {
 })
 
 async function session() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-codex-failed-turn-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-codex-failed-turn-'))
   const journal = await journals.open({
     identity: {
       sessionId: SESSION,

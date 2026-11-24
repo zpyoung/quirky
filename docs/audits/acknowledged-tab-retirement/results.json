@@ -1,7 +1,7 @@
 {
   "comparison": "Actual renderer close, durable Store, runtime close/graph/physical-exit methods; before reverses only fix.patch in a temporary Vite transform",
   "sourceHashes": {
-    "src/main/runtime/orca-runtime-close-mobile-session-tab.ts": {
+    "src/main/runtime/quirky-runtime-close-mobile-session-tab.ts": {
       "before": "fcf1a22bc7aa72af40593c00008a83695fc3ebd78b76a6707ecca300beaedece",
       "after": "b5f5ff9df47165c6c9b41b49ee78f4d84b4d6210e69c04d3ca63bc53e9d32ad5"
     },

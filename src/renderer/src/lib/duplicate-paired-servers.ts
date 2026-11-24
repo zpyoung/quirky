@@ -141,7 +141,7 @@ export function ambiguousWorkspaceOwnerMessage(
   return duplicate
     ? translate(
         'auto.lib.duplicatePairedServers.ambiguousSameServer',
-        '{{value0}} and {{value1}} are the same server paired twice. Remove one in Settings > Remote Orca Servers.',
+        '{{value0}} and {{value1}} are the same server paired twice. Remove one in Settings > Remote Quirky Servers.',
         { value0: duplicate[0], value1: duplicate[1] }
       )
     : WORKTREE_REMOVAL_AMBIGUOUS_ERROR

@@ -1,6 +1,6 @@
 import type { RuntimeHeadlessTerminal } from '../../runtime-terminal-state-records'
 import { splitFreebuffScreenUpdates } from '../../../../shared/freebuff-screen-status'
-import { OrcaRuntimeWithSerializeMainTerminalBuffer } from './terminal-buffer-operations'
+import { QuirkyRuntimeWithSerializeMainTerminalBuffer } from './terminal-buffer-operations'
 import { observeFreebuffTerminalStatus } from '../../freebuff-terminal-status'
 import { observeCodexCapacityTerminalStatus } from '../../codex-capacity-terminal-status'
 import { MOBILE_SUBSCRIBE_SCROLLBACK_ROWS } from '../../scrollback-limits'
@@ -10,7 +10,7 @@ import {
 } from '../../../../shared/agent-detection'
 import { shouldModelAnswerHiddenPtyQueries } from '../../terminal-model-query-authority'
 
-export abstract class OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer extends OrcaRuntimeWithSerializeMainTerminalBuffer {
+export abstract class QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer extends QuirkyRuntimeWithSerializeMainTerminalBuffer {
   protected abstract getOrCreateHeadlessTerminal(ptyId: string): RuntimeHeadlessTerminal
   protected abstract markPaneLiveTitlesDirty(): void
 

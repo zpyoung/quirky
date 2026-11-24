@@ -38,7 +38,7 @@ const BARE_SPECIFIER =
 
 type WorkspaceSourceResolver = ReturnType<typeof createWorkspaceSourceResolver>
 
-// Every module extension an orca-source export may target, so package JS is rewritten too.
+// Every module extension an quirky-source export may target, so package JS is rewritten too.
 function isRewritableSource(name: string): boolean {
   return /\.(ts|tsx|mts|cts|js|mjs|cjs)$/.test(name)
 }
@@ -155,7 +155,7 @@ async function runCheckoutProcess(
   deadline: number
 ): Promise<string> {
   // Kept lazy so plain Node 24 contention children never load Vite's TS graph.
-  const { runProcess } = await import('@orca/process-host')
+  const { runProcess } = await import('@quirky/process-host')
   const result = await runProcess({
     program,
     args,

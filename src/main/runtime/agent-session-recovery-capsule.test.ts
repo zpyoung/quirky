@@ -20,7 +20,7 @@ let filePath: string
 let capsule: AgentSessionRecoveryCapsule
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-recovery-capsule-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-recovery-capsule-'))
   filePath = join(directory, AGENT_SESSION_RECOVERY_CAPSULE_FILE)
   capsule = new AgentSessionRecoveryCapsule(directory)
 })

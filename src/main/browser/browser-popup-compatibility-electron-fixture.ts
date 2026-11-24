@@ -22,9 +22,9 @@ import type {
 } from './browser-route-page-authority'
 import { BrowserPopupAdapterProbeFixture } from './browser-popup-adapter-probe-fixture'
 
-const origin = process.env.ORCA_POPUP_FIXTURE_ORIGIN
-const statusPath = process.env.ORCA_POPUP_FIXTURE_STATUS
-if (!origin || !statusPath || process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+const origin = process.env.QUIRKY_POPUP_FIXTURE_ORIGIN
+const statusPath = process.env.QUIRKY_POPUP_FIXTURE_STATUS
+if (!origin || !statusPath || process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
   throw new Error('Popup fixture requires synthetic origin, status path and background launch')
 }
 const fixtureOrigin = origin
@@ -49,7 +49,7 @@ let fixtureAuthority: symbol | null = authority
 let fixtureAuthorityThrows = false
 let revision = 0
 const adapterProbe =
-  process.env.ORCA_POPUP_FIXTURE_ADAPTER_PROBE === '1'
+  process.env.QUIRKY_POPUP_FIXTURE_ADAPTER_PROBE === '1'
     ? new BrowserPopupAdapterProbeFixture(() => writeStatus())
     : null
 const native = new BrowserPopupNativeFixture({
@@ -159,18 +159,18 @@ async function createHost(name: string, partition: string, nativeControl = false
             throw new Error('Route guest registration failed')
           }
           guest.on('console-message', ({ message }) => {
-            if (message === 'orca-popup-fixture:fence' && registry && routeIdentity) {
+            if (message === 'quirky-popup-fixture:fence' && registry && routeIdentity) {
               routeClaim = registry.claimGuestLifecycle(routeIdentity)
               if (routeClaim) {
                 routeGranted = !registry.revokeNavigation(routeClaim)
               }
               writeStatus()
-            } else if (message === 'orca-popup-fixture:grant' && registry && routeClaim) {
+            } else if (message === 'quirky-popup-fixture:grant' && registry && routeClaim) {
               routeGranted = registry.grantReconciledNavigation(routeClaim)
               writeStatus()
-            } else if (message === 'orca-popup-fixture:close') {
+            } else if (message === 'quirky-popup-fixture:close') {
               guest.close()
-            } else if (message === 'orca-popup-fixture:snapshot') {
+            } else if (message === 'quirky-popup-fixture:snapshot') {
               writeStatus()
             } else {
               native.handleMessage(message)
@@ -210,7 +210,7 @@ async function run(): Promise<void> {
   phase = 'ready'
   writeStatus()
   const localPartition = 'popup-fixture-local'
-  const routePartition = `persist:orca-browser-v1-${'a'.repeat(64)}`
+  const routePartition = `persist:quirky-browser-v1-${'a'.repeat(64)}`
   const localSession = session.fromPartition(localPartition)
   const routeSession = session.fromPartition(routePartition)
   fixtureRouteSession = routeSession
@@ -257,7 +257,7 @@ async function run(): Promise<void> {
   phase = 'local'
   writeStatus()
   await createHost('route', routePartition)
-  if (process.env.ORCA_POPUP_FIXTURE_NATIVE_CONTROLS === '1') {
+  if (process.env.QUIRKY_POPUP_FIXTURE_NATIVE_CONTROLS === '1') {
     await createHost('local-control', localPartition, true)
     await createHost('route-control', routePartition, true)
   }

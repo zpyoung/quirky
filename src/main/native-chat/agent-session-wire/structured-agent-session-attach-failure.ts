@@ -73,7 +73,7 @@ export function endStructuredAgentSessionReleasedChild(
       fence: child.fence,
       cause: 'attach-failed',
       reason: cause instanceof Error ? cause.message : String(cause),
-      // Orca failed to attach; the provider said nothing.
+      // Quirky failed to attach; the provider said nothing.
       failure: agentSessionFailureFact('hostFault'),
       duringStartup: child.phase === 'starting',
       ...verdict

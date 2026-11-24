@@ -1,11 +1,11 @@
-// The sends of one ACP session. ACP runs one prompt at a time, so a message sent while Orca's prompt
+// The sends of one ACP session. ACP runs one prompt at a time, so a message sent while Quirky's prompt
 // runs steers: that prompt is cancelled (the session stays) and the message goes as the next prompt
 // once the agent answers the cancel, however long that takes. Each running prompt gets one cancel,
 // however many steers arrive; steers wait here, the last one runs, and a Stop withdraws what waits.
-// A turn the agent began itself is not Orca's to cut short: a message sent during it goes to the
+// A turn the agent began itself is not Quirky's to cut short: a message sent during it goes to the
 // agent at once. Each send is settled exactly once:
 // accepted when the agent's first event for its turn (or its answer) arrives, rejected when the
-// agent refused it or it never left Orca, unknown when the agent died with it or its connection
+// agent refused it or it never left Quirky, unknown when the agent died with it or its connection
 // broke before it answered.
 
 import {
@@ -64,7 +64,7 @@ export class AcpStructuredTurns {
     return this.active !== null
   }
 
-  /** Whether an agent request may reach the person: Orca's prompt runs and nobody is cutting it
+  /** Whether an agent request may reach the person: Quirky's prompt runs and nobody is cutting it
    *  short (no steer's cancel, no Stop). */
   get acceptsRequests(): boolean {
     return (
@@ -101,7 +101,7 @@ export class AcpStructuredTurns {
     return this.withdrawSteers()
   }
 
-  /** Resolves once no prompt of Orca's is running. */
+  /** Resolves once no prompt of Quirky's is running. */
   whenIdle(): Promise<void> {
     if (!this.active) {
       return Promise.resolve()
@@ -153,7 +153,7 @@ export class AcpStructuredTurns {
     if (this.unsettled.delete(clientMessageId)) {
       this.deps.settle({
         clientMessageId,
-        providerIdentity: { provider: 'orca', clientMessageId }
+        providerIdentity: { provider: 'quirky', clientMessageId }
       })
     }
   }
@@ -169,7 +169,7 @@ export class AcpStructuredTurns {
     return withdrawn.length > 0
   }
 
-  /** The child is gone: held sends never left Orca, and the running one's fate is unknown. */
+  /** The child is gone: held sends never left Quirky, and the running one's fate is unknown. */
   end(reason: string, cause?: Error): void {
     this.ended = true
     for (const send of this.steers.splice(0)) {
@@ -198,7 +198,7 @@ export class AcpStructuredTurns {
   private run(send: Send, promptId: string): void {
     const { lane } = this.deps
     // An agent whose dialect echoes this id on every event of the turn gets it, so its rows join the
-    // turn Orca opened; no other agent is sent the extension.
+    // turn Quirky opened; no other agent is sent the extension.
     const meta = lane.translator.injectsPromptIdentity
       ? { promptId, requestId: promptId }
       : undefined
@@ -221,7 +221,7 @@ export class AcpStructuredTurns {
           return
         }
         if (!(error instanceof AcpAgentError)) {
-          // Answered, but not in a way Orca can read: the turn failed and the next send may go.
+          // Answered, but not in a way Quirky can read: the turn failed and the next send may go.
           lane.apply(
             lane.translator.promptFailed(
               send.clientMessageId,

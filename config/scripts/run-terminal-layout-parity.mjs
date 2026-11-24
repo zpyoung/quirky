@@ -16,14 +16,14 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 const repoRoot = resolve(import.meta.dirname, '../..')
 const BUILD_STAMP = join('out', '.terminal-layout-parity-build')
 
 // Bundle TypeScript parity modules so plain Node does not need a loader.
 async function importParityModules() {
-  const temporary = mkdtempSync(join(tmpdir(), 'orca-layout-parity-'))
+  const temporary = mkdtempSync(join(tmpdir(), 'quirky-layout-parity-'))
   try {
     const outfile = join(temporary, 'parity.mjs')
     await build({
@@ -151,7 +151,7 @@ function captureSide(label, side, outRoot) {
     side.tree,
     {
       ...process.env,
-      ORCA_BACKGROUND_LAUNCH: '1',
+      QUIRKY_BACKGROUND_LAUNCH: '1',
       [TERMINAL_LAYOUT_PARITY_OUT_ENV]: outDir,
       // The working tree builds in Playwright's global setup; checkouts were built above.
       ...(side.skipBuild ? { SKIP_BUILD: '1' } : {})

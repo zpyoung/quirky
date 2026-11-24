@@ -8,7 +8,7 @@ import {
 import type { CodexHookAnswer } from './codex-hook-trust-derivation'
 import { reconcileRealHomeCodexHookEntries } from './codex-real-home-hook-install'
 
-// Keeps Orca's Codex hook entry in ~/.codex true to the setting and the codex in
+// Keeps Quirky's Codex hook entry in ~/.codex true to the setting and the codex in
 // use; a call that finds nothing changed only reads files and spawns nothing.
 
 type ReconcileConfig = {
@@ -37,7 +37,7 @@ let realHomeLaunchRequested = false
 const ANSWER_WAIT_MS = 500
 
 /**
- * App start, main process only: lets Orca ask Codex for its hook hashes, and
+ * App start, main process only: lets Quirky ask Codex for its hook hashes, and
  * reconciles ~/.codex, both once the shell PATH is hydrated.
  */
 export function startCodexHooks({
@@ -145,7 +145,7 @@ async function reconcileOnce(realHomeLaunch: boolean): Promise<void> {
   // a slow version probe at app start changes nothing that answer already put in place.
   const answer = live && live.kind !== 'pending' ? live : readKnownCodexHookAnswer()
   if (answer?.kind === 'refused' || (answer?.kind === 'pending' && answer.codexMissing)) {
-    // Why nothing: this Codex cannot approve Orca's entry, or none was found to run it.
+    // Why nothing: this Codex cannot approve Quirky's entry, or none was found to run it.
     return
   }
   const convertOlderForms = convertRequested

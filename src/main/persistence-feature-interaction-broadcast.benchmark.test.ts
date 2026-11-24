@@ -21,9 +21,9 @@ const INTERACTIONS = 200
 const tempDirs: string[] = []
 
 function createStore(name: string): { dataFile: string; store: Store } {
-  const dir = mkdtempSync(join(tmpdir(), `orca-ui-broadcast-${name}-`))
+  const dir = mkdtempSync(join(tmpdir(), `quirky-ui-broadcast-${name}-`))
   tempDirs.push(dir)
-  const dataFile = join(dir, 'orca-data.json')
+  const dataFile = join(dir, 'quirky-data.json')
   return { dataFile, store: createSqliteTestStore(Store, { dataFile }) }
 }
 

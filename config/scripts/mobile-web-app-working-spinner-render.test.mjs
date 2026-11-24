@@ -32,7 +32,7 @@ import { AgentSpinner } from ${JSON.stringify(spinnerModule)}
 import { AgentStateDot } from ${JSON.stringify(dotModule)}
 
 export default function WorkingSpinnerProbeRoute() {
-  globalThis.__orcaWorkingSpinnerProbe = true
+  globalThis.__quirkyWorkingSpinnerProbe = true
   return (
     <View style={{ padding: 24, gap: 24 }}>
       <View nativeID="working-spinner"><AgentSpinner status="working" /></View>
@@ -54,7 +54,7 @@ beforeAll(async () => {
   }
   const componentsDir = join(projectDir, 'mobile', 'src', 'components')
   const cspHeader = await readShellCsp()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-working-spinner-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-working-spinner-'))
   const appDir = join(scratch, 'app')
   const routeDir = join(appDir, MOBILE_WEB_APP_ROUTE_ROOT)
   await mkdir(routeDir, { recursive: true })
@@ -74,7 +74,7 @@ beforeAll(async () => {
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 600_000)
 
@@ -106,11 +106,11 @@ async function openProbe() {
   await page.goto(`${origin}/`, { waitUntil: 'load' })
   await page.waitForFunction(
     () =>
-      globalThis.__orcaWorkingSpinnerProbe !== undefined ||
-      (globalThis.__orcaRenderCheckFaults ?? []).length > 0,
+      globalThis.__quirkyWorkingSpinnerProbe !== undefined ||
+      (globalThis.__quirkyRenderCheckFaults ?? []).length > 0,
     { timeout: 60_000, polling: 100 }
   )
-  expect(await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])).toEqual([])
+  expect(await page.evaluate(() => globalThis.__quirkyRenderCheckFaults ?? [])).toEqual([])
   return { errors, page }
 }
 

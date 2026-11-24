@@ -5,7 +5,7 @@
  * - Browser works and also retains state when switching tabs etc.
  */
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import {
@@ -342,68 +342,68 @@ async function writeBrowserInputValue(
 }
 
 test.describe('Browser Tab', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
   test('browser webview form state survives switching between browser tabs', async ({
-    orcaPage
+    quirkyPage
   }) => {
     const formServer = await startBrowserFormServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const firstTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         formServer.url('First search'),
         'First Form'
       )
       expect(firstTab?.id).toBeTruthy()
-      await writeBrowserInputValue(orcaPage, firstTab!.id, 'first typed value')
+      await writeBrowserInputValue(quirkyPage, firstTab!.id, 'first typed value')
 
       const secondTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         formServer.url('Second search'),
         'Second Form'
       )
       expect(secondTab?.id).toBeTruthy()
-      await writeBrowserInputValue(orcaPage, secondTab!.id, 'second typed value')
+      await writeBrowserInputValue(quirkyPage, secondTab!.id, 'second typed value')
 
       // Why: switching browser tabs used to unmount and reparent the inactive
       // Electron webview, which recreated the guest document and erased form DOM.
-      await switchToBrowserTab(orcaPage, worktreeId, firstTab!.id)
+      await switchToBrowserTab(quirkyPage, worktreeId, firstTab!.id)
       await expect
-        .poll(async () => readBrowserInputValue(orcaPage, firstTab!.id), { timeout: 5_000 })
+        .poll(async () => readBrowserInputValue(quirkyPage, firstTab!.id), { timeout: 5_000 })
         .toBe('first typed value')
 
-      await switchToBrowserTab(orcaPage, worktreeId, secondTab!.id)
+      await switchToBrowserTab(quirkyPage, worktreeId, secondTab!.id)
       await expect
-        .poll(async () => readBrowserInputValue(orcaPage, secondTab!.id), { timeout: 5_000 })
+        .poll(async () => readBrowserInputValue(quirkyPage, secondTab!.id), { timeout: 5_000 })
         .toBe('second typed value')
     } finally {
       await formServer.close()
     }
   })
 
-  test('browser page reload restores the configured 100% zoom', async ({ orcaPage }) => {
+  test('browser page reload restores the configured 100% zoom', async ({ quirkyPage }) => {
     const formServer = await startBrowserFormServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const browserTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         formServer.url('Zoom reload'),
         'Zoom Reload'
       )
       expect(browserTab?.id).toBeTruthy()
       await expect
-        .poll(async () => readBrowserInputValue(orcaPage, browserTab!.id), { timeout: 5_000 })
+        .poll(async () => readBrowserInputValue(quirkyPage, browserTab!.id), { timeout: 5_000 })
         .not.toBeNull()
 
-      const zoomLevels = await orcaPage.evaluate(async (browserTabId) => {
+      const zoomLevels = await quirkyPage.evaluate(async (browserTabId) => {
         const slot = document.querySelector(`[data-browser-overlay-tab-id="${browserTabId}"]`)
         const webview = slot?.querySelector('webview') as Electron.WebviewTag | null
         if (!webview) {
@@ -432,22 +432,22 @@ test.describe('Browser Tab', () => {
     }
   })
 
-  test('Cmd/Ctrl+0 resets a zoomed browser page to 100%', async ({ orcaPage }) => {
+  test('Cmd/Ctrl+0 resets a zoomed browser page to 100%', async ({ quirkyPage }) => {
     const formServer = await startBrowserFormServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const browserTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         formServer.url('Zoom reset'),
         'Zoom Reset'
       )
       expect(browserTab?.id).toBeTruthy()
       await expect
-        .poll(async () => readBrowserInputValue(orcaPage, browserTab!.id), { timeout: 5_000 })
+        .poll(async () => readBrowserInputValue(quirkyPage, browserTab!.id), { timeout: 5_000 })
         .not.toBeNull()
 
-      await orcaPage.evaluate(
+      await quirkyPage.evaluate(
         async ({ browserTabId, browserPageId, modifier }) => {
           const slot = document.querySelector(`[data-browser-overlay-tab-id="${browserTabId}"]`)
           const webview = slot?.querySelector('webview') as Electron.WebviewTag | null
@@ -455,7 +455,7 @@ test.describe('Browser Tab', () => {
             throw new Error(`Missing webview for browser tab ${browserTabId}`)
           }
           window.dispatchEvent(
-            new CustomEvent('orca:browser-page-zoom', {
+            new CustomEvent('quirky:browser-page-zoom', {
               detail: { browserPageId, direction: 'in' }
             })
           )
@@ -470,7 +470,7 @@ test.describe('Browser Tab', () => {
       )
       await expect
         .poll(() =>
-          orcaPage.evaluate((browserTabId) => {
+          quirkyPage.evaluate((browserTabId) => {
             const slot = document.querySelector(`[data-browser-overlay-tab-id="${browserTabId}"]`)
             return (slot?.querySelector('webview') as Electron.WebviewTag | null)?.getZoomLevel()
           }, browserTab!.id)
@@ -481,24 +481,34 @@ test.describe('Browser Tab', () => {
     }
   })
 
-  test('reloading one browser tab does not adopt another tab zoom', async ({ orcaPage }) => {
+  test('reloading one browser tab does not adopt another tab zoom', async ({ quirkyPage }) => {
     const [formServerA, formServerB] = await Promise.all([
       startBrowserFormServer(),
       startBrowserFormServer('localhost')
     ])
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
-      const tabA = await createBrowserTab(orcaPage, worktreeId, formServerA.url('Zoom A'), 'Zoom A')
-      const tabB = await createBrowserTab(orcaPage, worktreeId, formServerB.url('Zoom B'), 'Zoom B')
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
+      const tabA = await createBrowserTab(
+        quirkyPage,
+        worktreeId,
+        formServerA.url('Zoom A'),
+        'Zoom A'
+      )
+      const tabB = await createBrowserTab(
+        quirkyPage,
+        worktreeId,
+        formServerB.url('Zoom B'),
+        'Zoom B'
+      )
       expect(tabA?.id).toBeTruthy()
       expect(tabB?.id).toBeTruthy()
       for (const tab of [tabA, tabB]) {
         await expect
-          .poll(async () => readBrowserInputValue(orcaPage, tab!.id), { timeout: 5_000 })
+          .poll(async () => readBrowserInputValue(quirkyPage, tab!.id), { timeout: 5_000 })
           .not.toBeNull()
       }
 
-      const levels = await orcaPage.evaluate(
+      const levels = await quirkyPage.evaluate(
         async ({ tabAId, tabBId, pageBId }) => {
           const webviewFor = (id: string): Electron.WebviewTag => {
             const slot = document.querySelector(`[data-browser-overlay-tab-id="${id}"]`)
@@ -514,7 +524,7 @@ test.describe('Browser Tab', () => {
           // Zoom only tab B through the real renderer zoom path (also writes the shared setting).
           for (let step = 0; step < 2; step += 1) {
             window.dispatchEvent(
-              new CustomEvent('orca:browser-page-zoom', {
+              new CustomEvent('quirky:browser-page-zoom', {
                 detail: { browserPageId: pageBId, direction: 'in' }
               })
             )
@@ -544,13 +554,13 @@ test.describe('Browser Tab', () => {
 
   test('new-tab link gestures follow Chrome foreground and background behavior', async ({
     electronApp,
-    orcaPage
+    quirkyPage
   }) => {
     const linkServer = await startBrowserLinkServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const sourceTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         linkServer.sourceUrl,
         'Source page'
@@ -561,61 +571,69 @@ test.describe('Browser Tab', () => {
         ({ BaseWindow }) => BaseWindow.getAllWindows().length
       )
       // A plain main-frame target=_blank click must not navigate the source tab away.
-      const sourceTabLocator = orcaPage.locator(`[data-tab-id="${sourceTab!.id}"]`)
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#blank-link')
-      await expectBrowserTabActive(orcaPage, 'Blank target destination')
+      const sourceTabLocator = quirkyPage.locator(`[data-tab-id="${sourceTab!.id}"]`)
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#blank-link')
+      await expectBrowserTabActive(quirkyPage, 'Blank target destination')
       await expect(sourceTabLocator).toContainText('Source page')
-      await switchToBrowserTab(orcaPage, worktreeId, sourceTab!.id)
+      await switchToBrowserTab(quirkyPage, worktreeId, sourceTab!.id)
 
       // Context-menu links keep the source visible until the new tab is selected.
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#external-link', { button: 'right' })
-      await orcaPage
-        .getByRole('menuitem', { name: 'Open Link In Orca Browser', exact: true })
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#external-link', { button: 'right' })
+      await quirkyPage
+        .getByRole('menuitem', { name: 'Open Link In Quirky Browser', exact: true })
         .click()
-      await expectBrowserTabOpenedInBackground(orcaPage, sourceTab!.id, 'Linked destination')
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#frame-link', {
+      await expectBrowserTabOpenedInBackground(quirkyPage, sourceTab!.id, 'Linked destination')
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#frame-link', {
         frameSelector: '#link-frame'
       })
-      await expectBrowserTabActive(orcaPage, 'Frame destination')
-      await switchToBrowserTab(orcaPage, worktreeId, sourceTab!.id)
+      await expectBrowserTabActive(quirkyPage, 'Frame destination')
+      await switchToBrowserTab(quirkyPage, worktreeId, sourceTab!.id)
 
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#frame-modifier-link', {
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#frame-modifier-link', {
         frameSelector: '#link-frame',
         modifiers: process.platform === 'darwin' ? ['meta'] : ['control']
       })
       await expectBrowserTabOpenedInBackground(
-        orcaPage,
+        quirkyPage,
         sourceTab!.id,
         'Frame modifier destination'
       )
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#frame-middle-link', {
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#frame-middle-link', {
         button: 'middle',
         frameSelector: '#link-frame'
       })
-      await expectBrowserTabOpenedInBackground(orcaPage, sourceTab!.id, 'Frame middle destination')
+      await expectBrowserTabOpenedInBackground(
+        quirkyPage,
+        sourceTab!.id,
+        'Frame middle destination'
+      )
 
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#modifier-link', {
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#modifier-link', {
         modifiers: process.platform === 'darwin' ? ['meta'] : ['control']
       })
-      await expectBrowserTabOpenedInBackground(orcaPage, sourceTab!.id, 'Modifier destination')
+      await expectBrowserTabOpenedInBackground(quirkyPage, sourceTab!.id, 'Modifier destination')
 
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#frame-shift-middle-link', {
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#frame-shift-middle-link', {
         button: 'middle',
         modifiers: ['shift'],
         frameSelector: '#link-frame'
       })
-      await expectBrowserTabActive(orcaPage, 'Frame shift middle destination')
-      await switchToBrowserTab(orcaPage, worktreeId, sourceTab!.id)
+      await expectBrowserTabActive(quirkyPage, 'Frame shift middle destination')
+      await switchToBrowserTab(quirkyPage, worktreeId, sourceTab!.id)
 
-      const tabCountBeforeCancelledClick = await orcaPage.locator('[data-tab-id]').count()
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#cancelled-link')
+      const tabCountBeforeCancelledClick = await quirkyPage.locator('[data-tab-id]').count()
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#cancelled-link')
       await expect(
-        orcaPage.locator('[data-tab-id]').filter({ hasText: 'Click handled in page' })
+        quirkyPage.locator('[data-tab-id]').filter({ hasText: 'Click handled in page' })
       ).toBeVisible({ timeout: 10_000 })
-      await expect(orcaPage.locator('[data-tab-id]')).toHaveCount(tabCountBeforeCancelledClick)
+      await expect(quirkyPage.locator('[data-tab-id]')).toHaveCount(tabCountBeforeCancelledClick)
 
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#middle-link', { button: 'middle' })
-      await expectBrowserTabOpenedInBackground(orcaPage, sourceTab!.id, 'Middle-click destination')
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#middle-link', { button: 'middle' })
+      await expectBrowserTabOpenedInBackground(
+        quirkyPage,
+        sourceTab!.id,
+        'Middle-click destination'
+      )
       await expect
         .poll(() => electronApp.evaluate(({ BaseWindow }) => BaseWindow.getAllWindows().length), {
           timeout: 5_000
@@ -627,19 +645,19 @@ test.describe('Browser Tab', () => {
   })
 
   test('blocked window.close in a link-created tab does not break tab switching', async ({
-    orcaPage
+    quirkyPage
   }) => {
     const closeServer = await startBrowserWindowCloseServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const neighboringTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         'about:blank',
         'Neighboring tab'
       )
       const sourceTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         closeServer.sourceUrl,
         'Close link source'
@@ -647,20 +665,22 @@ test.describe('Browser Tab', () => {
       expect(neighboringTab?.id).toBeTruthy()
       expect(sourceTab?.id).toBeTruthy()
 
-      await clickBrowserLink(orcaPage, sourceTab!.id, '#window-close-link')
+      await clickBrowserLink(quirkyPage, sourceTab!.id, '#window-close-link')
       let closeTabId: string | null = null
       await expect
         .poll(async () => {
-          const tabs = await getBrowserTabs(orcaPage, worktreeId)
+          const tabs = await getBrowserTabs(quirkyPage, worktreeId)
           closeTabId = tabs.find((tab) => tab.url === closeServer.url)?.id ?? null
           return closeTabId
         })
         .not.toBeNull()
 
-      await orcaPage.locator(`[data-tab-id="${neighboringTab!.id}"]`).click()
-      await expect.poll(async () => getActiveTabType(orcaPage), { timeout: 5_000 }).toBe('browser')
+      await quirkyPage.locator(`[data-tab-id="${neighboringTab!.id}"]`).click()
       await expect
-        .poll(() => readBrowserWindowCloseStatus(orcaPage, closeTabId!), { timeout: 5_000 })
+        .poll(async () => getActiveTabType(quirkyPage), { timeout: 5_000 })
+        .toBe('browser')
+      await expect
+        .poll(() => readBrowserWindowCloseStatus(quirkyPage, closeTabId!), { timeout: 5_000 })
         .toContain('window.close() was blocked')
     } finally {
       await closeServer.close()
@@ -668,13 +688,13 @@ test.describe('Browser Tab', () => {
   })
 
   test('directly created browser tabs block window.close and remain usable', async ({
-    orcaPage
+    quirkyPage
   }) => {
     const closeServer = await startBrowserWindowCloseServer()
     try {
-      const worktreeId = (await getActiveWorktreeId(orcaPage))!
+      const worktreeId = (await getActiveWorktreeId(quirkyPage))!
       const directTab = await createBrowserTab(
-        orcaPage,
+        quirkyPage,
         worktreeId,
         closeServer.url,
         'Direct close tab'
@@ -682,13 +702,13 @@ test.describe('Browser Tab', () => {
       expect(directTab?.id).toBeTruthy()
 
       await expect
-        .poll(() => readBrowserWindowCloseStatus(orcaPage, directTab!.id), { timeout: 5_000 })
+        .poll(() => readBrowserWindowCloseStatus(quirkyPage, directTab!.id), { timeout: 5_000 })
         .toContain('window.close() was blocked')
 
       await expect
         .poll(
           () =>
-            orcaPage.evaluate(async (targetBrowserTabId) => {
+            quirkyPage.evaluate(async (targetBrowserTabId) => {
               const slot = document.querySelector(
                 `[data-browser-overlay-tab-id="${targetBrowserTabId}"]`
               )

@@ -529,7 +529,7 @@
         "View": 4
       },
       "labels": ["Back", "Refresh agent sessions"],
-      "text": ["Agent Session History", "orca-history"]
+      "text": ["Agent Session History", "quirky-history"]
     },
     "d302f4eada82": {
       "name": "status.get#1",

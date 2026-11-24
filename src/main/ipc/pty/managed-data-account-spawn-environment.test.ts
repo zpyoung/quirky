@@ -30,10 +30,10 @@ vi.mock('../../managed-data-accounts/service', async (importOriginal) => {
 beforeEach(() => {
   for (const key of [
     ...MANAGED_DATA_ACCOUNT_BASELINE_ENV_KEYS,
-    'ORCA_DATA_ACCOUNT_DATA_HOME',
-    'ORCA_DATA_ACCOUNT_STATE_HOME',
-    'ORCA_DATA_ACCOUNT_PROVIDER',
-    'ORCA_DATA_ACCOUNT_ORIGINAL_ENV'
+    'QUIRKY_DATA_ACCOUNT_DATA_HOME',
+    'QUIRKY_DATA_ACCOUNT_STATE_HOME',
+    'QUIRKY_DATA_ACCOUNT_PROVIDER',
+    'QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV'
   ]) {
     vi.stubEnv(key, undefined)
   }
@@ -77,10 +77,10 @@ describe.each(['renderer', 'runtime'])('%s managed account daemon environment', 
       XDG_DATA_HOME: join(tmpdir(), 'daemon-data'),
       XDG_STATE_HOME: join(tmpdir(), 'daemon-state'),
       OPENCODE_DB: 'daemon.db',
-      ORCA_DATA_ACCOUNT_DATA_HOME: join(tmpdir(), 'future-profile'),
-      ORCA_DATA_ACCOUNT_PROVIDER: 'future-provider',
-      ORCA_DATA_ACCOUNT_ORIGINAL_ENV: '{"future":"opaque"}',
-      ORCA_DATA_ACCOUNT_FUTURE_METADATA: 'opaque-metadata'
+      QUIRKY_DATA_ACCOUNT_DATA_HOME: join(tmpdir(), 'future-profile'),
+      QUIRKY_DATA_ACCOUNT_PROVIDER: 'future-provider',
+      QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV: '{"future":"opaque"}',
+      QUIRKY_DATA_ACCOUNT_FUTURE_METADATA: 'opaque-metadata'
     }
     for (const [key, value] of Object.entries(inherited)) {
       vi.stubEnv(key, value)
@@ -156,10 +156,10 @@ describe.each(['renderer', 'runtime'])('%s managed account daemon environment', 
       vi.stubEnv(key, child[key])
     }
     for (const key of [
-      'ORCA_DATA_ACCOUNT_DATA_HOME',
-      'ORCA_DATA_ACCOUNT_STATE_HOME',
-      'ORCA_DATA_ACCOUNT_PROVIDER',
-      'ORCA_DATA_ACCOUNT_ORIGINAL_ENV'
+      'QUIRKY_DATA_ACCOUNT_DATA_HOME',
+      'QUIRKY_DATA_ACCOUNT_STATE_HOME',
+      'QUIRKY_DATA_ACCOUNT_PROVIDER',
+      'QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV'
     ]) {
       vi.stubEnv(key, child[key])
     }
@@ -172,7 +172,7 @@ describe.each(['renderer', 'runtime'])('%s managed account daemon environment', 
       envToDelete: systemDeletions
     })
     expect(hash(systemChild.OPENCODE_AUTH_CONTENT) === hash(baseline)).toBe(true)
-    expect(systemChild.ORCA_DATA_ACCOUNT_DATA_HOME).toBeUndefined()
+    expect(systemChild.QUIRKY_DATA_ACCOUNT_DATA_HOME).toBeUndefined()
     restoreManagedDataAccountEnvironment(copied)
     expect(hash(copied.OPENCODE_AUTH_CONTENT) === hash(baseline)).toBe(true)
   })

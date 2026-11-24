@@ -124,11 +124,11 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             transcriptPath: '/Users/example/.codex/sessions/2026/07/20/rollout-session.jsonl'
           },
           env: expect.objectContaining({
-            ORCA_PANE_KEY: paneKey,
-            ORCA_TAB_ID: 'tab-1',
-            ORCA_WORKTREE_ID: 'wt-1',
-            ORCA_WORKSPACE_ID: 'wt-1',
-            ORCA_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
+            QUIRKY_PANE_KEY: paneKey,
+            QUIRKY_TAB_ID: 'tab-1',
+            QUIRKY_WORKTREE_ID: 'wt-1',
+            QUIRKY_WORKSPACE_ID: 'wt-1',
+            QUIRKY_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
           })
         })
       )
@@ -210,11 +210,11 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
           sessionId: 'lost-pty',
           command: `codex 'resume' 'codex-session-1'"'"'s'`,
           env: expect.objectContaining({
-            ORCA_PANE_KEY: paneKey,
-            ORCA_TAB_ID: 'tab-1',
-            ORCA_WORKTREE_ID: 'wt-1',
-            ORCA_WORKSPACE_ID: 'wt-1',
-            ORCA_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
+            QUIRKY_PANE_KEY: paneKey,
+            QUIRKY_TAB_ID: 'tab-1',
+            QUIRKY_WORKTREE_ID: 'wt-1',
+            QUIRKY_WORKSPACE_ID: 'wt-1',
+            QUIRKY_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
           })
         })
       )
@@ -301,11 +301,11 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             transcriptPath
           },
           env: expect.objectContaining({
-            ORCA_PANE_KEY: paneKey,
-            ORCA_TAB_ID: 'tab-1',
-            ORCA_WORKTREE_ID: 'wt-1',
-            ORCA_WORKSPACE_ID: 'wt-1',
-            ORCA_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
+            QUIRKY_PANE_KEY: paneKey,
+            QUIRKY_TAB_ID: 'tab-1',
+            QUIRKY_WORKTREE_ID: 'wt-1',
+            QUIRKY_WORKSPACE_ID: 'wt-1',
+            QUIRKY_AGENT_LAUNCH_TOKEN: expect.stringMatching(new RegExp(`^${UUID_RE}$`))
           })
         })
       )

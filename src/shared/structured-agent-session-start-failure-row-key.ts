@@ -7,11 +7,11 @@ const START_FAILURE_ROW = 'start-failure:'
 
 export function structuredAgentSessionStartFailureRowIdentity(
   startKey: string
-): Extract<AgentJournalItemIdentity, { provider: 'orca' }> {
-  return { provider: 'orca', clientMessageId: `${START_FAILURE_ROW}${startKey}` }
+): Extract<AgentJournalItemIdentity, { provider: 'quirky' }> {
+  return { provider: 'quirky', clientMessageId: `${START_FAILURE_ROW}${startKey}` }
 }
 
 export function isStructuredAgentSessionStartFailureRow(itemId: string): boolean {
   const identity = parseAgentJournalItemKey(itemId)
-  return identity?.provider === 'orca' && identity.clientMessageId.startsWith(START_FAILURE_ROW)
+  return identity?.provider === 'quirky' && identity.clientMessageId.startsWith(START_FAILURE_ROW)
 }

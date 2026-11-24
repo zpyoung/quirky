@@ -48,7 +48,7 @@ describe('Claude child operation output retention', () => {
     }
     const translator = createClaudeJournalTranslator({ sink })
     try {
-      translator.handle({ type: 'message', sessionId: 'orca', message, observedAt: 1_000 })
+      translator.handle({ type: 'message', sessionId: 'quirky', message, observedAt: 1_000 })
       const join = vi.spyOn(Array.prototype, 'join')
       const evidence = drainClaudeChildWork(
         {

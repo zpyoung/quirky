@@ -11,7 +11,7 @@ import {
   getAgentPromptSubmitDelayMs
 } from '../../shared/agent-prompt-injection'
 import { createAgentPromptSubmissionRuntime } from './agent-prompt-submission-runtime-test-fixture'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 
 vi.mock('../git/worktree', () => ({
   listWorktrees: vi.fn().mockResolvedValue([
@@ -42,9 +42,9 @@ const BUNDLED_WRITER_PATH = normalizePath(
 )
 const BUNDLED_WRITER_EXTERNALS: Record<string, object> = {
   '../wait/terminal-wait-permission': {
-    OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission: class {}
+    QuirkyRuntimeWithResolveAuthoritativeTerminalWaitPermission: class {}
   },
-  '../../orca-runtime-core': {
+  '../../quirky-runtime-core': {
     assertAgentPromptRequestActive: () => {},
     waitForAgentPromptDelay: async () => {},
     waitForAgentPromptPromise: async (promise: Promise<unknown>) => await promise
@@ -119,7 +119,7 @@ async function buildBundledWriter(): Promise<BundledWriterConstructor> {
       return external
     }
   })
-  const constructor = module.exports.OrcaRuntimeWithWriteTerminalAgentPrompt
+  const constructor = module.exports.QuirkyRuntimeWithWriteTerminalAgentPrompt
   if (typeof constructor !== 'function') {
     throw new Error('OMP writer bundle emitted no runtime constructor')
   }
@@ -211,7 +211,7 @@ describe('OMP agent prompt submission', () => {
       { length: 120 },
       (_, index) => `line ${index}: ${'x'.repeat(48)}`
     ).join('\n')
-    let runtime: OrcaRuntimeService
+    let runtime: QuirkyRuntimeService
     const omp = createOmpLargePasteHarness(() => {
       // The provider can report its turn synchronously from the write callback. The verification
       // baseline must predate the atomic write or this real transition is missed as stale state.
@@ -307,7 +307,7 @@ describe('OMP agent prompt submission', () => {
       { length: 120 },
       (_, index) => `line ${index}: ${'x'.repeat(48)}`
     ).join('\n')
-    let runtime: OrcaRuntimeService
+    let runtime: QuirkyRuntimeService
     const omp = createOmpLargePasteHarness(() => {
       runtime.onPtyData(PTY_ID, '\x1b]9999;{"state":"working","agentType":"omp"}\x07', Date.now())
     })

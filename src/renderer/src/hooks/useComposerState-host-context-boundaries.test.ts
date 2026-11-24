@@ -206,9 +206,9 @@ describe('useComposerState host-context boundaries', () => {
       provider: 'jira' as const,
       type: 'issue' as const,
       number: 0,
-      title: 'ORCA-123 Link Jira',
-      url: 'https://company.atlassian.net/jira/browse/ORCA-123',
-      jiraIdentifier: 'ORCA-123'
+      title: 'QUIRKY-123 Link Jira',
+      url: 'https://company.atlassian.net/jira/browse/QUIRKY-123',
+      jiraIdentifier: 'QUIRKY-123'
     }
     const context = {
       kind: 'task-source' as const,
@@ -219,7 +219,7 @@ describe('useComposerState host-context boundaries', () => {
         provider: 'jira' as const,
         siteId: 'site-1',
         siteUrl: 'https://company.atlassian.net/jira',
-        projectKey: 'ORCA'
+        projectKey: 'QUIRKY'
       }
     }
 
@@ -231,7 +231,7 @@ describe('useComposerState host-context boundaries', () => {
       })
     ).toBeNull()
     expect(
-      getMatchingLinkedTaskSourceContext({ ...item, jiraIdentifier: 'ORCA-999' }, context)
+      getMatchingLinkedTaskSourceContext({ ...item, jiraIdentifier: 'QUIRKY-999' }, context)
     ).toBeNull()
   })
 })

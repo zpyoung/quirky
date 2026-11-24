@@ -6,9 +6,9 @@ handoff recipe. A model or effort is not custom argv: `worker-start --model
 --effort` carries them and keeps the user's Chat UI setting.
 
 ```text
-ORCA terminal create --worktree active --title <task_name> --command "<agent_command>" --json
-ORCA terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
-ORCA orchestration dispatch --task <task_id> --to <handle> --inject --json
+QUIRKY terminal create --worktree active --title <task_name> --command "<agent_command>" --json
+QUIRKY terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json
+QUIRKY orchestration dispatch --task <task_id> --to <handle> --inject --json
 ```
 
 Wait for readiness only when startup could lose injected input. Prefer

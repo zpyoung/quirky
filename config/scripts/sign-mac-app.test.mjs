@@ -12,7 +12,7 @@ it('preserves file-specific signing policy and retries with fresh options', asyn
   const calls = []
   const failure = new Error('timestamp service unavailable')
   const options = {
-    app: '/fixture/Orca.app',
+    app: '/fixture/Quirky.app',
     platform: 'darwin',
     type: 'distribution',
     identity: 'SIGNING_IDENTITY',
@@ -20,7 +20,7 @@ it('preserves file-specific signing policy and retries with fresh options', asyn
     keychain: '/fixture/signing.keychain',
     binaries: ['/fixture/extra-helper'],
     optionsForFile: (path) => ({ entitlements: `${path}.plist`, hardenedRuntime: true }),
-    ignore: [(path) => path.includes('/orcad-template/')],
+    ignore: [(path) => path.includes('/quirkyd-template/')],
     preAutoEntitlements: false
   }
   let policy
@@ -53,7 +53,7 @@ it('preserves file-specific signing policy and retries with fresh options', asyn
       entitlements: '/fixture/helper.plist',
       hardenedRuntime: true
     })
-    expect(received.ignore[0]('/fixture/orcad-template/helper')).toBe(true)
+    expect(received.ignore[0]('/fixture/quirkyd-template/helper')).toBe(true)
   }
   expect(options).not.toHaveProperty('batchCodesignCalls')
 })
@@ -74,12 +74,12 @@ it('propagates signing failure after the retry policy is exhausted', async () =>
 })
 
 it.each([
-  { ORCA_MAC_ADHOC: '1' },
+  { QUIRKY_MAC_ADHOC: '1' },
   {},
-  { ORCA_MAC_RELEASE: '1' },
-  { ORCA_MAC_HOURLY: '1' },
-  { ORCA_MAC_DAILY: '1' },
-  { ORCA_WIN_ADHOC: '1' }
+  { QUIRKY_MAC_RELEASE: '1' },
+  { QUIRKY_MAC_HOURLY: '1' },
+  { QUIRKY_MAC_DAILY: '1' },
+  { QUIRKY_WIN_ADHOC: '1' }
 ])(
   'uses batched signing and strict verification for every macOS release channel: %j',
   async (env) => {
@@ -87,21 +87,21 @@ it.each([
     const saved = { ...process.env }
     try {
       for (const name of Object.keys(process.env)) {
-        if (name.startsWith('ORCA_')) {
+        if (name.startsWith('QUIRKY_')) {
           delete process.env[name]
         }
       }
       Object.assign(process.env, env)
       delete require.cache[configPath]
       const config = require(configPath)
-      // The fork ships only the ORCA_MAC_RELEASE channel; upstream's hourly, daily and adhoc
+      // The fork ships only the QUIRKY_MAC_RELEASE channel; upstream's hourly, daily and adhoc
       // channels build from workflows gated to stablyai/orca, so the fork's config leaves them unsigned.
-      if (env.ORCA_MAC_RELEASE === '1') {
+      if (env.QUIRKY_MAC_RELEASE === '1') {
         expect(config.mac.sign).toBe(resolve('config/scripts/sign-mac-app.mjs'))
         const hook = await resolveFunction(undefined, config.mac.sign, 'sign', process.cwd())
         expect(typeof hook).toBe('function')
         expect(hook.name).toBe('sign')
-        expect(config.mac.signIgnore).toContain('/orcad-template/')
+        expect(config.mac.signIgnore).toContain('/quirkyd-template/')
         expect(config.forceCodeSigning).toBe(true)
         expect(config.mac.hardenedRuntime).toBe(true)
         expect(config.mac.notarize).toBe(true)

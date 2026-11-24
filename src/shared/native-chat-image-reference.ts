@@ -1,10 +1,10 @@
 // A composer image chip's text form. It names which attached image it means, never a number: the
 // number is drawn from the thumbnail row on screen and worked out once at send.
 
-const IMAGE_REFERENCES = /\[Image\]\(orca-image:([A-Za-z0-9._:-]{1,200})\)/g
+const IMAGE_REFERENCES = /\[Image\]\(quirky-image:([A-Za-z0-9._:-]{1,200})\)/g
 
 export function imageReferenceToken(attachmentId: string): string {
-  return `[Image](orca-image:${attachmentId})`
+  return `[Image](quirky-image:${attachmentId})`
 }
 
 /** Spaces keep inserted chips separate from the words on either side of the caret. */

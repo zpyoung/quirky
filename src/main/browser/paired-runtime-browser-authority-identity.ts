@@ -5,28 +5,28 @@ import type { BrowserClientPageAuthorityIdentity } from './browser-client-page-c
 
 /** Authority identities a paired server's client-hosted pages derive their partitions from. */
 export function derivePairedRuntimeBrowserAuthorityIdentity(input: {
-  orcaProfileId: string
-  environment: Pick<KnownRuntimeEnvironment, 'id' | 'orcadDeployment'>
+  quirkyProfileId: string
+  environment: Pick<KnownRuntimeEnvironment, 'id' | 'quirkydDeployment'>
   pairingRevision: number
   authorityRuntimeId: string
   connection: PairedRuntimeConnection
 }): BrowserClientPageAuthorityIdentity {
-  const { orcaProfileId, environment, pairingRevision, connection } = input
+  const { quirkyProfileId, environment, pairingRevision, connection } = input
   const pairingIdentity = pairingAuthorityConnectionIdentity(
-    orcaProfileId,
+    quirkyProfileId,
     environment.id,
     pairingRevision,
     connection
   )
   return {
-    // Why: Orca re-pairs its own deployments (managed SSH, WSL) in place on updates and
+    // Why: Quirky re-pairs its own deployments (managed SSH, WSL) in place on updates and
     // refusals, so their jar must outlive the pairing; it still ends with the server's key.
-    authorityConnectionIdentity: environment.orcadDeployment
-      ? deployedAuthorityConnectionIdentity(orcaProfileId, environment.id, connection)
+    authorityConnectionIdentity: environment.quirkydDeployment
+      ? deployedAuthorityConnectionIdentity(quirkyProfileId, environment.id, connection)
       : pairingIdentity,
     pairingAuthorityConnectionIdentity: pairingIdentity,
     legacyAuthorityConnectionIdentity: legacyAuthorityConnectionIdentity(
-      orcaProfileId,
+      quirkyProfileId,
       environment.id,
       pairingRevision,
       input.authorityRuntimeId,
@@ -44,14 +44,14 @@ export function derivePairedRuntimeBrowserAuthorityIdentity(input: {
  * fresh partition on every remote restart, dropping the user's cookies.
  */
 function pairingAuthorityConnectionIdentity(
-  orcaProfileId: string,
+  quirkyProfileId: string,
   environmentId: string,
   pairingRevision: number,
   connection: PairedRuntimeConnection
 ): string {
   return connectionIdentityDigest([
     'paired-runtime-browser',
-    orcaProfileId,
+    quirkyProfileId,
     environmentId,
     pairingRevision,
     connection.hostPublicKeyB64,
@@ -60,19 +60,19 @@ function pairingAuthorityConnectionIdentity(
 }
 
 /**
- * Storage identity of a server Orca deployed and re-pairs in place.
+ * Storage identity of a server Quirky deployed and re-pairs in place.
  *
  * Pairing revision and device id rotate on every re-pair, so only the environment and the
  * server's public key remain: a server with a different key never reaches this jar.
  */
 function deployedAuthorityConnectionIdentity(
-  orcaProfileId: string,
+  quirkyProfileId: string,
   environmentId: string,
   connection: PairedRuntimeConnection
 ): string {
   return connectionIdentityDigest([
     'paired-runtime-browser-deployed',
-    orcaProfileId,
+    quirkyProfileId,
     environmentId,
     connection.hostPublicKeyB64
   ])
@@ -80,7 +80,7 @@ function deployedAuthorityConnectionIdentity(
 
 /** Superseded per-process identity, kept only so its partition can be adopted. */
 function legacyAuthorityConnectionIdentity(
-  orcaProfileId: string,
+  quirkyProfileId: string,
   environmentId: string,
   pairingRevision: number,
   authorityRuntimeId: string,
@@ -88,7 +88,7 @@ function legacyAuthorityConnectionIdentity(
 ): string {
   return connectionIdentityDigest([
     'paired-runtime-browser',
-    orcaProfileId,
+    quirkyProfileId,
     environmentId,
     pairingRevision,
     authorityRuntimeId,

@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { createRequire } from 'node:module'
@@ -10,7 +10,7 @@ import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
 import { resolveElectronProbeLaunch } from './electron-probe-display-launch'
 
 export function createPopupIdentityProbeRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'orca-popup-identity-'))
+  return mkdtempSync(join(tmpdir(), 'quirky-popup-identity-'))
 }
 
 export async function buildPopupIdentityProbe(
@@ -25,8 +25,8 @@ export async function buildPopupIdentityProbe(
     oxc: { jsx: { development: false } },
     resolve: { alias: { '@': join(process.cwd(), 'src/renderer/src') } },
     define: {
-      ORCA_FEATURE_WALL_ENABLED: 'true',
-      ORCA_BUILD_COMMIT: JSON.stringify('0'.repeat(40)),
+      QUIRKY_FEATURE_WALL_ENABLED: 'true',
+      QUIRKY_BUILD_COMMIT: JSON.stringify('0'.repeat(40)),
       'import.meta.env.DEV': 'false',
       'process.env.NODE_ENV': JSON.stringify('production')
     },
@@ -76,7 +76,7 @@ export async function launchPopupIdentityProbe(root: string, electronArgs: reado
   const child = spawnProcess({
     program: executable,
     args,
-    env: { ...env, ORCA_BACKGROUND_LAUNCH: '1', ORCA_POPUP_IDENTITY_ROOT: root },
+    env: { ...env, QUIRKY_BACKGROUND_LAUNCH: '1', QUIRKY_POPUP_IDENTITY_ROOT: root },
     stdio: ['ignore', 'pipe', 'pipe']
   })
   const diagnostics: string[] = []

@@ -44,8 +44,8 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     return [
       '@echo off',
       'setlocal',
-      // Why: endpoint file holds the live port/token; a PTY that outlives an Orca restart carries stale env, so `call` it to refresh (else PTY env).
-      'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
+      // Why: endpoint file holds the live port/token; a PTY that outlives an Quirky restart carries stale env, so `call` it to refresh (else PTY env).
+      'if defined QUIRKY_AGENT_HOOK_ENDPOINT if exist "%QUIRKY_AGENT_HOOK_ENDPOINT%" call "%QUIRKY_AGENT_HOOK_ENDPOINT%" 2>nul',
       ...buildWindowsHookEnvironmentGuardLines(),
       buildWindowsAgentHookCurlPostCommand('zcode'),
       'exit /b 0',
@@ -58,12 +58,12 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     '#!/bin/sh',
     ...buildPosixHookPayloadCapture(),
     ...buildPosixHookSpoolLines('zcode'),
-    // Why: endpoint file holds the live port/token; PTYs that outlive an Orca restart carry stale env, so source it to reach the new server (else PTY env).
+    // Why: endpoint file holds the live port/token; PTYs that outlive an Quirky restart carry stale env, so source it to reach the new server (else PTY env).
     // Why: silence the `.` builtin (2>/dev/null + `|| :`) so a TOCTOU race can't leak shell parse errors into agent transcripts (fail-open).
-    'if [ -n "$ORCA_AGENT_HOOK_ENDPOINT" ] && [ -r "$ORCA_AGENT_HOOK_ENDPOINT" ]; then',
-    '  . "$ORCA_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
+    'if [ -n "$QUIRKY_AGENT_HOOK_ENDPOINT" ] && [ -r "$QUIRKY_AGENT_HOOK_ENDPOINT" ]; then',
+    '  . "$QUIRKY_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
     'fi',
-    'if [ -z "$ORCA_AGENT_HOOK_PORT" ] || [ -z "$ORCA_AGENT_HOOK_TOKEN" ] || [ -z "$ORCA_PANE_KEY" ]; then',
+    'if [ -z "$QUIRKY_AGENT_HOOK_PORT" ] || [ -z "$QUIRKY_AGENT_HOOK_TOKEN" ] || [ -z "$QUIRKY_PANE_KEY" ]; then',
     '  spool_hook_event',
     '  exit 0',
     'fi',
@@ -142,7 +142,7 @@ export class ZCodeHookService {
     const remoteConfigPath = getZCodeRemoteConfigPath(remoteHome)
     // Why: remote-Windows is out of scope; process.platform describes the local box, not the host.
     const remoteScriptFileName = getZCodePosixManagedScriptFileName()
-    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/${remoteScriptFileName}`
+    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.quirky/agent-hooks/${remoteScriptFileName}`
     try {
       const body = await readTextFileRemote(sftp, remoteConfigPath)
       const config = body === null ? {} : parseZCodeConfigText(body, 'remote ZCode config.json')

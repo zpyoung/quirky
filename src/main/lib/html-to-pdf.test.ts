@@ -39,7 +39,7 @@ vi.mock('node:crypto', () => ({ randomUUID: fake.uuid }))
 import { ExportTimeoutError, htmlToPdf } from './html-to-pdf'
 
 const HTML = '<p>synthetic export</p>'
-const TEMP_PATH = join('/mock-export-temp', 'orca-export-test-export.html')
+const TEMP_PATH = join('/mock-export-temp', 'quirky-export-test-export.html')
 const PDF = Buffer.from('synthetic PDF buffer')
 
 beforeEach(() => {
@@ -297,8 +297,8 @@ describe('htmlToPdf resource ownership', () => {
     const images = Promise.withResolvers<void>()
     fake.images.mockReturnValueOnce(images.promise)
     fake.uuid.mockReturnValueOnce('first-export').mockReturnValueOnce('second-export')
-    const firstPath = join('/mock-export-temp', 'orca-export-first-export.html')
-    const secondPath = join('/mock-export-temp', 'orca-export-second-export.html')
+    const firstPath = join('/mock-export-temp', 'quirky-export-first-export.html')
+    const secondPath = join('/mock-export-temp', 'quirky-export-second-export.html')
 
     const first = htmlToPdf(HTML)
     await vi.advanceTimersByTimeAsync(0)

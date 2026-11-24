@@ -3,7 +3,7 @@ import { createStore, type StoreApi } from 'zustand/vanilla'
 import { createEditorSlice } from '@/store/slices/editor'
 import type { AppState } from '@/store'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
+import { QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT } from '../../../../shared/editor-save-events'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
 import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
 import { emptyTabLayoutState } from '../../store/slices/editor-slice-test-harness'
@@ -33,7 +33,7 @@ function createEditorStore(): StoreApi<AppState> {
 async function saveDirtyFiles(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     window.dispatchEvent(
-      new CustomEvent(ORCA_EDITOR_SAVE_DIRTY_FILES_EVENT, {
+      new CustomEvent(QUIRKY_EDITOR_SAVE_DIRTY_FILES_EVENT, {
         detail: {
           claim: () => {},
           resolve,

@@ -115,7 +115,7 @@ describe('composer upload failures', () => {
         {
           sourcePath: '/a.png',
           status: 'imported',
-          destPath: '/repo/.orca/drops/a.png',
+          destPath: '/repo/.quirky/drops/a.png',
           kind: 'file',
           renamed: false
         },
@@ -146,7 +146,7 @@ describe('composer upload failures', () => {
         {
           sourcePath: '/a.png',
           status: 'imported',
-          destPath: '/repo/.orca/drops/a.png',
+          destPath: '/repo/.quirky/drops/a.png',
           kind: 'file',
           renamed: false
         }

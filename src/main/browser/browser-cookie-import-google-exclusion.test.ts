@@ -134,7 +134,7 @@ describe('file import excludes the Google cookie family', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    tmpDir = mkdtempSync(join(tmpdir(), 'orca-google-exclusion-file-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'quirky-google-exclusion-file-'))
     cookiesGetMock = vi.fn().mockResolvedValue([])
     cookiesRemoveMock = vi.fn().mockResolvedValue(undefined)
     cookiesSetMock = vi.fn().mockResolvedValue(undefined)
@@ -187,7 +187,7 @@ describe('native Chromium import excludes the Google cookie family', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    tmpDir = mkdtempSync(join(tmpdir(), 'orca-google-exclusion-native-'))
+    tmpDir = mkdtempSync(join(tmpdir(), 'quirky-google-exclusion-native-'))
     appGetPathMock.mockReturnValue(join(tmpDir, 'userData'))
     execFileSyncMock.mockImplementation(() => {
       throw new Error('OS browser version lookup unavailable')

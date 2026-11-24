@@ -13,7 +13,7 @@ import {
   restTestSend,
   type RestTestRig
 } from '../../../native-chat/agent-session-wire/structured-agent-session-rest-test-rig'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcResponse } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { STRUCTURED_AGENT_SESSION_METHODS } from './structured-agent-session'
@@ -44,12 +44,12 @@ async function stream(id: string, frames: RpcResponse[]): Promise<void> {
 beforeEach(async () => {
   rig = await createRestTestRig({ idleSweep: { intervalMs: 3_600_000 } })
   setStructuredAgentSessionHost(rig.host)
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   vi.spyOn(runtime, 'getClientSettings').mockImplementation(
     () =>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the RPC gate reads only this one setting.
       ({ experimentalStructuredNativeChat: true }) as ReturnType<
-        OrcaRuntimeService['getClientSettings']
+        QuirkyRuntimeService['getClientSettings']
       >
   )
   dispatcher = new RpcDispatcher({ runtime, methods: STRUCTURED_AGENT_SESSION_METHODS })

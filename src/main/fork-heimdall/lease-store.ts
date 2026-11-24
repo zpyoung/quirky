@@ -273,7 +273,7 @@ export class HostRoutedLeaseStore implements LeaseStore {
     let pathFlavor: LeasePathFlavor
     if (target.kind === 'folder') {
       pathFlavor = resolveLeasePathFlavor(target.executionHostId, localWorkspacePath)
-      leaseDirectory = pathFlavor.join(localWorkspacePath, '.orca', 'heimdall', 'lease')
+      leaseDirectory = pathFlavor.join(localWorkspacePath, '.quirky', 'heimdall', 'lease')
     } else {
       if (!target.gitTarget) {
         throw new LeaseConfigurationError('Git lease target has no runtime Git target')
@@ -290,7 +290,7 @@ export class HostRoutedLeaseStore implements LeaseStore {
         throw new LeaseConfigurationError('Git did not return an absolute git directory')
       }
       pathFlavor = resolveLeasePathFlavor(target.executionHostId, gitDirectory)
-      leaseDirectory = pathFlavor.join(gitDirectory, 'orca-heimdall', 'lease')
+      leaseDirectory = pathFlavor.join(gitDirectory, 'quirky-heimdall', 'lease')
     }
     const location = { key, target, leaseDirectory, fs, pathFlavor }
     this.locations.set(key, location)

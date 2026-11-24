@@ -2,7 +2,7 @@ import type { OrchestrationDb } from '../orchestration-db'
 
 // Frozen literals, never the live prefix constant: a migration rewrites what that build wrote.
 const LEGACY_PREFIX = 'session:'
-const CURRENT_PREFIX = 'orca_session_id:'
+const CURRENT_PREFIX = 'quirky_session_id:'
 
 // Every column an earlier build wrote a session's mail address into. Bodies, subjects and payloads
 // are text, not addresses, and are left as written.
@@ -19,8 +19,8 @@ const KEYED_ADDRESS_COLUMNS = [
 ] as const
 
 /**
- * Earlier builds addressed an Orca session as `session:<id>`. Respells every stored one as
- * `orca_session_id:<id>`, so a chat still reads mail sent before the upgrade, a Run still routes
+ * Earlier builds addressed an Quirky session as `session:<id>`. Respells every stored one as
+ * `quirky_session_id:<id>`, so a chat still reads mail sent before the upgrade, a Run still routes
  * mail to the chat that coordinated it, and a reply to old mail reaches its sender.
  */
 export function migrateV43(this: OrchestrationDb, current: number): void {

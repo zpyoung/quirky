@@ -107,8 +107,8 @@ function closeUnpreparedPopup(
 }
 
 /**
- * Hosts a guest-opened popup inside an Orca-built window whose top strip is a
- * separate, Orca-controlled WebContentsView showing the popup's current
+ * Hosts a guest-opened popup inside an Quirky-built window whose top strip is a
+ * separate, Quirky-controlled WebContentsView showing the popup's current
  * origin. A default Electron child window has no address bar, so arbitrary
  * web content could open windows whose destination the user cannot verify.
  */
@@ -135,7 +135,7 @@ export function openPopupWithOriginBar(
     minWidth: MIN_POPUP_CONTENT_WIDTH,
     minHeight: MIN_POPUP_CONTENT_HEIGHT + POPUP_ORIGIN_BAR_HEIGHT,
     title: 'about:blank',
-    // Why: Windows/Linux attach Orca's app menu to every window, including web popups.
+    // Why: Windows/Linux attach Quirky's app menu to every window, including web popups.
     autoHideMenuBar: true,
     show:
       Boolean(options.webContents || options.loadInitialUrl) &&
@@ -143,7 +143,7 @@ export function openPopupWithOriginBar(
       options.show !== false
   })
 
-  // Why: the origin bar renders only Orca's own data: URL and must stay
+  // Why: the origin bar renders only Quirky's own data: URL and must stay
   // isolated from the (arbitrary) popup content below it.
   const originBarView = new WebContentsView({
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }

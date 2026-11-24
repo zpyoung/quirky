@@ -1,5 +1,5 @@
 // Where a structured chat's scratch files (its inline visuals among them) live on the host that
-// owns the chat: Orca-owned state beside the chat journal, never inside the user's workspace.
+// owns the chat: Quirky-owned state beside the chat journal, never inside the user's workspace.
 
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'

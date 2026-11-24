@@ -11,11 +11,11 @@ const { PE_MACHINE } = require('./windows-pe-machine.cjs')
 /**
  * node-pty's loader tries build/Release, then build/Debug, then
  * prebuilds/<platform>-<arch>, swallowing failures in between. Only the source
- * build carries Orca's job-object exports, so leaving the prebuilt conpty.node
+ * build carries Quirky's job-object exports, so leaving the prebuilt conpty.node
  * beside it means an ABI mismatch or an AV quarantine silently downgrades the
  * app to a binary that cannot own a PTY tree.
  *
- * The siblings must survive: Orca's patch deletes the `conpty_console_list` and
+ * The siblings must survive: Quirky's patch deletes the `conpty_console_list` and
  * winpty `pty` gyp targets, so those binaries exist nowhere but here.
  */
 describe('prunePackagedNodePty: the Windows conpty fallback', () => {
@@ -55,7 +55,7 @@ describe('prunePackagedNodePty: the Windows conpty fallback', () => {
   }
 
   beforeEach(() => {
-    resources = mkdtempSync(join(tmpdir(), 'orca-prune-'))
+    resources = mkdtempSync(join(tmpdir(), 'quirky-prune-'))
   })
   afterEach(() => {
     rmSync(resources, { recursive: true, force: true })
@@ -71,7 +71,7 @@ describe('prunePackagedNodePty: the Windows conpty fallback', () => {
   })
 
   it.each(SIBLINGS)('keeps %s, which exists nowhere else in a packaged build', (sibling) => {
-    // Orca's patch removes the conpty_console_list and winpty gyp targets, so a
+    // Quirky's patch removes the conpty_console_list and winpty gyp targets, so a
     // Windows source build never produces these. Deleting them kills console
     // membership silently and breaks PTY spawn below Windows build 18309.
     seedWindowsTree()

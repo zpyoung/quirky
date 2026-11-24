@@ -309,7 +309,7 @@ branch refs/heads/main
   })
 
   it('deletes what Git left of the checkout after a successful remove', async () => {
-    const scratch = await mkdtemp(join(tmpdir(), 'orca-remove-residue-'))
+    const scratch = await mkdtemp(join(tmpdir(), 'quirky-remove-residue-'))
     const worktreePath = join(scratch, 'feature')
     // Git for Windows leaves junctions and the directories holding them behind yet exits 0.
     await mkdir(join(worktreePath, 'node_modules', 'left-behind'), { recursive: true })
@@ -328,7 +328,7 @@ branch refs/heads/main
   })
 
   it('leaves a WSL checkout that Git reported removed to the distro', async () => {
-    const scratch = await mkdtemp(join(tmpdir(), 'orca-remove-residue-wsl-'))
+    const scratch = await mkdtemp(join(tmpdir(), 'quirky-remove-residue-wsl-'))
     const worktreePath = join(scratch, 'feature')
     await mkdir(worktreePath, { recursive: true })
     try {

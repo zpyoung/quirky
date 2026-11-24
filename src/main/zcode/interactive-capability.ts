@@ -1,11 +1,11 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   isZCodeMissingTuiOutput,
   type ZCodeInteractiveCapability
 } from '../../shared/zcode-missing-tui'
 
 /**
- * Asking a `zcode` build whether it can open a session, before Orca opens a pane for it.
+ * Asking a `zcode` build whether it can open a session, before Quirky opens a pane for it.
  *
  * Why a deliberate probe and not a rule over the pane's output: the failure lands within
  * about half a second of spawn, so anything watching a live stream races it. Asking the
@@ -64,7 +64,7 @@ async function probe(command: string): Promise<ZCodeInteractiveCapability> {
   }
 }
 
-/** Whether this `zcode` can open a session. Answered once per Orca run. */
+/** Whether this `zcode` can open a session. Answered once per Quirky run. */
 export function readZCodeInteractiveCapability(
   command = 'zcode'
 ): Promise<ZCodeInteractiveCapability> {

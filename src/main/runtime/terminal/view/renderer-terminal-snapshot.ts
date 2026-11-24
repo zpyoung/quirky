@@ -1,8 +1,8 @@
-import { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals } from '../../session-tabs/renderer-session-terminal-rescue'
+import { QuirkyRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals } from '../../session-tabs/renderer-session-terminal-rescue'
 import type { TerminalOscLinkRange } from '../../../../shared/terminal-osc-link-ranges'
 import type { RuntimeLeafRecord } from '../../runtime-terminal-state-records'
 
-export abstract class OrcaRuntimeWithWaitForLeafPtyId extends OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals {
+export abstract class QuirkyRuntimeWithWaitForLeafPtyId extends QuirkyRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals {
   protected abstract issueHandle(leaf: RuntimeLeafRecord): string
 
   // Why: mobile may subscribe before the PTY spawns; wait for it so subscribe proceeds with phone-fit instead of a bare scrollback+end.

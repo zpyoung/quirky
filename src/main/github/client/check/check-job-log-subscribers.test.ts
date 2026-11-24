@@ -15,7 +15,7 @@ const { spawnMock, signalMock, forceMock, resolverMock } = vi.hoisted(() => ({
   resolverMock: vi.fn()
 }))
 vi.mock('node:child_process', async (original) => ({ ...(await original()), spawn: spawnMock }))
-vi.mock('@orca/process-host/process-tree-termination', () => ({
+vi.mock('@quirky/process-host/process-tree-termination', () => ({
   signalProcessTree: signalMock,
   forceTerminateProcessTree: forceMock
 }))

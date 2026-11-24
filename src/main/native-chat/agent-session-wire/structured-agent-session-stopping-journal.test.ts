@@ -26,7 +26,7 @@ let root: string
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-stopping-journal-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-stopping-journal-'))
   journal = await journals.open({
     identity: {
       sessionId: 'session-1',
@@ -90,7 +90,7 @@ describe("a person's Stop's Stopping", () => {
   it('reads only the journal from the running turn on, however long the chat before it', async () => {
     for (let index = 0; index < 40; index += 1) {
       await journal.appendItem(
-        { provider: 'orca', clientMessageId: `earlier-${index}` },
+        { provider: 'quirky', clientMessageId: `earlier-${index}` },
         { kind: 'status', text: `earlier row ${index}` },
         { fence: FENCE, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
       )

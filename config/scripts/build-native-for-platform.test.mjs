@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 
 const buildScript = fileURLToPath(new URL('./build-native-for-platform.mjs', import.meta.url))
 const directories = []
@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 function startBuild(mode, options = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-native-build-test-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-native-build-test-'))
   directories.push(directory)
   const cli = join(directory, 'fake-pnpm.mjs')
   const journal = join(directory, 'events.jsonl')
@@ -109,7 +109,7 @@ function startBuild(mode, options = {}) {
     cwd: directory,
     env: {
       ...process.env,
-      ORCA_BACKGROUND_LAUNCH: '1',
+      QUIRKY_BACKGROUND_LAUNCH: '1',
       npm_execpath: options.missingCli ? join(directory, 'missing-pnpm') : cli,
       NATIVE_BUILD_JOURNAL: journal,
       NATIVE_BUILD_GATE: join(directory, 'release'),

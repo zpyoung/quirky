@@ -15,7 +15,7 @@ async function assertBrowserIdentitySupported({ client }: HandlerContext): Promi
   if (!status.result.capabilities?.includes(BROWSER_IDENTITY_RUNTIME_CAPABILITY)) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The running Orca runtime does not support browser identity management. Update or restart Orca and try again.'
+      'The running Quirky runtime does not support browser identity management. Update or restart Quirky and try again.'
     )
   }
 }
@@ -56,7 +56,7 @@ export const BROWSER_IDENTITY_HANDLERS: Record<string, CommandHandler> = {
     }
     printResult(result, context.json, ({ identity }) =>
       identity.restartRequired
-        ? `Browser identity set to ${identity.configuredMode}; restart Orca to apply it.`
+        ? `Browser identity set to ${identity.configuredMode}; restart Quirky to apply it.`
         : `Browser identity set to ${identity.configuredMode}.`
     )
   }

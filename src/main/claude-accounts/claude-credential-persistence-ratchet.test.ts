@@ -227,7 +227,7 @@ it('confines filesystem persistence in accounts and usage to named profile surfa
   })
   expect(violations).toEqual([])
   const cli = readFileSync(join(main, '../cli/handlers/account.ts'), 'utf8')
-  expect(cli).not.toMatch(/Keychain|orca-account-add-claude|addClaudeFromConfigDir/)
+  expect(cli).not.toMatch(/Keychain|quirky-account-add-claude|addClaudeFromConfigDir/)
   const auth = readFileSync(join(__dirname, 'runtime-auth-service.ts'), 'utf8')
   expect(auth).not.toMatch(/extends ClaudeRuntimeAuth|snapshot|credentialsJson|readBack/i)
 })

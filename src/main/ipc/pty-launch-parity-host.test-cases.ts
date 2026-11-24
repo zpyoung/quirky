@@ -172,13 +172,13 @@ export const HOST_LAUNCH_CASES: HostLaunchCase[] = [
 ]
 
 const HOST_ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
-  'ORCA_TERMINAL_HANDLE'
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_TAB_ID',
+  'QUIRKY_WORKTREE_ID',
+  'QUIRKY_AGENT_LAUNCH_TOKEN',
+  'QUIRKY_TERMINAL_HANDLE'
 ]
-const FOLDER_ENV_KEYS = ['ORCA_WORKSPACE_ID', 'ORCA_PROJECT_GROUP_ID', 'ORCA_WORKSPACE_ROOT']
+const FOLDER_ENV_KEYS = ['QUIRKY_WORKSPACE_ID', 'QUIRKY_PROJECT_GROUP_ID', 'QUIRKY_WORKSPACE_ROOT']
 
 /** What main hands the provider for a host-lane case. */
 export function expectedHostProvider(c: HostLaunchCase): Record<string, unknown> {
@@ -193,7 +193,8 @@ export function expectedHostProvider(c: HostLaunchCase): Record<string, unknown>
     env: {},
     ...provider,
     ...(c.os === 'win32' ? { terminalWindowsWslDistro } : {}),
-    // main today: the host lane stamps ORCA_WORKSPACE_ID on folders only.
-    orcaEnv: c.workspace.kind === 'folder' ? [...FOLDER_ENV_KEYS, ...HOST_ENV_KEYS] : HOST_ENV_KEYS
+    // main today: the host lane stamps QUIRKY_WORKSPACE_ID on folders only.
+    quirkyEnv:
+      c.workspace.kind === 'folder' ? [...FOLDER_ENV_KEYS, ...HOST_ENV_KEYS] : HOST_ENV_KEYS
   }
 }

@@ -58,7 +58,7 @@ describe.skipIf(process.platform === 'win32')(
   'preflight selection in native provider commands',
   () => {
     beforeEach(async () => {
-      root = await mkdtemp(path.join(tmpdir(), 'orca-22975-provider-'))
+      root = await mkdtemp(path.join(tmpdir(), 'quirky-22975-provider-'))
       vi.stubEnv('HOME', root)
     })
 
@@ -110,11 +110,11 @@ describe.skipIf(process.platform === 'win32')(
       const good = await fixtureCli(
         'gh',
         'good',
-        'if [ "$1" = --version ] && [ "$ORCA_22975_VERSION_DISABLED" = 1 ]; then exit 126; fi\necho good-api\n'
+        'if [ "$1" = --version ] && [ "$QUIRKY_22975_VERSION_DISABLED" = 1 ]; then exit 126; fi\necho good-api\n'
       )
       vi.stubEnv('PATH', [path.dirname(shim), path.dirname(good)].join(path.delimiter))
       await findRunnableLocalCommand('gh')
-      vi.stubEnv('ORCA_22975_VERSION_DISABLED', '1')
+      vi.stubEnv('QUIRKY_22975_VERSION_DISABLED', '1')
 
       const refreshing = findRunnableLocalCommand('gh')
       await expect(providerCommand('gh')).resolves.toMatchObject({ stdout: 'good-api\n' })
@@ -241,7 +241,7 @@ describe.skipIf(process.platform === 'win32')(
 
 describe('Windows selection across working folders', () => {
   it('keeps an absolute PATH selection in a different provider cwd', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'orca-22975-cwd-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'quirky-22975-cwd-'))
     const binary = path.join(directory, 'gh.CMD')
     const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')
     await writeFile(binary, '@echo off\r\nexit /b 0\r\n')
@@ -263,7 +263,7 @@ describe('Windows selection across working folders', () => {
   })
 
   it('does not carry a current-directory CLI into another folder', async () => {
-    const directory = await mkdtemp(path.join(tmpdir(), 'orca-22975-local-cwd-'))
+    const directory = await mkdtemp(path.join(tmpdir(), 'quirky-22975-local-cwd-'))
     const binary = path.join(directory, 'gh.CMD')
     const descriptor = Object.getOwnPropertyDescriptor(process, 'platform')
     await writeFile(binary, '@echo off\r\nexit /b 0\r\n')
@@ -288,7 +288,7 @@ describe('Windows selection across working folders', () => {
 
 describe.runIf(process.platform === 'win32')('native provider batch selection', () => {
   beforeEach(async () => {
-    root = await mkdtemp(path.join(tmpdir(), 'orca-22975-provider-cmd-'))
+    root = await mkdtemp(path.join(tmpdir(), 'quirky-22975-provider-cmd-'))
   })
 
   afterEach(async () => {

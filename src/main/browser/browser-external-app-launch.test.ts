@@ -115,7 +115,7 @@ describe('browser external app launch', () => {
     'data:text/html,x',
     'blob:https://example.com/id',
     'about:blank',
-    'orca-preview://doc/index.html',
+    'quirky-preview://doc/index.html',
     'shell:startup',
     'vbscript:msgbox(1)',
     'hcp://system/sysinfo',

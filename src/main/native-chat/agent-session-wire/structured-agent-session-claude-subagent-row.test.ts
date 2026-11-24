@@ -50,7 +50,7 @@ let records: ReturnType<typeof acpChildWorkStatusSink>
 let clock = NOW
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-subagent-row-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-subagent-row-'))
   clock = NOW
   resetHostTestOperationIds()
   const log = recordingStructuredAgentSessionLogger()

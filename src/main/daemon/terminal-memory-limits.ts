@@ -2,12 +2,12 @@
  * Opt-in memory limits on each Linux terminal scope (see terminal-scopes.ts). Off by default:
  * an OOM kill at a limit nobody chose is worse than the host-wide pressure it prevents.
  *
- * `ORCA_TERMINAL_MEMORY_MAX` sets MemoryMax and `ORCA_TERMINAL_MEMORY_SWAP_MAX` sets
+ * `QUIRKY_TERMINAL_MEMORY_MAX` sets MemoryMax and `QUIRKY_TERMINAL_MEMORY_SWAP_MAX` sets
  * MemorySwapMax, per terminal. Sizes are bytes or K/M/G/T (base 1024), as systemd reads them.
  * A limit is applied only after the probe scope showed the kernel enforcing it.
  */
-export const TERMINAL_MEMORY_MAX_ENV = 'ORCA_TERMINAL_MEMORY_MAX'
-export const TERMINAL_MEMORY_SWAP_MAX_ENV = 'ORCA_TERMINAL_MEMORY_SWAP_MAX'
+export const TERMINAL_MEMORY_MAX_ENV = 'QUIRKY_TERMINAL_MEMORY_MAX'
+export const TERMINAL_MEMORY_SWAP_MAX_ENV = 'QUIRKY_TERMINAL_MEMORY_SWAP_MAX'
 
 /** Below this a shell plus one agent CLI is OOM-killed at startup. */
 const MIN_MEMORY_MAX_BYTES = 256 * 1024 ** 2

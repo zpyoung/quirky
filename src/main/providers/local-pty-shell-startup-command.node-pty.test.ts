@@ -37,7 +37,7 @@ describe('local POSIX shell startup-command delivery', () => {
   it.each(SHELLS)(
     '%s runs the command once, forwards stdin, and keeps the shell',
     async (shell) => {
-      testHome = mkdtempSync(join(tmpdir(), `orca-${shell}-startup-command-`))
+      testHome = mkdtempSync(join(tmpdir(), `quirky-${shell}-startup-command-`))
       setTestUserDataPath(testHome)
       const launch = getShellLaunchConfig(
         shell,
@@ -74,8 +74,8 @@ describe('local POSIX shell startup-command delivery', () => {
             ...process.env,
             ...launch.env,
             HOME: testHome,
-            ORCA_ORIG_ZDOTDIR: testHome,
-            ORCA_ZSHENV_SOURCE_DIR: testHome,
+            QUIRKY_ORIG_ZDOTDIR: testHome,
+            QUIRKY_ZSHENV_SOURCE_DIR: testHome,
             TERM: 'xterm-256color'
           }
         })

@@ -193,7 +193,7 @@ export function createRepoRemovalActions(
           }
         }
 
-        get().clearOrcaHookTrustForRepo(projectId)
+        get().clearQuirkyHookTrustForRepo(projectId)
         const repoPath = get().repos.find((repo) =>
           repoMatchesHostIdentity(repo, projectId, ownerHostId)
         )?.path

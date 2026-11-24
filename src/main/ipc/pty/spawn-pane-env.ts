@@ -47,23 +47,23 @@ export function stampPtySpawnPaneEnv(
   }
   const { pane } = args
   if (!pane) {
-    // Why: ORCA_PANE_KEY crosses into shells/hook registries; only a key naming this spawn's own pane may reach it.
-    delete env.ORCA_PANE_KEY
-    delete env.ORCA_TAB_ID
-    delete env.ORCA_WORKTREE_ID
-    delete env.ORCA_AGENT_LAUNCH_TOKEN
+    // Why: QUIRKY_PANE_KEY crosses into shells/hook registries; only a key naming this spawn's own pane may reach it.
+    delete env.QUIRKY_PANE_KEY
+    delete env.QUIRKY_TAB_ID
+    delete env.QUIRKY_WORKTREE_ID
+    delete env.QUIRKY_AGENT_LAUNCH_TOKEN
     return
   }
-  env.ORCA_PANE_KEY = pane.paneKey
+  env.QUIRKY_PANE_KEY = pane.paneKey
   if (pane.tabId !== undefined) {
-    env.ORCA_TAB_ID = pane.tabId
+    env.QUIRKY_TAB_ID = pane.tabId
   } else {
-    delete env.ORCA_TAB_ID
+    delete env.QUIRKY_TAB_ID
   }
   if (pane.worktreeId !== undefined) {
-    env.ORCA_WORKTREE_ID = pane.worktreeId
+    env.QUIRKY_WORKTREE_ID = pane.worktreeId
   } else {
-    delete env.ORCA_WORKTREE_ID
+    delete env.QUIRKY_WORKTREE_ID
   }
   // A failed managed-dir preparation must leave a working caller directory intact.
   if (args.jcodeRuntimeDir !== undefined) {

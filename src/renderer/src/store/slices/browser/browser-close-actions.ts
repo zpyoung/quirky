@@ -13,7 +13,7 @@ import { closeRemoteBrowserPageInOwningEnvironment } from './browser-remote-clos
 import { releaseDocPreviewGrant } from '@/lib/doc-preview-grants'
 import { destroyWorkspaceWebviews } from '../browser-webview-cleanup'
 import { omitRecordKeys } from '../worktrees/teardown/record-key-omission'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordBrowserTabClose } from './browser-layout-owner-commands'
 
 export function createBrowserCloseActions(
@@ -191,7 +191,7 @@ export function createBrowserCloseActions(
           (entry) => entry.contentType === 'browser' && entry.entityId === tabId
         )
         // Switch point: main records the close while the tab-bar entry still names the tab.
-        if (ORCA_LAYOUT_OWNER_IS_MAIN && workspaceItem) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN && workspaceItem) {
           recordBrowserTabClose(
             get(),
             workspaceItem.worktreeId,

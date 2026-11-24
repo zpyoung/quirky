@@ -1,7 +1,7 @@
 import { homedir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
-import { OrcaRuntimeService } from '../../orca-runtime'
+import { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { CAPABLE_CLIENT, methodNamed, STRUCTURED_PREFERENCE } from './agent-launch.test-fixture'
@@ -35,7 +35,7 @@ afterEach(() => {
 describe('floating workspace resolved-worktree minting', () => {
   // A missing resolver import previously broke structured-session creation at call time.
   it('mints the synthetic floating row through the shared module', () => {
-    class FloatingResolverProbe extends OrcaRuntimeService {
+    class FloatingResolverProbe extends QuirkyRuntimeService {
       mintFloatingResolvedWorktree(path: string): ResolvedWorktree {
         return this.floatingWorkspaceToResolvedWorktree(path)
       }
@@ -56,7 +56,7 @@ describe('floating workspace resolved-worktree minting', () => {
 
 describe('agent.launch with the real floating workspace resolver', () => {
   it.each(selectors)('resolves %s without a managed worktree record', async (selector) => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
 
     await expect(runtime.showManagedTerminalWorkspace(selector)).rejects.toThrow(
       'selector_not_found'
@@ -72,7 +72,7 @@ describe('agent.launch with the real floating workspace resolver', () => {
 
   // Floating workspaces still need a local path for structured-session records.
   it.each(selectors)('supports a structured session for %s on the local host', async (selector) => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
 
     await expect(
       runtime.getStructuredAgentSessionCreateSupport(selector, 'codex')
@@ -83,7 +83,7 @@ describe('agent.launch with the real floating workspace resolver', () => {
 
   describe.each([true, false])('structured preference %s', (structuredPreference) => {
     it.each(selectors)('routes %s by preference, not by workspace kind', async (selector) => {
-      const runtime = new OrcaRuntimeService()
+      const runtime = new QuirkyRuntimeService()
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these launch readers use only getSettings from the private store fixture.
       vi.spyOn(runtime, 'requireStore').mockReturnValue({
         getSettings: () => ({

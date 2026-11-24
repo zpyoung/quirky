@@ -2,7 +2,7 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { translate } from '@/i18n/i18n'
 import {
   FLOATING_TERMINAL_WORKTREE_ID,
-  ORCA_BROWSER_BLANK_URL
+  QUIRKY_BROWSER_BLANK_URL
 } from '../../../../../shared/constants'
 import type { BrowserSlice, BrowserSliceGet, BrowserSliceSet } from './browser-slice-contract'
 import {
@@ -24,7 +24,7 @@ import {
   loadPairedBrowserTabCreator
 } from './paired-browser-tab-creator'
 import { findGroupAndWorktree } from '../tab-group-state'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { recordBrowserTabOpen } from './browser-layout-owner-commands'
 
 export function createBrowserTabActions(
@@ -112,7 +112,7 @@ export function createBrowserTabActions(
           // the blank url is exactly what marks a New Tab as wanting the address bar it does not have.
           !page.docLocation &&
           (options?.focusAddressBar ??
-            (page.url === 'about:blank' || page.url === ORCA_BROWSER_BLANK_URL))
+            (page.url === 'about:blank' || page.url === QUIRKY_BROWSER_BLANK_URL))
 
         return {
           browserTabsByWorktree: {
@@ -176,7 +176,7 @@ export function createBrowserTabActions(
         }
       }
       // Switch point: main records the tab under these ids before any later command names it.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         recordBrowserTabOpen(get(), browserTab)
       }
       return browserTab

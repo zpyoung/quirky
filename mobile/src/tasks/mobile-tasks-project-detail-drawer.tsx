@@ -36,36 +36,36 @@ export function renderMobileTasksProjectMissingRepoDrawer(model: ConnectionPrese
   const {
     copiedLinkKey,
     copyTextToClipboard,
-    projectRepoNotInOrca,
-    setProjectRepoNotInOrca,
+    projectRepoNotInQuirky,
+    setProjectRepoNotInQuirky,
     taskUiReady
   } = model
   return (
     <BottomDrawer
-      visible={taskUiReady && projectRepoNotInOrca != null}
+      visible={taskUiReady && projectRepoNotInQuirky != null}
       onClose={() => {
-        setProjectRepoNotInOrca(null)
+        setProjectRepoNotInQuirky(null)
       }}
       // Why: opens over the project detail, which renders after it in the shared host.
       zIndex={TASK_SECONDARY_DRAWER_Z_INDEX}
     >
-      {projectRepoNotInOrca ? (
+      {projectRepoNotInQuirky ? (
         <View>
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Repository not in Orca</Text>
+            <Text style={styles.sheetTitle}>Repository not in Quirky</Text>
             <Text style={styles.sheetSubtitle}>
-              {projectRepoNotInOrca.owner}/{projectRepoNotInOrca.repo} is not added to Orca. Add
-              this repository from the desktop app, then refresh mobile Tasks.
+              {projectRepoNotInQuirky.owner}/{projectRepoNotInQuirky.repo} is not added to Quirky.
+              Add this repository from the desktop app, then refresh mobile Tasks.
             </Text>
           </View>
 
           <View style={styles.actionGroup}>
-            {projectRepoNotInOrca.url ? (
+            {projectRepoNotInQuirky.url ? (
               <Pressable
                 style={styles.actionRow}
                 onPress={() => {
-                  if (projectRepoNotInOrca.url) {
-                    void Linking.openURL(projectRepoNotInOrca.url)
+                  if (projectRepoNotInQuirky.url) {
+                    void Linking.openURL(projectRepoNotInQuirky.url)
                   }
                 }}
               >
@@ -73,20 +73,20 @@ export function renderMobileTasksProjectMissingRepoDrawer(model: ConnectionPrese
                 <Text style={styles.actionText}>Open in GitHub</Text>
               </Pressable>
             ) : null}
-            {projectRepoNotInOrca.url ? <View style={styles.actionSeparator} /> : null}
+            {projectRepoNotInQuirky.url ? <View style={styles.actionSeparator} /> : null}
             <Pressable
               style={styles.actionRow}
               onPress={() =>
                 void copyTextToClipboard(
-                  `project-repo:${projectRepoNotInOrca.owner}/${projectRepoNotInOrca.repo}`,
-                  `${projectRepoNotInOrca.owner}/${projectRepoNotInOrca.repo}`
+                  `project-repo:${projectRepoNotInQuirky.owner}/${projectRepoNotInQuirky.repo}`,
+                  `${projectRepoNotInQuirky.owner}/${projectRepoNotInQuirky.repo}`
                 )
               }
             >
               <Copy size={16} color={colors.textPrimary} />
               <Text style={styles.actionText}>
                 {copiedLinkKey ===
-                `project-repo:${projectRepoNotInOrca.owner}/${projectRepoNotInOrca.repo}`
+                `project-repo:${projectRepoNotInQuirky.owner}/${projectRepoNotInQuirky.repo}`
                   ? 'Copied'
                   : 'Copy repository'}
               </Text>
@@ -343,7 +343,7 @@ export function renderMobileTasksProjectDetailDrawer(model: ConnectionPresentati
                 </Pressable>
                 {!projectRowHostedRepo ? (
                   <Text style={styles.emptyInlineText}>
-                    Merge requires this repository in Orca.
+                    Merge requires this repository in Quirky.
                   </Text>
                 ) : null}
               </>

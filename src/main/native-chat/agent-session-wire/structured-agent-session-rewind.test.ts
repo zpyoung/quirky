@@ -61,7 +61,7 @@ beforeEach(async () => {
   rewind.mockReset().mockResolvedValue({ ok: true })
   recoverRewind.mockReset().mockResolvedValue({ ok: true })
   acquires = []
-  directory = await mkdtemp(join(tmpdir(), 'orca-rewind-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-rewind-'))
   store = await openTestAgentSessionRecordStore(directory)
   adapter = startsWhenPublished(
     {
@@ -218,7 +218,7 @@ describe('host rewind', () => {
 
   it('resolves accepted codex user submissions to provider targets', async () => {
     const target = await seed(true)
-    expect(target.startsWith('orca:')).toBe(true)
+    expect(target.startsWith('quirky:')).toBe(true)
     expect(await host.rewind(caller, await params(target))).toMatchObject({ ok: true })
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items).toHaveLength(1)
     expect(rewind).toHaveBeenCalledWith(expect.objectContaining({ beforeTurnId: 'drop' }))
@@ -310,7 +310,7 @@ describe('host rewind', () => {
       await attachAndStart(store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence)
     ).toMatchObject({ ok: true })
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items).toHaveLength(1)
-    // A person's own message keeps the words Orca recorded, not the provider's copy.
+    // A person's own message keeps the words Quirky recorded, not the provider's copy.
     expect((await host.journalSnapshot(HOST_TEST_SESSION)).items[0]?.body).toEqual(
       hostTestMessage('0')
     )
@@ -398,7 +398,7 @@ describe('host rewind', () => {
   it('refuses a rewind racing an active turn before provider execution', async () => {
     const target = await seed()
     sink.appendItem(
-      { provider: 'orca', clientMessageId: 'active' },
+      { provider: 'quirky', clientMessageId: 'active' },
       { kind: 'status', text: 'working', turnLifecycle: { turnId: 'active', state: 'running' } },
       { turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
@@ -552,7 +552,7 @@ describe('host rewind', () => {
       recordId: `turn-lifecycle:${turnId}`
     })
     const goalRow = {
-      provider: 'orca' as const,
+      provider: 'quirky' as const,
       clientMessageId: `codex-goal:${'a'.repeat(64)}:${'b'.repeat(64)}:${'c'.repeat(64)}`
     }
     const goalBody = {
@@ -612,7 +612,7 @@ describe('host rewind', () => {
     expect(store.getRecord(HOST_TEST_SESSION)?.rewind?.phase).toBe('completed')
   })
 
-  it("keeps a newer Orca's item of an unknown kind, in its place, through a Codex provider hydration", async () => {
+  it("keeps a newer Quirky's item of an unknown kind, in its place, through a Codex provider hydration", async () => {
     expect(await host.attach(caller, hostTestAttachParams(null))).toMatchObject({ ok: true })
     const message = (turnId: string) => ({
       provider: 'codex' as const,
@@ -620,7 +620,7 @@ describe('host rewind', () => {
       turnId,
       ordinal: 0
     })
-    const newerRow = { provider: 'orca' as const, clientMessageId: 'newer-card' }
+    const newerRow = { provider: 'quirky' as const, clientMessageId: 'newer-card' }
     // A kind this build does not know; no provider's history holds it.
     const newerBody: AgentJournalItemBody = JSON.parse(
       JSON.stringify({ kind: 'plan-card', steps: [{ text: 'by a newer build' }] })
@@ -738,7 +738,7 @@ describe('host rewind', () => {
       ordinal: 0
     })
     const goalRow = {
-      provider: 'orca' as const,
+      provider: 'quirky' as const,
       clientMessageId: `codex-goal:${'1'.repeat(64)}:${'2'.repeat(64)}:${'3'.repeat(64)}`
     }
     const goalBody = {

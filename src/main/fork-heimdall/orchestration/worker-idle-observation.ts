@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { redactWorkerTerminalLines } from '../../runtime/orchestration/worker-terminal-redaction'
 import {
@@ -21,7 +21,7 @@ function unavailable(reason: string): WorkerIdleObservation {
 
 /** Adapter entry point: a lost coordinator seat propagates; any other failure is `unavailable`. */
 export async function observeEnrolledWorkerIdle(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   dispatchId: string,
   resolveRun: (runId: string) => RunRow
@@ -43,7 +43,7 @@ export async function observeEnrolledWorkerIdle(
  * waiting or done; everything else is `active` or `unavailable`, never inferred idle.
  */
 export async function observeWorkerIdle(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   db: OrchestrationDb,
   run: RunRow,
   dispatchId: string
@@ -89,7 +89,7 @@ export async function observeWorkerIdle(
 }
 
 async function readLastMessage(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   args: { dispatchId: string; handle: string; workerState: string; attachedAt: string }
 ): Promise<WorkerLastMessage | null> {
   let output: OrchestrationWorkerReadResult

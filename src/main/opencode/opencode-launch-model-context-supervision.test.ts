@@ -35,7 +35,7 @@ setTimeout(() => {
 const OWNER = String.raw`
 import { probeOpenCodeLaunchModelContext } from './opencode-launch-model-context'
 void probeOpenCodeLaunchModelContext({
-  executable: process.env.ORCA_TEST_STAND_IN!,
+  executable: process.env.QUIRKY_TEST_STAND_IN!,
   cwd: process.cwd(),
   env: process.env
 }).catch(() => {})
@@ -81,7 +81,7 @@ describe.runIf(process.platform !== 'win32')('supervised OpenCode launch-context
     rig = createSupervisedProbeRig()
     const executable = rig.writeStandIn('opencode')
     const bundle = await rig.bundleOwner(OWNER, __dirname)
-    const owner = rig.launchOwner(bundle, { ORCA_TEST_STAND_IN: executable })
+    const owner = rig.launchOwner(bundle, { QUIRKY_TEST_STAND_IN: executable })
     const pids = await rig.readPids()
 
     owner.kill('SIGKILL')

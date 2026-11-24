@@ -13,7 +13,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 let root: string
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-overlay-source-')))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-overlay-source-')))
 })
 afterEach(() => {
   vi.restoreAllMocks()

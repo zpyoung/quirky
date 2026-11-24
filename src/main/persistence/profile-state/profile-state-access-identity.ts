@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { parseLinuxProcStartTicks } from '../../daemon/daemon-process-start-time'
 import { getPsProcessIdentity } from '../../daemon/daemon-process-identity-query'
 
@@ -35,7 +35,7 @@ export function profileStateAccessMachineIdentity(): string | null {
 
 /**
  * Lowercased so this matches what the SSH machine-home probe reads from the same source
- * (`orcad-machine-home.ts`); the two compare owner records against each other.
+ * (`quirkyd-machine-home.ts`); the two compare owner records against each other.
  */
 export function parseDarwinPlatformUuid(ioregOutput: string): string | null {
   const value = /"IOPlatformUUID"\s*=\s*"([^"]*)"/u.exec(ioregOutput)?.[1]?.toLowerCase()

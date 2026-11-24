@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
-import { claudeSessionIdForOrcaSession } from '../claude/claude-structured-launch-resolution'
+import { claudeSessionIdForQuirkySession } from '../claude/claude-structured-launch-resolution'
 import { hostTestMessage } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
@@ -75,7 +75,7 @@ function turnReportsModel(model: string): void {
   claude.child(SESSION).handlers.onMessage?.({
     type: 'system',
     subtype: 'init',
-    session_id: claudeSessionIdForOrcaSession(SESSION),
+    session_id: claudeSessionIdForQuirkySession(SESSION),
     model
   })
 }
@@ -221,8 +221,8 @@ describe('a Claude start whose CLI answers initialize but not a control request'
     expect(cleared.ok && cleared.value.replacementSessionId).toBeUndefined()
     const boundary = record(host)?.providerContextBoundary
     expect(boundary).toBeDefined()
-    const freshProviderSessionId = claudeSessionIdForOrcaSession(SESSION, boundary?.operationId)
-    expect(freshProviderSessionId).not.toBe(claudeSessionIdForOrcaSession(SESSION))
+    const freshProviderSessionId = claudeSessionIdForQuirkySession(SESSION, boundary?.operationId)
+    expect(freshProviderSessionId).not.toBe(claudeSessionIdForQuirkySession(SESSION))
     claude.behave(SESSION, LIVE_START)
     // The cleared chat starts nothing until its first message.
     expect(claude.children(SESSION)).toHaveLength(1)

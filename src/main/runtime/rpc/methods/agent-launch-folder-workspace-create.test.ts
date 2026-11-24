@@ -177,7 +177,7 @@ describe('a replayed folder launch', () => {
   let store: AgentSessionRecordStore
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-agent-launch-folder-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-agent-launch-folder-'))
     store = await openTestAgentSessionRecordStore(directory)
     setAgentLaunchRecordStore(store)
   })

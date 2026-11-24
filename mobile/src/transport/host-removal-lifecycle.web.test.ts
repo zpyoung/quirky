@@ -35,7 +35,7 @@ describe('removing a host from the page', () => {
 
   it('says where removal does work, rather than asking for a retry that cannot succeed', async () => {
     await expect(removeHostAndCloseClient('host-1', vi.fn())).rejects.toThrow(
-      'Remove this host from the host list in the Orca app.'
+      'Remove this host from the host list in the Quirky app.'
     )
   })
 

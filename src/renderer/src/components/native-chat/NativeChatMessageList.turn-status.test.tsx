@@ -25,7 +25,7 @@ afterEach(() => {
   expect(unusedChatLeaves.openSender).not.toHaveBeenCalled()
 })
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { NativeChatOrcaStopContext } from './native-chat-orca-stop-context'
+import { NativeChatQuirkyStopContext } from './native-chat-quirky-stop-context'
 import { agentSessionFailureWords } from '../../../../shared/agent-session-failure-words'
 import type {
   AgentJournalItemBody,
@@ -303,7 +303,7 @@ const usageLimitView = {
       ]
       render(
         <TooltipProvider>
-          <NativeChatOrcaStopContext.Provider value={usageLimitView}>
+          <NativeChatQuirkyStopContext.Provider value={usageLimitView}>
             <NativeChatMessageList
               session={{
                 ...session,
@@ -316,7 +316,7 @@ const usageLimitView = {
               isWorking={false}
               expandSignal={false}
             />
-          </NativeChatOrcaStopContext.Provider>
+          </NativeChatQuirkyStopContext.Provider>
         </TooltipProvider>
       )
       expect(screen.getByRole('button', { name: 'Toggle turn details' })).toHaveAttribute(

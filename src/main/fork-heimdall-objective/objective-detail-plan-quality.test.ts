@@ -121,7 +121,7 @@ describe('buildObjectiveDetailPlanQuality', () => {
       completedAtMs: 450,
       terminalHandle: null,
       setupState: 'retained',
-      reportPath: '.orca/reports/task-a.json',
+      reportPath: '.quirky/reports/task-a.json',
       report: {
         taskKey: 'task-a',
         summary: 'Applied',

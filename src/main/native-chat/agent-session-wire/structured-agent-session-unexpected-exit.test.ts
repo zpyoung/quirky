@@ -228,7 +228,7 @@ describe('provider-exit settlement', () => {
         {
           kind: 'item',
           identity: {
-            provider: 'orca',
+            provider: 'quirky',
             clientMessageId: `provider-exit:${SESSION}:7:${GENERATION}`
           },
           body: {

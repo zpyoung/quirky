@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import { RuntimeSshAccessControl } from './RuntimeSshAccessControl'
 
 function environment(
@@ -35,7 +35,7 @@ function renderControl(env: PublicKnownRuntimeEnvironment) {
   const linkSshAccess = vi.fn(async () => env)
   const unlinkSshAccess = vi.fn(async () => env)
   const onChanged = vi.fn()
-  const api: Pick<ManagedOrcadPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'> = {
+  const api: Pick<ManagedQuirkydPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'> = {
     linkSshAccess,
     unlinkSshAccess
   }

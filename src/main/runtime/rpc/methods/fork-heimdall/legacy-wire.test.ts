@@ -7,7 +7,7 @@ import {
 } from '../../../../../shared/protocol-version'
 import { remoteRuntimeClientCapabilities } from '../../../../../shared/remote-runtime-client-capabilities'
 import type { WatcherListEntry } from '../../../../../shared/fork-heimdall/watcher-types'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext, type RpcMethod } from '../../core'
 import { HEIMDALL_METHODS } from './heimdall'
 import { bindHeimdallKernel } from './kernel-binding'
@@ -42,7 +42,7 @@ function method(name: string): RpcMethod {
 }
 
 async function call<TResult = unknown>(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   name: string,
   params: unknown,
   context: Pick<RpcContext, 'clientKind' | 'clientCapabilities'> = {}
@@ -55,7 +55,7 @@ async function call<TResult = unknown>(
 }
 
 function harness(entries: unknown[] = []) {
-  const runtime = new OrcaRuntimeService(null)
+  const runtime = new QuirkyRuntimeService(null)
   const ledger = { watcherId: 'watcher-1', entries }
   const debugReport = {
     schemaVersion: 2,

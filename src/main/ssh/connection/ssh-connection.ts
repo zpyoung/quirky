@@ -22,7 +22,7 @@ import type {
 } from 'ssh2'
 import type { SshTarget, SshConnectionState, SshConnectionStatus } from '../../../shared/ssh-types'
 import {
-  getOrcaControlSocketPath,
+  getQuirkyControlSocketPath,
   isOpenSshConfigBackedTarget,
   type SystemSshBuildArgsOptions
 } from '../system-transport/system-ssh-args'
@@ -157,7 +157,7 @@ function isGitHubRestrictedShellProbeSuccess(
 
   // GitHub appends git:// advisory lines after the invalid-command line (issue #6988), so match the first line only.
   const firstLine = stderr.split('\n', 1)[0]?.trim()
-  if (firstLine !== 'Invalid command: echo ORCA-SYSTEM-SSH-OK') {
+  if (firstLine !== 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK') {
     return false
   }
 
@@ -271,7 +271,7 @@ export class SshConnection {
       return true
     }
     return (
-      getOrcaControlSocketPath(this.target, {
+      getQuirkyControlSocketPath(this.target, {
         ...this.getSystemSshBuildArgsOptions()
       }) !== null
     )
@@ -686,7 +686,7 @@ export class SshConnection {
       if (isSystemSshFallbackError(err)) {
         this.killProxyIfCurrent(connectGeneration)
         try {
-          // Why: on macOS, per-app network policy can block Orca's direct TCP socket while the system OpenSSH binary is still allowed.
+          // Why: on macOS, per-app network policy can block Quirky's direct TCP socket while the system OpenSSH binary is still allowed.
           await this.doSystemSshProbeWithControlMasterRetry(connectGeneration, resolved)
           return
         } catch {
@@ -916,7 +916,7 @@ export class SshConnection {
     this.killProxy()
 
     // Why: this probe runs before remote platform detection; a raw echo works under POSIX shells, cmd.exe, and PowerShell, but `/bin/sh` wrapping does not.
-    const channel = this.spawnTrackedSystemSshCommand('echo ORCA-SYSTEM-SSH-OK', {
+    const channel = this.spawnTrackedSystemSshCommand('echo QUIRKY-SYSTEM-SSH-OK', {
       wrapCommand: false
     })
     try {
@@ -956,7 +956,7 @@ export class SshConnection {
               return
             }
             if (
-              (code === 0 && stdout.includes('ORCA-SYSTEM-SSH-OK')) ||
+              (code === 0 && stdout.includes('QUIRKY-SYSTEM-SSH-OK')) ||
               isGitHubRestrictedShellProbeSuccess(
                 this.target,
                 this.systemSshResolvedConfig,
@@ -1008,7 +1008,7 @@ export class SshConnection {
     this.systemSshResolvedConfig = cloneResolvedConfig(resolved)
     this.systemSshControlMasterDisabledForSession = false
     this.systemSshGssapiOnlyForSession = gssapiOnly
-    const controlPath = getOrcaControlSocketPath(this.target, {
+    const controlPath = getQuirkyControlSocketPath(this.target, {
       resolvedConfig: this.systemSshResolvedConfig,
       gssapiOnly: this.systemSshGssapiOnlyForSession
     })

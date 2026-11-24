@@ -1,5 +1,5 @@
 /**
- * The bracketed-paste frame Orca writes for pasted text: the renderer's terminal paste and draft
+ * The bracketed-paste frame Quirky writes for pasted text: the renderer's terminal paste and draft
  * paste, and the host's launch prompt, which replaced the desktop's draft paste and must send the
  * same bytes.
  */

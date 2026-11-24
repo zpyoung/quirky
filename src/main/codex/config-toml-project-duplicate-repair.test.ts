@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { findDuplicateTomlDeclarations } from './config-toml-duplicate-declarations-test-fixture'
-import { repairOrcaDuplicateTrustTables } from './config-toml-project-duplicate-repair'
+import { repairQuirkyDuplicateTrustTables } from './config-toml-project-duplicate-repair'
 import { upsertProjectTrustLevel, upsertProjectTrustLevelInContent } from './config-toml-trust'
 import {
   createTrustConfigFixture,
@@ -26,9 +26,9 @@ afterEach(() => {
 })
 
 describe('repairing configs broken by #22592', () => {
-  it('removes the table Orca appended beside Codex quoted spelling and keeps a .bak', () => {
+  it('removes the table Quirky appended beside Codex quoted spelling and keeps a .bak', () => {
     const projectPath = '/Users/me/Projects/agentic-WPS'
-    // The reported file: Codex's table, then the duplicate an older Orca appended.
+    // The reported file: Codex's table, then the duplicate an older Quirky appended.
     const broken = [
       'model = "gpt-5.5"',
       '',
@@ -87,7 +87,7 @@ describe('repairing configs broken by #22592', () => {
     )
   })
 
-  it('removes the bare trust_level line Orca inserted under a quoted key', () => {
+  it('removes the bare trust_level line Quirky inserted under a quoted key', () => {
     const broken = [
       '["projects"."/repo-c"]',
       'trust_level = "trusted"',
@@ -95,7 +95,7 @@ describe('repairing configs broken by #22592', () => {
       ''
     ].join('\r\n')
 
-    const repaired = repairOrcaDuplicateTrustTables(broken)
+    const repaired = repairQuirkyDuplicateTrustTables(broken)
 
     expect(repaired).toBe(['["projects"."/repo-c"]', '"trust_level" = "trusted"', ''].join('\r\n'))
   })
@@ -110,7 +110,7 @@ describe('repairing configs broken by #22592', () => {
       ''
     ].join('\n')
 
-    const repaired = repairOrcaDuplicateTrustTables(broken)
+    const repaired = repairQuirkyDuplicateTrustTables(broken)
 
     expect(repaired).toBe(
       ["['projects'.'C:\\Users\\me\\repo']", "trust_level = 'trusted'", ''].join('\n')
@@ -127,7 +127,7 @@ describe('repairing configs broken by #22592', () => {
       ''
     ].join('\n')
 
-    expect(repairOrcaDuplicateTrustTables(config)).toBe(config)
+    expect(repairQuirkyDuplicateTrustTables(config)).toBe(config)
     expect(warn).not.toHaveBeenCalled()
   })
 
@@ -170,14 +170,14 @@ describe('repairing configs broken by #22592', () => {
       ''
     ].join('\n')
 
-    expect(repairOrcaDuplicateTrustTables(broken)).toBe(broken)
+    expect(repairQuirkyDuplicateTrustTables(broken)).toBe(broken)
     expect(warn).toHaveBeenCalledTimes(1)
   })
 
   it('does not touch a valid config', () => {
     const config = ['["projects"."/repo-f"]', '"trust_level" = "trusted"', ''].join('\n')
 
-    expect(repairOrcaDuplicateTrustTables(config)).toBe(config)
+    expect(repairQuirkyDuplicateTrustTables(config)).toBe(config)
     expect(warn).not.toHaveBeenCalled()
   })
 })

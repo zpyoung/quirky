@@ -17,11 +17,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -30,7 +30,7 @@ describe('AgentHookServer listener replay', () => {
         postClaudeHook({
           hook_event_name: 'PermissionRequest',
           tool_name: 'Bash',
-          tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+          tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
         })
       ).resolves.toMatchObject({ status: 204 })
       await expect(
@@ -47,7 +47,7 @@ describe('AgentHookServer listener replay', () => {
           state: 'waiting',
           agentType: 'claude',
           toolName: 'Bash',
-          toolInput: 'rm -rf /tmp/orca-subagent-repro'
+          toolInput: 'rm -rf /tmp/quirky-subagent-repro'
         })
       ])
     } finally {
@@ -61,11 +61,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -73,12 +73,12 @@ describe('AgentHookServer listener replay', () => {
       await postClaudeHook({
         hook_event_name: 'PermissionRequest',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
       })
       await postClaudeHook({
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
       })
 
       expect(server.getStatusSnapshot()).toEqual([
@@ -87,7 +87,7 @@ describe('AgentHookServer listener replay', () => {
           state: 'waiting',
           agentType: 'claude',
           toolName: 'Bash',
-          toolInput: 'rm -rf /tmp/orca-subagent-repro'
+          toolInput: 'rm -rf /tmp/quirky-subagent-repro'
         })
       ])
     } finally {
@@ -101,11 +101,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -113,12 +113,12 @@ describe('AgentHookServer listener replay', () => {
       await postClaudeHook({
         hook_event_name: 'PermissionRequest',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
       })
       await postClaudeHook({
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' },
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' },
         tool_use_id: 'toolu-approved-1'
       })
 
@@ -128,7 +128,7 @@ describe('AgentHookServer listener replay', () => {
           state: 'waiting',
           agentType: 'claude',
           toolName: 'Bash',
-          toolInput: 'rm -rf /tmp/orca-subagent-repro'
+          toolInput: 'rm -rf /tmp/quirky-subagent-repro'
         })
       ])
     } finally {
@@ -142,11 +142,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -154,18 +154,18 @@ describe('AgentHookServer listener replay', () => {
       await postClaudeHook({
         hook_event_name: 'PreToolUse',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-2824-permission-target' },
+        tool_input: { command: 'rm -rf /tmp/quirky-2824-permission-target' },
         tool_use_id: 'toolu-approved-by-claude'
       })
       await postClaudeHook({
         hook_event_name: 'PermissionRequest',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-2824-permission-target' }
+        tool_input: { command: 'rm -rf /tmp/quirky-2824-permission-target' }
       })
       await postClaudeHook({
         hook_event_name: 'PostToolUse',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-2824-permission-target' },
+        tool_input: { command: 'rm -rf /tmp/quirky-2824-permission-target' },
         tool_use_id: 'toolu-approved-by-claude'
       })
 
@@ -175,7 +175,7 @@ describe('AgentHookServer listener replay', () => {
           state: 'working',
           agentType: 'claude',
           toolName: 'Bash',
-          toolInput: 'rm -rf /tmp/orca-2824-permission-target'
+          toolInput: 'rm -rf /tmp/quirky-2824-permission-target'
         })
       ])
     } finally {
@@ -189,11 +189,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -235,11 +235,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -282,11 +282,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -332,11 +332,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -345,13 +345,13 @@ describe('AgentHookServer listener replay', () => {
         hook_event_name: 'PermissionRequest',
         agent_type: 'main',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
       })
       await postClaudeHook({
         hook_event_name: 'PreToolUse',
         agent_type: 'main',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' },
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' },
         tool_use_id: 'toolu-approved-1'
       })
 
@@ -361,7 +361,7 @@ describe('AgentHookServer listener replay', () => {
           state: 'working',
           agentType: 'claude',
           toolName: 'Bash',
-          toolInput: 'rm -rf /tmp/orca-subagent-repro'
+          toolInput: 'rm -rf /tmp/quirky-subagent-repro'
         })
       ])
     } finally {
@@ -375,11 +375,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -420,11 +420,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -465,11 +465,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -510,11 +510,11 @@ describe('AgentHookServer listener replay', () => {
     try {
       const env = server.buildPtyEnv()
       const postClaudeHook = async (payload: Record<string, unknown>): Promise<Response> =>
-        fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/claude`, {
+        fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/claude`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+            'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
           },
           body: JSON.stringify(buildBody(payload))
         })
@@ -522,7 +522,7 @@ describe('AgentHookServer listener replay', () => {
       await postClaudeHook({
         hook_event_name: 'PermissionRequest',
         tool_name: 'Bash',
-        tool_input: { command: 'rm -rf /tmp/orca-subagent-repro' }
+        tool_input: { command: 'rm -rf /tmp/quirky-subagent-repro' }
       })
       await postClaudeHook({
         hook_event_name: 'UserPromptSubmit',
@@ -549,11 +549,11 @@ describe('AgentHookServer listener replay', () => {
     await server.start({ env: 'production' })
     try {
       const env = server.buildPtyEnv()
-      await fetch(`http://127.0.0.1:${env.ORCA_AGENT_HOOK_PORT}/hook/codex`, {
+      await fetch(`http://127.0.0.1:${env.QUIRKY_AGENT_HOOK_PORT}/hook/codex`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Orca-Agent-Hook-Token': env.ORCA_AGENT_HOOK_TOKEN
+          'X-Quirky-Agent-Hook-Token': env.QUIRKY_AGENT_HOOK_TOKEN
         },
         body: JSON.stringify(
           buildBody({

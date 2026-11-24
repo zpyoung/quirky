@@ -43,7 +43,7 @@ async function stopEndingTheChild(options: {
   takesSendBack: boolean
   earlierProcessSendInDoubt?: boolean
 }) {
-  root = await mkdtemp(join(tmpdir(), 'orca-stop-note-withdrawn-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-stop-note-withdrawn-'))
   const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
   if (options.turnRunning) {
     await journal.appendItem(

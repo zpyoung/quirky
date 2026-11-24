@@ -42,11 +42,11 @@ The sole production change replaces both branch-specific decisions with `callerP
 
 The route regression invokes the production renderer payload builder, RPC schema/mapper, runtime creation, and terminal provisioner. The renderer test separately checks the actual execute call's selected agent, absent startup, and absent startup draft. This is composed route evidence, not a rendered end-to-end UI test. The runtime fixture waits for provisioning to observe terminal calls deterministically.
 
-Reviewed the lead's pre-fix log `/tmp/orca-native-chat-before.log`: both agent cases failed on the unexpected `undefined` command preceding Setup, while nine controls passed. Reviewed `/tmp/orca-native-chat-tests.log`: seven files passed, 1,451 tests passed and one skipped. Supplemental validation is attributed below.
+Reviewed the lead's pre-fix log `/tmp/quirky-native-chat-before.log`: both agent cases failed on the unexpected `undefined` command preceding Setup, while nine controls passed. Reviewed `/tmp/quirky-native-chat-tests.log`: seven files passed, 1,451 tests passed and one skipped. Supplemental validation is attributed below.
 
-P2 test hardening resolved during final review: the split control now asserts that `ORCA_TAB_ID` is a nonempty string before comparing the two panes' values.
+P2 test hardening resolved during final review: the split control now asserts that `QUIRKY_TAB_ID` is a nonempty string before comparing the two panes' values.
 
-Independent baseline run: `ORCA_BACKGROUND_LAUNCH=1 pnpm test` for `runtime-local-worktree-terminal-startup.test.ts`, `runtime-worktree-terminal-provisioning.test.ts`, `runtime-folder-worktree-create.test.ts`, and `rpc/methods/worktree-create-args.test.ts` passed all 37 tests in four files. These existing tests establish controls; they do not demonstrate the new regression fix.
+Independent baseline run: `QUIRKY_BACKGROUND_LAUNCH=1 pnpm test` for `runtime-local-worktree-terminal-startup.test.ts`, `runtime-worktree-terminal-provisioning.test.ts`, `runtime-folder-worktree-create.test.ts`, and `rpc/methods/worktree-create-args.test.ts` passed all 37 tests in four files. These existing tests establish controls; they do not demonstrate the new regression fix.
 
 The added node typecheck include names only the pure, type-only-importing renderer payload builder used by the regression; it follows existing cross-layer fixture includes and introduces no runtime renderer dependency.
 

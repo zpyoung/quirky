@@ -23,7 +23,7 @@ afterEach(async () => {
 })
 
 async function tempRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-scan-progress-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-scan-progress-'))
   tempRoots.push(root)
   return root
 }

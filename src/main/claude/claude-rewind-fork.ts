@@ -65,7 +65,7 @@ export async function readClaudePromptParentUuid(input: {
  * it. Null when no searched home holds that prompt.
  */
 export async function resolveClaudeRewindFork(input: {
-  orcaSessionId: string
+  quirkySessionId: string
   rewindOperationId: string
   head: AgentSessionProviderHandle
   prompt: { sessionId: string; uuid: string }
@@ -79,7 +79,7 @@ export async function resolveClaudeRewindFork(input: {
     })
     if (parent !== undefined) {
       const fork = {
-        sessionId: claudeSessionIdForRewind(input.orcaSessionId, input.rewindOperationId),
+        sessionId: claudeSessionIdForRewind(input.quirkySessionId, input.rewindOperationId),
         sourceSessionId: input.prompt.sessionId,
         ...(parent ? { throughEntryId: parent } : {}),
         replacesSessionId: input.head.nativeId
@@ -98,7 +98,7 @@ export async function resolveClaudeRewindFork(input: {
 }
 
 /** The adapter's answer: the fork for a rewind of `record` to before `beforeMessage`, read from any
- *  Claude home Orca knows, since the chat's account may have changed since that message. */
+ *  Claude home Quirky knows, since the chat's account may have changed since that message. */
 export const claudeForkForRewind: NonNullable<
   StructuredAgentSessionAdapter['forkForRewind']
 > = async ({ record, beforeMessage, rewindOperationId }) => {
@@ -108,7 +108,7 @@ export const claudeForkForRewind: NonNullable<
   }
   const router = getClaudeProfileRouter()
   const fork = await resolveClaudeRewindFork({
-    orcaSessionId: record.sessionId,
+    quirkySessionId: record.sessionId,
     rewindOperationId,
     head,
     prompt: beforeMessage,

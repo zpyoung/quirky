@@ -9,17 +9,17 @@
 
 import type { AgentLaunchPreferences } from '../../../../../../shared/agent-session-host-authority'
 import type { TuiAgent } from '../../../../../../shared/tui-agent'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { WorkerEffect, WorkerSetupReceipt } from './worker-topology'
 
 export async function createWorkerWorktree(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   dispatchId: string
   requestedWorktree: string
   coordinatorWorktree: Pick<
-    Awaited<ReturnType<OrcaRuntimeService['showManagedWorktree']>>,
+    Awaited<ReturnType<QuirkyRuntimeService['showManagedWorktree']>>,
     'id' | 'repoId'
   >
   params: {
@@ -43,7 +43,7 @@ export async function createWorkerWorktree(args: {
   launchPreferences?: AgentLaunchPreferences
   effects: WorkerEffect[]
 }): Promise<{
-  worktree: Awaited<ReturnType<OrcaRuntimeService['showManagedWorktree']>>
+  worktree: Awaited<ReturnType<QuirkyRuntimeService['showManagedWorktree']>>
   terminalHandle: string | undefined
   setupReceipt: WorkerSetupReceipt
 }> {
@@ -140,7 +140,7 @@ export async function createWorkerWorktree(args: {
     terminalId: setupTerminalHandle ?? setupTerminal?.id
   })
   return {
-    worktree: created.worktree as Awaited<ReturnType<OrcaRuntimeService['showManagedWorktree']>>,
+    worktree: created.worktree as Awaited<ReturnType<QuirkyRuntimeService['showManagedWorktree']>>,
     terminalHandle,
     setupReceipt
   }

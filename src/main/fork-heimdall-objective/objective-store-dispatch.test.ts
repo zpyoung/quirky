@@ -50,7 +50,7 @@ describe('ObjectiveStore durable dispatches', () => {
       completedAtMs: 800,
       terminalHandle: 'terminal-node-a',
       setupState: 'ready',
-      reportPath: '.orca/reports/task-a.json',
+      reportPath: '.quirky/reports/task-a.json',
       report: {
         taskKey: 'task-a',
         summary: 'Implemented task A',

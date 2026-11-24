@@ -68,7 +68,7 @@ export function unretryable(entry: ResumeCandidate): ResumeFailure {
   }
 }
 
-/** Repo "orca": parent (1 chat) > child (2 chats), plus an unrelated root workspace "other". */
+/** Repo "quirky": parent (1 chat) > child (2 chats), plus an unrelated root workspace "other". */
 export function seedTree(hosts: { parent?: ExecutionHostId; child?: ExecutionHostId } = {}) {
   // An explicit undefined is a row with no host id (older metadata).
   const parentHost = 'parent' in hosts ? hosts.parent : 'local'
@@ -78,7 +78,7 @@ export function seedTree(hosts: { parent?: ExecutionHostId; child?: ExecutionHos
   useAppStore.setState({
     settings: getDefaultSettings(''),
     repos: [
-      { id: 'repo-1', path: '/repo', displayName: 'orca', badgeColor: '#999999', addedAt: 1 }
+      { id: 'repo-1', path: '/repo', displayName: 'quirky', badgeColor: '#999999', addedAt: 1 }
     ],
     worktreesByRepo: { 'repo-1': [parent, child, other] },
     worktreeLineageById: { [child.id]: lineage(child, parent) }

@@ -12,7 +12,7 @@ import {
 // Why never-created paths: each sits under a missing folder or is a forced no-op removal, so even
 // with the guard off (the ablation) nothing lands in the real home.
 const missingRealFolder = (entry: string) =>
-  join(userInfo().homedir, entry, `orca-vitest-guard-${randomUUID()}`)
+  join(userInfo().homedir, entry, `quirky-vitest-guard-${randomUUID()}`)
 
 afterEach(() => {
   takeRealAgentHomeWriteViolations()
@@ -23,11 +23,11 @@ describe('vitest real-agent-home write guard', () => {
   it.each([undefined, '', '0', 'true', '1'])(
     'keeps only the explicitly opted-in Claude profile for %s',
     (value) => {
-      vi.stubEnv('ORCA_REAL_CLAUDE_CLI_TEST', value)
+      vi.stubEnv('QUIRKY_REAL_CLAUDE_CLI_TEST', value)
       vi.stubEnv('CLAUDE_CONFIG_DIR', '/tmp/explicit-claude-profile')
       vi.stubEnv('CODEX_HOME', '/tmp/inherited-codex-profile')
-      vi.stubEnv('ORCA_USER_DATA_PATH', '/tmp/inherited-orca-state')
-      vi.stubEnv('ORCA_CODEX_LAUNCH_PREFLIGHT', '/tmp/inherited-live-cli')
+      vi.stubEnv('QUIRKY_USER_DATA_PATH', '/tmp/inherited-quirky-state')
+      vi.stubEnv('QUIRKY_CODEX_LAUNCH_PREFLIGHT', '/tmp/inherited-live-cli')
 
       clearInheritedAgentStateEnv()
 
@@ -35,8 +35,8 @@ describe('vitest real-agent-home write guard', () => {
         value === '1' ? '/tmp/explicit-claude-profile' : undefined
       )
       expect(process.env.CODEX_HOME).toBeUndefined()
-      expect(process.env.ORCA_USER_DATA_PATH).toBeUndefined()
-      expect(process.env.ORCA_CODEX_LAUNCH_PREFLIGHT).toBeUndefined()
+      expect(process.env.QUIRKY_USER_DATA_PATH).toBeUndefined()
+      expect(process.env.QUIRKY_CODEX_LAUNCH_PREFLIGHT).toBeUndefined()
       expect(() => rmSync(missingRealFolder('.claude'), { force: true })).toThrow(
         /real-agent-home guard/
       )
@@ -50,13 +50,13 @@ describe('vitest real-agent-home write guard', () => {
   })
 
   it('allows only Claude transcript writes for the real CLI opt-in', () => {
-    vi.stubEnv('ORCA_REAL_CLAUDE_CLI_TEST', '1')
+    vi.stubEnv('QUIRKY_REAL_CLAUDE_CLI_TEST', '1')
     const missingTranscript = missingRealFolder(join('.claude', 'projects'))
     expect(() => rmSync(missingTranscript, { force: true })).not.toThrow()
     expect(() => rmSync(missingRealFolder('.codex'), { force: true })).toThrow(
       /real-agent-home guard/
     )
-    expect(() => rmSync(missingRealFolder('.orca'), { force: true })).toThrow(
+    expect(() => rmSync(missingRealFolder('.quirky'), { force: true })).toThrow(
       /real-agent-home guard/
     )
   })
@@ -68,7 +68,7 @@ describe('vitest real-agent-home write guard', () => {
   })
 
   it('refuses a removal that would otherwise succeed silently', () => {
-    expect(() => rmSync(missingRealFolder('.orca'), { recursive: true, force: true })).toThrow(
+    expect(() => rmSync(missingRealFolder('.quirky'), { recursive: true, force: true })).toThrow(
       /real-agent-home guard/
     )
   })
@@ -83,7 +83,7 @@ describe('vitest real-agent-home write guard', () => {
   })
 
   it('protects the account home even when HOME points elsewhere', () => {
-    const tempHome = mkdtempSync(join(tmpdir(), 'orca-vitest-guard-home-'))
+    const tempHome = mkdtempSync(join(tmpdir(), 'quirky-vitest-guard-home-'))
     vi.stubEnv('HOME', tempHome)
     vi.stubEnv('USERPROFILE', tempHome)
     try {
@@ -97,18 +97,18 @@ describe('vitest real-agent-home write guard', () => {
   })
 
   it('leaves a sibling that only shares an agent folder prefix alone', () => {
-    const sibling = join(userInfo().homedir, `.codex-orca-vitest-guard-${randomUUID()}`)
+    const sibling = join(userInfo().homedir, `.codex-quirky-vitest-guard-${randomUUID()}`)
     expect(() => rmSync(sibling, { force: true })).not.toThrow()
   })
 
   it('stands down while an opted-in real-agent suite switch is set', () => {
-    vi.stubEnv('ORCA_CODEX_TRUST_CONTRACT_BINARY', '/opt/codex')
+    vi.stubEnv('QUIRKY_CODEX_TRUST_CONTRACT_BINARY', '/opt/codex')
     expect(() => rmSync(missingRealFolder('.codex'), { force: true })).not.toThrow()
   })
 
   it('allows reads there and writes under a temp home', () => {
     expect(() => openSync(join(missingRealFolder('.codex'), 'config.toml'), 'r')).toThrow(/ENOENT/)
-    const tempHome = mkdtempSync(join(tmpdir(), 'orca-vitest-guard-home-'))
+    const tempHome = mkdtempSync(join(tmpdir(), 'quirky-vitest-guard-home-'))
     try {
       const target = join(tempHome, '.codex', 'config.toml')
       mkdirSync(join(tempHome, '.codex'))

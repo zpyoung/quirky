@@ -23,7 +23,7 @@ let transcriptPath = ''
 beforeEach(async () => {
   clearNativeChatSubscriptions()
   registerNativeChatHandlers()
-  transcriptDirectory = await mkdtemp(join(tmpdir(), 'orca-native-chat-renderer-lifetime-'))
+  transcriptDirectory = await mkdtemp(join(tmpdir(), 'quirky-native-chat-renderer-lifetime-'))
   transcriptPath = join(transcriptDirectory, 'session.jsonl')
   await writeFile(
     transcriptPath,

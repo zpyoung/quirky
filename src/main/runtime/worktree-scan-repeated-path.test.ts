@@ -25,7 +25,7 @@ vi.mock('./repo-worktree-admin-fingerprint', () => ({
   readRepoWorktreeAdminFingerprint: vi.fn(async () => null)
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { GitWorktreeInfo } from '../../shared/worktree/types'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
@@ -48,7 +48,7 @@ const OTHER_SPELLING_ROW = {
   isMainWorktree: false
 }
 
-function makeRuntime(options: { connectionId?: string } = {}): OrcaRuntimeService {
+function makeRuntime(options: { connectionId?: string } = {}): QuirkyRuntimeService {
   const metaById: Record<string, Record<string, unknown>> = {}
   const repos = [
     {
@@ -81,14 +81,14 @@ function makeRuntime(options: { connectionId?: string } = {}): OrcaRuntimeServic
     getProjects: () => []
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub carries the repo, meta, lineage and settings reads a worktree listing makes; the rest of Store is unreached.
-  return new OrcaRuntimeService(store as never)
+  return new QuirkyRuntimeService(store as never)
 }
 
 function gitLists(worktrees: GitWorktreeInfo[]): void {
   localScanMock.mockResolvedValue({ ok: true, worktrees })
 }
 
-async function listedRows(runtime: OrcaRuntimeService): Promise<string[]> {
+async function listedRows(runtime: QuirkyRuntimeService): Promise<string[]> {
   const listed = await runtime.listManagedWorktrees()
   return listed.worktrees.map((worktree) => `${worktree.id} ${worktree.branch}`)
 }

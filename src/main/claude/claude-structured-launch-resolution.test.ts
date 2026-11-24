@@ -10,12 +10,12 @@ import {
   CLAUDE_DEFAULT_SETTING_SOURCES,
   CLAUDE_SESSION_STATE_EVENTS_ENV,
   CLAUDE_STRUCTURED_BASE_OPTIONS,
-  claudeSessionIdForOrcaSession
+  claudeSessionIdForQuirkySession
 } from './claude-structured-launch-resolution'
 import { CLAUDE_THINKING_DISPLAY_FLAG, type ClaudeCliFlag } from './claude-cli-flag-support'
 import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
 
-const SESSION_ID = 'orca-session-1'
+const SESSION_ID = 'quirky-session-1'
 const IDENTITY = { sessionId: SESSION_ID } as Parameters<
   ReturnType<typeof createClaudeStructuredLaunchResolver>
 >[0]['identity']
@@ -80,7 +80,7 @@ const RESUMABLE = record({
 
 describe('claude structured launch resolution', () => {
   it('resumes a floating session in its pinned folder, not the current floating setting', async () => {
-    const pinned = mkdtempSync(join(tmpdir(), 'orca-claude-floating-'))
+    const pinned = mkdtempSync(join(tmpdir(), 'quirky-claude-floating-'))
     const floating = record({
       location: { ...record().location, workspaceId: FLOATING_TERMINAL_WORKTREE_ID },
       launchDirectory: pinned
@@ -96,7 +96,7 @@ describe('claude structured launch resolution', () => {
     const first = await resolverFor(record())({ identity: IDENTITY })
     const second = await resolverFor(record())({ identity: IDENTITY })
 
-    expect(first.providerSessionId).toBe(claudeSessionIdForOrcaSession(SESSION_ID))
+    expect(first.providerSessionId).toBe(claudeSessionIdForQuirkySession(SESSION_ID))
     expect(second.providerSessionId).toBe(first.providerSessionId)
     expect(first).toMatchObject({
       pathToClaudeCodeExecutable: '/usr/local/bin/claude',
@@ -136,9 +136,9 @@ describe('claude structured launch resolution', () => {
         'system',
         hasTranscript
       )({ identity: identityAt('old-leaf') })
-      const expected = claudeSessionIdForOrcaSession(SESSION_ID, boundary.operationId)
+      const expected = claudeSessionIdForQuirkySession(SESSION_ID, boundary.operationId)
       expect(launch.providerSessionId).toBe(expected)
-      expect(expected).not.toBe(claudeSessionIdForOrcaSession(SESSION_ID))
+      expect(expected).not.toBe(claudeSessionIdForQuirkySession(SESSION_ID))
       expect(launch.continuesChain).toBe(false)
       expect(launch.resumeLeafUuid).toBeNull()
       expect(launch.resumesTranscript).toBe(saved)
@@ -188,17 +188,17 @@ describe('claude structured launch resolution', () => {
     expect(launch.options.sessionId).toBeUndefined()
   })
 
-  it('names the child by the Orca session id, over any id the configured overlay carries', async () => {
-    // The Orca-minted id, never the provider's: the provider id rotates on /clear.
+  it('names the child by the Quirky session id, over any id the configured overlay carries', async () => {
+    // The Quirky-minted id, never the provider's: the provider id rotates on /clear.
     const launch = await resolverFor(record(), () => ({
-      ORCA_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd'
+      QUIRKY_AGENT_SESSION_ID: 'a0b1c2d3-0000-4000-8000-00000000abcd'
     }))({ identity: IDENTITY })
 
     expect(launch.env).toMatchObject({
-      ORCA_AGENT_SESSION_ID: SESSION_ID,
-      ORCA_CLI_COMMAND: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin[\\/]orca-dev$/)
+      QUIRKY_AGENT_SESSION_ID: SESSION_ID,
+      QUIRKY_CLI_COMMAND: expect.stringMatching(/^[^:;]*[\\/]cli[\\/]bin[\\/]quirky-dev$/)
     })
-    expect(launch.env?.ORCA_AGENT_SESSION_ID).not.toBe(launch.providerSessionId)
+    expect(launch.env?.QUIRKY_AGENT_SESSION_ID).not.toBe(launch.providerSessionId)
   })
 
   it('forces session-state events on when the inherited overlay disables them', async () => {
@@ -426,7 +426,7 @@ describe('claude structured launch resolution', () => {
     ])
   })
 
-  it('builds on the supplied inherited env instead of Orca process env', async () => {
+  it('builds on the supplied inherited env instead of Quirky process env', async () => {
     const launch = await createClaudeStructuredLaunchResolver({
       resolveLaunchArgs: () => [],
       store: { getRecord: () => record(), pinLaunchDirectory: vi.fn() },
@@ -511,7 +511,7 @@ describe('claude structured launch resolution', () => {
   })
 
   it('pairs a resolved Claude CLI with its sibling Node runtime', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-claude-launch-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-claude-launch-'))
     const binDir = join(root, 'bin')
     const claudeCommand = join(binDir, process.platform === 'win32' ? 'claude.cmd' : 'claude')
     const nodeCommand = join(binDir, process.platform === 'win32' ? 'node.cmd' : 'node')
@@ -588,7 +588,7 @@ describe('readable Claude thinking', () => {
           _launch: { command: string; cwd: string; env: Record<string, string> }
         ) => true
       )
-      const binDir = join(mkdtempSync(join(tmpdir(), 'orca-claude-probe-')), 'bin')
+      const binDir = join(mkdtempSync(join(tmpdir(), 'quirky-claude-probe-')), 'bin')
       const command = join(binDir, process.platform === 'win32' ? 'claude.cmd' : 'claude')
       makeExecutable(command)
       if (sibling) {
@@ -599,10 +599,14 @@ describe('readable Claude thinking', () => {
       expect(asked).toMatchObject({ command, cwd: '/repos/workspace-1' })
       const segments = (env: Record<string, string> | undefined) =>
         (env?.PATH ?? env?.Path ?? '').split(delimiter)
-      // The launch's PATH is the probe's plus Orca's own CLI directory, which holds no `claude` or
+      // The launch's PATH is the probe's plus Quirky's own CLI directory, which holds no `claude` or
       // runtime, so both resolve the same binary and the same shims in the same order.
-      const orcaCliDir = launch.env?.ORCA_CLI_COMMAND ? dirname(launch.env.ORCA_CLI_COMMAND) : null
-      expect(segments(launch.env).filter((dir) => dir !== orcaCliDir)).toEqual(segments(asked?.env))
+      const quirkyCliDir = launch.env?.QUIRKY_CLI_COMMAND
+        ? dirname(launch.env.QUIRKY_CLI_COMMAND)
+        : null
+      expect(segments(launch.env).filter((dir) => dir !== quirkyCliDir)).toEqual(
+        segments(asked?.env)
+      )
       expect(segments(asked?.env)[0] === binDir).toBe(sibling)
       expect(asked?.env).toMatchObject({ PROJECT_SHIM: '1' })
       expect(asked?.env).not.toHaveProperty('ANTHROPIC_API_KEY')
@@ -622,7 +626,7 @@ describe('readable Claude thinking', () => {
     expect((await launchWith()).options.extraArgs).toEqual({ 'replay-user-messages': null })
   })
 
-  it('keeps saved Arguments beside readable thinking, with the display left to Orca', async () => {
+  it('keeps saved Arguments beside readable thinking, with the display left to Quirky', async () => {
     const launch = await launchWith(
       { supports: async (flag) => flag === CLAUDE_THINKING_DISPLAY_FLAG },
       undefined,

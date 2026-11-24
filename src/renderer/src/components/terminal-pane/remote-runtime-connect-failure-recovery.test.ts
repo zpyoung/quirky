@@ -46,7 +46,7 @@ describe('recoverable connect failures on a remote runtime pane', () => {
       if (args.method === 'terminal.resolvePane') {
         resolvePaneCalls += 1
       }
-      throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+      throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
         code: 'remote_runtime_unavailable'
       })
     })
@@ -64,7 +64,7 @@ describe('recoverable connect failures on a remote runtime pane', () => {
       await new Promise((resolve) => {
         setTimeout(resolve, REMOTE_RUNTIME_RECOVERY_ATTEMPT_BUDGET_MS)
       })
-      throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+      throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
         code: 'remote_runtime_unavailable'
       })
     })

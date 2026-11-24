@@ -1,6 +1,6 @@
 import { measureClipboardTextByteLength } from '../../../shared/clipboard-text'
 
-export const JIRA_BOARD_DRAG_ISSUE_MIME = 'application/x-orca-jira-issue-ref'
+export const JIRA_BOARD_DRAG_ISSUE_MIME = 'application/x-quirky-jira-issue-ref'
 export const JIRA_BOARD_DRAG_ISSUE_REF_MAX_BYTES = 1024
 
 // Why: Jira issue keys are only unique per site, so the payload carries both.

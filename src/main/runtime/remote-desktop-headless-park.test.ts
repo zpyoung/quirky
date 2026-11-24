@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { publishHeadlessRuntimeGraph } from './headless-runtime-graph'
 
 // A parked paired pane closes its stream, the PTY's last viewer. On a windowless host the PTY must
@@ -16,7 +16,7 @@ function createRuntime({ headless }: { headless: boolean }) {
     getSettings: () => ({ workspaceDir: '/tmp/workspaces', mobileAutoRestoreFitMs: 5_000 })
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub covers the settings and repo reads the viewer floor reaches; the rest of Store is unreached.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   const sizes = new Map([[PTY, { ...SPAWN_GRID }]])
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resize and getSize are the only controller members the layout queue drives here.
   runtime.setPtyController({

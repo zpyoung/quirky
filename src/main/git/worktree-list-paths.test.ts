@@ -15,7 +15,7 @@ async function createRepoWithNewlineWorktree(): Promise<{
   repoPath: string
   worktreePath: string
 }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'orca-worktree-paths-'))
+  const root = await mkdtemp(path.join(tmpdir(), 'quirky-worktree-paths-'))
   tempRoots.push(root)
   const repoPath = path.join(root, 'repo')
   const requestedWorktreePath = path.join(root, 'linked\nworktree')
@@ -37,7 +37,7 @@ async function createRepoWithLockedDeletedWorktree(): Promise<{
   repoPath: string
   worktreePath: string
 }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'orca-worktree-locked-delete-'))
+  const root = await mkdtemp(path.join(tmpdir(), 'quirky-worktree-locked-delete-'))
   tempRoots.push(root)
   const repoPath = path.join(root, 'repo')
   const requestedWorktreePath = path.join(root, 'locked deleted worktree')
@@ -55,7 +55,13 @@ async function createRepoWithLockedDeletedWorktree(): Promise<{
     'feature/locked-delete',
     requestedWorktreePath
   ])
-  git(repoPath, ['worktree', 'lock', '--reason', 'orca locked stale repro', requestedWorktreePath])
+  git(repoPath, [
+    'worktree',
+    'lock',
+    '--reason',
+    'quirky locked stale repro',
+    requestedWorktreePath
+  ])
 
   const worktreePath = await realpath(requestedWorktreePath)
   await rm(worktreePath, { recursive: true, force: true })
@@ -70,7 +76,7 @@ async function createRepoWithPrunableWorktree(): Promise<{
   repoPath: string
   worktreePath: string
 }> {
-  const root = await mkdtemp(path.join(tmpdir(), 'orca-worktree-prunable-'))
+  const root = await mkdtemp(path.join(tmpdir(), 'quirky-worktree-prunable-'))
   tempRoots.push(root)
   const repoPath = path.join(root, 'repo')
   const requestedWorktreePath = path.join(root, 'stale-worktree')

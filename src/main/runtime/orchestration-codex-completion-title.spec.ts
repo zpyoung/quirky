@@ -21,7 +21,7 @@ import {
 } from './orchestration-mailbox-notification-test-harness'
 
 function completionFixture(delayMs = 0, presence?: 'unverifiable') {
-  const db = createDatabase('orca-codex-completion-title-')
+  const db = createDatabase('quirky-codex-completion-title-')
   const hook: AgentStatusIpcPayload = {
     paneKey: PANE_KEY,
     terminalHandle: TERMINAL_HANDLE,

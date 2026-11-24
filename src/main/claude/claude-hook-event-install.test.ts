@@ -6,7 +6,7 @@ import { getClaudeManagedHookPlan } from './claude-managed-hook-events'
 import { applyManagedHooks } from './hook-settings'
 
 const SCRIPT_FILE_NAME = 'claude-hook.sh'
-const MANAGED_COMMAND = '/home/dev/.orca/agent-hooks/claude-hook.sh'
+const MANAGED_COMMAND = '/home/dev/.quirky/agent-hooks/claude-hook.sh'
 const managedHook = { type: 'command' as const, command: MANAGED_COMMAND }
 const enums: Record<string, string[]> = fixture.enums
 const topLevelSettings: Record<string, { keys: string[] }> = fixture.topLevelSettings
@@ -105,7 +105,7 @@ describe('Claude managed hook events by resolved version', () => {
   )
 
   it.each([undefined, 'unknown'])(
-    'leaves Orca entries a version-aware install wrote untouched when the version is %s',
+    'leaves Quirky entries a version-aware install wrote untouched when the version is %s',
     (version) => {
       const current = install(userOwnedSettings(), '2.1.261')
       expect(JSON.stringify(install(current, version))).toBe(JSON.stringify(current))
@@ -113,7 +113,7 @@ describe('Claude managed hook events by resolved version', () => {
       // Why: even an entry from an older hook command stays byte-identical; only a known version may rewrite it.
       const staleHook = {
         type: 'command' as const,
-        command: '/old/.orca/agent-hooks/claude-hook.sh'
+        command: '/old/.quirky/agent-hooks/claude-hook.sh'
       }
       const stale = { hooks: { StopFailure: [{ hooks: [staleHook] }] } }
       const written = install(stale, version)
@@ -144,7 +144,7 @@ describe('Claude managed hook events by resolved version', () => {
     expect(upgraded.hooks?.StopFailure).toEqual([{ hooks: [managedHook] }])
   })
 
-  it('removes only Orca entries for events a downgraded Claude does not know', () => {
+  it('removes only Quirky entries for events a downgraded Claude does not know', () => {
     const current = install({ hooks: {} }, '2.1.261')
     expect(managedEvents(current)).toContain('SessionEnd')
 
@@ -168,7 +168,7 @@ describe('Claude managed hook events by resolved version', () => {
     (version) => {
       const fresh = install(userOwnedSettings(), version)
       expectUserSettingsKept(fresh)
-      // Why: a downgrade from the newest set is the path that removes Orca entries.
+      // Why: a downgrade from the newest set is the path that removes Quirky entries.
       expectUserSettingsKept(install(install(userOwnedSettings(), '2.1.261'), version))
     }
   )

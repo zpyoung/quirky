@@ -54,7 +54,7 @@ it('shows a finished resume as a result, in the past tense, once nothing is left
   await act(async () => lastToastShow()?.())
   expect(dialog()?.textContent).toContain('Resumed 2 of 2 chats')
   expect(dialog()?.textContent).toContain(
-    'Orca restored each one where it stopped, with its full context'
+    'Quirky restored each one where it stopped, with its full context'
   )
   expect(dialog()?.textContent).not.toContain('Resuming restores')
   expect(tree()?.querySelectorAll('[role="checkbox"]')).toHaveLength(0)
@@ -226,7 +226,7 @@ it('keeps the checkboxes while a chat can still be chosen, whichever tab is show
   await mountSurfaces()
   await act(async () => button('Resume 2 chats').click())
   await act(async () => button('1 chat failed to resume').click())
-  expect(dialog()?.textContent).toContain('The ones Orca resumed were restored')
+  expect(dialog()?.textContent).toContain('The ones Quirky resumed were restored')
   expect(tree()?.textContent).toContain('Select all')
   await act(async () => button('Resumed1').click())
   // Filtering to rows that all show a status must not drop the column under the user.

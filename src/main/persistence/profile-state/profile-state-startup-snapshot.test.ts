@@ -14,7 +14,7 @@ import { createProfileStateStore } from './profile-state-store-factory'
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -58,10 +58,10 @@ afterEach(async () => {
 })
 
 function createPaths(): { dataFile: string; databaseFile: string; profileId: string } {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-startup-snapshot-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-startup-snapshot-'))
   directories.push(directory)
   return {
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     databaseFile: join(directory, 'profile-state.db'),
     profileId: 'startup-snapshot-test'
   }

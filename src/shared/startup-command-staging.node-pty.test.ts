@@ -57,11 +57,11 @@ function discoverShells(): LiveShell[] {
   return shells
 }
 
-const SANDBOX = mkdtempSync(join(tmpdir(), 'orca-staging-pty-'))
+const SANDBOX = mkdtempSync(join(tmpdir(), 'quirky-staging-pty-'))
 const AGENT = join(SANDBOX, 'agent')
 writeFileSync(
   AGENT,
-  `#!/bin/sh\nps -o pgid=,tpgid= -p $$ > "$ORCA_TEST_CAPTURE.job"\nfor arg in "$@"; do printf '%s\\0' "$arg"; done > "$ORCA_TEST_CAPTURE"\n`
+  `#!/bin/sh\nps -o pgid=,tpgid= -p $$ > "$QUIRKY_TEST_CAPTURE.job"\nfor arg in "$@"; do printf '%s\\0' "$arg"; done > "$QUIRKY_TEST_CAPTURE"\n`
 )
 chmodSync(AGENT, 0o755)
 
@@ -89,7 +89,7 @@ async function launchInRealShell(shell: LiveShell, prompt: string): Promise<Agen
   const staging = stageStartupCommand({
     command,
     shellPath: shell.path,
-    orcaBuiltLine: true,
+    quirkyBuiltLine: true,
     directory: caseDir
   })
   const proc = pty.spawn(shell.path, shell.args, {
@@ -103,7 +103,7 @@ async function launchInRealShell(shell: LiveShell, prompt: string): Promise<Agen
       TERM: 'xterm-256color',
       XDG_CONFIG_HOME: join(caseDir, 'config'),
       XDG_DATA_HOME: join(caseDir, 'data'),
-      ORCA_TEST_CAPTURE: capture
+      QUIRKY_TEST_CAPTURE: capture
     }
   })
   const typeLine = (): void =>
@@ -145,7 +145,7 @@ async function launchInRealShell(shell: LiveShell, prompt: string): Promise<Agen
   } finally {
     onData.dispose()
     proc.kill()
-    expect(readdirSync(caseDir).filter((name) => name.startsWith('orca-launch-'))).toEqual([])
+    expect(readdirSync(caseDir).filter((name) => name.startsWith('quirky-launch-'))).toEqual([])
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "commands": [
-    "ORCA_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs --memory-control > /tmp/orca-chat-full-fold-memory-control.json",
-    "ORCA_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs > /tmp/orca-chat-full-fold-final.json"
+    "QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs --memory-control > /tmp/quirky-chat-full-fold-memory-control.json",
+    "QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc config/scripts/native-chat-fold-benchmark.mjs > /tmp/quirky-chat-full-fold-final.json"
   ],
   "artifactPromotion": "Final JSON copied only after successful process exit, all 54 cases completed, and memory-control validation passed.",
   "artifactFormatting": {

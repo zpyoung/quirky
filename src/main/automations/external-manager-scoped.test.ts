@@ -21,7 +21,7 @@ const readFileMock = vi.hoisted(() => vi.fn())
 const writeFileMock = vi.hoisted(() => vi.fn())
 const fixtureHome = vi.hoisted(() => 'external-manager-fixture-home')
 
-vi.mock('@orca/process-host', () => ({ runProcess: runProcessMock }))
+vi.mock('@quirky/process-host', () => ({ runProcess: runProcessMock }))
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof Fs>('fs')
   return { ...actual, existsSync: existsSyncMock }
@@ -38,7 +38,7 @@ function sshTarget(overrides: Partial<SshTarget> = {}): SshTarget {
     label: 'Build box',
     host: 'build.example',
     port: 22,
-    username: 'orca',
+    username: 'quirky',
     generation: 3,
     ...overrides
   }
@@ -53,8 +53,8 @@ function desktopSsh(targetId: string, targetGeneration: number): AutomationOwner
   return { authority: { kind: 'desktop' }, selector: { kind: 'ssh', targetId, targetGeneration } }
 }
 
-/** Stands in for the Orca automation store: readable, but never markable unavailable from here. */
-function orcaStoreHealth() {
+/** Stands in for the Quirky automation store: readable, but never markable unavailable from here. */
+function quirkyStoreHealth() {
   return { read: vi.fn<() => void>(), markUnavailable: vi.fn<() => void>() }
 }
 
@@ -237,8 +237,8 @@ describe('scoped external automations', () => {
     expect(runProcessMock).not.toHaveBeenCalled()
   })
 
-  it('confines a manager failure to its own scope and never to Orca store health', async () => {
-    const health = orcaStoreHealth()
+  it('confines a manager failure to its own scope and never to Quirky store health', async () => {
+    const health = quirkyStoreHealth()
     const engine = createScopedExternalAutomations({
       registry: {
         getSshTargets: () => {

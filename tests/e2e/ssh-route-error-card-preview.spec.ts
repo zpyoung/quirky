@@ -1,20 +1,20 @@
 // Throwaway interactive preview (untracked): shows the SSH-routing error cards
 // in a headed app and holds it open for review. The prepare IPC is stubbed at
 // the window level; everything else (gate, settings writes, escape hatch) is real.
-// Run: ORCA_SSH_CARD_PREVIEW=1 pnpm exec playwright test --config tests/playwright.config.ts \
+// Run: QUIRKY_SSH_CARD_PREVIEW=1 pnpm exec playwright test --config tests/playwright.config.ts \
 //   --project electron-headless --workers=1 tests/e2e/ssh-route-error-card-preview.spec.ts
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 
 test.skip(
-  process.env.ORCA_SSH_CARD_PREVIEW !== '1',
-  'Preview only; run with ORCA_SSH_CARD_PREVIEW=1'
+  process.env.QUIRKY_SSH_CARD_PREVIEW !== '1',
+  'Preview only; run with QUIRKY_SSH_CARD_PREVIEW=1'
 )
 
 const HOLD_MINUTES = 20
 
 test('shows the SSH routing error cards and holds for review', async ({
   electronApp,
-  orcaPage,
+  quirkyPage,
   testRepoPath
 }) => {
   test.setTimeout((HOLD_MINUTES + 10) * 60_000)
@@ -30,7 +30,7 @@ test('shows the SSH routing error cards and holds for review', async ({
   await expect
     .poll(
       () =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           (path) =>
             window.__store
               ?.getState()
@@ -41,7 +41,7 @@ test('shows the SSH routing error cards and holds for review', async ({
       { timeout: 60_000, message: 'test repo worktree never appeared' }
     )
     .not.toBeNull()
-  await orcaPage.evaluate((path) => {
+  await quirkyPage.evaluate((path) => {
     const state = window.__store?.getState()
     const worktree = state?.allWorktrees().find((candidate) => candidate.path === path)
     if (!worktree) {
@@ -53,7 +53,7 @@ test('shows the SSH routing error cards and holds for review', async ({
   // Stage with a REAL registered SSH target (a dead address) — no stubbing:
   // prepare runs the true main-process path and fails as 'ssh-unavailable',
   // rendering the classified card exactly as a user would see it.
-  const targetId = await orcaPage.evaluate(async () => {
+  const targetId = await quirkyPage.evaluate(async () => {
     const added = (await window.api.ssh.addTarget({
       target: {
         label: 'preview-dead-host',
@@ -68,7 +68,7 @@ test('shows the SSH routing error cards and holds for review', async ({
     }
     return id
   })
-  await orcaPage.evaluate((id) => {
+  await quirkyPage.evaluate((id) => {
     // Why: the active-workspace host id wins resolution precedence and was
     // stamped 'local' at activation; the gate consults it first.
     window.__store?.setState({
@@ -76,7 +76,7 @@ test('shows the SSH routing error cards and holds for review', async ({
     })
   }, targetId)
 
-  await orcaPage.evaluate(async () => {
+  await quirkyPage.evaluate(async () => {
     const state = window.__store?.getState()
     const worktreeId = state?.activeWorktreeId
     const groupId = worktreeId ? state?.activeGroupIdByWorktree[worktreeId] : null
@@ -86,7 +86,7 @@ test('shows the SSH routing error cards and holds for review', async ({
     await state.openNewBrowserTabInActiveWorkspace(groupId)
   })
 
-  await expect(orcaPage.getByText('SSH connection unavailable')).toBeVisible({
+  await expect(quirkyPage.getByText('SSH connection unavailable')).toBeVisible({
     timeout: 30_000
   })
   console.log(`\n=== SSH ERROR CARD PREVIEW READY — window stays up ${HOLD_MINUTES} minutes ===`)

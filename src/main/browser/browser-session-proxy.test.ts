@@ -38,14 +38,14 @@ const PROFILES = [
   {
     id: 'default',
     scope: 'default' as const,
-    partition: 'persist:orca-browser',
+    partition: 'persist:quirky-browser',
     label: 'Default',
     source: null
   },
   {
     id: 'iso',
     scope: 'isolated' as const,
-    partition: 'persist:orca-browser-session-iso',
+    partition: 'persist:quirky-browser-session-iso',
     label: 'Isolated',
     source: null
   }
@@ -69,8 +69,8 @@ describe('browser session proxy', () => {
       httpProxyBypassRules: ''
     })
 
-    expect(fromPartitionMock).toHaveBeenCalledWith('persist:orca-browser')
-    expect(fromPartitionMock).toHaveBeenCalledWith('persist:orca-browser-session-iso')
+    expect(fromPartitionMock).toHaveBeenCalledWith('persist:quirky-browser')
+    expect(fromPartitionMock).toHaveBeenCalledWith('persist:quirky-browser-session-iso')
     for (const partition of PROFILES.map((p) => p.partition)) {
       expect(sessionsByPartition.get(partition)?.setProxy).toHaveBeenCalledWith({
         mode: 'fixed_servers',
@@ -85,7 +85,7 @@ describe('browser session proxy', () => {
       httpProxyBypassRules: 'localhost, *.internal'
     })
 
-    expect(sessionsByPartition.get('persist:orca-browser')?.setProxy).toHaveBeenCalledWith({
+    expect(sessionsByPartition.get('persist:quirky-browser')?.setProxy).toHaveBeenCalledWith({
       mode: 'fixed_servers',
       proxyRules: 'socks5://127.0.0.1:1080',
       proxyBypassRules: 'localhost;*.internal'
@@ -97,7 +97,7 @@ describe('browser session proxy', () => {
       httpProxyUrl: 'http://browser-user:browser-pass@proxy.example:8080',
       httpProxyBypassRules: ''
     })
-    const sess = sessionsByPartition.get('persist:orca-browser')
+    const sess = sessionsByPartition.get('persist:quirky-browser')
     expect(sess?.setProxy).toHaveBeenCalledWith({
       mode: 'fixed_servers',
       proxyRules: 'http://proxy.example:8080'
@@ -134,24 +134,24 @@ describe('browser session proxy', () => {
         httpProxyUrl: 'socks5://127.0.0.1:1080',
         httpProxyBypassRules: ''
       })
-    ).rejects.toThrow('persist:orca-browser')
+    ).rejects.toThrow('persist:quirky-browser')
 
     expect(
-      sessionsByPartition.get('persist:orca-browser-session-iso')?.setProxy
+      sessionsByPartition.get('persist:quirky-browser-session-iso')?.setProxy
     ).toHaveBeenCalledWith({ mode: 'fixed_servers', proxyRules: 'socks5://127.0.0.1:1080' })
     expect(warn).toHaveBeenCalledWith(
       '[proxy] Failed to apply proxy to browser partition',
-      'persist:orca-browser'
+      'persist:quirky-browser'
     )
   })
 
   it('starts every partition write without waiting for earlier partitions', async () => {
     let finishFirstWrite: (() => void) | undefined
-    const firstSession = fromPartition('persist:orca-browser')
+    const firstSession = fromPartition('persist:quirky-browser')
     firstSession.setProxy.mockImplementation(
       () => new Promise<void>((resolve) => (finishFirstWrite = resolve))
     )
-    sessionsByPartition.set('persist:orca-browser', firstSession)
+    sessionsByPartition.set('persist:quirky-browser', firstSession)
 
     const sweep = applyBrowserSessionProxies(PROFILES, {
       httpProxyUrl: 'socks5://127.0.0.1:1080',
@@ -160,7 +160,7 @@ describe('browser session proxy', () => {
 
     await vi.waitFor(() =>
       expect(
-        sessionsByPartition.get('persist:orca-browser-session-iso')?.setProxy
+        sessionsByPartition.get('persist:quirky-browser-session-iso')?.setProxy
       ).toHaveBeenCalledOnce()
     )
     finishFirstWrite?.()
@@ -171,7 +171,7 @@ describe('browser session proxy', () => {
     let proxyUrl = 'http://old.example:8080'
     let finishFirstWrite: (() => void) | undefined
     setBrowserNetworkProxySettingsResolver(() => ({ httpProxyUrl: proxyUrl }))
-    const sess = fromPartition('persist:orca-browser-session-pending')
+    const sess = fromPartition('persist:quirky-browser-session-pending')
     sess.setProxy.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finishFirstWrite = resolve))
     )
@@ -193,7 +193,7 @@ describe('browser session proxy', () => {
     let proxyUrl = 'http://old.example:8080'
     let finishFirstWrite: (() => void) | undefined
     setBrowserNetworkProxySettingsResolver(() => ({ httpProxyUrl: proxyUrl }))
-    const sess = fromPartition('persist:orca-browser-session-restored')
+    const sess = fromPartition('persist:quirky-browser-session-restored')
     sess.setProxy.mockImplementationOnce(
       () => new Promise<void>((resolve) => (finishFirstWrite = resolve))
     )
@@ -218,7 +218,7 @@ describe('browser session proxy', () => {
       httpProxyUrl: 'socks5://127.0.0.1:1080',
       httpProxyBypassRules: ''
     }))
-    const sess = fromPartitionMock('persist:orca-browser')
+    const sess = fromPartitionMock('persist:quirky-browser')
 
     await applyProxyToBrowserSession(sess as never)
 
@@ -229,7 +229,7 @@ describe('browser session proxy', () => {
   })
 
   it('makes no proxy write when no resolver is registered', async () => {
-    const sess = fromPartitionMock('persist:orca-browser')
+    const sess = fromPartitionMock('persist:quirky-browser')
 
     await applyProxyToBrowserSession(sess as never)
 

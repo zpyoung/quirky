@@ -19,7 +19,7 @@ import {
  * The single writer for the process-wide browser identity.
  *
  * Preflight reads the root record before `ready` and hands its mode to the engine. The ready
- * phase used to mirror the *active Orca profile's* setting back into that record, so switching
+ * phase used to mirror the *active Quirky profile's* setting back into that record, so switching
  * from a native profile to a clean one started the clean profile in native. That second authority
  * is gone: the root record is the only one, and this module is its only writer.
  *
@@ -131,7 +131,7 @@ export async function setBrowserIdentityMode(
   const store = requireModeStore()
   const current = store.snapshot
   if (current.configuredMode === null) {
-    // Why never automatic: the data may belong to a newer Orca, and overwriting it silently
+    // Why never automatic: the data may belong to a newer Quirky, and overwriting it silently
     // would destroy the only copy. The caller has to ask, and the old bytes survive the ask.
     if (!options.reset) {
       return {
@@ -140,7 +140,7 @@ export async function setBrowserIdentityMode(
           code: 'browser_identity_reset_required',
           message:
             current.state === 'future'
-              ? 'Browser identity data was written by a newer Orca; update Orca, or reset it explicitly to overwrite it.'
+              ? 'Browser identity data was written by a newer Quirky; update Quirky, or reset it explicitly to overwrite it.'
               : `Browser identity data is ${current.state}; reset it explicitly to overwrite it.`
         },
         identity: current

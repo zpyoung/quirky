@@ -70,7 +70,7 @@ afterEach(async () => {
 })
 
 async function makeTempDir(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-parse-cache-persist-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-parse-cache-persist-'))
   tempRoots.push(root)
   return root
 }
@@ -407,14 +407,14 @@ describe('session parse cache persistence', () => {
     const cacheFile = join(root, 'session-parse-cache.json')
     initSessionParseCachePersistence({ filePath: cacheFile, appVersion: APP_VERSION })
     const kept = await writeTranscript(root, 'kaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')
-    const deletedOutsideOrca = await writeTranscript(root, 'daaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')
+    const deletedOutsideQuirky = await writeTranscript(root, 'daaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee')
     await parse(kept)
-    await parse(deletedOutsideOrca)
+    await parse(deletedOutsideQuirky)
     await flushSessionParseCachePersist()
     resetSessionParseCachePersistenceForTests()
     setSeenAt(cacheFile, kept, Date.now() - 31 * DAY_MS)
-    setSeenAt(cacheFile, deletedOutsideOrca, Date.now() - 31 * DAY_MS)
-    await rm(deletedOutsideOrca)
+    setSeenAt(cacheFile, deletedOutsideQuirky, Date.now() - 31 * DAY_MS)
+    await rm(deletedOutsideQuirky)
 
     simulateRestart(cacheFile)
     expect((await parse(kept)).reused).toBe(1)

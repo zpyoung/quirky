@@ -15,7 +15,7 @@ export const SKILL_INSTALL_PROVIDERS_CAPABILITY = 'skills.install-providers.v1' 
 export const SKILL_DELETE_CAPABILITY = 'skills.delete.v1' as const
 
 export const SKILL_DELETE_UPDATE_REQUIRED_MESSAGE =
-  'Update Orca on the selected machine to delete skills.'
+  'Update Quirky on the selected machine to delete skills.'
 
 export const SKILL_RUNTIME_CAPABILITIES = [
   SKILL_INSTALL_CAPABILITY,

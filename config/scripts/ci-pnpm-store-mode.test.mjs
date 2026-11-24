@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const action = parse(readFileSync('.github/actions/install-node-dependencies/action.yml', 'utf8'))
 const mode = action.runs.steps.find((step) => step.id === 'pnpm-store-mode')
@@ -30,7 +30,7 @@ function eligible(changes) {
 }
 
 function resolveMode(request, node, manager) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-store-mode-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-store-mode-'))
   const output = join(directory, 'output')
   try {
     writeFileSync(

@@ -17,7 +17,7 @@ export function getEphemeralVmRecipeResultWarnings(
   result: EphemeralVmRecipeResult
 ): EphemeralVmRecipeResultWarning[] {
   const connection = getEphemeralVmRecipeResultConnection(result)
-  if (connection.type !== 'orca-server') {
+  if (connection.type !== 'quirky-server') {
     return []
   }
   const pairing = parsePairingCode(connection.pairingCode)
@@ -40,7 +40,7 @@ export function redactEphemeralVmRecipeDiagnosticText(text: string): string {
     return text
   }
   return stripCredentialsFromMessage(text)
-    .replace(/orca:\/\/pair\?code=[A-Za-z0-9_-]+/g, 'orca://pair?code=[redacted]')
+    .replace(/quirky:\/\/pair\?code=[A-Za-z0-9_-]+/g, 'quirky://pair?code=[redacted]')
     .replace(
       /("(?:pairingCode|deviceToken|publicKeyB64|token|secret|password|apiKey|accessToken|identityFile|identityAgent|proxyCommand)"\s*:\s*)"[^"]*"/gi,
       '$1"[redacted]"'
@@ -60,14 +60,14 @@ export function redactEphemeralVmRecipeResultForDiagnostics(
   }
   return {
     ...result,
-    pairingCode: 'orca://pair?code=[redacted]',
+    pairingCode: 'quirky://pair?code=[redacted]',
     ...(userData ? { userData } : {})
   }
 }
 
 function redactConnection(connection: EphemeralVmRecipeConnection): EphemeralVmRecipeConnection {
-  if (connection.type === 'orca-server') {
-    return { ...connection, pairingCode: 'orca://pair?code=[redacted]' }
+  if (connection.type === 'quirky-server') {
+    return { ...connection, pairingCode: 'quirky://pair?code=[redacted]' }
   }
   return {
     ...connection,

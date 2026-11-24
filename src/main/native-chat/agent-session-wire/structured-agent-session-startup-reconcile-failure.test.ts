@@ -1,6 +1,6 @@
 // The lease reconcile is bookkeeping: a write that fails is reported, and startup and every read
 // carry on. Nothing is owed after it, because an unreconciled lease grants no writer and the next
-// send reconciles every lease again before it acts. Over records a newer Orca wrote, the reconcile
+// send reconciles every lease again before it acts. Over records a newer Quirky wrote, the reconcile
 // adjudicates in memory and writes nothing.
 
 import { cp, readdir, readFile, rm } from 'node:fs/promises'
@@ -60,7 +60,7 @@ afterEach(async () => {
 })
 
 /** A host with one chat, relaunched over a copy of its files; `newer` marks the copied records as
- *  a newer Orca's. */
+ *  a newer Quirky's. */
 async function relaunch(
   newer = false,
   probeOwner: StructuredAgentSessionHostDeps['probeOwner'] = async () => ({
@@ -143,7 +143,7 @@ it('reconciles the chat on its next send once the store can be written again', a
   await host.flushAllStreamedEvents()
 })
 
-it('adjudicates records a newer Orca wrote in memory only, and writes nothing', async () => {
+it('adjudicates records a newer Quirky wrote in memory only, and writes nothing', async () => {
   const { host, store, stateDirectory, leaseReconcileLogged } = await relaunch(true)
   expect(store.readOnly).toBe(true)
   const path = journalDatabasePath(stateDirectory)
@@ -174,24 +174,24 @@ it('restores a chat for reading while the reconcile keeps failing, and reports i
   expect(leaseReconcileLogged).toHaveBeenCalledWith(IO_ERROR)
 })
 
-it('refuses a send over records a newer Orca wrote with the update words', async () => {
+it('refuses a send over records a newer Quirky wrote with the update words', async () => {
   const { host } = await relaunch(true)
   await host.reconcileRestartLeases()
 
-  const body = hostTestMessage('sent to a chat a newer Orca saved')
+  const body = hostTestMessage('sent to a chat a newer Quirky saved')
   await expect(
     host.send(CALLER, { envelope: envelope('agentSession.send', { body }), body })
   ).resolves.toMatchObject({
     ok: false,
     refusal: {
       code: 'agent_session_journal_unreadable',
-      details: { reason: 'journalWrittenByNewerOrca' },
+      details: { reason: 'journalWrittenByNewerQuirky' },
       message: JOURNAL_NEWER_SCHEMA_MESSAGE
     }
   })
 })
 
-it('opens no chat from records a newer Orca wrote, and writes nothing trying', async () => {
+it('opens no chat from records a newer Quirky wrote, and writes nothing trying', async () => {
   const { host, stateDirectory, leaseReconcileLogged } = await relaunch(true)
   const path = journalDatabasePath(stateDirectory)
   const bytes = await readFile(path)

@@ -89,7 +89,7 @@ function marker(record: AgentSessionRecord): AgentSessionResumeMarker {
 it.each(['empty', 'claude-codex'] as const)(
   'keeps saved Grok recovery rows outside an old client audience with %s registrations',
   async (registrations) => {
-    root = await mkdtemp(join(tmpdir(), 'orca-unregistered-restart-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-unregistered-restart-'))
     const records = [savedGrokRecord(FAILED), savedGrokRecord(PENDING)]
     await seedTestAgentSessionRecordStore(root, { records })
     const store = await openTestAgentSessionRecordStore(root)

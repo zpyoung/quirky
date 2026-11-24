@@ -3,7 +3,7 @@ import { app } from 'electron'
 import { recordCrashBreadcrumb } from '../crash-reporting/crash-breadcrumb-store'
 
 const DEV_SHM_PATH = '/dev/shm'
-const DEV_SHM_OVERRIDE_ENV_VAR = 'ORCA_DEV_SHM'
+const DEV_SHM_OVERRIDE_ENV_VAR = 'QUIRKY_DEV_SHM'
 // Why 512: Docker/Codespaces default to 64 MB, where Chromium's ring-buffer and
 // texture allocations fail and IMMEDIATE_CRASH the renderer on every reload.
 const MIN_DEV_SHM_TOTAL_MIB = 512

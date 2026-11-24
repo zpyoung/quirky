@@ -46,14 +46,14 @@ export function createOrFocusWorkspaceSpaceWindow(store: Store): BrowserWindow {
     height: 820,
     minWidth: 700,
     minHeight: 520,
-    title: 'Orca Space Beta',
+    title: 'Quirky Space Beta',
     show: false,
     autoHideMenuBar: true,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: true,
-      partition: 'orca-workspace-space-window',
+      partition: 'quirky-workspace-space-window',
       webviewTag: false
     }
   })

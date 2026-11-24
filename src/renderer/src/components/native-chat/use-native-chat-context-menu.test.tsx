@@ -90,11 +90,11 @@ function childrenText(children: ReactNode): string {
 function Harness({
   onSwitchToTerminal,
   structured = false,
-  orcaSessionId
+  quirkySessionId
 }: {
   onSwitchToTerminal?: () => void
   structured?: boolean
-  orcaSessionId?: string
+  quirkySessionId?: string
 }) {
   const rootRef = createRef<HTMLDivElement>()
   const { menu } = useNativeChatContextMenu({
@@ -103,7 +103,7 @@ function Harness({
     onSwitchToTerminal,
     showTerminalPaneActions: !structured,
     workspaceLayout: structured ? { unifiedTabId: 'chat-tab', groupId: 'group-1' } : undefined,
-    resolveOrcaSessionId: orcaSessionId === undefined ? undefined : async () => orcaSessionId,
+    resolveQuirkySessionId: quirkySessionId === undefined ? undefined : async () => quirkySessionId,
     actions: {
       ...emptyNativeChatContextMenuActions,
       onPaste: vi.fn()
@@ -412,8 +412,8 @@ describe('useNativeChatContextMenu', () => {
     expect(markup).not.toContain('Fork Agent Session')
   })
 
-  describe('Copy Orca Session ID', () => {
-    const orcaSessionId = 'orca_session_id:4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
+  describe('Copy Quirky Session ID', () => {
+    const quirkySessionId = 'quirky_session_id:4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37'
     const writeClipboardText = vi.fn()
 
     beforeEach(() => {
@@ -430,36 +430,38 @@ describe('useNativeChatContextMenu', () => {
 
     function copyItem(): ItemProps | undefined {
       return items.list.find(
-        (candidate) => childrenText(candidate.children) === 'Copy Orca Session ID'
+        (candidate) => childrenText(candidate.children) === 'Copy Quirky Session ID'
       )
     }
 
-    it('copies the Orca session ID in a chat tab, explaining what it is', async () => {
-      renderToStaticMarkup(<Harness structured orcaSessionId={orcaSessionId} />)
-
-      copyItem()?.onSelect?.()
-
-      await vi.waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Orca session ID copied'))
-      expect(writeClipboardText).toHaveBeenCalledWith(orcaSessionId)
-      expect(tooltips.list.map(childrenText)).toContain(
-        "Orca's ID for this chat, separate from the agent CLI's own session ID. Agents use it to refer to each other through Orca."
-      )
-    })
-
-    it('is absent for a chat with no Orca session ID', () => {
-      renderToStaticMarkup(<Harness structured />)
-
-      expect(labels()).not.toContain('Copy Orca Session ID')
-    })
-
-    it('reports a failed copy instead of claiming success', async () => {
-      writeClipboardText.mockRejectedValue(new Error('denied'))
-      renderToStaticMarkup(<Harness structured orcaSessionId={orcaSessionId} />)
+    it('copies the Quirky session ID in a chat tab, explaining what it is', async () => {
+      renderToStaticMarkup(<Harness structured quirkySessionId={quirkySessionId} />)
 
       copyItem()?.onSelect?.()
 
       await vi.waitFor(() =>
-        expect(toasts.error).toHaveBeenCalledWith('Unable to copy Orca session ID')
+        expect(toasts.success).toHaveBeenCalledWith('Quirky session ID copied')
+      )
+      expect(writeClipboardText).toHaveBeenCalledWith(quirkySessionId)
+      expect(tooltips.list.map(childrenText)).toContain(
+        "Quirky's ID for this chat, separate from the agent CLI's own session ID. Agents use it to refer to each other through Quirky."
+      )
+    })
+
+    it('is absent for a chat with no Quirky session ID', () => {
+      renderToStaticMarkup(<Harness structured />)
+
+      expect(labels()).not.toContain('Copy Quirky Session ID')
+    })
+
+    it('reports a failed copy instead of claiming success', async () => {
+      writeClipboardText.mockRejectedValue(new Error('denied'))
+      renderToStaticMarkup(<Harness structured quirkySessionId={quirkySessionId} />)
+
+      copyItem()?.onSelect?.()
+
+      await vi.waitFor(() =>
+        expect(toasts.error).toHaveBeenCalledWith('Unable to copy Quirky session ID')
       )
       expect(toasts.success).not.toHaveBeenCalled()
     })

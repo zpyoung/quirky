@@ -1,5 +1,5 @@
 /**
- * The relays an older Orca left listening for this target, and each one's own `--connect` command.
+ * The relays an older Quirky left listening for this target, and each one's own `--connect` command.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  *
  * Read-only: lists sockets or pipes and reads each daemon's argv; never starts, stops or removes
@@ -66,7 +66,7 @@ export function legacyRelayEndpointListCommand(remoteHome: string, sockName: str
 /**
  * The relay's own bridge, run from its own version directory so it presents its own build hash.
  * A socket relocated under the short `/tmp` base (long `$HOME`) keeps its `relay.js` and credential
- * in the matching `~/.orca-remote/relay-<version>/`, where every relay of that era wrote them.
+ * in the matching `~/.quirky-remote/relay-<version>/`, where every relay of that era wrote them.
  */
 export function posixLegacyRelayConnectCommand(
   remoteHome: string,

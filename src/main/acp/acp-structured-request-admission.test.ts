@@ -1,4 +1,4 @@
-// What Grok asks reaches the person only while Orca's prompt runs and may still ask: a Stop or a
+// What Grok asks reaches the person only while Quirky's prompt runs and may still ask: a Stop or a
 // steer withdraws what is open and refuses what arrives later with Grok's own cancelled reply, with
 // no card, as does a turn Grok began itself; an answer the person already gave is still sent.
 

@@ -1,6 +1,6 @@
 // The registered command must not depend on the shell Claude selects.
 import { describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,12 +15,12 @@ import { getManagedScript } from '../claude/hook-script'
 import { getWindowsPowerShellExecutablePath } from './windows-powershell-hook-launcher'
 import { findGitBash } from './windows-git-bash-path.test-fixture'
 
-const SAFE_PATH = 'C:\\Users\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
+const SAFE_PATH = 'C:\\Users\\alice\\.quirky\\agent-hooks\\claude-hook.cmd'
 
 describe('wrapWindowsDirectCmdHookCommand', () => {
   it('emits an operator-free path that PowerShell 5.1 can parse', () => {
     expect(wrapWindowsDirectCmdHookCommand(SAFE_PATH)).toBe(
-      'C:/Users/alice/.orca/agent-hooks/claude-hook.cmd'
+      'C:/Users/alice/.quirky/agent-hooks/claude-hook.cmd'
     )
   })
 
@@ -41,16 +41,16 @@ describe('wrapWindowsDirectCmdHookCommand', () => {
 
   it('declines any path the shells cannot carry bare', () => {
     for (const path of [
-      'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\claude-hook.cmd',
-      'C:\\Users\\%name%\\.orca\\agent-hooks\\claude-hook.cmd',
-      'C:\\Users\\a^b\\.orca\\agent-hooks\\claude-hook.cmd',
-      'C:\\Users\\a&b\\.orca\\agent-hooks\\claude-hook.cmd',
-      'C:\\Users\\a(b)\\.orca\\agent-hooks\\claude-hook.cmd',
-      'C:\\Users\\rené\\.orca\\agent-hooks\\claude-hook.cmd',
-      '/home/alice/.orca/agent-hooks/claude-hook.sh',
+      'C:\\Users\\Bob Smith\\.quirky\\agent-hooks\\claude-hook.cmd',
+      'C:\\Users\\%name%\\.quirky\\agent-hooks\\claude-hook.cmd',
+      'C:\\Users\\a^b\\.quirky\\agent-hooks\\claude-hook.cmd',
+      'C:\\Users\\a&b\\.quirky\\agent-hooks\\claude-hook.cmd',
+      'C:\\Users\\a(b)\\.quirky\\agent-hooks\\claude-hook.cmd',
+      'C:\\Users\\rené\\.quirky\\agent-hooks\\claude-hook.cmd',
+      '/home/alice/.quirky/agent-hooks/claude-hook.sh',
       // Why: WINDOWS_CMD_SAFE_PATH admits a UNC profile, but `//server/share/...` is not a
       // command cmd.exe reliably starts — keep those on the encoded launcher.
-      '\\\\server\\share\\alice\\.orca\\agent-hooks\\claude-hook.cmd'
+      '\\\\server\\share\\alice\\.quirky\\agent-hooks\\claude-hook.cmd'
     ]) {
       expect(wrapWindowsDirectCmdHookCommand(path), path).toBeNull()
     }
@@ -63,10 +63,10 @@ describe('wrapWindowsBatchHookCommand', () => {
   })
 
   it('keeps the encoded launcher for a path the shells cannot carry bare', () => {
-    const spaced = 'C:\\Users\\Bob Smith\\.orca\\agent-hooks\\gemini-hook.cmd'
+    const spaced = 'C:\\Users\\Bob Smith\\.quirky\\agent-hooks\\gemini-hook.cmd'
     expect(wrapWindowsBatchHookCommand(spaced)).toBe(wrapWindowsHookCommand(spaced))
     // Guarded Unicode .cmd paths take the cheaper policy switch.
-    const unicode = 'C:\\Users\\rené\\.orca\\agent-hooks\\gemini-hook.cmd'
+    const unicode = 'C:\\Users\\rené\\.quirky\\agent-hooks\\gemini-hook.cmd'
     expect(wrapWindowsBatchHookCommand(unicode)).toBe(
       wrapWindowsHookCommand(unicode, {}, { useProcessPolicyEnvironment: true })
     )
@@ -122,7 +122,7 @@ describe.skipIf(process.platform !== 'win32')(
           PATH: process.env.PATH,
           PATHEXT: process.env.PATHEXT,
           ComSpec: process.env.ComSpec,
-          ORCA_BACKGROUND_LAUNCH: '1',
+          QUIRKY_BACKGROUND_LAUNCH: '1',
           HOME: cwd,
           // PowerShell starts batch files through cmd, whose AutoRun may read the host profile.
           USERPROFILE: process.env.USERPROFILE ?? cwd
@@ -136,13 +136,15 @@ describe.skipIf(process.platform !== 'win32')(
 
     // Why: a runner whose TEMP sits under a profile with a space is the encoded-launcher case,
     // so these legs skip rather than assert a contract that shape never claimed.
-    const tempIsCmdSafe = WINDOWS_CMD_SAFE_PATH.test(join(tmpdir(), 'orca-direct-hook-x', 'x.cmd'))
+    const tempIsCmdSafe = WINDOWS_CMD_SAFE_PATH.test(
+      join(tmpdir(), 'quirky-direct-hook-x', 'x.cmd')
+    )
     const canRunLive = tempIsCmdSafe
 
     async function withTempDir(
       run: (dir: string, scriptPath: string, command: string) => Promise<void>
     ): Promise<void> {
-      const dir = mkdtempSync(join(tmpdir(), 'orca-direct-hook-'))
+      const dir = mkdtempSync(join(tmpdir(), 'quirky-direct-hook-'))
       try {
         const scriptPath = join(dir, 'claude-hook.cmd')
         const command = wrapWindowsDirectCmdHookCommand(scriptPath)

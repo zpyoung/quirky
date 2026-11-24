@@ -74,7 +74,7 @@ RUN set -eux; \
 # pnpm's bundled gyp_main.py is not executable, so native rebuilds need the standalone node-gyp.
 ENV npm_config_node_gyp=/usr/local/lib/node_modules/node-gyp/bin/node-gyp.js
 
-COPY --chmod=0755 config/docker/test-sandbox/entrypoint.sh /usr/local/bin/orca-test-sandbox
+COPY --chmod=0755 config/docker/test-sandbox/entrypoint.sh /usr/local/bin/quirky-test-sandbox
 
 # Tests that induce fs errors with chmod 0555 need a user that DAC actually stops;
 # as root those writes succeed. Named for CI's user because diagnostic redaction
@@ -87,7 +87,7 @@ USER runner
 WORKDIR /work
 
 # Why: the image is a throwaway per-shard install, so it keeps a project-local node_modules as CI does.
-ENV ORCA_PNPM_GLOBAL_VIRTUAL_STORE=0
+ENV QUIRKY_PNPM_GLOBAL_VIRTUAL_STORE=0
 
 COPY --chown=runner:runner package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=runner:runner config/pnpmfile.cjs ./config/pnpmfile.cjs
@@ -103,11 +103,11 @@ COPY --chown=runner:runner config/scripts ./config/scripts
 # Why: install-electron-package-binary.mjs re-exports its zip extractor from src/shared.
 COPY --chown=runner:runner src/shared/zip-extractor-command.ts ./src/shared/zip-extractor-command.ts
 
-# Why build:packages first: ensure-native-runtime.mjs imports @orca/process-host's dist output.
+# Why build:packages first: ensure-native-runtime.mjs imports @quirky/process-host's dist output.
 RUN pnpm run build:packages \
   && node config/scripts/ensure-native-runtime.mjs --runtime=node \
   && node config/scripts/install-electron-package-binary.mjs \
   && sha256sum pnpm-lock.yaml | cut -d ' ' -f 1 > /home/runner/lockfile.sha256
 
-ENTRYPOINT ["/usr/local/bin/orca-test-sandbox"]
+ENTRYPOINT ["/usr/local/bin/quirky-test-sandbox"]
 CMD ["pnpm", "exec", "vitest", "run", "--config", "config/vitest.config.ts"]

@@ -1,7 +1,7 @@
 // Why: jcode runs one server/client daemon per runtime dir (the daemon lock,
-// socket, and debug socket all live there). Orca stamps a per-pane runtime dir
-// so every Orca-launched jcode pane gets its own daemon, and jcode's lifecycle
-// hooks (which fire inside the daemon) inherit that pane's ORCA_PANE_KEY
+// socket, and debug socket all live there). Quirky stamps a per-pane runtime dir
+// so every Quirky-launched jcode pane gets its own daemon, and jcode's lifecycle
+// hooks (which fire inside the daemon) inherit that pane's QUIRKY_PANE_KEY
 // instead of the first pane's. Without this, a second jcode pane connects the
 // first pane's daemon and its status is attributed to the wrong tab.
 import { createHash } from 'node:crypto'
@@ -17,7 +17,7 @@ export const JCODE_RUNTIME_DIR_ENV_KEY = 'JCODE_RUNTIME_DIR'
 // short while staying per-pane unique and stable across restarts.
 export function buildJcodeRuntimeDir(paneKey: string): string {
   const hash = createHash('sha256').update(paneKey).digest('hex').slice(0, 16)
-  return join(tmpdir(), 'orca-jcode', hash)
+  return join(tmpdir(), 'quirky-jcode', hash)
 }
 
 /** jcode's daemon model is unix-socket based; Windows support is unverified. */
@@ -42,9 +42,9 @@ export function buildJcodeRuntimeDirEnv(
  *
  * Why a failure returns undefined rather than throwing: this dir is stamped on
  * EVERY local pane, not only jcode ones, so letting an EACCES on a shared
- * /tmp/orca-jcode or a read-only TMPDIR propagate would stop a plain shell from
+ * /tmp/quirky-jcode or a read-only TMPDIR propagate would stop a plain shell from
  * opening. Without the dir jcode falls back to its own default daemon, which is
- * the behaviour Orca had before per-pane isolation.
+ * the behaviour Quirky had before per-pane isolation.
  */
 export async function ensureJcodeRuntimeDir(
   paneKey: string,

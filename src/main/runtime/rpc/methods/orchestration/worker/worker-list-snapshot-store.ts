@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { BoundedMap } from '../../../../../../shared/bounded-map'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import type { WorkerTerminalListState } from '../../../../orchestration/worker-terminal-ownership'
 
@@ -23,10 +23,10 @@ type WorkerListSnapshotStore = {
   pins: Map<string, number>
 }
 
-const storesByRuntime = new WeakMap<OrcaRuntimeService, WorkerListSnapshotStore>()
+const storesByRuntime = new WeakMap<QuirkyRuntimeService, WorkerListSnapshotStore>()
 
 export function createWorkerListSnapshot(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   params: {
     runId?: string
     terminalState: WorkerTerminalListState
@@ -55,7 +55,7 @@ export function createWorkerListSnapshot(
 }
 
 export function readWorkerListSnapshot(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   id: string,
   params: { runId?: string; terminalState?: WorkerTerminalListState }
 ): WorkerListSnapshot {
@@ -79,7 +79,7 @@ export function readWorkerListSnapshot(
 }
 
 export function pinWorkerListSnapshot(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   id: string,
   params: { runId?: string; terminalState?: WorkerTerminalListState }
 ): { snapshot: WorkerListSnapshot; release: () => void } {
@@ -104,7 +104,7 @@ export function pinWorkerListSnapshot(
   }
 }
 
-function storeFor(runtime: OrcaRuntimeService): WorkerListSnapshotStore {
+function storeFor(runtime: QuirkyRuntimeService): WorkerListSnapshotStore {
   let store = storesByRuntime.get(runtime)
   if (!store) {
     const pins = new Map<string, number>()

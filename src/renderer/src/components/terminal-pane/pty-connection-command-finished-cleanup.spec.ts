@@ -251,7 +251,7 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
     it.each([
       ['clears stale sleeping identity after a confirmed return to shell', false],
       // Why: a hibernation records the pane's resume before its kill; the agent dying first
-      // surfaces the shell, which is Orca's own stop rather than the agent exiting.
+      // surfaces the shell, which is Quirky's own stop rather than the agent exiting.
       ['keeps sleeping identity when the shell surfaces during an intentional stop', true]
     ])('%s', async (_label, stoppingOnPurpose) => {
       vi.useFakeTimers()

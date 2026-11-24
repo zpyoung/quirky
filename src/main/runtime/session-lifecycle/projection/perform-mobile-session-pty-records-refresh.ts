@@ -1,8 +1,8 @@
 import type { RuntimeWorkspaceSelectors as WorkspaceSelectors } from '../../workspaces/workspace-selectors'
-import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
-import type { OrcaRuntimeWithStopTerminalsForWorktree as WorktreeTerminalStop } from '../../terminal/stop/worktree-terminal-stop'
-import { OrcaRuntimeWithRestoredPaneStart } from './restored-pane-materialize'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import type { QuirkyRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { QuirkyRuntimeWithStopTerminalsForWorktree as WorktreeTerminalStop } from '../../terminal/stop/worktree-terminal-stop'
+import { QuirkyRuntimeWithRestoredPaneStart } from './restored-pane-materialize'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { PtyControllerInventory } from '../../runtime-pty-controller-contract'
 import { isAgentLaunchRunningIn } from '../../../agent-launch/agent-launch-pane-attachment'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -17,7 +17,7 @@ import { navigationTargetsHost } from '../../../../shared/runtime-navigation'
 import { isAutomaticTabActivation } from '../../../../shared/tab-activation-intent'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 
-export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh extends OrcaRuntimeWithRestoredPaneStart {
+export abstract class QuirkyRuntimeWithPerformMobileSessionPtyRecordsRefresh extends QuirkyRuntimeWithRestoredPaneStart {
   protected abstract buildResolvedWorktreeFromId(
     ...args: Parameters<WorkspaceSelectors['buildResolvedWorktreeFromId']>
   ): ReturnType<WorkspaceSelectors['buildResolvedWorktreeFromId']>
@@ -189,7 +189,7 @@ export abstract class OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh exten
         const trigger = { automatic, targetsHost, targetGroupId }
         try {
           // Switch point: a pane main holds starts through main's one starter.
-          if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+          if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
             const started = await this.ensureRestoredPaneStarted(
               { worktreeId, tabId: tab.parentTabId, leafId: tab.leafId },
               trigger

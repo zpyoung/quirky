@@ -86,7 +86,7 @@ function readMacTailscaleDnsDiagnostic(now = Date.now()): DnsDiagnostic | null {
   return diagnostic
 }
 
-// Why: Claude/Codex own the failing API transports, so Orca can only point
+// Why: Claude/Codex own the failing API transports, so Quirky can only point
 // users at the macOS resolver configuration that makes those transports fail.
 function appendMagicDnsHint(message: string, diagnostic: DnsDiagnostic | null): string {
   return diagnostic ? `${message} ${MAGIC_DNS_HINT}` : message

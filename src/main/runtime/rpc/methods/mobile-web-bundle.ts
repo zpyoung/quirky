@@ -29,7 +29,7 @@ import {
   loadBundledMobileWebBundle,
   type BundledMobileWebBundle
 } from '../../bundled-mobile-web-bundle'
-import { isClientDisconnectedError } from '../../orca-runtime-core'
+import { isClientDisconnectedError } from '../../quirky-runtime-core'
 import { defineMethod, InvalidArgumentError, type RpcContext } from '../core'
 import {
   readMobileWebBundleAssetWindow,

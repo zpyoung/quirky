@@ -26,12 +26,12 @@ afterEach(() => {
 
 function makeHome(): string {
   Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
-  const dir = mkdtempSync(join(tmpdir(), 'orca-commit-env-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-commit-env-'))
   tempDirs.push(dir)
   process.env.HOME = dir
   process.env.SHELL = '/bin/zsh'
-  delete process.env.ORCA_OPENCODE_SOURCE_CONFIG_DIR
-  delete process.env.ORCA_PI_SOURCE_AGENT_DIR
+  delete process.env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR
+  delete process.env.QUIRKY_PI_SOURCE_AGENT_DIR
   return dir
 }
 
@@ -52,8 +52,8 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
   })
 
   it('prefers the original OpenCode config root over inherited PTY overlays', async () => {
-    process.env.OPENCODE_CONFIG_DIR = '/tmp/orca-opencode-overlay'
-    process.env.ORCA_OPENCODE_SOURCE_CONFIG_DIR = '/Users/tester/company/opencode'
+    process.env.OPENCODE_CONFIG_DIR = '/tmp/quirky-opencode-overlay'
+    process.env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR = '/Users/tester/company/opencode'
 
     const result = await prepareLocalCommitMessageAgentEnv('opencode', undefined)
 
@@ -81,8 +81,8 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
   })
 
   it('prefers the original Pi agent root over inherited PTY overlays', async () => {
-    process.env.PI_CODING_AGENT_DIR = '/tmp/orca-pi-overlay'
-    process.env.ORCA_PI_SOURCE_AGENT_DIR = '/Users/tester/.pi/agent'
+    process.env.PI_CODING_AGENT_DIR = '/tmp/quirky-pi-overlay'
+    process.env.QUIRKY_PI_SOURCE_AGENT_DIR = '/Users/tester/.pi/agent'
 
     const result = await prepareLocalCommitMessageAgentEnv('pi', undefined)
 
@@ -114,13 +114,13 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
   it('sets CODEX_HOME for host managed Codex accounts', async () => {
     const result = await prepareLocalCommitMessageAgentEnv('codex', {
       prepareForCodexLaunch: () =>
-        'C:\\Users\\tester\\AppData\\Roaming\\Orca\\codex-accounts\\a\\home'
+        'C:\\Users\\tester\\AppData\\Roaming\\Quirky\\codex-accounts\\a\\home'
     })
 
     expect(result).toEqual({
       ok: true,
       env: expect.objectContaining({
-        CODEX_HOME: 'C:\\Users\\tester\\AppData\\Roaming\\Orca\\codex-accounts\\a\\home'
+        CODEX_HOME: 'C:\\Users\\tester\\AppData\\Roaming\\Quirky\\codex-accounts\\a\\home'
       })
     })
   })
@@ -130,7 +130,7 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
   // real ~/.codex while the UI shows the managed account selected.
   it('fails commit generation instead of building a system-account env when the managed home is unreadable', async () => {
     process.env.CODEX_HOME = '/home/me/.config/codex'
-    delete process.env.ORCA_CODEX_HOME
+    delete process.env.QUIRKY_CODEX_HOME
 
     const result = await prepareLocalCommitMessageAgentEnv('codex', {
       prepareForCodexLaunch: () => {
@@ -145,9 +145,9 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
     expect(result).not.toHaveProperty('env')
   })
 
-  it('strips a nested-Orca CODEX_HOME override when the launch resolves to the real home', async () => {
+  it('strips a nested-Quirky CODEX_HOME override when the launch resolves to the real home', async () => {
     process.env.CODEX_HOME = '/managed/runtime/home'
-    process.env.ORCA_CODEX_HOME = '/managed/runtime/home'
+    process.env.QUIRKY_CODEX_HOME = '/managed/runtime/home'
 
     const result = await prepareLocalCommitMessageAgentEnv('codex', {
       prepareForCodexLaunch: () => null
@@ -157,12 +157,12 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
     const env = (result as { ok: true; env?: NodeJS.ProcessEnv }).env
     expect(env).toBeDefined()
     expect(env?.CODEX_HOME).toBeUndefined()
-    expect(env?.ORCA_CODEX_HOME).toBeUndefined()
+    expect(env?.QUIRKY_CODEX_HOME).toBeUndefined()
   })
 
   it('preserves a user-owned CODEX_HOME when the launch resolves to the real home', async () => {
     process.env.CODEX_HOME = '/home/me/.config/codex'
-    delete process.env.ORCA_CODEX_HOME
+    delete process.env.QUIRKY_CODEX_HOME
 
     const result = await prepareLocalCommitMessageAgentEnv('codex', {
       prepareForCodexLaunch: () => null
@@ -178,7 +178,7 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
 
     const result = await prepareLocalCommitMessageAgentEnv('codex', {
       prepareForCodexLaunch: () =>
-        '\\\\wsl.localhost\\Ubuntu\\home\\tester\\.local\\share\\orca\\codex-accounts\\a\\home'
+        '\\\\wsl.localhost\\Ubuntu\\home\\tester\\.local\\share\\quirky\\codex-accounts\\a\\home'
     })
 
     expect(result).toEqual({ ok: true })
@@ -225,7 +225,7 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
       ANTHROPIC_AUTH_TOKEN: 'shell-token'
     }
 
-    it('gives Claude the shell-exported variables Orca was launched without', async () => {
+    it('gives Claude the shell-exported variables Quirky was launched without', async () => {
       delete process.env.ANTHROPIC_BASE_URL
       delete process.env.ANTHROPIC_AUTH_TOKEN
 
@@ -285,10 +285,10 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
       ).resolves.toEqual({ ok: true, env: shellBase })
     })
 
-    it("prefers the login shell's config dir over Orca's inherited one", async () => {
+    it("prefers the login shell's config dir over Quirky's inherited one", async () => {
       makeHome()
       process.env.OPENCODE_CONFIG_DIR = '/old/opencode'
-      delete process.env.ORCA_OPENCODE_SOURCE_CONFIG_DIR
+      delete process.env.QUIRKY_OPENCODE_SOURCE_CONFIG_DIR
 
       const result = await prepareLocalCommitMessageAgentEnv('opencode', {
         resolveBaseEnvironment: async () => ({ ...shellBase, OPENCODE_CONFIG_DIR: '/new/opencode' })
@@ -297,7 +297,7 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
       expect(envOf(result)?.OPENCODE_CONFIG_DIR).toBe('/new/opencode')
     })
 
-    it('keeps Orca env for WSL-local generation instead of the host shell', async () => {
+    it('keeps Quirky env for WSL-local generation instead of the host shell', async () => {
       delete process.env.ANTHROPIC_BASE_URL
       const resolveBaseEnvironment = vi.fn(async () => shellBase)
 
@@ -317,8 +317,8 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
       expect(cursor).toEqual({ ok: true })
     })
 
-    it('falls back to Orca env when the shell environment cannot be read', async () => {
-      process.env.ORCA_COMMIT_ENV_MARKER = 'process'
+    it('falls back to Quirky env when the shell environment cannot be read', async () => {
+      process.env.QUIRKY_COMMIT_ENV_MARKER = 'process'
 
       const result = await prepareLocalCommitMessageAgentEnv('codex', {
         resolveBaseEnvironment: async () => {
@@ -329,7 +329,7 @@ describe('prepareLocalCommitMessageAgentEnv', () => {
 
       expect(envOf(result)).toEqual(
         expect.objectContaining({
-          ORCA_COMMIT_ENV_MARKER: 'process',
+          QUIRKY_COMMIT_ENV_MARKER: 'process',
           CODEX_HOME: '/managed/codex-home'
         })
       )

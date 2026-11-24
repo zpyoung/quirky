@@ -13,7 +13,7 @@ it('keeps a kept send’s card id and its source through a parse', () => {
     payloadFingerprint: 'fingerprint-kept',
     dispatchState: 'rejected',
     providerItemId: null,
-    reason: 'Orca restarted before this message was sent.',
+    reason: 'Quirky restarted before this message was sent.',
     rejection: { kind: 'hostRestarted' },
     submittedAt: 1,
     resolvedAt: 2,

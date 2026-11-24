@@ -8,7 +8,7 @@ import {
 
 const mocks = vi.hoisted(() => ({ spawn: vi.fn(), closeBrowser: vi.fn() }))
 
-vi.mock('@orca/process-host', () => ({ spawnProcess: mocks.spawn }))
+vi.mock('@quirky/process-host', () => ({ spawnProcess: mocks.spawn }))
 vi.mock('playwright', () => ({
   chromium: { connectOverCDP: vi.fn(async () => ({ close: mocks.closeBrowser })) }
 }))

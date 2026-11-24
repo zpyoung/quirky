@@ -118,7 +118,7 @@ describe('mobile relay credential bundle', () => {
   it('deletes the namespaced bundle and never enables it on web', async () => {
     await deleteMobileRelayCredentialBundle('host-1')
     expect(secureStore.deleteItemAsync).toHaveBeenCalledWith(
-      'orca.mobile-relay.credentials.host-1',
+      'quirky.mobile-relay.credentials.host-1',
       expect.any(Object)
     )
     platform.OS = 'web'

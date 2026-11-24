@@ -20,7 +20,7 @@ import {
   resolveHostAgentBaseEnvironment
 } from './structured-agent-shell-environment'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
-import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../quirky-profiles/profile-storage-paths'
 
 type LaunchEnvironmentSettings = Pick<
   GlobalSettings,

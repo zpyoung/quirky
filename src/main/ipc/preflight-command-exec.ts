@@ -3,7 +3,7 @@ import path from 'node:path'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { getSystemCliInstallDirectories } from '../../shared/system-cli-install-dirs'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   beginLocalCommandSelection,
   isCommandOnLocalPath,

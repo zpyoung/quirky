@@ -38,7 +38,7 @@ function formatLegacyRestores(records: readonly LegacyRestoreRecord[] | undefine
   return [
     '',
     '',
-    `This host refused ${count} from an older Orca client and kept them here:`,
+    `This host refused ${count} from an older Quirky client and kept them here:`,
     ...lines
   ].join('\n')
 }

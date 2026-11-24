@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:

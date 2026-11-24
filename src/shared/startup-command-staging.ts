@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { hasControlByte, TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES } from './startup-line-prompt-carry'
 import { quoteStartupArg } from './tui-agent-startup-shell'
 
-export const STAGED_STARTUP_COMMAND_PREFIX = 'orca-launch-'
+export const STAGED_STARTUP_COMMAND_PREFIX = 'quirky-launch-'
 
 /** Which delivery ran for a spawn's typed startup line, decided by the host that owns the PTY. */
 export type StartupLineDelivery = 'typed' | 'staged' | 'typed-after-stage-failed'
@@ -32,13 +32,13 @@ export type StartupCommandStaging = {
   failure?: string
 }
 
-// Why only these type any short line as is: Orca's portable quoting is verified literal in these. Any
-// other shell (tcsh, nu, xonsh, pwsh...) runs an agent launch line Orca built through `/bin/sh` when
+// Why only these type any short line as is: Quirky's portable quoting is verified literal in these. Any
+// other shell (tcsh, nu, xonsh, pwsh...) runs an agent launch line Quirky built through `/bin/sh` when
 // it holds anything but plain characters; a command the user wrote for that shell is typed as it was.
 const STAGING_SHELLS = new Set(['bash', 'zsh', 'sh', 'dash', 'fish', 'ksh', 'mksh'])
 
 // Why not ksh: it runs a sourced file's commands in the shell's own process group, so Ctrl-Z could
-// not stop the agent (mksh untested, kept with it); their long Orca-built lines use `/bin/sh`.
+// not stop the agent (mksh untested, kept with it); their long Quirky-built lines use `/bin/sh`.
 const SOURCING_SHELLS = new Set(['bash', 'zsh', 'sh', 'dash', 'fish'])
 
 const encoder = new TextEncoder()
@@ -56,8 +56,8 @@ export function shouldStageStartupCommand(args: {
   command: string
   shellPath: string | undefined
   platform: NodeJS.Platform
-  /** An agent launch line Orca built with POSIX quoting, which sh can run in any shell. */
-  orcaBuiltLine?: boolean
+  /** An agent launch line Quirky built with POSIX quoting, which sh can run in any shell. */
+  quirkyBuiltLine?: boolean
 }): boolean {
   if (args.platform === 'win32') {
     return false
@@ -69,9 +69,9 @@ export function shouldStageStartupCommand(args: {
   if (shellName === null) {
     // Why these characters: tcsh doubles a quoted backslash and expands `!!`, and nu cannot read
     // `'\''`. A plain line is typed so the agent is the shell's own job, where the paste guard finds it.
-    return args.orcaBuiltLine === true && (needsStaging || /[!\\"`$]/.test(body))
+    return args.quirkyBuiltLine === true && (needsStaging || /[!\\"`$]/.test(body))
   }
-  return needsStaging && (SOURCING_SHELLS.has(shellName) || args.orcaBuiltLine === true)
+  return needsStaging && (SOURCING_SHELLS.has(shellName) || args.quirkyBuiltLine === true)
 }
 
 function stagedScriptLine(shellName: string | null, quotedPath: string): string {
@@ -89,7 +89,7 @@ let staleSweepStarted = false
 export function stageStartupCommand(args: {
   command: string
   shellPath: string | undefined
-  orcaBuiltLine?: boolean
+  quirkyBuiltLine?: boolean
   platform?: NodeJS.Platform
   directory?: string
 }): StartupCommandStaging {
@@ -142,7 +142,7 @@ export function startupStagingFailureNotice(staging: StartupCommandStaging): str
   const reason = [...staging.failure]
     .map((char) => (char < ' ' || char === '\x7f' ? ' ' : char))
     .join('')
-  return `\r\n[orca] Could not stage the launch command (${reason}); typed it in full. If the shell shows quote> or waits for more input, press Ctrl-C and launch again.\r\n`
+  return `\r\n[quirky] Could not stage the launch command (${reason}); typed it in full. If the shell shows quote> or waits for more input, press Ctrl-C and launch again.\r\n`
 }
 
 /** For a PTY that exited, or was never typed into, before it sourced its script. */

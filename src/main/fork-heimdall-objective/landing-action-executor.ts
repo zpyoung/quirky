@@ -34,7 +34,7 @@ import type { ObjectiveStore } from './objective-store'
 import type { RecordLandingArgs } from './objective-store-data'
 import { computeObjectiveWorktreeContentDigest } from './objective-workspace-manifest'
 
-const ATTEMPT_TRAILER = 'Orca-Heimdall-Attempt'
+const ATTEMPT_TRAILER = 'Quirky-Heimdall-Attempt'
 
 type LandingExecutorArgs<TAction> = {
   action: TAction

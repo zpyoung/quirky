@@ -121,10 +121,10 @@ describe('main’s operations drawn record by record', () => {
         {
           ...on,
           type: 'openEditorTab',
-          fileId: '/Users/dev/orca/src/main.ts',
+          fileId: '/Users/dev/quirky/src/main.ts',
           contentType: 'editor',
           file: {
-            filePath: '/Users/dev/orca/src/main.ts',
+            filePath: '/Users/dev/quirky/src/main.ts',
             relativePath: 'src/main.ts',
             language: 'typescript'
           },

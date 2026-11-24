@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { eraseRpcMethods, type RpcContext } from '../../../core'
 import { OrchestrationDb } from '../../../../orchestration/db'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import {
   encodeFederatedControlMessage,
   importFederatedControlMessage
@@ -40,7 +40,7 @@ describe('orchestration.check on a federated attachment across a restart', () =>
 
   function launch(path: string): RpcContext {
     db = new OrchestrationDb(path)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
       handle === WORKER_HANDLE ? WORKER_PANE : null
@@ -96,7 +96,7 @@ describe('orchestration.check on a federated attachment across a restart', () =>
   }
 
   it('replays the coordinator instruction and takes its ack after the app restarts', async () => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-federated-check-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-federated-check-'))
     const path = join(directory, 'orchestration.db')
 
     const first = launch(path)

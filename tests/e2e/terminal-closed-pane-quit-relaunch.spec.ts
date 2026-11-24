@@ -8,8 +8,8 @@
  */
 
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
-import { createRestartSession } from './helpers/orca-restart'
+import { test, expect } from './helpers/quirky-app'
+import { createRestartSession } from './helpers/quirky-restart'
 import {
   focusActiveTerminalInput,
   sendToTerminal,

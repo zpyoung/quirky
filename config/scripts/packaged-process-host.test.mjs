@@ -14,13 +14,13 @@ import {
 const require = createRequire(import.meta.url)
 const { createPackagedRuntimeNodeModuleResources } = require('../packaged-runtime-node-modules.cjs')
 const { collectRuntimeClosure } = require('./verify-skills-cli-runtime.cjs')
-const nodeExecutable = process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath
+const nodeExecutable = process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath
 
 it('loads the copied process package from an unpacked CLI without checkout dependencies', async () => {
-  const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-packaged-process-host-'))
+  const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-packaged-process-host-'))
   try {
     const resource = createPackagedRuntimeNodeModuleResources().find(
-      (entry) => entry.to === join('node_modules', '@orca', 'process-host')
+      (entry) => entry.to === join('node_modules', '@quirky', 'process-host')
     )
     expect(resource).toBeDefined()
     expect(resource.filter).toEqual(['package.json', 'dist/**/*'])
@@ -43,7 +43,7 @@ describe('process-host output packaging guard', () => {
   const electronBuilderConfig = require('../electron-builder.config.cjs')
 
   async function builtPackage() {
-    const packageDir = await mkdtemp(join(tmpdir(), 'orca-process-host-output-'))
+    const packageDir = await mkdtemp(join(tmpdir(), 'quirky-process-host-output-'))
     await mkdir(join(packageDir, 'src', '__fixtures__'), { recursive: true })
     await mkdir(join(packageDir, 'dist'))
     await writeFile(

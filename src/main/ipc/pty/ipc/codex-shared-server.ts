@@ -19,7 +19,7 @@ import { ptyOwnership } from '../provider/ownership-state'
 import { getProviderForPty, hasPtyProviderForInspection } from '../provider/registry'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 
-// Why per shell: a new terminal fixes Codex only where this build's daemon gives that shell Orca's
+// Why per shell: a new terminal fixes Codex only where this build's daemon gives that shell Quirky's
 // codex function; cmd.exe and unrecognized shells never get one.
 const CODEX_SHELL_FUNCTION_PROTOCOL_BY_SHELL: ReadonlyMap<string, number> = new Map([
   ['zsh', CODEX_NO_DAEMON_SHELL_LAUNCH_DAEMON_PROTOCOL_VERSION],

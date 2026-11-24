@@ -13,9 +13,9 @@ import { i18n } from '@/i18n/i18n'
 import { agentSessionFailureWords } from '../../../../shared/agent-session-failure-words'
 import { agentSessionFailureFact } from '../../../../shared/agent-session-failure'
 import {
-  NativeChatOrcaStopContext,
-  type NativeChatOrcaStopView
-} from './native-chat-orca-stop-context'
+  NativeChatQuirkyStopContext,
+  type NativeChatQuirkyStopView
+} from './native-chat-quirky-stop-context'
 
 afterEach(async () => {
   cleanup()
@@ -33,15 +33,15 @@ it('keeps a skipped compaction warning truthful instead of showing the success s
   expect(screen.queryByText('Context compacted')).toBeNull()
 })
 
-type ContinueOffer = Pick<NativeChatOrcaStopView, 'offeredTurnItemId' | 'continueNow'> &
-  Partial<Pick<NativeChatOrcaStopView, 'usageLimitTurnItemId' | 'continueUsageLimit'>>
+type ContinueOffer = Pick<NativeChatQuirkyStopView, 'offeredTurnItemId' | 'continueNow'> &
+  Partial<Pick<NativeChatQuirkyStopView, 'usageLimitTurnItemId' | 'continueUsageLimit'>>
 
-function orcaStopView(
+function quirkyStopView(
   hostLabel: string | null,
   continueAvailable: boolean,
   remoteHost: boolean,
   offer: ContinueOffer
-): NativeChatOrcaStopView {
+): NativeChatQuirkyStopView {
   return {
     hostLabel,
     remoteHost,
@@ -72,17 +72,17 @@ function renderStatus(
       turnScope: { kind: 'turn', turnItemId: 'cut-turn' }
     }
   ])
-  const view = orcaStopView(hostLabel, continueAvailable, remoteHost, offer)
+  const view = quirkyStopView(hostLabel, continueAvailable, remoteHost, offer)
   return render(
     <TooltipProvider>
-      <NativeChatOrcaStopContext.Provider value={view}>
+      <NativeChatQuirkyStopContext.Provider value={view}>
         <MessageRow
           message={message!}
           agentName={agentName}
           expandSignal={false}
           onScrollMessageToTop={vi.fn()}
         />
-      </NativeChatOrcaStopContext.Provider>
+      </NativeChatQuirkyStopContext.Provider>
     </TooltipProvider>
   )
 }
@@ -90,45 +90,45 @@ function renderStatus(
 const LEGACY_TEXT =
   'Codex stopped while this response was in progress. You can continue in this conversation.'
 
-function orcaStopRow(cause: string): AgentJournalStatusItem {
+function quirkyStopRow(cause: string): AgentJournalStatusItem {
   return {
     kind: 'status',
     text: LEGACY_TEXT,
     tone: 'error',
-    presentation: 'orca-stop',
-    orcaStop: { cause }
+    presentation: 'quirky-stop',
+    quirkyStop: { cause }
   }
 }
 
-describe('the row an Orca stop leaves', () => {
+describe('the row an Quirky stop leaves', () => {
   it.each([
-    ['update', 'Orca on studio-mac restarted for an update while this response was in progress.'],
-    ['quit', 'Orca on studio-mac was closed while this response was in progress.'],
-    ['crash', 'Orca on studio-mac stopped unexpectedly while this response was in progress.']
+    ['update', 'Quirky on studio-mac restarted for an update while this response was in progress.'],
+    ['quit', 'Quirky on studio-mac was closed while this response was in progress.'],
+    ['crash', 'Quirky on studio-mac stopped unexpectedly while this response was in progress.']
   ])('names a %s and the machine, muted', (cause, sentence) => {
-    renderStatus(orcaStopRow(cause), 'studio-mac')
+    renderStatus(quirkyStopRow(cause), 'studio-mac')
     const row = screen.getByText(`${sentence} You can continue in this conversation.`)
     expect(row.parentElement?.parentElement).toHaveClass('text-chat-foreground-faint')
     expect(screen.queryByText(LEGACY_TEXT)).toBeNull()
   })
 
   it('leaves the way on to Continue wherever its host can continue a cut', () => {
-    renderStatus(orcaStopRow('update'), 'studio-mac', true)
+    renderStatus(quirkyStopRow('update'), 'studio-mac', true)
     expect(
       screen.getByText(
-        'Orca on studio-mac restarted for an update while this response was in progress.'
+        'Quirky on studio-mac restarted for an update while this response was in progress.'
       )
     ).toBeInTheDocument()
   })
 
   it('carries Continue on the cut it is offered for, and only there', () => {
     const continueNow = vi.fn()
-    renderStatus(orcaStopRow('quit'), 'studio-mac', true, false, undefined, {
+    renderStatus(quirkyStopRow('quit'), 'studio-mac', true, false, undefined, {
       offeredTurnItemId: 'cut-turn',
       continueNow
     })
     const sentence = screen.getByText(
-      'Orca on studio-mac was closed while this response was in progress.'
+      'Quirky on studio-mac was closed while this response was in progress.'
     )
     const button = screen.getByRole('button', { name: 'Continue' })
     // Beside the words that say why, in the same card.
@@ -137,34 +137,34 @@ describe('the row an Orca stop leaves', () => {
     expect(continueNow).toHaveBeenCalledOnce()
     cleanup()
 
-    renderStatus(orcaStopRow('quit'), 'studio-mac', true, false, undefined, {
+    renderStatus(quirkyStopRow('quit'), 'studio-mac', true, false, undefined, {
       offeredTurnItemId: 'another-turn',
       continueNow
     })
     expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
   })
 
-  it("says a remote host's Orca stopped, not that it was closed", () => {
-    renderStatus(orcaStopRow('quit'), 'QA SSH', true, true)
+  it("says a remote host's Quirky stopped, not that it was closed", () => {
+    renderStatus(quirkyStopRow('quit'), 'QA SSH', true, true)
     expect(
-      screen.getByText('Orca on QA SSH stopped while this response was in progress.').parentElement
-        ?.parentElement
+      screen.getByText('Quirky on QA SSH stopped while this response was in progress.')
+        .parentElement?.parentElement
     ).toHaveClass('text-chat-foreground-faint')
     expect(screen.queryByText(/was closed/)).toBeNull()
   })
 
   it("keeps this desktop's quit as closed", () => {
-    renderStatus(orcaStopRow('quit'), 'studio-mac', true, false)
+    renderStatus(quirkyStopRow('quit'), 'studio-mac', true, false)
     expect(
-      screen.getByText('Orca on studio-mac was closed while this response was in progress.')
+      screen.getByText('Quirky on studio-mac was closed while this response was in progress.')
     ).toBeInTheDocument()
   })
 
   it.each([
-    ['update', 'Orca on QA SSH restarted for an update while this response was in progress.'],
-    ['crash', 'Orca on QA SSH stopped unexpectedly while this response was in progress.']
+    ['update', 'Quirky on QA SSH restarted for an update while this response was in progress.'],
+    ['crash', 'Quirky on QA SSH stopped unexpectedly while this response was in progress.']
   ])("keeps a remote host's %s words", (cause, sentence) => {
-    renderStatus(orcaStopRow(cause), 'QA SSH', true, true)
+    renderStatus(quirkyStopRow(cause), 'QA SSH', true, true)
     expect(screen.getByText(sentence)).toBeInTheDocument()
   })
 
@@ -175,13 +175,13 @@ describe('the row an Orca stop leaves', () => {
       kind: 'status',
       text: 'This response was interrupted. You can continue in this conversation.',
       tone: 'notice',
-      presentation: 'orca-stop',
-      orcaStop: { cause: 'crash' }
+      presentation: 'quirky-stop',
+      quirkyStop: { cause: 'crash' }
     }
     renderStatus(represented, 'studio-mac', true)
     expect(
       screen.getByText(
-        'Orca on studio-mac stopped unexpectedly while this response was in progress.'
+        'Quirky on studio-mac stopped unexpectedly while this response was in progress.'
       ).parentElement?.parentElement
     ).toHaveClass('text-chat-foreground-faint')
     cleanup()
@@ -193,29 +193,33 @@ describe('the row an Orca stop leaves', () => {
   })
 
   it('keeps the host words for a cause this build does not know', () => {
-    renderStatus(orcaStopRow('power-loss'), 'studio-mac')
+    renderStatus(quirkyStopRow('power-loss'), 'studio-mac')
     expect(screen.getByText(LEGACY_TEXT)).toBeInTheDocument()
   })
 
   it('keeps the host words when the chat has no machine to name, muted all the same', () => {
-    renderStatus(orcaStopRow('update'), null)
+    renderStatus(quirkyStopRow('update'), null)
     expect(screen.getByText(LEGACY_TEXT).parentElement?.parentElement).toHaveClass(
       'text-chat-foreground-faint'
     )
   })
 
   it('calls a paired server with no name the remote server, so its words match the button', () => {
-    renderStatus(orcaStopRow('update'), null, true, true)
+    renderStatus(quirkyStopRow('update'), null, true, true)
     expect(
       screen.getByText(
-        'Orca on the remote server restarted for an update while this response was in progress.'
+        'Quirky on the remote server restarted for an update while this response was in progress.'
       )
     ).toBeInTheDocument()
     expect(screen.queryByText(LEGACY_TEXT)).toBeNull()
   })
 
-  it('keeps the host words for a stop Orca did not cause', () => {
-    const { orcaStop: _orcaStop, presentation: _presentation, ...agentExit } = orcaStopRow('update')
+  it('keeps the host words for a stop Quirky did not cause', () => {
+    const {
+      quirkyStop: _quirkyStop,
+      presentation: _presentation,
+      ...agentExit
+    } = quirkyStopRow('update')
     renderStatus(agentExit, 'studio-mac')
     expect(screen.getByText(LEGACY_TEXT).parentElement?.parentElement).toHaveClass(
       'text-destructive'

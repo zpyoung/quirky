@@ -4,7 +4,7 @@ import type { Repo } from '../../../shared/repo-types'
 import { resolveProjectCloneUrlPrefill } from './project-clone-url-prefill'
 
 function project(sourceRepoIds: string[]): Project {
-  return { id: 'project-orca', sourceRepoIds } as unknown as Project
+  return { id: 'project-quirky', sourceRepoIds } as unknown as Project
 }
 
 function repo(id: string, remoteUrl: string): Repo {
@@ -16,11 +16,11 @@ describe('resolveProjectCloneUrlPrefill', () => {
     // The clone runs on the target host and would persist this into .git/config.
     const prefill = resolveProjectCloneUrlPrefill(
       [project(['repo-1'])],
-      [repo('repo-1', 'https://x-access-token:ghp_ABC123@github.com/acme/orca.git')],
-      'project-orca'
+      [repo('repo-1', 'https://x-access-token:ghp_ABC123@github.com/acme/quirky.git')],
+      'project-quirky'
     )
 
-    expect(prefill).toBe('https://github.com/acme/orca.git')
+    expect(prefill).toBe('https://github.com/acme/quirky.git')
     expect(prefill).not.toContain('ghp_ABC123')
   })
 
@@ -28,10 +28,10 @@ describe('resolveProjectCloneUrlPrefill', () => {
     expect(
       resolveProjectCloneUrlPrefill(
         [project(['repo-1'])],
-        [repo('repo-1', 'https://alice:hunter2@gitlab.com/acme/orca.git')],
-        'project-orca'
+        [repo('repo-1', 'https://alice:hunter2@gitlab.com/acme/quirky.git')],
+        'project-quirky'
       )
-    ).toBe('https://gitlab.com/acme/orca.git')
+    ).toBe('https://gitlab.com/acme/quirky.git')
   })
 
   it('leaves an SSH remote untouched, since git@host is part of the URL', () => {
@@ -39,15 +39,15 @@ describe('resolveProjectCloneUrlPrefill', () => {
       resolveProjectCloneUrlPrefill(
         [project(['repo-1'])],
         [repo('repo-1', 'git@github.com:stablyai/orca.git')],
-        'project-orca'
+        'project-quirky'
       )
     ).toBe('git@github.com:stablyai/orca.git')
   })
 
   it('returns empty when the project, repo, or remote is missing', () => {
     expect(resolveProjectCloneUrlPrefill([], [], null)).toBe('')
-    expect(resolveProjectCloneUrlPrefill([], [], 'project-orca')).toBe('')
-    expect(resolveProjectCloneUrlPrefill([project(['repo-1'])], [], 'project-orca')).toBe('')
+    expect(resolveProjectCloneUrlPrefill([], [], 'project-quirky')).toBe('')
+    expect(resolveProjectCloneUrlPrefill([project(['repo-1'])], [], 'project-quirky')).toBe('')
   })
 
   it('takes the first source repo that actually has a remote', () => {
@@ -58,7 +58,7 @@ describe('resolveProjectCloneUrlPrefill', () => {
           { id: 'repo-no-remote' } as unknown as Repo,
           repo('repo-2', 'https://github.com/acme/second.git')
         ],
-        'project-orca'
+        'project-quirky'
       )
     ).toBe('https://github.com/acme/second.git')
   })
@@ -72,7 +72,7 @@ describe('resolveProjectCloneUrlPrefill', () => {
       }
     }))
     const sourceIds = Array.from({ length: 1000 }, (_, i) => `repo-${i}`)
-    expect(resolveProjectCloneUrlPrefill([project(sourceIds)], repos, 'project-orca')).toBe(
+    expect(resolveProjectCloneUrlPrefill([project(sourceIds)], repos, 'project-quirky')).toBe(
       'https://gitlab.com/acme/repo.git'
     )
     expect(reads).toBe(1)
@@ -81,7 +81,7 @@ describe('resolveProjectCloneUrlPrefill', () => {
       resolveProjectCloneUrlPrefill(
         [project(sourceIds.map((id) => `missing-${id}`))],
         repos,
-        'project-orca'
+        'project-quirky'
       )
     ).toBe('')
     expect(reads).toBeLessThanOrEqual(2000)
@@ -92,7 +92,7 @@ describe('resolveProjectCloneUrlPrefill', () => {
       resolveProjectCloneUrlPrefill(
         [project(['missing', 'duplicate'])],
         [repo('duplicate', ''), repo('duplicate', 'https://gitlab.com/acme/repo.git')],
-        'project-orca'
+        'project-quirky'
       )
     ).toBe('')
   })

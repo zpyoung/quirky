@@ -3,7 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomKey } from '../terminal/terminal-custom-keys'
 
-const CUSTOM_KEYS = 'orca:custom-accessory-keys'
+const CUSTOM_KEYS = 'quirky:custom-accessory-keys'
 
 const store = vi.hoisted(() => {
   const held: {

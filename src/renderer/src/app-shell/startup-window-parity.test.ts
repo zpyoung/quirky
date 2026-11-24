@@ -28,7 +28,7 @@ import {
 // The window boots as today's (the oracle); main loads as it does once it owns the layout.
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
@@ -123,7 +123,7 @@ describe('the window shows the same session before and after the shared Loader r
       ])
     )
     expect(view[`${GIT} group 0 tabs`]).toEqual(['tab-a', 'tab-b'])
-    expect(view).not.toHaveProperty([`${GIT} tab /Users/dev/orca/src/app.ts`])
+    expect(view).not.toHaveProperty([`${GIT} tab /Users/dev/quirky/src/app.ts`])
   })
 
   it('lists differences only for fixtures that exist', () => {

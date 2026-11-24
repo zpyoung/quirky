@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const RUNNING_INSTANCES_SCRIPT = `function run(argv) {
   ObjC.import('AppKit');
@@ -36,7 +36,7 @@ export async function getMacUpdateRunningInstances(
     killOnOutputLimit: true
   })
   if (result.code !== 0 || result.timedOut || result.outputTruncated) {
-    throw new Error('Could not check running Orca instances')
+    throw new Error('Could not check running Quirky instances')
   }
   return parseMacUpdateRunningInstances(result.stdout, currentPid)
 }

@@ -63,7 +63,7 @@ beforeEach(async () => {
   }))
   rig.adapter.dispatch.mockImplementation(async ({ clientMessageId }) => ({
     state: 'accepted',
-    providerIdentity: { provider: 'orca', clientMessageId }
+    providerIdentity: { provider: 'quirky', clientMessageId }
   }))
 })
 

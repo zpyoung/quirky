@@ -8,7 +8,7 @@ import {
 const COLORS = { foreground: '#2e3434', background: '#ffffff' }
 const FOREGROUND_REPLY = '\x1b]10;rgb:2e2e/3434/3434\x1b\\'
 const BACKGROUND_REPLY = '\x1b]11;rgb:ffff/ffff/ffff\x1b\\'
-// Orca's default dark theme, which answers until a viewer reports colours.
+// Quirky's default dark theme, which answers until a viewer reports colours.
 const DEFAULT_FOREGROUND_REPLY = '\x1b]10;rgb:ffff/ffff/ffff\x1b\\'
 const DEFAULT_BACKGROUND_REPLY = '\x1b]11;rgb:2828/2c2c/3434\x1b\\'
 // The two echo shapes a cooked POSIX tty produces for a written reply: ECHOCTL
@@ -348,7 +348,7 @@ describe('PtyStartupIngress', () => {
 
   it('swallows a cooked POSIX echo coalesced behind earlier program output', () => {
     // Why this shape: an agent pane is launched by writing a command into an interactive
-    // shell, so the tty echo of Orca's reply never arrives at the head of a read (#12112).
+    // shell, so the tty echo of Quirky's reply never arrives at the head of a read (#12112).
     vi.useFakeTimers()
     for (const echoOf of POSIX_COOKED_ECHOES) {
       const replies: string[] = []
@@ -668,7 +668,7 @@ describe('PtyStartupIngress', () => {
   it('keeps swallowing an echo split across the query-authority handoff', () => {
     // Why the asymmetry with snapshotBarrier is deliberate: closing query authority
     // hands off who may answer, but the reply is already on the wire and its echo is
-    // still Orca's to swallow. Cutting the hold here would show its first half.
+    // still Quirky's to swallow. Cutting the hold here would show its first half.
     vi.useFakeTimers()
     const { ingress, writes, emissions } = createHarness()
     const echo = FOREGROUND_REPLY.replaceAll('\x1b', '^[')
@@ -686,7 +686,7 @@ describe('PtyStartupIngress', () => {
 
   it('swallows an echo whose halves straddle a relay-sized stall', () => {
     // Why: an expired hold releases raw, so a hold shorter than real inter-chunk
-    // jitter reinstates the leak on exactly the links Orca has to work over.
+    // jitter reinstates the leak on exactly the links Quirky has to work over.
     vi.useFakeTimers()
     const echo = FOREGROUND_REPLY.replaceAll('\x1b', '^[')
     for (const gapMs of [50, 200, 400]) {

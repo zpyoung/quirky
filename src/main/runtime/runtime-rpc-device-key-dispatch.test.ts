@@ -6,19 +6,19 @@ import { describe, expect, it, vi } from 'vitest'
 import { encodeDeviceProofMessage } from '../../shared/device-key-proof'
 import { devicePrincipalOf } from './device-principal'
 import { DeviceRegistry } from './device-registry'
-import type { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import type { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import type { AuthenticatedMobileSocket } from './rpc/mobile-socket-wiring'
 
 function keyedServer() {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-dispatch-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-key-dispatch-'))
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: status.get only reads these three members.
   const runtime = {
     configureNotificationDismissalStore: () => {},
     getRuntimeId: () => 'test-runtime',
     getStatus: vi.fn().mockResolvedValue({ graphStatus: 'ok' })
-  } as unknown as OrcaRuntimeService
-  const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+  } as unknown as QuirkyRuntimeService
+  const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
   const registry = new DeviceRegistry(userDataPath)
   server['deviceRegistry'] = registry
   const legacy = registry.addDevice('Laptop', 'runtime')
@@ -85,13 +85,13 @@ describe('pairing.registerDeviceKey over the dispatcher', () => {
   it.each(['runtime', 'mobile'] as const)(
     'forks a %s token row bound to the calling socket',
     async (scope) => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-key-register-'))
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-key-register-'))
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration never touches the runtime service.
       const runtime = {
         configureNotificationDismissalStore: () => {},
         getRuntimeId: () => 'test-runtime'
-      } as unknown as OrcaRuntimeService
-      const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+      } as unknown as QuirkyRuntimeService
+      const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
       const registry = new DeviceRegistry(userDataPath)
       server['deviceRegistry'] = registry
       const legacy = registry.addDevice('Device', scope)

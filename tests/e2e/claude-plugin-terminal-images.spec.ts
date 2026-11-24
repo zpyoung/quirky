@@ -2,44 +2,44 @@ import { readFileSync } from 'node:fs'
 import { PNG } from 'pngjs'
 import { resolveClaudeCommand } from '../../src/shared/node-cli-command-resolution'
 import { createClaudePluginImageFixture } from './helpers/claude-plugin-image-fixture'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForSessionReady } from './helpers/store'
 import { execInTerminal, sendToTerminal, waitForActiveTerminalManager } from './helpers/terminal'
 import { enableInlineImages } from './helpers/terminal-inline-image-proof'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../src/shared/constants'
 import { nodeTerminalCommand } from './terminal-node-command'
 
-const enabled = process.env.ORCA_REAL_CLAUDE_PLUGIN_TEST === '1'
-const command = process.env.ORCA_REAL_CLAUDE_COMMAND || resolveClaudeCommand()
+const enabled = process.env.QUIRKY_REAL_CLAUDE_PLUGIN_TEST === '1'
+const command = process.env.QUIRKY_REAL_CLAUDE_COMMAND || resolveClaudeCommand()
 
 test.use({
-  launchEnv: { ORCA_BACKGROUND_LAUNCH: '1' },
-  orcaAppExtraArgs: ['--force-color-profile=srgb']
+  launchEnv: { QUIRKY_BACKGROUND_LAUNCH: '1' },
+  quirkyAppExtraArgs: ['--force-color-profile=srgb']
 })
-test.skip(!enabled, 'Set ORCA_REAL_CLAUDE_PLUGIN_TEST=1 to run the installed Claude UI')
+test.skip(!enabled, 'Set QUIRKY_REAL_CLAUDE_PLUGIN_TEST=1 to run the installed Claude UI')
 
 for (const acceleration of ['off', 'on'] as const) {
   for (const surface of ['bare', 'workspace', 'floating'] as const) {
     const managed = surface !== 'bare'
     const floating = surface === 'floating'
     test(`@headful ${acceleration}: real Claude plugin ${managed ? `${surface} managed launch renders bytes and host files` : 'reports unsupported automatic detection'}`, async ({
-      orcaPage
+      quirkyPage
     }, testInfo) => {
-      await waitForSessionReady(orcaPage)
-      await ensureTerminalVisible(orcaPage)
-      await orcaPage.evaluate(async (policy) => {
+      await waitForSessionReady(quirkyPage)
+      await ensureTerminalVisible(quirkyPage)
+      await quirkyPage.evaluate(async (policy) => {
         await window.__store!.getState().updateSettings({ terminalGpuAcceleration: policy })
       }, acceleration)
-      await waitForActiveTerminalManager(orcaPage)
-      await enableInlineImages(orcaPage)
+      await waitForActiveTerminalManager(quirkyPage)
+      await enableInlineImages(quirkyPage)
       const { launcher, gateReceipt, cleanup } = createClaudePluginImageFixture(
         testInfo.outputPath('claude'),
         command,
         managed ? 'managed' : false
       )
-      let tabId = await orcaPage.evaluate(() => window.__store!.getState().activeTabId)
+      let tabId = await quirkyPage.evaluate(() => window.__store!.getState().activeTabId)
       if (managed) {
-        tabId = await orcaPage.evaluate(
+        tabId = await quirkyPage.evaluate(
           ({ startupCommand, floatingWorktreeId }) => {
             const store = window.__store!
             const state = store.getState()
@@ -61,24 +61,24 @@ for (const acceleration of ['off', 'on'] as const) {
         )
       }
       if (floating) {
-        await orcaPage.evaluate(async () => {
+        await quirkyPage.evaluate(async () => {
           await window.__store!.getState().updateSettings({ floatingTerminalEnabled: true })
         })
-        await expect(orcaPage.locator('[data-floating-terminal-panel]')).toBeAttached()
-        await orcaPage.evaluate(() =>
-          window.dispatchEvent(new Event('orca-toggle-floating-terminal'))
+        await expect(quirkyPage.locator('[data-floating-terminal-panel]')).toBeAttached()
+        await quirkyPage.evaluate(() =>
+          window.dispatchEvent(new Event('quirky-toggle-floating-terminal'))
         )
-        await expect(orcaPage.locator('[data-floating-terminal-panel]')).toBeVisible()
+        await expect(quirkyPage.locator('[data-floating-terminal-panel]')).toBeVisible()
       }
       await expect
         .poll(() =>
-          orcaPage.evaluate(
+          quirkyPage.evaluate(
             (id) => id && window.__paneManagers?.get(id)?.getActivePane()?.container.dataset.ptyId,
             tabId
           )
         )
         .toBeTruthy()
-      const ptyId = await orcaPage.evaluate(
+      const ptyId = await quirkyPage.evaluate(
         (id) => id && window.__paneManagers?.get(id)?.getActivePane()?.container.dataset.ptyId,
         tabId
       )
@@ -89,7 +89,7 @@ for (const acceleration of ['off', 'on'] as const) {
         await expect
           .poll(
             () =>
-              orcaPage.evaluate((id) => {
+              quirkyPage.evaluate((id) => {
                 const manager = id ? window.__paneManagers?.get(id) : undefined
                 const pane = manager?.getActivePane()
                 return pane?.serializeAddon?.serialize() ?? ''
@@ -100,11 +100,11 @@ for (const acceleration of ['off', 'on'] as const) {
       }
       try {
         if (!managed) {
-          await execInTerminal(orcaPage, ptyId, nodeTerminalCommand([launcher]))
+          await execInTerminal(quirkyPage, ptyId, nodeTerminalCommand([launcher]))
         }
         await expect
           .poll(() =>
-            orcaPage.evaluate((tabId) => {
+            quirkyPage.evaluate((tabId) => {
               const manager = tabId && window.__paneManagers?.get(tabId)
               const pane = manager && manager.getActivePane()
               return Boolean(manager && pane && manager.hasWebglRenderer(pane.id))
@@ -115,7 +115,7 @@ for (const acceleration of ['off', 'on'] as const) {
         expect(JSON.parse(readFileSync(gateReceipt, 'utf8'))).toEqual({
           flag: managed ? '1' : null
         })
-        const screen = orcaPage
+        const screen = quirkyPage
           .locator(
             floating
               ? '[data-floating-terminal-panel] .pane:visible .xterm-screen'
@@ -123,7 +123,7 @@ for (const acceleration of ['off', 'on'] as const) {
           )
           .first()
         const colors = async (name: string) => {
-          const notice = orcaPage.getByRole('status', {
+          const notice = quirkyPage.getByRole('status', {
             name: 'Usage display is now compact',
             exact: true
           })
@@ -168,7 +168,7 @@ for (const acceleration of ['off', 'on'] as const) {
             { timeout: 15_000 }
           )
           .toBe(true)
-        await sendToTerminal(orcaPage, ptyId, '/image-acceptance file\r')
+        await sendToTerminal(quirkyPage, ptyId, '/image-acceptance file\r')
         await waitForOutput('IMAGE_ACCEPTANCE_STAGE_file')
         await expect
           .poll(
@@ -179,14 +179,14 @@ for (const acceleration of ['off', 'on'] as const) {
             { timeout: 15_000 }
           )
           .toBe(true)
-        await sendToTerminal(orcaPage, ptyId, '/image-acceptance clear\r')
+        await sendToTerminal(quirkyPage, ptyId, '/image-acceptance clear\r')
         await waitForOutput('IMAGE_ACCEPTANCE_STAGE_clear')
         await expect
           .poll(() => colors('cleared.png'), { timeout: 15_000 })
           .toEqual({ red: 0, blue: 0, green: 0, yellow: 0 })
       } finally {
         try {
-          await orcaPage.evaluate((id) => window.api.pty.kill(id), ptyId)
+          await quirkyPage.evaluate((id) => window.api.pty.kill(id), ptyId)
         } finally {
           cleanup()
         }

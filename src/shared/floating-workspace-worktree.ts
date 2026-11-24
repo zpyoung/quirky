@@ -2,7 +2,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from './constants'
 import type { Worktree } from './worktree/types'
 
 /**
- * The floating workspace is a directory the user points Orca at, with no repo, worktree or folder
+ * The floating workspace is a directory the user points Quirky at, with no repo, worktree or folder
  * row behind it. Anything that resolves a workspace to a filesystem location needs an answer for
  * it, so this mints the same synthetic `Worktree` shape folder workspaces use.
  *

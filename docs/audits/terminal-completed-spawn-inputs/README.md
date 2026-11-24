@@ -50,15 +50,15 @@ The seeded snapshot remains readable after collection. These object reachability
 Run from the worktree:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/reproduce.cjs --baseline
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/reproduce.cjs
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/admission-control.cjs
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/daemon/terminal-host-spawn-input-retention.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/reproduce.cjs --baseline
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc --max-old-space-size=192 docs/audits/terminal-completed-spawn-inputs/admission-control.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/daemon/terminal-host-spawn-input-retention.test.ts
 ```
 
-For Electron, run the same proof scripts with the binary returned by `require('electron')`, the same Node flags, `ELECTRON_RUN_AS_NODE=1`, and `ORCA_BACKGROUND_LAUNCH=1`. This starts no application or window. Node and Electron reports are stored separately in this directory.
+For Electron, run the same proof scripts with the binary returned by `require('electron')`, the same Node flags, `ELECTRON_RUN_AS_NODE=1`, and `QUIRKY_BACKGROUND_LAUNCH=1`. This starts no application or window. Node and Electron reports are stored separately in this directory.
 
-The four permanent regressions pass with the fix. The reconstructed baseline deliberately fails the two retention regressions and passes both lifecycle controls: `ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config docs/audits/terminal-completed-spawn-inputs/baseline.config.mjs` exits 1. Existing host, concurrent create, teardown/recreate, reaping, agent ownership, preflight replacement, and history restore tests also pass: 67 tests across nine files. Node typecheck and the changed-code quality gate passed; explicit basic/type-aware lint includes the audit scripts.
+The four permanent regressions pass with the fix. The reconstructed baseline deliberately fails the two retention regressions and passes both lifecycle controls: `QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config docs/audits/terminal-completed-spawn-inputs/baseline.config.mjs` exits 1. Existing host, concurrent create, teardown/recreate, reaping, agent ownership, preflight replacement, and history restore tests also pass: 67 tests across nine files. Node typecheck and the changed-code quality gate passed; explicit basic/type-aware lint includes the audit scripts.
 
 ## Source identity and compatibility
 
@@ -66,6 +66,6 @@ The four permanent regressions pass with the fix. The reconstructed baseline del
 
 The supported `TerminalHost` SHA-256 pairs are audit baseline `8cd6804b249ffb0d82da7f5a7ec8faa66514b0d6e3e36472cd81e6409c3edbc4` → fixed `23cfd9c6317db30edd48a0c8bd7c54658206654703461cf12295274b23fb8844`, and independent-main baseline `5216562b3c10c5fce4238614dc3a81887c970359a60e7e23179c6dfa15ccbcca` → fixed `f22856504559a6bb78498c6d5aae07cbbd80a21019723278a560628e0142236f`. Each selected fixed source is reverse-patched and checked against its own paired baseline hash.
 
-The four permanent tests pass when the three patched main modules are overlaid on current dependencies. The six `mapped-*.json` reports repeat both runtime proofs and admission controls using the exact patched publication-main modules. They report the main hashes actually evaluated. This is a narrow compatibility check with working-tree dependencies, not a full historical application build. An optional `ORCA_SPAWN_INPUT_PROOF_SOURCE_MAP` points to a JSON object from these three relative source paths to exact reviewed fixed-source strings; unknown or incomplete mappings fail the same hash checks. With no mapping, the loader checks the published checkout directly. Mapped runs write separate reports prefixed `mapped-`.
+The four permanent tests pass when the three patched main modules are overlaid on current dependencies. The six `mapped-*.json` reports repeat both runtime proofs and admission controls using the exact patched publication-main modules. They report the main hashes actually evaluated. This is a narrow compatibility check with working-tree dependencies, not a full historical application build. An optional `QUIRKY_SPAWN_INPUT_PROOF_SOURCE_MAP` points to a JSON object from these three relative source paths to exact reviewed fixed-source strings; unknown or incomplete mappings fail the same hash checks. With no mapping, the loader checks the published checkout directly. Mapped runs write separate reports prefixed `mapped-`.
 
 Cancellation wait/listener findings from the preceding audit remain diagnostic and are outside this patch. The independent admission review narrowed the signal/environment claims before publication.

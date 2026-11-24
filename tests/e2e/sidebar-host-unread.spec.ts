@@ -1,5 +1,5 @@
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { postClaudeHook, readHookEndpoint } from './helpers/agent-hook-endpoint'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
@@ -11,7 +11,7 @@ import {
 
 test.skip(
   !SIDEBAR_INPUTS_BUILD,
-  'the host raises the unread flag only in an ORCA_SIDEBAR_INPUTS=main build'
+  'the host raises the unread flag only in an QUIRKY_SIDEBAR_INPUTS=main build'
 )
 
 async function readHostRow(page: Page, rowKey: string): Promise<WorkspaceRow | undefined> {
@@ -25,38 +25,38 @@ async function readHostRow(page: Page, rowKey: string): Promise<WorkspaceRow | u
 }
 
 test('the host raises the unread flag where the window’s user is not looking, as the window would', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
   test.setTimeout(90_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
   const endpoint = await readHookEndpoint(electronApp)
-  const pane = await waitForActivePaneHookDescriptor(orcaPage)
+  const pane = await waitForActivePaneHookDescriptor(quirkyPage)
   const rowKey = `local|${pane.worktreeId}`
   const unread = async (): Promise<boolean | undefined> =>
-    (await readHostRow(orcaPage, rowKey))?.isUnread
+    (await readHostRow(quirkyPage, rowKey))?.isUnread
   await expect.poll(unread).toBe(false)
 
   // Input in the window confirms the user is present, and the agent's tab is on screen.
-  await orcaPage.mouse.move(40, 40)
-  await orcaPage.mouse.move(60, 60)
+  await quirkyPage.mouse.move(40, 40)
+  await quirkyPage.mouse.move(60, 60)
   await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'go' })
   await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
-  await expect.poll(async () => (await readHostRow(orcaPage, rowKey))?.smartTier).toBe('done')
+  await expect.poll(async () => (await readHostRow(quirkyPage, rowKey))?.smartTier).toBe('done')
   expect(await unread()).toBe(false)
 
   // Settings is up, so no workspace is on screen: the finish is news.
-  await orcaPage.evaluate(() => window.__store?.setState({ activeView: 'tasks' }))
+  await quirkyPage.evaluate(() => window.__store?.setState({ activeView: 'tasks' }))
   await postClaudeHook(endpoint, pane, { hook_event_name: 'UserPromptSubmit', prompt: 'more' })
   await postClaudeHook(endpoint, pane, { hook_event_name: 'Stop', last_assistant_message: 'ok' })
   await expect.poll(unread).toBe(true)
   // The window's copy is the host's record.
   await expect
     .poll(() =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         (id) =>
           Object.values(window.__store?.getState().worktreesByRepo ?? {})
             .flat()
@@ -67,7 +67,7 @@ test('the host raises the unread flag where the window’s user is not looking, 
     .toBe(true)
 
   // Mark as read writes through to the host.
-  await orcaPage.evaluate((id) => {
+  await quirkyPage.evaluate((id) => {
     window.__store?.getState().setWorkspaceUnreadByUser(id, false, 'local')
   }, pane.worktreeId)
   await expect.poll(unread).toBe(false)
@@ -81,21 +81,21 @@ test('the host raises the unread flag where the window’s user is not looking, 
 })
 
 test('the host raises the flag even for a workspace the Filters hide while hidden workspaces stay quiet', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
   test.setTimeout(90_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
   const endpoint = await readHookEndpoint(electronApp)
-  const pane = await waitForActivePaneHookDescriptor(orcaPage)
+  const pane = await waitForActivePaneHookDescriptor(quirkyPage)
   const rowKey = `local|${pane.worktreeId}`
   const unread = async (): Promise<boolean | undefined> =>
-    (await readHostRow(orcaPage, rowKey))?.isUnread
+    (await readHostRow(quirkyPage, rowKey))?.isUnread
   // The seeded workspace is the primary checkout, which "Hide default branch" hides.
-  await orcaPage.evaluate(async () => {
+  await quirkyPage.evaluate(async () => {
     const state = window.__store!.getState()
     state.setHideDefaultBranchWorkspace(true)
     state.setActiveView('tasks')
@@ -106,7 +106,7 @@ test('the host raises the flag even for a workspace the Filters hide while hidde
   // The host reads the persisted switch, not the window's copy.
   await expect
     .poll(() =>
-      orcaPage.evaluate(async () => (await window.api.ui.get()).hideDefaultBranchWorkspace)
+      quirkyPage.evaluate(async () => (await window.api.ui.get()).hideDefaultBranchWorkspace)
     )
     .toBe(true)
   await expect.poll(unread).toBe(false)
@@ -118,7 +118,7 @@ test('the host raises the flag even for a workspace the Filters hide while hidde
   // The window keeps the host's dot; its Filters mute only its own banner and sound.
   await expect
     .poll(() =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         (id) =>
           Object.values(window.__store?.getState().worktreesByRepo ?? {})
             .flat()

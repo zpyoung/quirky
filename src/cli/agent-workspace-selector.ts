@@ -38,7 +38,7 @@ export async function resolveCurrentAgentWorkspaceSelector(
           (row) =>
             resolveFolderWorkspaceHost(state, row.id.slice('folder:'.length)).kind === 'local'
         )
-        const callerWorkspace = process.env.ORCA_WORKSPACE_ID ?? process.env.ORCA_WORKTREE_ID
+        const callerWorkspace = process.env.QUIRKY_WORKSPACE_ID ?? process.env.QUIRKY_WORKTREE_ID
         const callerCatalog = nativeCatalog.filter((row) => row.id === callerWorkspace)
         const selector =
           selectEnclosingWorktreeOnHost(callerCatalog, cwd, LOCAL_EXECUTION_HOST_ID) ??

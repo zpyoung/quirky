@@ -1,5 +1,5 @@
 import type { AutomationWorkspaceMode } from '../../../../shared/automations-types'
-import type { OrcaHooks, SetupRunPolicy } from '../../../../shared/orca-yaml-hook-types'
+import type { QuirkyHooks, SetupRunPolicy } from '../../../../shared/quirky-yaml-hook-types'
 import type { ProjectHostSetup } from '../../../../shared/project-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { SetupDecision } from '../../../../shared/worktree/create-types'
@@ -14,7 +14,7 @@ function getAutomationSetupSource(
   repoId: string,
   repos: readonly Repo[],
   projectHostSetups: readonly ProjectHostSetup[],
-  yamlHooks: OrcaHooks | null | undefined
+  yamlHooks: QuirkyHooks | null | undefined
 ): AutomationSetupSource | null {
   const setup = projectHostSetups.find(
     (candidate) => candidate.repoId === repoId && candidate.setupState === 'ready'
@@ -48,7 +48,7 @@ export function getVisibleAutomationSetupDecision(args: {
   repoId: string
   repos: readonly Repo[]
   projectHostSetups: readonly ProjectHostSetup[]
-  yamlHooks?: OrcaHooks | null
+  yamlHooks?: QuirkyHooks | null
 }): Extract<SetupDecision, 'run' | 'skip'> | undefined {
   if (args.workspaceMode !== 'new_per_run') {
     return undefined
@@ -63,7 +63,7 @@ export function resolveAutomationSetupDecisionForSave(args: {
   repoId: string
   repos: readonly Repo[]
   projectHostSetups: readonly ProjectHostSetup[]
-  yamlHooks?: OrcaHooks | null
+  yamlHooks?: QuirkyHooks | null
   draftSetupDecision: Extract<SetupDecision, 'run' | 'skip'> | undefined
 }): Extract<SetupDecision, 'run' | 'skip'> | undefined {
   if (args.workspaceMode !== 'new_per_run') {
@@ -76,7 +76,7 @@ export function resolveAutomationSetupDecisionForSave(args: {
   }
 
   if (args.yamlHooks === undefined) {
-    // Why: automations cannot pause later for an orca.yaml trust prompt; when
+    // Why: automations cannot pause later for an quirky.yaml trust prompt; when
     // hook inspection is unavailable, fail closed instead of inheriting setup.
     return 'skip'
   }

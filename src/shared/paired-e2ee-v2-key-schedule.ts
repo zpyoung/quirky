@@ -4,8 +4,8 @@ import type { PairedE2EEV2KeySchedule } from './paired-e2ee-primitives'
 
 // Why: pure JS so browsers without crypto.subtle (http://<lan-ip>) and Hermes derive the
 // same v2 keys as the node:crypto schedule. Keep it out of the CLI's unbundled graph.
-const SALT_LABEL = new TextEncoder().encode('orca-mobile-e2ee/v2/salt\0')
-const INFO_LABEL = new TextEncoder().encode('orca-mobile-e2ee/v2/session\0')
+const SALT_LABEL = new TextEncoder().encode('quirky-mobile-e2ee/v2/salt\0')
+const INFO_LABEL = new TextEncoder().encode('quirky-mobile-e2ee/v2/session\0')
 
 export function derivePairedE2EEV2KeySchedule(args: {
   sharedSecret: Uint8Array

@@ -28,7 +28,7 @@ type ParserSessionOptions = {
 
 // Kiro CLI keeps each session as <id>.json (metadata) beside <id>.jsonl (transcript),
 // flat under $KIRO_HOME/sessions/cli; per-session subdirectories hold task state only.
-// This is the `kiro-cli chat` store Orca launches; the opt-in ACP V3 engine owns its own.
+// This is the `kiro-cli chat` store Quirky launches; the opt-in ACP V3 engine owns its own.
 const KIRO_SESSION_FILE_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.json$/i
 

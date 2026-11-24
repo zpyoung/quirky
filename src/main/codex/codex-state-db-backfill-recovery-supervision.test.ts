@@ -22,8 +22,8 @@ const INCOMPLETE: CodexStateDbBackfillStatus = {
 
 const OWNER = String.raw`
 import { runCodexStateDbBackfillRecovery } from './codex-state-db-backfill-recovery'
-void runCodexStateDbBackfillRecovery(process.env.ORCA_TEST_CODEX_HOME!, new AbortController().signal, {
-  resolveCommand: () => process.env.ORCA_TEST_STAND_IN!,
+void runCodexStateDbBackfillRecovery(process.env.QUIRKY_TEST_CODEX_HOME!, new AbortController().signal, {
+  resolveCommand: () => process.env.QUIRKY_TEST_STAND_IN!,
   readStatus: () => ({ kind: 'incomplete', stateDbPath: '/state.sqlite', status: 'running' })
 }).catch(() => {})
 setInterval(() => {}, 60_000)
@@ -32,8 +32,8 @@ setInterval(() => {}, 60_000)
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
 function decodedSupervisorSpec(env: unknown): unknown {
   const encoded =
-    typeof env === 'object' && env !== null && 'ORCA_PROVIDER_SUPERVISOR_SPEC' in env
-      ? String(env.ORCA_PROVIDER_SUPERVISOR_SPEC)
+    typeof env === 'object' && env !== null && 'QUIRKY_PROVIDER_SUPERVISOR_SPEC' in env
+      ? String(env.QUIRKY_PROVIDER_SUPERVISOR_SPEC)
       : ''
   return JSON.parse(Buffer.from(encoded, 'base64').toString() || 'null')
 }
@@ -130,8 +130,8 @@ describe.runIf(process.platform !== 'win32')('supervised Codex backfill recovery
     const standIn = rig.writeStandIn('codex')
     const bundle = await rig.bundleOwner(OWNER, __dirname)
     const owner = rig.launchOwner(bundle, {
-      ORCA_TEST_STAND_IN: standIn,
-      ORCA_TEST_CODEX_HOME: rig.dir
+      QUIRKY_TEST_STAND_IN: standIn,
+      QUIRKY_TEST_CODEX_HOME: rig.dir
     })
     const pids = await rig.readPids()
 

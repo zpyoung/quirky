@@ -67,15 +67,15 @@ function stopHooks(f: ReturnType<typeof fixture>) {
       ? hooks.Stop
       : []
   }
-  const isOrca = (entry: unknown) => JSON.stringify(entry).includes('agent-hooks')
+  const isQuirky = (entry: unknown) => JSON.stringify(entry).includes('agent-hooks')
   const setStop = (dir: string, commands: string[]) =>
     f.edit(dir, (value) => {
       const hooks = typeof value.hooks === 'object' ? value.hooks : {}
-      value.hooks = { ...hooks, Stop: [...commands.map(hook), ...stopOf(value).filter(isOrca)] }
+      value.hooks = { ...hooks, Stop: [...commands.map(hook), ...stopOf(value).filter(isQuirky)] }
     })
   const stop = (dir: string) => stopOf(f.settings(dir))
-  const orcaCount = (dir: string) => stop(dir).filter(isOrca).length
-  return { hook, setStop, stop, orcaCount }
+  const quirkyCount = (dir: string) => stop(dir).filter(isQuirky).length
+  return { hook, setStop, stop, quirkyCount }
 }
 const sync = async (f: ReturnType<typeof fixture>) => {
   const report = await f.provision()
@@ -99,9 +99,9 @@ describe('Claude hooks at an explicit profile', () => {
     expect(readFileSync(join(f.defaultDir, 'settings.json'), 'utf8')).toBe(before)
     expect(f.settings(f.profile)).toEqual({ model: 'profile', hooks: JSON.parse(before).hooks })
   })
-  it("shares the user's hooks, Orca's hooks and statusline as plain keys that installs leave in sync", async () => {
+  it("shares the user's hooks, Quirky's hooks and statusline as plain keys that installs leave in sync", async () => {
     const f = fixture()
-    const { hook, setStop, stop, orcaCount } = stopHooks(f)
+    const { hook, setStop, stop, quirkyCount } = stopHooks(f)
     f.service.install(CURRENT)
     setStop(f.defaultDir, ['notify-me'])
     await sync(f)
@@ -111,16 +111,16 @@ describe('Claude hooks at an explicit profile', () => {
     setStop(f.defaultDir, ['notify-v2'])
     await sync(f)
     expect(stop(f.profile)[0]).toEqual(hook('notify-v2'))
-    expect(orcaCount(f.profile)).toBe(1)
+    expect(quirkyCount(f.profile)).toBe(1)
     // The default home is the master copy: an edit made in the profile lasts until the next refresh.
     setStop(f.profile, ['profile-only'])
     setStop(f.defaultDir, ['notify-v3'])
     await sync(f)
     expect(stop(f.profile)[0]).toEqual(hook('notify-v3'))
-    expect(orcaCount(f.profile)).toBe(1)
+    expect(quirkyCount(f.profile)).toBe(1)
   })
   it.each(['with', 'without'])(
-    'leaves the profile settings untouched by a refresh that changes nothing, %s Orca hooks in the default home',
+    'leaves the profile settings untouched by a refresh that changes nothing, %s Quirky hooks in the default home',
     async (variant) => {
       const f = fixture()
       writeFileSync(join(f.defaultDir, 'settings.json'), JSON.stringify({ model: 'opus' }))

@@ -114,7 +114,7 @@ export function parityWorldOverrides(base: Partial<AppState>): Partial<AppState>
     ]),
     // A creation main runs: one on a paired server is that server's own (see exclusions).
     pendingWorktreeCreations: pending
-      ? { [pending.creationId]: { ...pending, request: { ...pending.request, repoId: 'orca' } } }
+      ? { [pending.creationId]: { ...pending, request: { ...pending.request, repoId: 'quirky' } } }
       : {},
     workspaceHostOrder: ['ssh:gpu-vm', SERVER_HOST_ID, 'local'],
     // Desktop-only cards (imported, new external) are no feed input, so neither side gets them.

@@ -21,7 +21,7 @@ export function getUsageProviderAccountsSectionId(
       return 'accounts-cursor'
     case 'antigravity':
     case 'kimi':
-      // Why: Orca must not mutate Kimi's CLI-owned credential lifecycle.
+      // Why: Quirky must not mutate Kimi's CLI-owned credential lifecycle.
       // Antigravity credentials live in the agy CLI; quota is fetched directly via agy.
       return null
     case 'zcode':

@@ -208,7 +208,7 @@ export function HostedReviewSitterEnrollmentForm({
       <p className="text-[10px] leading-relaxed text-muted-foreground">
         {translate(
           'fork.hostedReviewSitter.enrollment.askAuthority',
-          'Ask may prepare and commit fixes in this worktree; Orca waits for approval before publishing them. It also waits before triggering CI, updating the branch, or merging.'
+          'Ask may prepare and commit fixes in this worktree; Quirky waits for approval before publishing them. It also waits before triggering CI, updating the branch, or merging.'
         )}
       </p>
 

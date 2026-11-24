@@ -1,4 +1,4 @@
-// Runs on plain Node, as orcad does: the reader imports no Electron.
+// Runs on plain Node, as quirkyd does: the reader imports no Electron.
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import type { ProjectGroup } from '../../../shared/project-group-types'

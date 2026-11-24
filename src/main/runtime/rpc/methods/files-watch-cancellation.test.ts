@@ -2,7 +2,7 @@ import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { FILE_METHODS } from './files'
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -41,7 +41,7 @@ describe('file watch RPC cancellation', () => {
       cleanupSubscription: vi.fn((id) => {
         void cleanupSubscriptionAndWait(id)
       })
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
     const replies: { result?: { type?: string; subscriptionId?: string } }[] = []
 
@@ -85,7 +85,7 @@ describe('file watch RPC cancellation', () => {
         cleanupSubscription: vi.fn((id) => {
           void Promise.resolve(cleanups.get(id)?.())
         })
-      } as unknown as OrcaRuntimeService
+      } as unknown as QuirkyRuntimeService
       const dispatcher = new RpcDispatcher({ runtime, methods: FILE_METHODS })
       const abortController = new AbortController()
       const replies: unknown[] = []

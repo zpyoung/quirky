@@ -1,7 +1,7 @@
 /** After a managed connect or restore: flags a macOS host whose server outlived its launching SSH session. */
 import { getAppEnvironment } from '../../../shared/app-environment'
 import { listEnvironments } from '../../../shared/runtime-environment-store'
-import { readManagedOrcadLaunchSshSession } from '../../managed-server/lifecycle/orcad-managed-launch-session'
+import { readManagedQuirkydLaunchSshSession } from '../../managed-server/lifecycle/quirkyd-managed-launch-session'
 import { knownSshHostPlatform } from '../../ssh/ssh-host-platform-memo'
 import { getSshHostServerStatus } from '../../ssh/ssh-host-server-status'
 import { connectionManager } from './ssh-ipc-context'
@@ -54,7 +54,7 @@ export async function noteEndedLaunchSshSession(
     connection.getConnectGeneration() !== generation ||
     checked.get(connection) !== pending
   try {
-    const session = await readManagedOrcadLaunchSshSession(
+    const session = await readManagedQuirkydLaunchSshSession(
       getAppEnvironment().getPath('userData'),
       environmentId
     )

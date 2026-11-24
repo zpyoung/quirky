@@ -139,7 +139,7 @@ describe('RateLimitService', () => {
     const networkProxySettings = { httpProxyUrl: 'http://proxy.fixture.invalid:8080' }
     service.setNetworkProxySettingsResolver(() => networkProxySettings)
     const wslCodexHome =
-      '\\\\wsl.localhost\\Ubuntu\\home\\jin\\.local\\share\\orca\\codex-accounts\\a\\home'
+      '\\\\wsl.localhost\\Ubuntu\\home\\jin\\.local\\share\\quirky\\codex-accounts\\a\\home'
     service.setInactiveCodexAccountsResolver(() => [
       inactiveCodexAccount('account-1', wslCodexHome)
     ])

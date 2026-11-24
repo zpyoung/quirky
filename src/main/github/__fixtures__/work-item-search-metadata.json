@@ -82,7 +82,7 @@
       },
       "author": {
         "__typename": "Bot",
-        "login": "orca-discord-issues",
+        "login": "quirky-discord-issues",
         "avatarUrl": "https://avatars.githubusercontent.com/u/127256420?v=4"
       },
       "assignees": {
@@ -105,7 +105,7 @@
         }
       ],
       "user": {
-        "login": "orca-discord-issues[bot]",
+        "login": "quirky-discord-issues[bot]",
         "avatar_url": "https://avatars.githubusercontent.com/u/127256420?v=4"
       },
       "assignees": []
@@ -154,7 +154,7 @@
   {
     "graphql": {
       "number": 19919,
-      "title": "[Bug]: v1.4.199 Windows NSIS installer reports success but never installs Orca.exe (partial install)",
+      "title": "[Bug]: v1.4.199 Windows NSIS installer reports success but never installs Quirky.exe (partial install)",
       "state": "OPEN",
       "url": "https://github.com/stablyai/orca/issues/19919",
       "updatedAt": "2026-09-10T20:08:25Z",
@@ -179,7 +179,7 @@
     },
     "rest": {
       "number": 19919,
-      "title": "[Bug]: v1.4.199 Windows NSIS installer reports success but never installs Orca.exe (partial install)",
+      "title": "[Bug]: v1.4.199 Windows NSIS installer reports success but never installs Quirky.exe (partial install)",
       "state": "open",
       "html_url": "https://github.com/stablyai/orca/issues/19919",
       "updated_at": "2026-09-10T20:08:25Z",

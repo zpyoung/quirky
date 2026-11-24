@@ -22,7 +22,7 @@ import {
   visibleProjectGroups,
   visibleProjectHostSetups,
   visibleRepos
-} from '../ssh/orcad-retained-source'
+} from '../ssh/quirkyd-retained-source'
 import type { RuntimeStore } from './runtime-store-contract'
 
 type CatalogSource = Pick<
@@ -30,7 +30,7 @@ type CatalogSource = Pick<
   'getRepos' | 'getProjectGroups' | 'getFolderWorkspaces' | 'getSshTargets' | 'getProjectHostSetups'
 >
 
-// Headless orcad has no SSH targets, so nothing of its own is ever a retained source.
+// Headless quirkyd has no SSH targets, so nothing of its own is ever a retained source.
 function catalogStore(store: CatalogSource) {
   return {
     getRepos: () => store.getRepos(),

@@ -32,7 +32,7 @@ export type CodexAccountSessionIndexHealOptions = CodexSessionIndexHealOptions &
 const STATE_DB_CREATE_TIMEOUT_MS = 15_000
 
 // Why: a just-linked rollout Codex refuses or cannot find fails the same way on
-// every read; skip it until Orca restarts instead of respawning app-server each launch.
+// every read; skip it until Quirky restarts instead of respawning app-server each launch.
 const failedThreadIdsByHome = new Map<string, Set<string>>()
 
 /**
@@ -78,7 +78,7 @@ export async function healCodexAccountSessionIndex(
     return summary
   }
   // Why: with no DB in the home, Codex keeps none (older CLI) or uses a
-  // `sqlite_home` shared by every Orca home, which already indexes these threads.
+  // `sqlite_home` shared by every Quirky home, which already indexes these threads.
   const indexed = (options.readIndexedThreadIds ?? readIndexedCodexThreadIds)(codexHomePath)
   if (!indexed) {
     return { ...summary, outcome: 'no-index' }

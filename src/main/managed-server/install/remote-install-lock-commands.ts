@@ -36,7 +36,7 @@ export function tryCreateInstallLockCommand(
       'else echo BUSY; fi'
     ].join(' ')
   }
-  // Why: old Orca clients recognize only a directory at `.install-lock`, while
+  // Why: old Quirky clients recognize only a directory at `.install-lock`, while
   // concurrent New-Item calls can both report success in PowerShell 5.1. Keep
   // that directory marker and arbitrate ownership with an atomic child file.
   return powerShellCommand(

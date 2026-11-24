@@ -25,7 +25,7 @@ export type WorkspaceDetailLink = {
   checks?: CheckStatus
 }
 
-/** Who made the workspace, as the desktop hover card's Automation / Orca CLI sections say. */
+/** Who made the workspace, as the desktop hover card's Automation / Quirky CLI sections say. */
 export type WorkspaceOrigin = { kind: 'automation'; name?: string } | { kind: 'cli' }
 
 function optionalText(value: unknown): string | undefined {

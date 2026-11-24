@@ -9,7 +9,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 import { ServeBrowserTabs } from './serve-browser-tabs'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const WT = 'repo-1::/repo'
 const PAGE = { worktreeId: WT, pageId: 'page-1', url: 'https://example.com/', title: 'Example' }

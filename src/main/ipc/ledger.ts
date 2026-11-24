@@ -2,13 +2,13 @@ import { ipcMain, type WebContents } from 'electron'
 import { getRuntimeEnvironmentStatus } from './runtime-environments/runtime-environment-status-probe'
 import { callRuntimeEnvironment } from './runtime-environments/runtime-environment-transport-routing'
 import { isTrustedUIRenderer } from './ui'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { LedgerRequest, LedgerResponse } from '../../shared/ledger'
 import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import { getPreferredPairingOffer } from '../../shared/runtime-environments'
 import { issueLedgerUiAttestation } from '../runtime/rpc/ledger-ui-attestation'
 
-export type LedgerIpcRuntime = Pick<OrcaRuntimeService, 'getRuntimeId' | 'executeLedgerUiRequest'>
+export type LedgerIpcRuntime = Pick<QuirkyRuntimeService, 'getRuntimeId' | 'executeLedgerUiRequest'>
 
 type LedgerIpcOptions = {
   userDataPath: string

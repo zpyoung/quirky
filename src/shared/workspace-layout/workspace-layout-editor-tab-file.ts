@@ -1,7 +1,7 @@
 // Which file an editor tab shows. The window keys a file by its path, or by its owned id when
 // another owner holds the path, it is floating, or it moved to its file's workspace.
 
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../layout-owner-switch'
 import { ownedEditorFileId } from '../workspace-session-pane-ownership'
 import type { LayoutEditorFile } from './workspace-layout-model'
 
@@ -11,7 +11,7 @@ export function editorTabShowsFile(entityId: string, file: FileOwner, worktreeId
   return (
     entityId === file.filePath ||
     // Why the switch: a headless host saves through this code in shipped builds too.
-    (ORCA_LAYOUT_OWNER_IS_MAIN &&
+    (QUIRKY_LAYOUT_OWNER_IS_MAIN &&
       entityId === ownedEditorFileId(file.filePath, worktreeId, file.runtimeEnvironmentId))
   )
 }
@@ -23,7 +23,7 @@ export function editorTabShowsFile(entityId: string, file: FileOwner, worktreeId
  */
 export function editorFileKey(file: FileOwner): string {
   // Why no worktree: every record keyed here belongs to one workspace, or moves between two.
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? ownedEditorFileId(file.filePath, '', file.runtimeEnvironmentId)
     : file.filePath
 }
@@ -54,7 +54,7 @@ export function editorTabFile<F extends FileOwner>(
   workspace: EditorWorkspace<F>,
   entityId: string
 ): F | undefined {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? editorTabFiles(workspace, entityId)[0]
     : workspace.editorFiles?.find((file) =>
         editorTabShowsFile(entityId, file, workspace.worktreeId)
@@ -67,7 +67,7 @@ export function editorTabNamesFile<F extends FileOwner>(
   entityId: string,
   file: F
 ): boolean {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? editorTabFile(workspace, entityId) === file
     : editorTabShowsFile(entityId, file, workspace.worktreeId)
 }

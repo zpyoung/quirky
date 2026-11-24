@@ -1,7 +1,7 @@
 // Where a party named by its mailbox address is now, so a chat can open a message's sender.
 
 import type { OrchestrationPartyLocationResult } from '../../../shared/orchestration-caller-status'
-import type { OrcaSessionId } from '../../../shared/orca-session-address'
+import type { QuirkySessionId } from '../../../shared/quirky-session-address'
 import type { OrchestrationDb } from './db'
 import { resolveOrchestrationParty } from './orchestration-party'
 import { OrchestrationError } from './orchestration-error'
@@ -37,8 +37,8 @@ export function locateOrchestrationParty(
     }
     throw error
   }
-  if (party.orcaSessionId) {
-    return locateSession(party.orcaSessionId, deps.records)
+  if (party.quirkySessionId) {
+    return locateSession(party.quirkySessionId, deps.records)
   }
   return party.terminalHandle
     ? locateTerminal(party.terminalHandle, deps, messageIds)
@@ -75,8 +75,8 @@ function locateDispatchAssignee(
   deps: PartyLocationDeps
 ): OrchestrationPartyLocationResult {
   const dispatch = deps.db?.getDispatchContextById(dispatchId)
-  if (dispatch?.assignee_orca_session_id) {
-    return locateSession(dispatch.assignee_orca_session_id, deps.records)
+  if (dispatch?.assignee_quirky_session_id) {
+    return locateSession(dispatch.assignee_quirky_session_id, deps.records)
   }
   const remote = dispatch ? undefined : deps.db?.getRemoteDispatchAttachment(dispatchId)
   const paneKey = dispatch?.assignee_pane_key ?? remote?.pane_key
@@ -90,10 +90,10 @@ function locateDispatchAssignee(
 }
 
 function locateSession(
-  orcaSessionId: OrcaSessionId,
+  quirkySessionId: QuirkySessionId,
   records: AgentSessionRecordReader | null
 ): OrchestrationPartyLocationResult {
-  const record = records ? lineageLiveSession(records, orcaSessionId) : null
+  const record = records ? lineageLiveSession(records, quirkySessionId) : null
   return record
     ? {
         location: {

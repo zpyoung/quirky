@@ -1,4 +1,4 @@
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import type { ServeUpdateHandoffState } from '../../shared/serve-update-handoff'
 
 type ExitSignal = ProcessResult['signal']

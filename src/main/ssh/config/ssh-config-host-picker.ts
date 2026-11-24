@@ -50,19 +50,19 @@ export function searchSshConfigHosts(
       continue
     }
     seenAliases.add(normalizedAlias)
-    const alreadyInOrca = existingAliases.has(normalizedAlias)
+    const alreadyInQuirky = existingAliases.has(normalizedAlias)
     // Why: tombstones only block passive bulk import — the picker still lists the
-    // Host so deleting one Orca target never looks like "~/.ssh/config is empty".
-    const previouslyRemoved = !alreadyInOrca && suppressedAliasSet.has(normalizedAlias)
+    // Host so deleting one Quirky target never looks like "~/.ssh/config is empty".
+    const previouslyRemoved = !alreadyInQuirky && suppressedAliasSet.has(normalizedAlias)
     totalHostCount += 1
     // Why: "Add all" must match importFromSshConfig without reAdopt (tombstones stay).
-    newHostCount += alreadyInOrca || previouslyRemoved ? 0 : 1
+    newHostCount += alreadyInQuirky || previouslyRemoved ? 0 : 1
     if (!matchesQuery(entry, normalizedQuery)) {
       continue
     }
     matchCount += 1
     if (summaries.length < SSH_CONFIG_HOST_RESULT_LIMIT) {
-      summaries.push(toSummary(entry, alreadyInOrca, previouslyRemoved))
+      summaries.push(toSummary(entry, alreadyInQuirky, previouslyRemoved))
     }
   }
 
@@ -141,7 +141,7 @@ function matchesAlias(entry: SshConfigHost, normalizedAlias: string): boolean {
 
 function toSummary(
   entry: SshConfigHost,
-  alreadyInOrca: boolean,
+  alreadyInQuirky: boolean,
   previouslyRemoved = false
 ): SshConfigHostSummary {
   return {
@@ -152,7 +152,7 @@ function toSummary(
     ...(entry.identityFile ? { identityFile: entry.identityFile } : {}),
     ...(entry.proxyCommand ? { proxyCommand: entry.proxyCommand } : {}),
     ...(entry.proxyJump ? { jumpHost: entry.proxyJump } : {}),
-    alreadyInOrca,
+    alreadyInQuirky,
     ...(previouslyRemoved ? { previouslyRemoved: true } : {})
   }
 }

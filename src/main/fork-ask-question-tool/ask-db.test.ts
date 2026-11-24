@@ -61,7 +61,7 @@ describe('AskDb', () => {
   })
 
   it('restores rows unchanged after reopening the database file', () => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-ask-db-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-ask-db-'))
     const dbPath = join(dir, 'asks.db')
     const first = new AskDb(dbPath)
     first.registerAsk(baseParams())
@@ -75,7 +75,7 @@ describe('AskDb', () => {
   })
 
   it('persists a partial and survives a reopen', () => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-ask-db-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-ask-db-'))
     const dbPath = join(dir, 'asks.db')
     const first = new AskDb(dbPath)
     first.registerAsk(baseParams())
@@ -177,7 +177,7 @@ describe('AskDb', () => {
   })
 
   it('keeps seq monotonic across row changes and across a reopen', () => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-ask-db-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-ask-db-'))
     const dbPath = join(dir, 'asks.db')
     const first = new AskDb(dbPath)
     const registered = first.registerAsk(baseParams())
@@ -202,7 +202,7 @@ describe('AskDb', () => {
   })
 
   it('derives expires_at from timeout_ms at registration and keeps it unchanged after a reopen', () => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-ask-db-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-ask-db-'))
     const dbPath = join(dir, 'asks.db')
     const first = new AskDb(dbPath)
     const { row } = first.registerAsk(baseParams({ timeoutMs: 60_000 }), '2024-01-01T00:00:00.000Z')

@@ -15,7 +15,7 @@ import {
 import { TUI_AGENT_DISPLAY_NAMES } from '../../shared/tui-agent-display-names'
 import { claudeRecord } from './claude-structured-item-translation'
 
-/** Orca refused the message's content, as opposed to failing to read an attachment. */
+/** Quirky refused the message's content, as opposed to failing to read an attachment. */
 export class ClaudeDispatchContentError extends Error {
   /** What was wrong, typed where the check saw it; `message` stays for logs. */
   readonly failure: SubmissionRejectionFact
@@ -45,7 +45,7 @@ export function claudeDispatchRejection(
   })
 }
 
-/** Why a message whose content could not be built was not sent: Orca's own refusal of it, or an
+/** Why a message whose content could not be built was not sent: Quirky's own refusal of it, or an
  *  attachment it could not read. Never the provider. */
 export function claudeDispatchContentRejection(error: unknown): AgentJournalDispatchRejection {
   if (error instanceof ClaudeDispatchContentError) {
@@ -98,7 +98,7 @@ export async function readClaudeImage(path: string, openImpl: typeof open = open
       throw tooLarge()
     }
     if (finalInfo.size !== bytesRead) {
-      // Not the image's fault: it changed while Orca read it, so it reads as unreadable.
+      // Not the image's fault: it changed while Quirky read it, so it reads as unreadable.
       throw new Error('Claude image changed while it was read')
     }
     if (bytesRead === 0) {
@@ -169,7 +169,7 @@ export async function claudeDispatchMessageContent(
   body: AgentJournalMessageItem
 ): Promise<unknown[]> {
   if (body.role !== 'user') {
-    // No Orca client sends one, so the fault is Orca's.
+    // No Quirky client sends one, so the fault is Quirky's.
     throw new ClaudeDispatchContentError(
       'Claude dispatch accepts only user messages',
       agentSessionFailureFact('hostFault')

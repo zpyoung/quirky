@@ -155,7 +155,7 @@ describe('admitAgentSessionMutation', () => {
       refusal: {
         code: 'agent_session_conflict',
         message:
-          "Orca has not yet confirmed that this chat's previous agent process stopped. Reopen the chat to check again."
+          "Quirky has not yet confirmed that this chat's previous agent process stopped. Reopen the chat to check again."
       }
     })
   })

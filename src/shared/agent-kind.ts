@@ -1,4 +1,4 @@
-// Mapping from the renderer's `TuiAgent` union (every agent Orca knows how to launch) to the
+// Mapping from the renderer's `TuiAgent` union (every agent Quirky knows how to launch) to the
 // closed `AgentKind` enum carried on launch descriptors. Lives in `src/shared/` because main and
 // renderer both stamp and read it; a new TuiAgent member is one edit here.
 

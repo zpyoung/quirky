@@ -10,7 +10,7 @@ type RepoOwnerState = {
 }
 
 /** Transport for a GitHub Project row mutation. A row whose `owner/repo` slug matches a known
- *  repo goes to that repo's owner; otherwise (Orca may not track the repo) it goes to
+ *  repo goes to that repo's owner; otherwise (Quirky may not track the repo) it goes to
  *  `rowSource`, the host the row was loaded from. */
 export function runtimeTargetForProjectRowOwner(
   state: RepoOwnerState,

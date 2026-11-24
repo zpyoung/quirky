@@ -4,7 +4,7 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { createHash } from 'node:crypto'
 import { delimiter } from 'node:path'
 import { makePaneKey } from '../../shared/stable-pane-id'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { ClaudeAgentTeamsService } from '../runtime/claude-agent-teams-service'
 import {
   clearPaneSpawnReservation,
@@ -35,7 +35,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -63,10 +63,10 @@ describe('registerPtyHandlers', () => {
         env: {
           CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
           PATH: `/tmp/fresh-agent-teams${delimiter}/usr/bin`,
-          TMUX: '/tmp/orca-claude-agent-teams/team-fresh,0,1',
+          TMUX: '/tmp/quirky-claude-agent-teams/team-fresh,0,1',
           TMUX_PANE: '%1',
-          ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-          ORCA_AGENT_TEAMS_TOKEN: 'fresh-token'
+          QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-fresh',
+          QUIRKY_AGENT_TEAMS_TOKEN: 'fresh-token'
         }
       })),
       registerPreAllocatedHandleForPty: vi.fn(),
@@ -87,23 +87,23 @@ describe('registerPtyHandlers', () => {
       leafId,
       worktreeId: 'wt-1',
       env: {
-        ORCA_PANE_KEY: `tab-1:${leafId}`,
-        ORCA_TAB_ID: 'tab-1',
-        ORCA_WORKTREE_ID: 'wt-1',
+        QUIRKY_PANE_KEY: `tab-1:${leafId}`,
+        QUIRKY_TAB_ID: 'tab-1',
+        QUIRKY_WORKTREE_ID: 'wt-1',
         CLAUDE_PROFILE: 'captured',
         PATH: `/tmp/stale-agent-teams${delimiter}/usr/bin`,
-        TMUX: '/tmp/orca-claude-agent-teams/team-stale,0,1',
-        ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale',
-        ORCA_AGENT_TEAMS_TOKEN: 'stale-token',
-        TERM_PROGRAM: 'Orca'
+        TMUX: '/tmp/quirky-claude-agent-teams/team-stale,0,1',
+        QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-stale',
+        QUIRKY_AGENT_TEAMS_TOKEN: 'stale-token',
+        TERM_PROGRAM: 'Quirky'
       },
       launchConfig: {
         agentCommand: 'claude --teammate-mode auto',
         agentArgs: '',
         agentEnv: {
           CLAUDE_PROFILE: 'captured',
-          ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale',
-          ORCA_AGENT_TEAMS_TOKEN: 'stale-token'
+          QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-stale',
+          QUIRKY_AGENT_TEAMS_TOKEN: 'stale-token'
         }
       },
       launchAgent: 'claude'
@@ -114,16 +114,16 @@ describe('registerPtyHandlers', () => {
       handle: 'term_agent_teams',
       baseEnv: expect.objectContaining({
         CLAUDE_PROFILE: 'captured',
-        ORCA_AGENT_TEAMS_TEAM_ID: 'team-stale'
+        QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-stale'
       })
     })
     expect(spawnOptions.env).toMatchObject({
       CLAUDE_PROFILE: 'captured',
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      ORCA_TERMINAL_HANDLE: 'term_agent_teams',
-      ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-      ORCA_AGENT_TEAMS_TOKEN: 'fresh-token',
-      TMUX: '/tmp/orca-claude-agent-teams/team-fresh,0,1',
+      QUIRKY_TERMINAL_HANDLE: 'term_agent_teams',
+      QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-fresh',
+      QUIRKY_AGENT_TEAMS_TOKEN: 'fresh-token',
+      TMUX: '/tmp/quirky-claude-agent-teams/team-fresh,0,1',
       TMUX_PANE: '%1'
     })
     expect(spawnOptions.env.PATH.split(delimiter)[0]).toBe('/tmp/fresh-agent-teams')
@@ -131,9 +131,9 @@ describe('registerPtyHandlers', () => {
     expect(result.launchConfig?.agentEnv).toMatchObject({
       CLAUDE_PROFILE: 'captured',
       CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-      ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-      ORCA_AGENT_TEAMS_TOKEN: 'fresh-token',
-      TMUX: '/tmp/orca-claude-agent-teams/team-fresh,0,1'
+      QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-fresh',
+      QUIRKY_AGENT_TEAMS_TOKEN: 'fresh-token',
+      TMUX: '/tmp/quirky-claude-agent-teams/team-fresh,0,1'
     })
     expect(runtime.registerPreAllocatedHandleForPty).toHaveBeenCalledWith(
       expect.any(String),
@@ -231,7 +231,7 @@ describe('registerPtyHandlers', () => {
       expectedToken: null
     }
   ])('binds only $label from renderer pty:spawn to runtime authority', async (testCase) => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     registerPtyHandlers(mainWindow as never, runtime)
     const worktreeId = 'repo-1::/tmp/renderer-authority'
     const tabId = 'tab-renderer-authority'
@@ -247,10 +247,10 @@ describe('registerPtyHandlers', () => {
       tabId,
       leafId,
       env: {
-        ORCA_PANE_KEY: paneKey,
-        ORCA_TAB_ID: tabId,
-        ORCA_WORKTREE_ID: worktreeId,
-        ORCA_AGENT_LAUNCH_TOKEN: testCase.envLaunchToken
+        QUIRKY_PANE_KEY: paneKey,
+        QUIRKY_TAB_ID: tabId,
+        QUIRKY_WORKTREE_ID: worktreeId,
+        QUIRKY_AGENT_LAUNCH_TOKEN: testCase.envLaunchToken
       },
       ...(testCase.launchToken ? { launchToken: testCase.launchToken } : {}),
       ...(testCase.hasLaunchConfig
@@ -320,8 +320,8 @@ describe('registerPtyHandlers', () => {
       prepareClaudeAgentTeamsLeaderForHandle: vi.fn(async () => ({
         env: {
           CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1',
-          ORCA_AGENT_TEAMS_TEAM_ID: 'team-fresh',
-          ORCA_AGENT_TEAMS_TOKEN: 'fresh-token'
+          QUIRKY_AGENT_TEAMS_TEAM_ID: 'team-fresh',
+          QUIRKY_AGENT_TEAMS_TOKEN: 'fresh-token'
         }
       })),
       registerPreAllocatedHandleForPty: vi.fn(),
@@ -342,9 +342,9 @@ describe('registerPtyHandlers', () => {
       leafId,
       worktreeId: 'wt-1',
       env: {
-        ORCA_PANE_KEY: `tab-1:${leafId}`,
-        ORCA_TAB_ID: 'tab-1',
-        ORCA_WORKTREE_ID: 'wt-1'
+        QUIRKY_PANE_KEY: `tab-1:${leafId}`,
+        QUIRKY_TAB_ID: 'tab-1',
+        QUIRKY_WORKTREE_ID: 'wt-1'
       },
       launchConfig: {
         agentCommand: 'claude',
@@ -395,7 +395,7 @@ describe('registerPtyHandlers', () => {
 
     const spawnCall = spawnMock.mock.calls.at(-1)!
     const env = spawnCall[2].env as Record<string, string>
-    expect(env.ORCA_TERMINAL_HANDLE).toBe('term_expected')
+    expect(env.QUIRKY_TERMINAL_HANDLE).toBe('term_expected')
     expect(runtime.preAllocateHandleForPty).not.toHaveBeenCalled()
     expect(runtime.registerPreAllocatedHandleForPty).toHaveBeenCalledWith(
       expect.any(String),
@@ -417,7 +417,7 @@ describe('registerPtyHandlers', () => {
           teams.createLaunchEnv({
             leaderHandle: args.handle,
             baseEnv: args.baseEnv ?? {},
-            shimDir: '/tmp/orca-agent-teams-shim',
+            shimDir: '/tmp/quirky-agent-teams-shim',
             shimBin: null
           })
       ),
@@ -442,7 +442,7 @@ describe('registerPtyHandlers', () => {
       command: 'claude --teammate-mode auto',
       tabId: 'tab-1',
       leafId,
-      env: { ORCA_PANE_KEY: `tab-1:${leafId}`, ORCA_TAB_ID: 'tab-1' },
+      env: { QUIRKY_PANE_KEY: `tab-1:${leafId}`, QUIRKY_TAB_ID: 'tab-1' },
       launchConfig: { agentCommand: 'claude --teammate-mode auto', agentArgs: '', agentEnv: {} },
       launchAgent: 'claude'
     }
@@ -482,7 +482,7 @@ describe('registerPtyHandlers', () => {
           teams.createLaunchEnv({
             leaderHandle: args.handle,
             baseEnv: args.baseEnv ?? {},
-            shimDir: '/tmp/orca-agent-teams-shim',
+            shimDir: '/tmp/quirky-agent-teams-shim',
             shimBin: null
           })
       ),
@@ -511,7 +511,7 @@ describe('registerPtyHandlers', () => {
         tabId: 'tab-1',
         leafId,
         worktreeId: 'wt-1',
-        env: { ORCA_PANE_KEY: `tab-1:${leafId}`, ORCA_TAB_ID: 'tab-1' },
+        env: { QUIRKY_PANE_KEY: `tab-1:${leafId}`, QUIRKY_TAB_ID: 'tab-1' },
         launchConfig: { agentCommand: 'claude --teammate-mode auto', agentArgs: '', agentEnv: {} },
         launchAgent: 'claude'
       })

@@ -83,7 +83,7 @@ describe('runtime terminal input acceptance', () => {
         params: {
           terminal: 'terminal-1',
           text: 'x',
-          client: { id: 'orca-desktop', type: 'desktop' }
+          client: { id: 'quirky-desktop', type: 'desktop' }
         },
         timeoutMs: 15_000
       })

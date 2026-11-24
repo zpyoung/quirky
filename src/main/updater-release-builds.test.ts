@@ -45,11 +45,11 @@ function requestHeaders(call = 0): Record<string, string> {
  *  filtering stays readable and stays green whatever platform is passed. */
 const allPlatformAssets = [
   { name: 'latest-mac.yml' },
-  { name: 'orca-macos-arm64.dmg' },
+  { name: 'quirky-macos-arm64.dmg' },
   { name: 'latest.yml' },
-  { name: 'orca-windows-setup.exe' },
+  { name: 'quirky-windows-setup.exe' },
   { name: 'latest-linux.yml' },
-  { name: 'orca-linux.AppImage' }
+  { name: 'quirky-linux.AppImage' }
 ]
 
 const release = (tag: string, extra: Record<string, unknown> = {}) => ({
@@ -161,7 +161,7 @@ describe('listReleaseBuilds', () => {
       jsonResponse([
         release('v1.4.163-rc.2'),
         release('v1.4.163-rc.1', {
-          assets: [{ name: 'latest-mac.yml' }, { name: 'orca-macos-arm64.dmg' }]
+          assets: [{ name: 'latest-mac.yml' }, { name: 'quirky-macos-arm64.dmg' }]
         })
       ])
     )
@@ -377,7 +377,7 @@ describe('listReleaseBuilds', () => {
     )
 
     await expect(listReleaseBuilds('rc', 'darwin')).rejects.toThrow(
-      "GitHub rate limit reached. Try again in about 28 minutes, or run `gh auth login` so Orca can use your account's higher limit."
+      "GitHub rate limit reached. Try again in about 28 minutes, or run `gh auth login` so Quirky can use your account's higher limit."
     )
   })
 

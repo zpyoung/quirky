@@ -5,7 +5,7 @@ import type { AcpStructuredSession } from './acp-structured-session'
 
 type AcpStoppableSession = Pick<AcpStructuredSession, 'connection' | 'lane' | 'prompts' | 'turns'>
 
-/** A turn a cancel can end: Orca's prompt, or one the agent opened itself. */
+/** A turn a cancel can end: Quirky's prompt, or one the agent opened itself. */
 function acpTurnInFlight(session: AcpStoppableSession): boolean {
   return session.turns.running || session.lane.openTurnId !== null
 }

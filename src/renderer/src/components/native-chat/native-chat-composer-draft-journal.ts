@@ -16,7 +16,7 @@ import {
   type StoredNativeChatComposerDraft
 } from './native-chat-composer-draft-storage'
 
-const JOURNAL_KEY = 'orca:nativeChatComposerDraftJournal:v1'
+const JOURNAL_KEY = 'quirky:nativeChatComposerDraftJournal:v1'
 // Why: localStorage is shared with every other saved setting, so the journal stays small: whole
 // drafts together stop at the first cap, and additions, at most one message each with their source
 // deleted right after, at the second, which fits the largest. A removal is never capped: it is

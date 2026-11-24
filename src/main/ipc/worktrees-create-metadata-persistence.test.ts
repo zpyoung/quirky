@@ -189,7 +189,7 @@ describe('registerWorktreeHandlers', () => {
     expect(store.setWorktreeMeta).not.toHaveBeenCalled()
   })
 
-  it('strips Orca provenance fields from renderer metadata updates', () => {
+  it('strips Quirky provenance fields from renderer metadata updates', () => {
     store.setWorktreeMeta.mockImplementation((_target: HostWorktreeTarget, meta) => meta)
 
     const result = handlers['worktrees:updateMeta'](null, {
@@ -197,9 +197,9 @@ describe('registerWorktreeHandlers', () => {
       updates: {
         comment: 'keep me',
         isPinned: true,
-        orcaCreatedAt: 123,
-        orcaCreationSource: 'desktop',
-        orcaCreationWorkspaceLayout: { path: '/workspace', nestWorkspaces: false }
+        quirkyCreatedAt: 123,
+        quirkyCreationSource: 'desktop',
+        quirkyCreationWorkspaceLayout: { path: '/workspace', nestWorkspaces: false }
       }
     })
 
@@ -524,9 +524,9 @@ describe('registerWorktreeHandlers', () => {
       repoId: 'repo-1',
       name: 'improve-dashboard',
       pushTarget: {
-        remoteName: 'pr-prateek-orca',
+        remoteName: 'pr-prateek-quirky',
         branchName: 'prateek/fix-sidebar-agents-toggle',
-        remoteUrl: 'git@github.com:prateek/orca.git'
+        remoteUrl: 'git@github.com:prateek/quirky.git'
       }
     })
 
@@ -537,16 +537,16 @@ describe('registerWorktreeHandlers', () => {
         '-t',
         'prateek/fix-sidebar-agents-toggle',
         '--no-tags',
-        'pr-prateek-orca',
-        'git@github.com:prateek/orca.git'
+        'pr-prateek-quirky',
+        'git@github.com:prateek/quirky.git'
       ],
       { cwd: '/workspace/repo' }
     )
     expect(gitExecFileAsyncMock).not.toHaveBeenCalledWith(
       [
         'fetch',
-        'pr-prateek-orca',
-        '+refs/heads/prateek/fix-sidebar-agents-toggle*:refs/remotes/pr-prateek-orca/prateek/fix-sidebar-agents-toggle*'
+        'pr-prateek-quirky',
+        '+refs/heads/prateek/fix-sidebar-agents-toggle*:refs/remotes/pr-prateek-quirky/prateek/fix-sidebar-agents-toggle*'
       ],
       { cwd: '/workspace/repo' }
     )
@@ -555,7 +555,7 @@ describe('registerWorktreeHandlers', () => {
       [
         'branch',
         '--set-upstream-to',
-        'pr-prateek-orca/prateek/fix-sidebar-agents-toggle',
+        'pr-prateek-quirky/prateek/fix-sidebar-agents-toggle',
         'improve-dashboard'
       ],
       { cwd: '/workspace/improve-dashboard' }
@@ -566,19 +566,19 @@ describe('registerWorktreeHandlers', () => {
       hostWorktreeTarget({ id: 'repo-1::/workspace/improve-dashboard', hostId: 'local' }),
       expect.objectContaining({
         pushTarget: {
-          remoteName: 'pr-prateek-orca',
+          remoteName: 'pr-prateek-quirky',
           branchName: 'prateek/fix-sidebar-agents-toggle',
-          remoteUrl: 'git@github.com:prateek/orca.git'
+          remoteUrl: 'git@github.com:prateek/quirky.git'
         }
       })
     )
   })
 
-  // Was "keeps the Orca-created marker ...": create used to inherit the marker while
+  // Was "keeps the Quirky-created marker ...": create used to inherit the marker while
   // minting. With minting deferred (#17828) create must not claim ownership it has not
   // earned; marker inheritance now happens at materialization and is covered by
   // worktree-push-target-setup.test.ts.
-  it('does not claim the Orca-created marker at create when a sibling worktree minted the fork remote', async () => {
+  it('does not claim the Quirky-created marker at create when a sibling worktree minted the fork remote', async () => {
     listWorktreesMock.mockResolvedValue([
       {
         path: '/workspace/improve-dashboard',
@@ -589,9 +589,9 @@ describe('registerWorktreeHandlers', () => {
       }
     ])
     const existingPushTarget = {
-      remoteName: 'pr-contributor-orca',
+      remoteName: 'pr-contributor-quirky',
       branchName: 'contributor/previous-fix',
-      remoteUrl: 'https://github.com/contributor/orca.git',
+      remoteUrl: 'https://github.com/contributor/quirky.git',
       remoteCreated: true
     }
     store.getAllWorktreeMeta.mockReturnValue({
@@ -600,10 +600,10 @@ describe('registerWorktreeHandlers', () => {
     store.setWorktreeMeta.mockImplementation((_target: HostWorktreeTarget, meta) => meta)
     gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
       if (args[0] === 'remote' && args.length === 1) {
-        return { stdout: 'pr-contributor-orca\n', stderr: '' }
+        return { stdout: 'pr-contributor-quirky\n', stderr: '' }
       }
       if (args[0] === 'remote' && args[1] === 'get-url') {
-        return { stdout: 'https://github.com/contributor/orca.git\n', stderr: '' }
+        return { stdout: 'https://github.com/contributor/quirky.git\n', stderr: '' }
       }
       return { stdout: '', stderr: '' }
     })
@@ -612,9 +612,9 @@ describe('registerWorktreeHandlers', () => {
       repoId: 'repo-1',
       name: 'improve-dashboard',
       pushTarget: {
-        remoteName: 'pr-contributor-orca',
+        remoteName: 'pr-contributor-quirky',
         branchName: 'contributor/new-fix',
-        remoteUrl: 'https://github.com/contributor/orca.git'
+        remoteUrl: 'https://github.com/contributor/quirky.git'
       }
     })
 
@@ -626,9 +626,9 @@ describe('registerWorktreeHandlers', () => {
       hostWorktreeTarget({ id: 'repo-1::/workspace/improve-dashboard', hostId: 'local' }),
       expect.objectContaining({
         pushTarget: {
-          remoteName: 'pr-contributor-orca',
+          remoteName: 'pr-contributor-quirky',
           branchName: 'contributor/new-fix',
-          remoteUrl: 'https://github.com/contributor/orca.git'
+          remoteUrl: 'https://github.com/contributor/quirky.git'
         }
       })
     )
@@ -646,9 +646,9 @@ describe('registerWorktreeHandlers', () => {
     })
     getPullRequestPushTargetMock.mockResolvedValue({
       pushTarget: {
-        remoteName: 'pr-prateek-orca',
+        remoteName: 'pr-prateek-quirky',
         branchName: 'prateek/fix-sidebar-agents-toggle',
-        remoteUrl: 'git@github.com:prateek/orca.git'
+        remoteUrl: 'git@github.com:prateek/quirky.git'
       }
     })
     gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
@@ -678,7 +678,7 @@ describe('registerWorktreeHandlers', () => {
         'fetch',
         '--no-tags',
         'origin',
-        `+refs/pull/1738/head:refs/orca/pull/${ORIGIN_HEAD_COMPONENT}/1738`
+        `+refs/pull/1738/head:refs/quirky/pull/${ORIGIN_HEAD_COMPONENT}/1738`
       ],
       { cwd: '/workspace/repo', timeout: REVIEW_HEAD_FETCH_TIMEOUT_MS }
     )
@@ -698,9 +698,9 @@ describe('registerWorktreeHandlers', () => {
       headSha: 'abc123',
       branchNameOverride: 'prateek/fix-sidebar-agents-toggle',
       pushTarget: {
-        remoteName: 'pr-prateek-orca',
+        remoteName: 'pr-prateek-quirky',
         branchName: 'prateek/fix-sidebar-agents-toggle',
-        remoteUrl: 'git@github.com:prateek/orca.git'
+        remoteUrl: 'git@github.com:prateek/quirky.git'
       }
     })
   })

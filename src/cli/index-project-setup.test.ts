@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -12,8 +12,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -24,7 +24,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -46,20 +46,20 @@ import { okFixture, queueFixtures } from './test-fixtures'
 import { PROJECT_HOST_SETUP_HOST_TARGET_RUNTIME_CAPABILITY } from '../shared/worktree-runtime-capabilities'
 import { pairRuntimeEnvironment, useWorktreeAwarenessEnvironment } from './index-test-harness'
 
-const ORCA_PROJECT = {
+const QUIRKY_PROJECT = {
   id: 'github:stablyai/orca',
-  displayName: 'Orca',
+  displayName: 'Quirky',
   badgeColor: '#7c3aed',
   sourceRepoIds: ['repo-1'],
   createdAt: 1,
   updatedAt: 1
 }
-const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [ORCA_PROJECT] })
+const PROJECT_LIST_FIXTURE = okFixture('req_project_list', { projects: [QUIRKY_PROJECT] })
 
-describe('orca cli worktree awareness', () => {
+describe('quirky cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -93,12 +93,12 @@ describe('orca cli worktree awareness', () => {
         projects: [
           {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             providerIdentity: {
               provider: 'github',
               owner: 'stablyai',
-              repo: 'orca'
+              repo: 'quirky'
             },
             sourceRepoIds: ['repo-1'],
             createdAt: 1,
@@ -125,8 +125,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-local',
-            path: '/tmp/orca',
-            displayName: 'Orca',
+            path: '/tmp/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -137,8 +137,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:gpu',
             repoId: 'repo-remote',
-            path: '/srv/orca',
-            displayName: 'Orca',
+            path: '/srv/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -171,8 +171,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-on-box',
-            path: '/srv/orca',
-            displayName: 'Orca',
+            path: '/srv/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -183,8 +183,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:prod',
             repoId: 'repo-by-client',
-            path: '/srv/orca-2',
-            displayName: 'Orca',
+            path: '/srv/quirky-2',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -203,7 +203,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   // Why: --host runtime:<id> routes to a paired server, so an older one is reachable without the
-  // caller meaning to. A raw method_not_found reads as an Orca bug rather than a version gap.
+  // caller meaning to. A raw method_not_found reads as an Quirky bug rather than a version gap.
   it('names the version gap when the server predates project host setup', async () => {
     pairRuntimeEnvironment(listEnvironmentsMock, 'old-server')
     const { RuntimeClientError } = await import('./runtime/types.js')
@@ -234,7 +234,7 @@ describe('orca cli worktree awareness', () => {
     // The command itself never reached a runtime; only the suggestion lookup did.
     expect(callMock).not.toHaveBeenCalledWith('projectHostSetup.list')
     const printed = [...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')
-    expect(printed).toContain('no paired Orca server is named or has id not-a-real-env')
+    expect(printed).toContain('no paired Quirky server is named or has id not-a-real-env')
     // An agent reads the code and the retry candidates, not the prose.
     expect(JSON.parse(printed).error.code).toBe('invalid_argument')
     expect(JSON.parse(printed).error.data.knownEnvironments).toEqual([])
@@ -290,8 +290,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'ssh:ssh-123-abc',
             repoId: 'repo-openclaw',
-            path: '/home/me/orca',
-            displayName: 'Orca',
+            path: '/home/me/quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'legacy-repo',
             createdAt: 1,
@@ -319,7 +319,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: [],
             createdAt: 1,
@@ -406,7 +406,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: ['repo-1'],
             createdAt: 1,
@@ -417,8 +417,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-1',
-            path: path.resolve('/tmp/orca'),
-            displayName: 'Orca',
+            path: path.resolve('/tmp/quirky'),
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'imported-existing-folder',
             createdAt: 1,
@@ -426,8 +426,8 @@ describe('orca cli worktree awareness', () => {
           },
           repo: {
             id: 'repo-1',
-            path: path.resolve('/tmp/orca'),
-            displayName: 'Orca',
+            path: path.resolve('/tmp/quirky'),
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             addedAt: 1
           }
@@ -449,18 +449,18 @@ describe('orca cli worktree awareness', () => {
         '--kind',
         'git',
         '--display-name',
-        'Orca',
+        'Quirky',
         '--json'
       ],
-      '/tmp/orca/worktrees/feature'
+      '/tmp/quirky/worktrees/feature'
     )
 
     expect(callMock).toHaveBeenCalledWith('projectHostSetup.setupExistingFolder', {
       projectId: 'github:stablyai/orca',
       hostId: 'local',
-      path: path.resolve('/tmp/orca/worktrees'),
+      path: path.resolve('/tmp/quirky/worktrees'),
       kind: 'git',
-      displayName: 'Orca'
+      displayName: 'Quirky'
     })
   })
 
@@ -479,7 +479,7 @@ describe('orca cli worktree awareness', () => {
         '--host',
         'runtime:gpu',
         '--path',
-        './orca',
+        './quirky',
         '--json'
       ],
       '/tmp/repo'
@@ -495,7 +495,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('rejects SSH project setup relative paths, which name the client filesystem', async () => {
-    // A local CLI reaching an `ssh:*` host is still off-client: resolving `./orca` against the
+    // A local CLI reaching an `ssh:*` host is still off-client: resolving `./quirky` against the
     // CLI cwd would register a path that exists on the wrong machine.
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -510,7 +510,7 @@ describe('orca cli worktree awareness', () => {
         '--host',
         'ssh:openclaw',
         '--path',
-        './orca',
+        './quirky',
         '--json'
       ],
       '/tmp/repo'
@@ -550,7 +550,7 @@ describe('orca cli worktree awareness', () => {
       okFixture('req_repo_add', {
         repo: {
           id: 'repo-1',
-          path: '/srv/orca/web',
+          path: '/srv/quirky/web',
           displayName: 'web'
         }
       })
@@ -558,12 +558,12 @@ describe('orca cli worktree awareness', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await main(
-      ['repo', 'add', '--path', '/srv/orca/web', '--pairing-code', 'remote-runtime', '--json'],
+      ['repo', 'add', '--path', '/srv/quirky/web', '--pairing-code', 'remote-runtime', '--json'],
       '/tmp/repo'
     )
 
     expect(callMock).toHaveBeenCalledWith('repo.add', {
-      path: '/srv/orca/web'
+      path: '/srv/quirky/web'
     })
   })
 
@@ -605,7 +605,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: [],
             createdAt: 1,
@@ -616,8 +616,8 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'local',
             repoId: 'repo-awin',
-            path: 'C:\\orca-probe\\orca',
-            displayName: 'Orca',
+            path: 'C:\\quirky-probe\\quirky',
+            displayName: 'Quirky',
             setupState: 'ready',
             setupMethod: 'cloned',
             createdAt: 1,
@@ -625,8 +625,8 @@ describe('orca cli worktree awareness', () => {
           },
           repo: {
             id: 'repo-awin',
-            path: 'C:\\orca-probe\\orca',
-            displayName: 'Orca',
+            path: 'C:\\quirky-probe\\quirky',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             addedAt: 1
           }
@@ -646,16 +646,16 @@ describe('orca cli worktree awareness', () => {
         '--url',
         'https://github.com/stablyai/orca.git',
         '--destination',
-        'C:\\orca-probe',
+        'C:\\quirky-probe',
         '--json'
       ],
-      '/Users/nwparker/orca/workspaces/orca/IME-koko'
+      '/Users/nwparker/quirky/workspaces/quirky/IME-koko'
     )
 
     expect(runtimeClientConstructorMock).toHaveBeenCalledWith(null, 'awin')
     expect(callMock).toHaveBeenCalledWith(
       'projectHostSetup.clone',
-      expect.objectContaining({ destination: 'C:\\orca-probe' })
+      expect.objectContaining({ destination: 'C:\\quirky-probe' })
     )
   })
 
@@ -666,7 +666,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: [],
             createdAt: 1,
@@ -677,7 +677,7 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:gpu',
             repoId: '',
-            path: '/srv/orca',
+            path: '/srv/quirky',
             displayName: 'GPU VM',
             setupState: 'ready',
             setupMethod: 'imported-existing-folder',
@@ -698,7 +698,7 @@ describe('orca cli worktree awareness', () => {
         '--display-name',
         'GPU VM',
         '--path',
-        '/srv/orca',
+        '/srv/quirky',
         '--worktree-base-path',
         '../worktrees',
         '--state',
@@ -714,7 +714,7 @@ describe('orca cli worktree awareness', () => {
       setupId: 'setup-gpu',
       updates: {
         displayName: 'GPU VM',
-        path: path.resolve('/tmp/repo', '/srv/orca'),
+        path: path.resolve('/tmp/repo', '/srv/quirky'),
         worktreeBasePath: '../worktrees',
         gitUsername: undefined,
         kind: undefined,
@@ -733,7 +733,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: [],
             createdAt: 1,
@@ -804,7 +804,7 @@ describe('orca cli worktree awareness', () => {
         result: {
           project: {
             id: 'github:stablyai/orca',
-            displayName: 'Orca',
+            displayName: 'Quirky',
             badgeColor: '#7c3aed',
             sourceRepoIds: [],
             createdAt: 1,
@@ -815,7 +815,7 @@ describe('orca cli worktree awareness', () => {
             projectId: 'github:stablyai/orca',
             hostId: 'runtime:gpu',
             repoId: '',
-            path: '/srv/orca',
+            path: '/srv/quirky',
             displayName: 'GPU VM',
             setupState: 'ready',
             setupMethod: 'imported-existing-folder',

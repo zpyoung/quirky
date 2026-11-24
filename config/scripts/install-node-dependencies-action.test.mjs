@@ -22,7 +22,7 @@ function run(command, args, options = {}) {
 }
 
 function createFixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-install-node-action-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-install-node-action-'))
   const workspace = join(root, 'checkout')
   const detachedCwd = join(root, 'action cwd')
   const bin = join(root, 'bin')
@@ -88,7 +88,9 @@ describe('install-node-dependencies action', () => {
       expect(result.status, result.stderr || result.stdout).toBe(0)
       expect(readFileSync(output, 'utf8')).toBe(`path=${storePath}\narch=${process.arch}\n`)
       if (lookupOnly === 'true') {
-        expect(readFileSync(environment, 'utf8')).toBe(`ORCA_PNPM_STORE_CACHE_PATH=${storePath}\n`)
+        expect(readFileSync(environment, 'utf8')).toBe(
+          `QUIRKY_PNPM_STORE_CACHE_PATH=${storePath}\n`
+        )
       } else {
         expect(existsSync(environment)).toBe(false)
       }

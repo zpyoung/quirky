@@ -38,9 +38,9 @@ on:
         required: false
         type: string
         default: ''
-      # Why: the app, orcad and its test template (--dark-test-template) build with it; releases refuse it.
+      # Why: the app, quirkyd and its test template (--dark-test-template) build with it; releases refuse it.
       layout_owner:
-        description: Set to main to build with ORCA_LAYOUT_OWNER=main and record save-divergence reports
+        description: Set to main to build with QUIRKY_LAYOUT_OWNER=main and record save-divergence reports
         required: false
         type: string
         default: ''
@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
 
     steps:
       - name: Checkout
@@ -78,20 +78,20 @@ jobs:
 
       - name: Install native build tools
         env:
-          ORCA_E2E_APT_PACKAGES: build-essential python3
+          QUIRKY_E2E_APT_PACKAGES: build-essential python3
         run: &install_e2e_tools |
-          if [ "$ORCA_E2E_APT_PACKAGES" = 'build-essential python3' ] &&
+          if [ "$QUIRKY_E2E_APT_PACKAGES" = 'build-essential python3' ] &&
             command -v make >/dev/null && command -v g++ >/dev/null && command -v python3 >/dev/null; then
             exit 0
           fi
-          read -r -a packages <<< "$ORCA_E2E_APT_PACKAGES"
+          read -r -a packages <<< "$QUIRKY_E2E_APT_PACKAGES"
           # Why apt-mirrors.txt: runner images resolve mirror+file: sources through it, so editing the lists alone leaves Azure in use.
           for source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
             if [ -f "$source" ]; then
               sudo sed -i 's|https*://azure\.archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"
             fi
           done
-          sudo tee /etc/apt/apt.conf.d/99-orca-e2e >/dev/null <<'APTCONF'
+          sudo tee /etc/apt/apt.conf.d/99-quirky-e2e >/dev/null <<'APTCONF'
           Acquire::http::Timeout "15";
           Acquire::https::Timeout "15";
           Acquire::Retries "1";
@@ -120,11 +120,11 @@ jobs:
       - name: Build E2E outputs
         env:
           VITE_EXPOSE_STORE: 'true'
-          ORCA_CI_MAIN_SOURCEMAPS: '0'
+          QUIRKY_CI_MAIN_SOURCEMAPS: '0'
           LAYOUT_OWNER: ${{ inputs.layout_owner }}
         run: |
           if [ -n "$LAYOUT_OWNER" ]; then
-            export ORCA_LAYOUT_OWNER="$LAYOUT_OWNER"
+            export QUIRKY_LAYOUT_OWNER="$LAYOUT_OWNER"
           fi
           pnpm run build:electron-vite:parallel --mode e2e
 
@@ -147,7 +147,7 @@ jobs:
       # The switch-on specs skip, rather than fail, when the build left no marker.
       - name: Check layout-owner build marker
         if: inputs.layout_owner == 'main'
-        run: test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+        run: test -f out/main/QUIRKY_LAYOUT_OWNER_MAIN
 
       - name: Check shared native runtime action
         id: native-runtime-action
@@ -158,7 +158,7 @@ jobs:
             echo 'available=false' >> "$GITHUB_OUTPUT"
           fi
 
-      # The orcad builds downstream refuse to run without the page; older refs predate the action.
+      # The quirkyd builds downstream refuse to run without the page; older refs predate the action.
       - uses: ./.github/actions/build-mobile-web-bundle
         if: hashFiles('.github/actions/build-mobile-web-bundle/action.yml') != ''
 
@@ -240,7 +240,7 @@ jobs:
         # The Azure archive took 16 minutes for one font package; bound setup
         # separately so a slow mirror cannot consume the shard's test budget.
         env: &e2e_tool_packages
-          ORCA_E2E_APT_PACKAGES: build-essential fonts-noto-cjk openssh-client python3 ripgrep xvfb zsh openbox x11-utils xdotool
+          QUIRKY_E2E_APT_PACKAGES: build-essential fonts-noto-cjk openssh-client python3 ripgrep xvfb zsh openbox x11-utils xdotool
         run: *install_e2e_tools
 
       - uses: ./.github/actions/install-node-dependencies
@@ -259,18 +259,18 @@ jobs:
       # headless suite across separate runners.
       # SKIP_BUILD makes Playwright globalSetup reuse the single build job's
       # artifact instead of starting five concurrent electron-vite builds.
-      # ORCA_E2E_FORWARD_APP_LOGS keeps startup failures visible when Electron
+      # QUIRKY_E2E_FORWARD_APP_LOGS keeps startup failures visible when Electron
       # launches but never creates a BrowserWindow.
       - name: Balance E2E shard from timing evidence
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
           SKIP_BUILD: '1'
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
-          ORCA_E2E_WEB_CLIENT: '1'
+          QUIRKY_E2E_FORWARD_APP_LOGS: '1'
+          QUIRKY_E2E_WEB_CLIENT: '1'
         run: |
           mkdir -p ci-shards
           pnpm exec playwright test --config tests/playwright.config.ts --project=electron-headless --list --reporter=json > ci-shards/discovery.json
-          export ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
+          export QUIRKY_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
           node config/scripts/ci-e2e-shard-plan.mjs ci-shards/discovery.json '${{ matrix.shard }}' ci-shards
           pnpm exec playwright test --config tests/playwright.config.ts --project=electron-headless --test-list=ci-shards/selected.txt --list --reporter=json > ci-shards/selected-discovery.json
           node config/scripts/ci-e2e-shard-plan.mjs --verify ci-shards/assignment.json ci-shards/selected-discovery.json
@@ -278,7 +278,7 @@ jobs:
       - name: Run E2E tests (${{ matrix.shard_name }})
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: ci-shards/results.json
-        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 ORCA_E2E_WEB_CLIENT=1 pnpm run test:e2e --test-list=ci-shards/selected.txt --reporter=list,json
+        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 QUIRKY_E2E_WEB_CLIENT=1 pnpm run test:e2e --test-list=ci-shards/selected.txt --reporter=list,json
 
       - name: Summarize E2E failures
         if: always()
@@ -299,7 +299,7 @@ jobs:
       # The frame benchmark needs a mapped window, which the headless shards exclude.
       - name: Run worktree first-paint benchmark
         if: matrix.shard == '1/14'
-        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm exec playwright test tests/e2e/worktree-switch-first-paint.spec.ts --config tests/playwright.config.ts --project=electron-headful --workers=1
+        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh env SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 pnpm exec playwright test tests/e2e/worktree-switch-first-paint.spec.ts --config tests/playwright.config.ts --project=electron-headful --workers=1
 
       # Why: Playwright retains traces/screenshots only on failure. Uploading
       # them as an artifact makes post-mortem debugging on CI possible without
@@ -354,9 +354,9 @@ jobs:
             jq -r '.[] | select(
               . != "tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts" and
               . != "tests/e2e/terminal-ibus-hangul-native.spec.ts" and
-              . != "tests/e2e/orcad-serve-mode-switch.spec.ts" and
+              . != "tests/e2e/quirkyd-serve-mode-switch.spec.ts" and
               . != "tests/e2e/workspace-layout-oracle-headless.spec.ts" and
-              (startswith("tests/e2e/ssh-orcad-") | not)
+              (startswith("tests/e2e/ssh-quirkyd-") | not)
             )' <<<"$TEST_FILES_JSON" > "$RUNNER_TEMP/general-e2e-specs"
           fi
           mapfile -t TEST_FILES < "$RUNNER_TEMP/general-e2e-specs"
@@ -364,12 +364,12 @@ jobs:
             echo "Changed specs are all owned by dedicated lanes."
             exit 0
           fi
-          E2E_ENV=(SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 ORCA_E2E_WEB_CLIENT=1)
+          E2E_ENV=(SKIP_BUILD=1 QUIRKY_E2E_FORWARD_APP_LOGS=1 QUIRKY_E2E_WEB_CLIENT=1)
           E2E_PROJECT_ARGS=()
           if [ -n "$LAYOUT_OWNER" ]; then
-            test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+            test -f out/main/QUIRKY_LAYOUT_OWNER_MAIN
             mkdir -p layout-divergence
-            E2E_ENV+=(ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/window-specs.jsonl")
+            E2E_ENV+=(QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/window-specs.jsonl")
             E2E_ENV+=(PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/layout-divergence/window-specs-results.json")
             E2E_PROJECT_ARGS+=('--reporter=list,json')
           fi
@@ -428,21 +428,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y openssh-client
       - name: Run Docker SSH browser network route journeys
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_RUN_DOCKER_SSH_BROWSER_E2E: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
+          QUIRKY_RUN_DOCKER_SSH_BROWSER_E2E: '1'
         run: node_modules/.bin/vitest run --config config/vitest.config.ts tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts
 
-  orcad-serve-mode-switch:
-    name: orca serve Electron/orcad mode switch (D7)
+  quirkyd-serve-mode-switch:
+    name: quirky serve Electron/quirkyd mode switch (D7)
     needs: [build]
     if: >-
       inputs.test_files == '' ||
-      contains(inputs.test_files, 'tests/e2e/orcad-serve-mode-switch.spec.ts') ||
+      contains(inputs.test_files, 'tests/e2e/quirkyd-serve-mode-switch.spec.ts') ||
       contains(inputs.test_files, 'tests/e2e/workspace-layout-oracle-headless.spec.ts')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -457,58 +457,58 @@ jobs:
         with:
           name: e2e-build-out${{ inputs.artifact_suffix }}
           path: out/
-      # The packaged orcad slot the T6-11 launcher runs: its own node-pty under the pinned Node.
-      # The template is what `orca serve`'s default selection materializes that slot from.
-      - name: Build this runner's orcad slot and template
+      # The packaged quirkyd slot the T6-11 launcher runs: its own node-pty under the pinned Node.
+      # The template is what `quirky serve`'s default selection materializes that slot from.
+      - name: Build this runner's quirkyd slot and template
         env:
           LAYOUT_OWNER: ${{ inputs.layout_owner }}
         run: |
-          slot="$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
-          pnpm build:orcad-prebuilds
-          pnpm build:orcad-prebuilds --require-slots "$slot"
-          # The headless oracle's orcad host must hold the same layout owner as the Electron host,
-          # and so must the template `orca serve` materializes its server from.
+          slot="$(node config/scripts/build-quirkyd-prebuilds.mjs --print-slot)"
+          pnpm build:quirkyd-prebuilds
+          pnpm build:quirkyd-prebuilds --require-slots "$slot"
+          # The headless oracle's quirkyd host must hold the same layout owner as the Electron host,
+          # and so must the template `quirky serve` materializes its server from.
           if [ -n "$LAYOUT_OWNER" ]; then
-            export ORCA_LAYOUT_OWNER="$LAYOUT_OWNER"
-            pnpm build:orcad
-            node config/scripts/build-orcad-template.mjs --targets "$slot" --dark-test-template
-            test -f out/orcad/ORCA_LAYOUT_OWNER_MAIN
-            test -f out/orcad-template/ORCA_LAYOUT_OWNER_MAIN
+            export QUIRKY_LAYOUT_OWNER="$LAYOUT_OWNER"
+            pnpm build:quirkyd
+            node config/scripts/build-quirkyd-template.mjs --targets "$slot" --dark-test-template
+            test -f out/quirkyd/QUIRKY_LAYOUT_OWNER_MAIN
+            test -f out/quirkyd-template/QUIRKY_LAYOUT_OWNER_MAIN
           else
-            pnpm build:orcad
-            node config/scripts/build-orcad-template.mjs --targets "$slot"
+            pnpm build:quirkyd
+            node config/scripts/build-quirkyd-template.mjs --targets "$slot"
           fi
       - name: Switch serve hosts on one profile
-        if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/orcad-serve-mode-switch.spec.ts')
+        if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/quirkyd-serve-mode-switch.spec.ts')
         env:
           SKIP_BUILD: '1'
-          ORCA_E2E_ORCAD_SERVE: '1'
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
-        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/orcad-serve-mode-switch.spec.ts --project=electron-headless --workers=1
-      # Only this job builds out/orcad, so the spec's orcad case runs here; the e2e shards run its Electron case.
-      - name: Phone Markdown on headless orcad serve
+          QUIRKY_E2E_QUIRKYD_SERVE: '1'
+          QUIRKY_E2E_FORWARD_APP_LOGS: '1'
+        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/quirkyd-serve-mode-switch.spec.ts --project=electron-headless --workers=1
+      # Only this job builds out/quirkyd, so the spec's quirkyd case runs here; the e2e shards run its Electron case.
+      - name: Phone Markdown on headless quirkyd serve
         if: >-
           !cancelled() &&
           (inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/headless-serve-mobile-markdown.spec.ts'))
         env:
           SKIP_BUILD: '1'
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
-        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/headless-serve-mobile-markdown.spec.ts --grep "headless orcad server" --project=electron-headless --workers=1
-      # The layout oracle's headless scenarios run on both serve hosts, so they need this job's orcad.
-      - name: Layout oracle on headless serve (orcad and Electron)
+          QUIRKY_E2E_FORWARD_APP_LOGS: '1'
+        run: xvfb-run --auto-servernum bash .github/scripts/e2e-with-window-manager.sh pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/headless-serve-mobile-markdown.spec.ts --grep "headless quirkyd server" --project=electron-headless --workers=1
+      # The layout oracle's headless scenarios run on both serve hosts, so they need this job's quirkyd.
+      - name: Layout oracle on headless serve (quirkyd and Electron)
         if: >-
           !cancelled() &&
           (inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/workspace-layout-oracle-headless.spec.ts'))
         env:
           SKIP_BUILD: '1'
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
+          QUIRKY_E2E_FORWARD_APP_LOGS: '1'
           LAYOUT_OWNER: ${{ inputs.layout_owner }}
         run: |
           REPORT_ARGS=()
           if [ -n "$LAYOUT_OWNER" ]; then
-            test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+            test -f out/main/QUIRKY_LAYOUT_OWNER_MAIN
             mkdir -p layout-divergence
-            export ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/headless-oracle.jsonl"
+            export QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/headless-oracle.jsonl"
             export PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/layout-divergence/headless-oracle-results.json"
             REPORT_ARGS=('--reporter=list,json')
           fi
@@ -529,17 +529,17 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: orcad-serve-mode-switch-traces${{ inputs.artifact_suffix }}
+          name: quirkyd-serve-mode-switch-traces${{ inputs.artifact_suffix }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
 
-  # Selected managed-orcad SSH specs on a Docker host; daily runs keep the full suite. Needs the
-  # orcad template for the fixture's target (Debian, linux-x64-glibc), which only this job builds.
-  orcad-ssh-docker:
-    name: ssh on managed orcad (Docker ${{ matrix.shard }})
+  # Selected managed-quirkyd SSH specs on a Docker host; daily runs keep the full suite. Needs the
+  # quirkyd template for the fixture's target (Debian, linux-x64-glibc), which only this job builds.
+  quirkyd-ssh-docker:
+    name: ssh on managed quirkyd (Docker ${{ matrix.shard }})
     needs: [build]
-    if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-orcad-')
+    if: inputs.test_files == '' || contains(inputs.test_files, 'tests/e2e/ssh-quirkyd-')
     runs-on: ubuntu-latest
     timeout-minutes: 60
     strategy:
@@ -547,7 +547,7 @@ jobs:
       matrix:
         shard: ${{ fromJSON(inputs.managed_ssh_shards || '["1/2","2/2"]') }}
     env:
-      ORCA_BACKGROUND_LAUNCH: '1'
+      QUIRKY_BACKGROUND_LAUNCH: '1'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -567,26 +567,26 @@ jobs:
           path: out/
       # Built to a path the app does not look at by default, so the relay-era phase has no template.
       # The switch-on leg deploys a switch-on server, so both sides of the host run one layout owner.
-      - name: Build the linux-x64-glibc orcad template
+      - name: Build the linux-x64-glibc quirkyd template
         env:
           LAYOUT_OWNER: ${{ inputs.layout_owner }}
         run: |
-          pnpm build:orcad-prebuilds
-          pnpm build:orcad-prebuilds --require-slots linux-x64-glibc
+          pnpm build:quirkyd-prebuilds
+          pnpm build:quirkyd-prebuilds --require-slots linux-x64-glibc
           if [ -n "$LAYOUT_OWNER" ]; then
-            ORCA_LAYOUT_OWNER="$LAYOUT_OWNER" node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc --dark-test-template
-            test -f out/orcad-template/ORCA_LAYOUT_OWNER_MAIN
+            QUIRKY_LAYOUT_OWNER="$LAYOUT_OWNER" node config/scripts/build-quirkyd-template.mjs --targets linux-x64-glibc --dark-test-template
+            test -f out/quirkyd-template/QUIRKY_LAYOUT_OWNER_MAIN
           else
-            node config/scripts/build-orcad-template.mjs --targets linux-x64-glibc
+            node config/scripts/build-quirkyd-template.mjs --targets linux-x64-glibc
           fi
-          mv out/orcad-template "$RUNNER_TEMP/orcad-convert-template"
+          mv out/quirkyd-template "$RUNNER_TEMP/quirkyd-convert-template"
       - name: Run managed SSH specs on a Docker host
         env:
           TEST_FILES_JSON: ${{ inputs.test_files }}
           SKIP_BUILD: '1'
-          ORCA_E2E_SSH_DOCKER: '1'
-          ORCA_E2E_ORCAD_CONVERT_HOST: docker
-          ORCA_E2E_FORWARD_APP_LOGS: '1'
+          QUIRKY_E2E_SSH_DOCKER: '1'
+          QUIRKY_E2E_QUIRKYD_CONVERT_HOST: docker
+          QUIRKY_E2E_FORWARD_APP_LOGS: '1'
           SHARD: ${{ matrix.shard }}
           LAYOUT_OWNER: ${{ inputs.layout_owner }}
           SHARD_INDEX: ${{ strategy.job-index }}
@@ -598,18 +598,18 @@ jobs:
           // Older checkout refs retain their full-suite behavior.
           const specs = selection.selectManagedSshE2eSpecs
             ? selection.selectManagedSshE2eSpecs(process.env.TEST_FILES_JSON)
-            : ['tests/e2e/ssh-orcad-']
+            : ['tests/e2e/ssh-quirkyd-']
           for (const spec of specs) {
             console.log(spec.endsWith('.spec.ts') ? spec.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$' : spec)
           }
           NODE
           mapfile -t TEST_FILES < "$RUNNER_TEMP/managed-ssh-specs"
-          export ORCA_E2E_ORCAD_CONVERT_TEMPLATE="$RUNNER_TEMP/orcad-convert-template"
+          export QUIRKY_E2E_QUIRKYD_CONVERT_TEMPLATE="$RUNNER_TEMP/quirkyd-convert-template"
           REPORT_ARGS=()
           if [ -n "$LAYOUT_OWNER" ]; then
-            test -f out/main/ORCA_LAYOUT_OWNER_MAIN
+            test -f out/main/QUIRKY_LAYOUT_OWNER_MAIN
             mkdir -p layout-divergence
-            export ORCA_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/managed-ssh-$SHARD_INDEX.jsonl"
+            export QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG="$PWD/layout-divergence/managed-ssh-$SHARD_INDEX.jsonl"
             export PLAYWRIGHT_JSON_OUTPUT_FILE="$PWD/layout-divergence/managed-ssh-$SHARD_INDEX-results.json"
             REPORT_ARGS=('--reporter=list,json')
           fi
@@ -630,7 +630,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
-          name: orcad-ssh-docker-traces-${{ strategy.job-index }}${{ inputs.artifact_suffix }}
+          name: quirkyd-ssh-docker-traces-${{ strategy.job-index }}${{ inputs.artifact_suffix }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore

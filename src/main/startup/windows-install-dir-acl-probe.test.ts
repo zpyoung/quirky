@@ -19,7 +19,7 @@ import {
   RESTRICTED_PACKAGES_ACE
 } from './windows-install-dir-acl.test-fixture'
 
-const INSTALL_DIR = 'C:\\Users\\neil\\AppData\\Local\\Programs\\orca'
+const INSTALL_DIR = 'C:\\Users\\neil\\AppData\\Local\\Programs\\quirky'
 const ORPHAN = ORPHAN_PACKAGE_ACE
 const RESTRICTED_GRANT = RESTRICTED_PACKAGES_ACE
 
@@ -207,7 +207,7 @@ describe('probeWindowsInstallDirAcl', () => {
   })
 
   it('does not report malformed saved output as a clean DACL', async () => {
-    installFakeDacls(() => 'orca')
+    installFakeDacls(() => 'quirky')
     const data = await probe({
       fileExists: () => false
     })

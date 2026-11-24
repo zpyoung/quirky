@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(0)
   vi.stubEnv('GH_HOST', 'github.com')
-  vi.stubEnv('ORCA_WORK_ITEM_SEARCH_FIXTURE', randomUUID())
+  vi.stubEnv('QUIRKY_WORK_ITEM_SEARCH_FIXTURE', randomUUID())
   _resetRateLimitCache()
   for (const runtime of ['native', 'wsl:ubuntu', 'wsl:debian']) {
     for (const host of ['github.com', 'github.example.com']) {

@@ -62,7 +62,7 @@ const moduleCode = (table = moduleTable()) =>
   `export const value = 1\n//# vitestCache=${Buffer.from(JSON.stringify(table)).toString('base64')}`
 
 async function fixture() {
-  const path = await mkdtemp(join(tmpdir(), 'orca-unit-module-cache-'))
+  const path = await mkdtemp(join(tmpdir(), 'quirky-unit-module-cache-'))
   roots.push(path)
   await writeFile(join(path, filename), moduleCode())
   await writeFile(

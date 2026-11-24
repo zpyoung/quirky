@@ -112,7 +112,7 @@ describe('ClientHostedBrowserUnavailableNotice', () => {
     if (!status) {
       throw new Error('fixture status missing')
     }
-    // orcad with no engine: it hosts pages on desktops but cannot render one itself.
+    // quirkyd with no engine: it hosts pages on desktops but cannot render one itself.
     renderNotice({
       ...live,
       status: {

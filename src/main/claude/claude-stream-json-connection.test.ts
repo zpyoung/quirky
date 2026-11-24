@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
-import type { SpawnedProcess, ProcessSpec } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { SpawnedProcess, ProcessSpec } from '@quirky/process-host/process-spec'
 
 import { query, type CanUseTool, type Options } from '@anthropic-ai/claude-agent-sdk'
 import {
@@ -69,8 +69,8 @@ function scriptScenario(
     cwd: dir,
     env: {
       PATH: process.env.PATH ?? '',
-      ORCA_SDK_CONTRACT_SCENARIO_PATH: scenarioPath,
-      ORCA_SDK_CONTRACT_REPORT_PATH: reportPath
+      QUIRKY_SDK_CONTRACT_SCENARIO_PATH: scenarioPath,
+      QUIRKY_SDK_CONTRACT_REPORT_PATH: reportPath
     },
     readReport: () => JSON.parse(readFileSync(reportPath, 'utf8')) as ScriptedCliReport
   }
@@ -88,7 +88,7 @@ function launchFor(
   }
 }
 
-/** The derived child environment, captured where Orca actually hands it to the OS. */
+/** The derived child environment, captured where Quirky actually hands it to the OS. */
 const spawned: ProcessSpec[] = []
 /** The retained child, so a test can end it the way a crashing CLI would. */
 const spawnedChildren: SpawnedProcess[] = []
@@ -117,7 +117,7 @@ async function open(
 function launchedArgv(spec: ProcessSpec | undefined): string[] {
   const argv = [spec?.program ?? '', ...(spec?.args ?? [])]
   // A supervised launch carries the provider's argv after the supervisor script's '--'.
-  return spec?.env?.ORCA_PROVIDER_SUPERVISOR_SPEC ? argv.slice(argv.indexOf('--') + 1) : argv
+  return spec?.env?.QUIRKY_PROVIDER_SUPERVISOR_SPEC ? argv.slice(argv.indexOf('--') + 1) : argv
 }
 
 function childEnv(): Record<string, string | undefined> {
@@ -176,16 +176,16 @@ describe('Claude stream-json connection', () => {
     vi.stubEnv('NODE_OPTIONS', '--require=/tmp/inject.js')
     // An inherited value wins over the SDK's default, so clear it to pin the default.
     vi.stubEnv('CLAUDE_CODE_ENTRYPOINT', undefined)
-    vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
-    // An Orca launched inside another structured session inherits that session's id.
-    vi.stubEnv('ORCA_AGENT_SESSION_ID', 'a0b1c2d3-0000-4000-8000-00000000abcd')
+    vi.stubEnv('QUIRKY_CONNECTION_MARKER', 'inherited')
+    // An Quirky launched inside another structured session inherits that session's id.
+    vi.stubEnv('QUIRKY_AGENT_SESSION_ID', 'a0b1c2d3-0000-4000-8000-00000000abcd')
     const scenario = scriptScenario([HOLD_OPEN])
     const connection = await open(
       launchFor(scenario, {
-        ORCA_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666',
+        QUIRKY_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666',
         CLAUDE_CONFIG_DIR: '/accounts/managed/home',
         ANTHROPIC_AUTH_TOKEN: 'configured-token',
-        ORCA_AGENT_SESSION_SPAWN_TOKEN: 'spawn-9',
+        QUIRKY_AGENT_SESSION_SPAWN_TOKEN: 'spawn-9',
         CLAUDE_CODE_CHILD_SESSION: 'configured-child-session',
         CLAUDE_CODE_SESSION_ID: 'configured-session',
         CLAUDE_CODE_BRIDGE_SESSION_ID: 'configured-bridge-session'
@@ -199,10 +199,10 @@ describe('Claude stream-json connection', () => {
     // The managed home is pinned verbatim: the CLI keys credential lookup on the literal string.
     expect(env.CLAUDE_CONFIG_DIR).toBe('/accounts/managed/home')
     expect(env.ANTHROPIC_AUTH_TOKEN).toBe('configured-token')
-    expect(env.ORCA_AGENT_SESSION_SPAWN_TOKEN).toBe('spawn-9')
-    expect(env.ORCA_CONNECTION_MARKER).toBe('inherited')
+    expect(env.QUIRKY_AGENT_SESSION_SPAWN_TOKEN).toBe('spawn-9')
+    expect(env.QUIRKY_CONNECTION_MARKER).toBe('inherited')
     // The session's own id reaches the spawned child over the inherited one.
-    expect(env.ORCA_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
+    expect(env.QUIRKY_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
     expect(env.CLAUDE_CODE_CHILD_SESSION).toBeUndefined()
     expect(env.CLAUDE_CODE_SESSION_ID).toBeUndefined()
@@ -214,30 +214,30 @@ describe('Claude stream-json connection', () => {
     const report = await until(() => readReportSafely(scenario), 'the scripted CLI report')
     expect(report.argv[0]).toBe(FAKE_CLI)
     // The .mjs fixture makes the SDK run it under node; a real CLI path is the program
-    // itself. Either way the resolved path is what Orca's spawner is asked to execute,
+    // itself. Either way the resolved path is what Quirky's spawner is asked to execute,
     // through the POSIX supervisor's spec where there is one.
     expect(launchedArgv(spawned.at(-1))).toContain(FAKE_CLI)
     expect(report.argv).toContain('--replay-user-messages')
     expect(report.argv).toContain(`--session-id=${SESSION_ID}`)
   })
 
-  it("strips the launch's inherited keys after Orca's own env is merged in", async () => {
-    vi.stubEnv('ORCA_PANE_KEY', 'tab-1:pane-1')
-    vi.stubEnv('ORCA_AGENT_HOOK_PORT', '4242')
-    vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
+  it("strips the launch's inherited keys after Quirky's own env is merged in", async () => {
+    vi.stubEnv('QUIRKY_PANE_KEY', 'tab-1:pane-1')
+    vi.stubEnv('QUIRKY_AGENT_HOOK_PORT', '4242')
+    vi.stubEnv('QUIRKY_CONNECTION_MARKER', 'inherited')
     const scenario = scriptScenario([HOLD_OPEN])
     await open({
-      ...launchFor(scenario, { ORCA_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666' }),
-      envToDelete: ['ORCA_PANE_KEY', 'ORCA_AGENT_HOOK_PORT']
+      ...launchFor(scenario, { QUIRKY_AGENT_SESSION_ID: 'f7a1c0de-1111-4222-8333-444455556666' }),
+      envToDelete: ['QUIRKY_PANE_KEY', 'QUIRKY_AGENT_HOOK_PORT']
     })
 
     await until(() => readReportSafely(scenario), 'the scripted CLI report')
     const env = childEnv()
-    expect(env.ORCA_PANE_KEY).toBeUndefined()
-    expect(env.ORCA_AGENT_HOOK_PORT).toBeUndefined()
+    expect(env.QUIRKY_PANE_KEY).toBeUndefined()
+    expect(env.QUIRKY_AGENT_HOOK_PORT).toBeUndefined()
     // Only the listed keys go: the rest of the inherited env and the launch's own still arrive.
-    expect(env.ORCA_CONNECTION_MARKER).toBe('inherited')
-    expect(env.ORCA_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
+    expect(env.QUIRKY_CONNECTION_MARKER).toBe('inherited')
+    expect(env.QUIRKY_AGENT_SESSION_ID).toBe('f7a1c0de-1111-4222-8333-444455556666')
   })
 
   it('leaves the default CLI home unpinned so macOS Keychain OAuth keeps working', async () => {
@@ -248,15 +248,15 @@ describe('Claude stream-json connection', () => {
     expect(childEnv().CLAUDE_CONFIG_DIR).toBeUndefined()
   })
 
-  it("drops a CLAUDE_CONFIG_DIR from Orca's own process env: only the launch may name a home", async () => {
-    vi.stubEnv('CLAUDE_CONFIG_DIR', '/orca/process/claude')
-    vi.stubEnv('ORCA_CONNECTION_MARKER', 'inherited')
+  it("drops a CLAUDE_CONFIG_DIR from Quirky's own process env: only the launch may name a home", async () => {
+    vi.stubEnv('CLAUDE_CONFIG_DIR', '/quirky/process/claude')
+    vi.stubEnv('QUIRKY_CONNECTION_MARKER', 'inherited')
     const scenario = scriptScenario([HOLD_OPEN])
     await open(launchFor(scenario))
 
     await until(() => readReportSafely(scenario), 'the scripted CLI report')
     expect(childEnv().CLAUDE_CONFIG_DIR).toBeUndefined()
-    expect(childEnv().ORCA_CONNECTION_MARKER).toBe('inherited')
+    expect(childEnv().QUIRKY_CONNECTION_MARKER).toBe('inherited')
 
     await open(launchFor(scenario, { CLAUDE_CONFIG_DIR: '/accounts/managed/home' }))
     expect(childEnv().CLAUDE_CONFIG_DIR).toBe('/accounts/managed/home')
@@ -489,7 +489,7 @@ describe('Claude stream-json connection', () => {
     expect(written.response.response).toMatchObject({ behavior: 'deny', message: 'No' })
   })
 
-  it('drives Orca control methods onto the SDK and times out with the init proof message', async () => {
+  it('drives Quirky control methods onto the SDK and times out with the init proof message', async () => {
     const scenario = scriptScenario([HOLD_OPEN], {
       initialize: { models: [{ value: 'sonnet' }], account: { tokenSource: 'oauth' } },
       get_settings: { env: { ANTHROPIC_BASE_URL: 'https://settings.example.test' } }
@@ -614,7 +614,7 @@ describe('Claude stream-json connection', () => {
     const scenario = scriptScenario([{ stderr: 'claude: not signed in\n' }, { exit: 1 }])
     const connection = await open({
       ...launchFor(scenario),
-      env: { ...launchFor(scenario).env, ORCA_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS: '1' }
+      env: { ...launchFor(scenario).env, QUIRKY_SDK_CONTRACT_IGNORE_CONTROL_REQUESTS: '1' }
     })
 
     await expect(connection.initializationResult()).rejects.toThrow()
@@ -632,7 +632,7 @@ describe('Claude stream-json connection', () => {
     await until(() => exit, 'the exit error')
     // The status and stderr are the only diagnostic a refused start leaves behind.
     expect((exit as unknown as Error).message).toMatch(/exited \(code 1\): claude: not signed in/)
-    // Kept apart from Orca's wording where it is composed, and marked as log text.
+    // Kept apart from Quirky's wording where it is composed, and marked as log text.
     expect(providerDiagnosticOf(exit)).toEqual({
       text: expect.stringMatching(/^\(code 1\)\n.*claude: not signed in/s),
       audience: 'log'
@@ -662,7 +662,7 @@ describe('Claude stream-json connection', () => {
       const connection = await open(
         {
           ...launchFor(scenario),
-          env: { ...launchFor(scenario).env, ORCA_SDK_CONTRACT_DESCENDANT: '1' }
+          env: { ...launchFor(scenario).env, QUIRKY_SDK_CONTRACT_DESCENDANT: '1' }
         },
         { onExit: (error) => (exit = error) }
       )
@@ -773,7 +773,7 @@ describe('Claude stream-json connection', () => {
     const scenario = scriptScenario([HOLD_OPEN])
     const connection = await open({
       ...launchFor(scenario),
-      env: { ...launchFor(scenario).env, ORCA_SDK_CONTRACT_IGNORE_SIGTERM: '1' }
+      env: { ...launchFor(scenario).env, QUIRKY_SDK_CONTRACT_IGNORE_SIGTERM: '1' }
     })
 
     // Keep the lstart capture boundary outside the child's displayed start second.

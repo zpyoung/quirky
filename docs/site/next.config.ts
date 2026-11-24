@@ -7,7 +7,7 @@ const crawlerUserAgentPattern =
   '.*(?:[Bb][Oo][Tt]|[Cc][Rr][Aa][Ww][Ll]|[Ss][Pp][Ii][Dd][Ee][Rr]|GPTBot|ChatGPT-User|OAI-SearchBot|ClaudeBot|Claude-User|anthropic-ai|PerplexityBot|CCBot|Google-Extended|Applebot|facebookexternalhit|Twitterbot|LinkedInBot|Slackbot|Discordbot|TelegramBot|WhatsApp|SkypeUriPreview|Pinterest|Ahrefs|Semrush|MJ12|DotBot|PetalBot|Bytespider|Amazonbot|DuckDuckBot|Baiduspider|Yandex).*'
 
 const crawlerGifPosterRewrites = [
-  ['/docs/orca-design-mode.gif', '/docs/posters/orca-design-mode.jpg'],
+  ['/docs/quirky-design-mode.gif', '/docs/posters/quirky-design-mode.jpg'],
   ['/docs/tab-split.gif', '/docs/posters/tab-split.jpg']
 ] as const
 

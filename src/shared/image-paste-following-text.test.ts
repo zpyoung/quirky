@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { imagePasteWritesFollowedByText } from './image-paste-following-text'
 
-const IMAGE_A = '\x1b[200~/tmp/orca-paste-a.png\x1b[201~'
-const IMAGE_B = '\x1b[200~/tmp/orca-paste-b.png\x1b[201~'
+const IMAGE_A = '\x1b[200~/tmp/quirky-paste-a.png\x1b[201~'
+const IMAGE_B = '\x1b[200~/tmp/quirky-paste-b.png\x1b[201~'
 
 describe('imagePasteWritesFollowedByText', () => {
   it('separates an attachment path from following prompt text by a single space', () => {

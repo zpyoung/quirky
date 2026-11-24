@@ -1,7 +1,7 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from './dispatcher'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
 import type { RuntimeTerminalWait } from '../../../shared/runtime-types'
@@ -25,7 +25,7 @@ function createRuntime(
   writeGate: () => Promise<void> = async () => {},
   scriptedWrites: ScriptedWrite[] = [],
   sendOptions: unknown[] = []
-): OrcaRuntimeService {
+): QuirkyRuntimeService {
   const registry = createSubscriptionRegistryDouble()
   return stubRuntime({
     readTerminal: vi.fn().mockResolvedValue({ tail: [], truncated: false }),

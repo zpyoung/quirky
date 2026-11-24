@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { RunRow } from '../../runtime/orchestration/db'
 import { OrchestrationError } from '../../runtime/orchestration/orchestration-error'
 import type { WatcherQuestionState } from './orchestration-contract'
@@ -8,7 +8,7 @@ import type { WatcherQuestionState } from './orchestration-contract'
  * absent rather than pending, because this Run's coordinator could never answer it.
  */
 export function readWatcherQuestion(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   run: RunRow,
   messageId: string
 ): WatcherQuestionState {
@@ -23,7 +23,7 @@ export function readWatcherQuestion(
 }
 
 export function answerWatcherQuestion(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   run: RunRow,
   messageId: string,
   body: string

@@ -1,6 +1,6 @@
 // What a running ACP agent reports about its own choices — config options (model, reasoning
-// effort), the older model list, and its `/` commands — as Orca's option and command surfaces.
-// Kept as the agent last reported it; nothing here is guessed or listed by Orca itself.
+// effort), the older model list, and its `/` commands — as Quirky's option and command surfaces.
+// Kept as the agent last reported it; nothing here is guessed or listed by Quirky itself.
 
 import { abortSignalReason } from '../../shared/abort-signal-reason'
 
@@ -30,7 +30,7 @@ import {
 
 type SelectOption = Extract<SessionConfigOption, { type: 'select' }>
 
-/** How an Orca option key reaches the agent: a config option it declared, or the model method. */
+/** How an Quirky option key reaches the agent: a config option it declared, or the model method. */
 export type AcpOptionWrite =
   | { method: 'config'; configId: string; value: string }
   | { method: 'model'; modelId: string }
@@ -90,7 +90,7 @@ export class AcpStructuredOptions {
     return this.initialChoice
   }
 
-  /** Orca sent `key` to the session, or the chat's saved options hold a value for it. */
+  /** Quirky sent `key` to the session, or the chat's saved options hold a value for it. */
   notePick(key: string): void {
     this.picked.add(key)
   }

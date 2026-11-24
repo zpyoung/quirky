@@ -4,7 +4,7 @@ export function shouldPresentTerminalPerfWindow(
   env: Readonly<Record<string, string | undefined>> = process.env,
   platform: string = process.platform
 ): boolean {
-  if (env.ORCA_E2E_TERMINAL_PERF_XVFB !== '1') {
+  if (env.QUIRKY_E2E_TERMINAL_PERF_XVFB !== '1') {
     return false
   }
   if (

@@ -1,14 +1,14 @@
 // Why: jcode config paths and the [hooks] table contract. jcode loads lifecycle
-// hooks from ~/.jcode/config.toml (or $JCODE_HOME/config.toml); Orca writes its
-// managed observer hooks there so sessions launched outside Orca still report.
+// hooks from ~/.jcode/config.toml (or $JCODE_HOME/config.toml); Quirky writes its
+// managed observer hooks there so sessions launched outside Quirky still report.
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
 const JCODE_SCRIPT_BASE = 'jcode-hook'
 
-// The lifecycle points Orca subscribes to, in the order jcode fires them.
+// The lifecycle points Quirky subscribes to, in the order jcode fires them.
 // `pre_tool` is jcode's synchronous gate, but the managed script backgrounds its
-// POST and exits 0 immediately, so Orca observes the tool without ever holding
+// POST and exits 0 immediately, so Quirky observes the tool without ever holding
 // up a tool call. Without it a long `bash` would show no tool at all until it
 // finished, and `request_permission` (the only jcode tool a human answers)
 // would only be seen after the answer.
@@ -44,14 +44,14 @@ export function getJcodeManagedScriptPath(): string {
 }
 
 export function getSharedJcodeScriptPath(scriptFileName: string): string {
-  return join(homedir(), '.orca', 'agent-hooks', scriptFileName)
+  return join(homedir(), '.quirky', 'agent-hooks', scriptFileName)
 }
 
 // Why quoted: jcode executes hook commands directly (no shell), but it tokenizes the
 // configured string shell-style first — parse_hook_command in jcode-terminal-launch
 // splits on unquoted whitespace AND consumes every unquoted backslash as an escape, so
-// a bare `C:\Users\me\.orca\agent-hooks\jcode-hook.cmd` reaches exec as
-// `C:Usersme.orcaagent-hooksjcode-hook.cmd` and no Windows hook ever fires. Single
+// a bare `C:\Users\me\.quirky\agent-hooks\jcode-hook.cmd` reaches exec as
+// `C:Usersme.quirkyagent-hooksjcode-hook.cmd` and no Windows hook ever fires. Single
 // quotes pass the path through verbatim (backslashes are literal inside them); a path
 // that itself contains one falls back to double quotes, where \ and " are the escapes.
 export function getJcodeManagedCommand(scriptPath: string): string {

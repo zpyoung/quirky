@@ -22,7 +22,7 @@ export type ActivityEvent = {
   state: ActivityEventState
   /** The state's own start time; unread and "Clear completed" compare against it. */
   timestamp: number
-  /** When Orca saw the switch into this state; orders the timeline and keys the event. */
+  /** When Quirky saw the switch into this state; orders the timeline and keys the event. */
   observedAt: number
   worktree: Worktree
   repo: Repo | null

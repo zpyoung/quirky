@@ -51,7 +51,7 @@ export async function initDaemonPtyProvider(
 ): Promise<void> {
   logDaemonMilestone('daemon-init-start')
   // Why: e2e coverage for the startup PTY gate (#5232) needs a daemon init that deterministically outlasts the first-window timeout.
-  const e2eInitDelayMs = Number(process.env.ORCA_E2E_DAEMON_INIT_DELAY_MS)
+  const e2eInitDelayMs = Number(process.env.QUIRKY_E2E_DAEMON_INIT_DELAY_MS)
   if (Number.isFinite(e2eInitDelayMs) && e2eInitDelayMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, e2eInitDelayMs))
   }

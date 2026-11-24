@@ -3,10 +3,10 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { createManifest } from './check-job-log-performance-cases.mjs'
 import { prepareBenchmark, runDescriptor, hash } from './check-job-log-byte-cap-benchmark.mjs'
 
-assert(process.env.ORCA_CHECK_LOG_SMOKE_REPORT)
+assert(process.env.QUIRKY_CHECK_LOG_SMOKE_REPORT)
 const context = await prepareBenchmark()
 const manifest = createManifest({
-  capturePath: process.env.ORCA_CHECK_LOG_CAPTURE
+  capturePath: process.env.QUIRKY_CHECK_LOG_CAPTURE
 }).filter(
   (item) => item.mode === 'cpu' && ['baseline', 'proposed'].includes(item.arm) && item.sample < 3
 )
@@ -16,7 +16,7 @@ try {
     records.push(await runDescriptor(context, descriptor))
   }
   await writeFile(
-    process.env.ORCA_CHECK_LOG_SMOKE_REPORT,
+    process.env.QUIRKY_CHECK_LOG_SMOKE_REPORT,
     JSON.stringify(
       {
         purpose:

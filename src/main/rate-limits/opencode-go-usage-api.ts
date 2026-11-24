@@ -16,7 +16,7 @@ const MAX_ERROR_BODY_CHARS = 4_000
  * Outcome of one Bearer-authenticated usage request.
  *
  * `unauthorized` and `no-subscription` are the server's two definitive verdicts
- * about the key; `failed` covers everything Orca could not get an answer from.
+ * about the key; `failed` covers everything Quirky could not get an answer from.
  */
 export type OpenCodeGoUsageApiOutcome =
   | { kind: 'ok'; windows: OpenCodeGoUsageWindows }

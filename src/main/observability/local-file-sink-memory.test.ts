@@ -11,7 +11,7 @@ function parseLine(raw: string): Record<string, unknown> {
 let directory: string
 let sink: LocalFileSink | undefined
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-trace-memory-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-trace-memory-'))
   vi.useFakeTimers()
 })
 afterEach(() => {

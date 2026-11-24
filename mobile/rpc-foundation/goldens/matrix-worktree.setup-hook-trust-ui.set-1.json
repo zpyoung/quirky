@@ -15,7 +15,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -59,7 +59,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -110,7 +110,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -152,7 +152,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -188,7 +188,7 @@
     "86d0d8f71257": {
       "name": "ui.set#1",
       "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedOrcaHooks\":{\"repo-1\":{\"setup\":{\"contentHash\":\"hash-1\",\"approvedAt\":1767225600000}}}}}"
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"ui.set\",\"params\":{\"trustedQuirkyHooks\":{\"repo-1\":{\"setup\":{\"contentHash\":\"hash-1\",\"approvedAt\":1767225600000}}}}}"
     },
     "94bc2d1b8bf5": {
       "name": "ui.set#1",
@@ -201,7 +201,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -243,7 +243,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -305,7 +305,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -353,7 +353,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -412,7 +412,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -454,7 +454,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,
@@ -505,7 +505,7 @@
         {
           "name": "params",
           "value": {
-            "trustedOrcaHooks": {
+            "trustedQuirkyHooks": {
               "repo-1": {
                 "setup": {
                   "approvedAt": 1767225600000,

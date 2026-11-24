@@ -4,10 +4,10 @@ import { classifyRuntimeEnvironmentHost } from '../../../shared/runtime-environm
 import type { KnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 
 const UNREACHABLE_RE =
-  /could not connect to the remote orca runtime|remote orca runtime closed the connection|timed out (?:waiting for|while connecting to) the remote orca runtime/i
+  /could not connect to the remote quirky runtime|remote quirky runtime closed the connection|timed out (?:waiting for|while connecting to) the remote quirky runtime/i
 
 export function withRuntimeUnreachableHint(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment'>,
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment'>,
   message: string,
   endpoint: string | null | undefined
 ): string {
@@ -18,7 +18,7 @@ export function withRuntimeUnreachableHint(
     case 'wsl':
       // Why not Tailscale: a WSL host is a distro on this computer, reached over wsl.exe.
       return UNREACHABLE_RE.test(message)
-        ? `${message} The Orca server in the WSL distro ${host.deployment.distro} isn’t answering; connect it again in Settings → Remote Orca Servers → WSL hosts.`
+        ? `${message} The Quirky server in the WSL distro ${host.deployment.distro} isn’t answering; connect it again in Settings → Remote Quirky Servers → WSL hosts.`
         : message
   }
 }

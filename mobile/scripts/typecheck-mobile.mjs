@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveMobileTypecheckCompiler } from './mobile-typecheck-compiler.mjs'
 
 const compiler = resolveMobileTypecheckCompiler()

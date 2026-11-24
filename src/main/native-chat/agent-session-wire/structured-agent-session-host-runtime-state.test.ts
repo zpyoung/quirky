@@ -19,7 +19,7 @@ import { createStructuredAgentSessionLogger } from './structured-agent-session-l
 const NOW = 1_800_000_000_000
 
 // The runtime state never reads the journal database; it only fills the deps' shape.
-const stateDirectory = mkdtempSync(join(tmpdir(), 'orca-host-runtime-state-'))
+const stateDirectory = mkdtempSync(join(tmpdir(), 'quirky-host-runtime-state-'))
 afterAll(() => {
   closeTestJournalHostDatabases()
   rmSync(stateDirectory, { recursive: true, force: true })

@@ -248,7 +248,7 @@ describe('the URLs a page may hand to the shell', () => {
       'file:///etc/passwd',
       'data:text/html,<script>1</script>',
       'intent://scan/#Intent;scheme=zxing;end',
-      'orca-mobile-web://session/x',
+      'quirky-mobile-web://session/x',
       'ftp://example.com/f'
     ]) {
       expect(isBridgeExternalLinkUrl(url), url).toBe(false)

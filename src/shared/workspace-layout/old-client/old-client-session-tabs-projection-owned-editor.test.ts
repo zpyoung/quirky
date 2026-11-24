@@ -9,7 +9,7 @@ import { build, testContext, WS } from '../workspace-layout-command.test-fixture
 
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 vi.mock('../../layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))
@@ -18,7 +18,7 @@ beforeEach(() => {
   mocks.layoutOwnerIsMain = true
 })
 
-const FILE = '/Users/dev/orca/README.md'
+const FILE = '/Users/dev/quirky/README.md'
 const noFacts: SessionTabsFacts = { tabLabels: {}, terminalRows: {}, browserTabs: {} }
 
 function projectOwnedReadme() {

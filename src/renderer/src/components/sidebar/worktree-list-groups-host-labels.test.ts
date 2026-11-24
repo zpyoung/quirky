@@ -20,28 +20,28 @@ describe('buildRows with pinned worktrees', () => {
     const windowsRepo: Repo = {
       ...repo,
       id: 'repo-windows',
-      path: String.raw`C:\Users\alice\git\orca`,
-      displayName: 'orca',
+      path: String.raw`C:\Users\alice\git\quirky`,
+      displayName: 'quirky',
       executionHostId: runtimeHostId
     }
     const wslRepo: Repo = {
       ...repo,
       id: 'repo-wsl',
-      path: String.raw`\\wsl.localhost\Ubuntu\home\alice\git\orca`,
-      displayName: 'orca',
+      path: String.raw`\\wsl.localhost\Ubuntu\home\alice\git\quirky`,
+      displayName: 'quirky',
       executionHostId: runtimeHostId
     }
     const windowsWorktree: Worktree = {
       ...worktree,
       id: 'wt-windows',
       repoId: windowsRepo.id,
-      path: String.raw`C:\Users\alice\git\orca\feature`
+      path: String.raw`C:\Users\alice\git\quirky\feature`
     }
     const wslWorktree: Worktree = {
       ...worktree,
       id: 'wt-wsl',
       repoId: wslRepo.id,
-      path: String.raw`\\wsl.localhost\Ubuntu\home\alice\git\orca\feature`
+      path: String.raw`\\wsl.localhost\Ubuntu\home\alice\git\quirky\feature`
     }
     const windowsSetup: ProjectHostSetup = {
       ...projectHostSetups[0]!,
@@ -90,7 +90,7 @@ describe('buildRows with pinned worktrees', () => {
     expect(rows.filter((row) => row.type === 'header')).toMatchObject([
       {
         key: 'project:github:stablyai/orca',
-        label: 'Orca',
+        label: 'Quirky',
         count: 2
       }
     ])
@@ -100,7 +100,7 @@ describe('buildRows with pinned worktrees', () => {
     const runtimeRepo: Repo = {
       ...remoteRepo,
       id: 'repo-runtime',
-      path: '/Users/alice/runtime-orca',
+      path: '/Users/alice/runtime-quirky',
       connectionId: null,
       executionHostId: 'runtime:03ef704c-b180-4b10-998d-e28fbd5de9a3'
     }
@@ -149,7 +149,7 @@ describe('buildRows with pinned worktrees', () => {
     )
 
     expect(rows).toMatchObject([
-      { type: 'header', key: 'project:github:stablyai/orca', label: 'Orca', count: 2 },
+      { type: 'header', key: 'project:github:stablyai/orca', label: 'Quirky', count: 2 },
       { type: 'item', worktree: { id: worktree.id }, hostContextLabel: LOCAL_HOST_LABEL },
       { type: 'item', worktree: { id: runtimeWorktree.id }, hostContextLabel: 'dev box' }
     ])
@@ -202,7 +202,7 @@ describe('buildRows with pinned worktrees', () => {
     ])
   })
 
-  it('shows distinct Orca server names when status grouping mixes runtime hosts', () => {
+  it('shows distinct Quirky server names when status grouping mixes runtime hosts', () => {
     const firstRepo: Repo = {
       ...repo,
       id: 'repo-runtime-a',
@@ -295,7 +295,7 @@ describe('buildRows with pinned worktrees', () => {
     )
 
     expect(rows).toMatchObject([
-      { type: 'header', key: 'project:github:stablyai/orca', label: 'Orca', count: 2 },
+      { type: 'header', key: 'project:github:stablyai/orca', label: 'Quirky', count: 2 },
       { type: 'item', worktree: { id: worktree.id } },
       { type: 'item', worktree: { id: secondLocalWorktree.id } }
     ])
@@ -311,8 +311,8 @@ describe('buildRows with pinned worktrees', () => {
       'repo',
       [worktree, remoteWorktree],
       new Map([
-        [repo.id, { ...repo, displayName: 'orca' }],
-        [remoteRepo.id, { ...remoteRepo, displayName: 'orca' }]
+        [repo.id, { ...repo, displayName: 'quirky' }],
+        [remoteRepo.id, { ...remoteRepo, displayName: 'quirky' }]
       ]),
       null,
       new Set()

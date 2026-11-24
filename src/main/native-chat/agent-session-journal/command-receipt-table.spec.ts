@@ -25,7 +25,7 @@ export function registerCommandReceiptTableTests(): void {
   const globalScope = commandReceiptScope('caller-1', 'global')
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-command-receipt-table-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-command-receipt-table-'))
     database = openTestJournalHostDatabase(root)
     database.transaction((db) => writeCommandReceiptTestRecord(db))
   })

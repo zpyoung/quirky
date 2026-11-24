@@ -187,7 +187,7 @@ function getClaudeStatusAccountsFromSettings(
   }
 }
 
-// Why: with a Remote Orca Server, local GlobalSettings describe this desktop, not the owner — the server snapshot wins (#7973).
+// Why: with a Remote Quirky Server, local GlobalSettings describe this desktop, not the owner — the server snapshot wins (#7973).
 
 /** `ownerEnvironmentId` is the server owning the shown accounts; `null` is this desktop. */
 export function resolveClaudeStatusAccountState(

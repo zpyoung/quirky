@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import type { SecretServiceCollectionState } from './linux-keyring-backend-selection'
 
 /**

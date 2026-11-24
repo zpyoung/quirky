@@ -44,12 +44,12 @@ beforeAll(async () => {
   if (!bundles) {
     return
   }
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-safe-area-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-safe-area-'))
   const { outDir } = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   const served = await createBundleServer({ outDir, cspHeader: await readShellCsp() })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 180_000)
 
@@ -162,7 +162,7 @@ describeRender('the page pads for the system bars once, by the shell insets', ()
     const before = await readEdges(opened.page)
     await opened.page.evaluate(
       (insets) => {
-        globalThis.__orcaRenderCheckResendInit({ safeAreaInsets: insets })
+        globalThis.__quirkyRenderCheckResendInit({ safeAreaInsets: insets })
       },
       { ...INSETS, top: 64 }
     )

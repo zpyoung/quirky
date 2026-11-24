@@ -31,13 +31,13 @@ describe('BrowserSessionRegistry persistence', () => {
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.pendingCookieDbPath).toBeNull()
     expect(written.pendingCookieImports).toEqual({})
-    expect(fsState.present.has('/user-data/Partitions/orca-browser/Cookies')).toBe(true)
+    expect(fsState.present.has('/user-data/Partitions/quirky-browser/Cookies')).toBe(true)
   })
 
   it('replays pending cookies into an existing Network database', async () => {
     const stagedPath = '/staged/network-import'
-    const networkPath = '/user-data/Partitions/orca-browser/Network/Cookies'
-    const legacyPath = '/user-data/Partitions/orca-browser/Cookies'
+    const networkPath = '/user-data/Partitions/quirky-browser/Network/Cookies'
+    const legacyPath = '/user-data/Partitions/quirky-browser/Cookies'
     const fsState = createFsState()
     seedMeta(fsState, {
       defaultSource: null,
@@ -59,15 +59,15 @@ describe('BrowserSessionRegistry persistence', () => {
     expect(fsState.present.has(legacyPath)).toBe(false)
   })
 
-  it('persists new browser session profiles under the active Orca profile directory', async () => {
+  it('persists new browser session profiles under the active Quirky profile directory', async () => {
     const fsState = createFsState()
     const profileMetaPath = '/user-data/profiles/local-work/browser-session-meta.json'
 
     installModuleMocks(fsState)
     const { browserSessionRegistry } = await import('./browser-session-registry')
 
-    browserSessionRegistry.configureForOrcaProfile({
-      orcaProfileId: 'local-work',
+    browserSessionRegistry.configureForQuirkyProfile({
+      quirkyProfileId: 'local-work',
       profileDirectory: '/user-data/profiles/local-work'
     })
     const profile = await browserSessionRegistry.createProfile('isolated', 'Work Browser')
@@ -112,17 +112,17 @@ describe('BrowserSessionRegistry persistence', () => {
     installModuleMocks(fsState)
     const { browserSessionRegistry } = await import('./browser-session-registry')
 
-    browserSessionRegistry.setPendingCookieImport('persist:orca-browser', '/staged/default')
+    browserSessionRegistry.setPendingCookieImport('persist:quirky-browser', '/staged/default')
     browserSessionRegistry.setPendingCookieImport(
-      'persist:orca-browser-session-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'persist:quirky-browser-session-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
       '/staged/imported'
     )
 
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.pendingCookieDbPath).toBeNull()
     expect(written.pendingCookieImports).toEqual({
-      'persist:orca-browser': { format: 'scoped-v1', path: '/staged/default' },
-      'persist:orca-browser-session-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa': {
+      'persist:quirky-browser': { format: 'scoped-v1', path: '/staged/default' },
+      'persist:quirky-browser-session-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa': {
         format: 'scoped-v1',
         path: '/staged/imported'
       }
@@ -130,7 +130,7 @@ describe('BrowserSessionRegistry persistence', () => {
   })
 
   it('clears only the requested partition and unlinks its staged database files', async () => {
-    const otherPartition = 'persist:orca-browser-session-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+    const otherPartition = 'persist:quirky-browser-session-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
     const fsState = createFsState()
     seedMeta(fsState, {
       defaultSource: null,
@@ -138,7 +138,7 @@ describe('BrowserSessionRegistry persistence', () => {
       userAgentByPartition: {},
       pendingCookieDbPath: '/staged/default',
       pendingCookieImports: {
-        'persist:orca-browser': '/staged/default',
+        'persist:quirky-browser': '/staged/default',
         [otherPartition]: '/staged/other'
       },
       profiles: []
@@ -156,7 +156,7 @@ describe('BrowserSessionRegistry persistence', () => {
     browserSessionRegistry.clearPendingCookieImport(otherPartition)
 
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
-    expect(written.pendingCookieImports).toEqual({ 'persist:orca-browser': '/staged/default' })
+    expect(written.pendingCookieImports).toEqual({ 'persist:quirky-browser': '/staged/default' })
     // Why: the default partition still has a staged replay, so the legacy pointer must survive.
     expect(written.pendingCookieDbPath).toBe('/staged/default')
     for (const suffix of ['', '-wal', '-shm']) {
@@ -166,7 +166,7 @@ describe('BrowserSessionRegistry persistence', () => {
   })
 
   it('drops the legacy pointer when the default partition is the one cleared', async () => {
-    const otherPartition = 'persist:orca-browser-session-cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    const otherPartition = 'persist:quirky-browser-session-cccccccc-cccc-4ccc-8ccc-cccccccccccc'
     const fsState = createFsState()
     seedMeta(fsState, {
       defaultSource: null,
@@ -174,7 +174,7 @@ describe('BrowserSessionRegistry persistence', () => {
       userAgentByPartition: {},
       pendingCookieDbPath: '/staged/default',
       pendingCookieImports: {
-        'persist:orca-browser': '/staged/default',
+        'persist:quirky-browser': '/staged/default',
         [otherPartition]: '/staged/other'
       },
       profiles: []
@@ -183,7 +183,7 @@ describe('BrowserSessionRegistry persistence', () => {
     installModuleMocks(fsState)
     const { browserSessionRegistry } = await import('./browser-session-registry')
 
-    browserSessionRegistry.clearPendingCookieImport('persist:orca-browser')
+    browserSessionRegistry.clearPendingCookieImport('persist:quirky-browser')
 
     const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
     expect(written.pendingCookieImports).toEqual({ [otherPartition]: '/staged/other' })
@@ -197,7 +197,7 @@ describe('BrowserSessionRegistry persistence', () => {
       userAgent: null,
       userAgentByPartition: {},
       pendingCookieDbPath: '/staged/default',
-      pendingCookieImports: { 'persist:orca-browser': '/staged/default' },
+      pendingCookieImports: { 'persist:quirky-browser': '/staged/default' },
       profiles: []
     })
     fsState.files.set('/staged/default', 'db')
@@ -207,7 +207,7 @@ describe('BrowserSessionRegistry persistence', () => {
     const { browserSessionRegistry } = await import('./browser-session-registry')
     const metaBefore = fsState.files.get(META_PATH)
 
-    browserSessionRegistry.clearPendingCookieImport('persist:orca-browser-session-unknown')
+    browserSessionRegistry.clearPendingCookieImport('persist:quirky-browser-session-unknown')
 
     // Why: an absent key must not rewrite meta or touch another partition's staged file.
     expect(fsState.files.get(META_PATH)).toBe(metaBefore)
@@ -235,7 +235,9 @@ describe('BrowserSessionRegistry persistence', () => {
     browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
 
     const defaultSessions = sessionFromPartitionMock.mock.results
-      .filter((_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:orca-browser')
+      .filter(
+        (_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:quirky-browser'
+      )
       .map((r) => r.value)
     expect(defaultSessions.length).toBeGreaterThan(0)
     const defaultSession = defaultSessions[0]
@@ -307,7 +309,7 @@ describe('BrowserSessionRegistry persistence', () => {
       })
     )
 
-    // Opaque frame URLs have no site Orca can name accurately.
+    // Opaque frame URLs have no site Quirky can name accurately.
     browserManagerNotifyPermissionDeniedMock.mockClear()
     requestHandler(guestWc, 'geolocation', permissionCallback, {
       requestingUrl: 'about:blank',
@@ -339,7 +341,7 @@ describe('BrowserSessionRegistry persistence', () => {
     expect(checkHandler(null, 'storage-access', '')).toBe(true)
 
     // Why: requestStorageAccessFor() is a different platform decision — Chromium consults Related
-    // Website Sets and has no third-party-cookie auto-grant, and Orca has no such data source. This
+    // Website Sets and has no third-party-cookie auto-grant, and Quirky has no such data source. This
     // pins the deliberate denial so a future blanket widening of the allow-set fails loudly.
     requestHandler(guestWc, 'top-level-storage-access', permissionCallback)
     expect(permissionCallback).toHaveBeenLastCalledWith(false)
@@ -439,7 +441,9 @@ describe('BrowserSessionRegistry persistence', () => {
     browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
 
     const defaultSessions = sessionFromPartitionMock.mock.results
-      .filter((_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:orca-browser')
+      .filter(
+        (_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:quirky-browser'
+      )
       .map((r) => r.value)
     const policySessions = defaultSessions.filter(
       (s) => s.setPermissionRequestHandler.mock.calls.length > 0
@@ -484,7 +488,7 @@ describe('BrowserSessionRegistry persistence', () => {
     browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
 
     const defaultSession = sessionFromPartitionMock.mock.results.find(
-      (_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:orca-browser'
+      (_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:quirky-browser'
     )?.value
     const requestHandler = defaultSession.setPermissionRequestHandler.mock.calls[0][0]
     const guestWc = { id: 403, getURL: vi.fn(() => 'https://example.com/camera') }
@@ -502,7 +506,7 @@ describe('BrowserSessionRegistry persistence', () => {
   })
 
   it('keeps failed partition replay pending and removes unrelated missing entries', async () => {
-    const importedPartition = 'persist:orca-browser-session-22222222-2222-4222-8222-222222222222'
+    const importedPartition = 'persist:quirky-browser-session-22222222-2222-4222-8222-222222222222'
     const fsState = createFsState()
     seedMeta(fsState, {
       defaultSource: null,
@@ -511,7 +515,7 @@ describe('BrowserSessionRegistry persistence', () => {
       pendingCookieDbPath: null,
       pendingCookieImports: {
         [importedPartition]: '/staged/imported',
-        'persist:orca-browser': '/staged/missing'
+        'persist:quirky-browser': '/staged/missing'
       },
       profiles: [
         {

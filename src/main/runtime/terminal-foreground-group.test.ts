@@ -33,7 +33,13 @@ describe('who holds a pane’s terminal, by its foreground process group', () =>
     [
       'the agent behind the sh that leads its group',
       pane(200, [
-        { pid: 200, ppid: 101, pgid: 200, stat: 'S+', command: '/bin/sh /tmp/orca-launch/run.sh' },
+        {
+          pid: 200,
+          ppid: 101,
+          pgid: 200,
+          stat: 'S+',
+          command: '/bin/sh /tmp/quirky-launch/run.sh'
+        },
         { pid: 201, ppid: 200, pgid: 200, stat: 'S+', command: '/opt/bin/claude' }
       ]),
       'agent'

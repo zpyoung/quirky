@@ -138,12 +138,12 @@ describe('runtime pty spawn preflight: OpenSSH login shell on a managed SSH host
 
   async function resolveWithLoginShell(managed: boolean, shellOverride?: string) {
     vi.resetModules()
-    loginShellDir = mkdtempSync(join(tmpdir(), 'orca-openssh-login-shell-'))
+    loginShellDir = mkdtempSync(join(tmpdir(), 'quirky-openssh-login-shell-'))
     const loginShell = join(loginShellDir, 'pwsh.exe')
     writeFileSync(loginShell, '')
     regQueryStdout.value = `HKEY_LOCAL_MACHINE\\SOFTWARE\\OpenSSH\r\n    DefaultShell    REG_SZ    ${loginShell}\r\n`
     if (managed) {
-      vi.stubEnv('ORCA_ORCAD_MANAGED_ACTIVATION_ROOT', loginShellDir)
+      vi.stubEnv('QUIRKY_QUIRKYD_MANAGED_ACTIVATION_ROOT', loginShellDir)
     }
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     const { prepareRuntimePtySpawn: prepare } = await import('./spawn-preflight')
@@ -187,7 +187,7 @@ describe('runtime pty spawn preflight: Claude account routing in a WSL pane', ()
     installClaudeProfileRouter(
       new ClaudeProfileRouter({
         getSettings: () => getDefaultSettings('/tmp'),
-        dataRoot: '/data/orca',
+        dataRoot: '/data/quirky',
         env: {},
         runSetup
       })
@@ -204,7 +204,7 @@ describe('runtime pty spawn preflight: Claude account routing in a WSL pane', ()
     expect(ctx.codexSelectionTarget).toEqual({ runtime: 'wsl', wslDistro: 'Ubuntu' })
     expect(args.env).toEqual({
       KEEP: '1',
-      ORCA_CLAUDE_PROFILE_POINTER: '~/.local/share/orca/claude-profiles/selected-wsl-orca'
+      QUIRKY_CLAUDE_PROFILE_POINTER: '~/.local/share/quirky/claude-profiles/selected-wsl-quirky'
     })
     expect(runSetup).not.toHaveBeenCalled()
   })

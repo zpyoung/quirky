@@ -32,7 +32,7 @@
       "candidate": "c2e0403d4a98eb5963da23988ad0fde24fc91d22b9e064e342fcfccb875e446f",
       "windowCandidate": "ddc33ebf0c5f1b628f2fe9223b41b3dc105e08d3dd48ca36dde9e1aec39387b5"
     },
-    "src/main/runtime/orca-runtime-stop-structured-session-process.ts": "11b71f61bdad9cde89ac174a22f91937f2ba138e34bb58a86edeb568252a64b9"
+    "src/main/runtime/quirky-runtime-stop-structured-session-process.ts": "11b71f61bdad9cde89ac174a22f91937f2ba138e34bb58a86edeb568252a64b9"
   },
   "bundleHashes": {
     "baseline": "c7e5c410a974a3e95a371a1e7fc6e55356163850855a574d0c20fcef8dd93664",

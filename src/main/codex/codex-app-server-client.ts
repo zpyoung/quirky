@@ -1,10 +1,10 @@
-import type { ChildProcessHandle, ProcessSpec } from '@orca/process-host/process-spec'
-import { spawnProcess } from '@orca/process-host'
+import type { ChildProcessHandle, ProcessSpec } from '@quirky/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
 import { normalizeHookTrustKeyForLookup } from './config-toml-trust'
 import { runCodexAppServerSession, type CodexAppServerInvocation } from './codex-app-server-session'
 
 // Why: Codex gates hooks on a `trusted_hash` it computes from a private
-// canonical-JSON identity. Orca used to replicate that algorithm
+// canonical-JSON identity. Quirky used to replicate that algorithm
 // (computeTrustedHash), which drifted from the real one across Codex releases
 // (#7896, #7110, #8699). `codex app-server` exposes the same sanctioned RPCs
 // the Codex TUI "Trust all" button uses — hooks/list (returns Codex's own
@@ -27,7 +27,7 @@ export type CodexHookTrustGrantRequest = {
    *  project hooks appear, which the key filter below ignores anyway. */
   hooksListCwd: string
   /** Lookup-normalized trust keys (normalizeHookTrustKeyForLookup shape) for
-   *  the managed entries Orca just wrote. Grants are restricted to hooks whose
+   *  the managed entries Quirky just wrote. Grants are restricted to hooks whose
    *  reported key normalizes into this set — user hooks are never touched. */
   expectedTrustKeys: string[]
   /** Exact command string written to the managed hooks.json entries. */

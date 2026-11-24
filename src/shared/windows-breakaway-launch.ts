@@ -1,6 +1,6 @@
 /**
  * The contract between a Windows launch script (main) and the one-shot launcher mode that
- * `relay.js` and `orcad.js` both expose to start a detached process outside the SSH session's
+ * `relay.js` and `quirkyd.js` both expose to start a detached process outside the SSH session's
  * job object. The flags are shared; each program names its own args separator and report marker.
  */
 
@@ -21,14 +21,14 @@ export type WindowsBreakawayLaunchContract = {
   reportMarker: string
 }
 
-export const ORCAD_WINDOWS_BREAKAWAY_CONTRACT: WindowsBreakawayLaunchContract = {
-  argsFlag: '--orcad-args',
-  reportMarker: 'ORCA_ORCAD_LAUNCH'
+export const QUIRKYD_WINDOWS_BREAKAWAY_CONTRACT: WindowsBreakawayLaunchContract = {
+  argsFlag: '--quirkyd-args',
+  reportMarker: 'QUIRKY_QUIRKYD_LAUNCH'
 }
 
 /**
  * `unavailable` means this host cannot use the launcher (no addon, an addon that predates it, or
- * a job that refuses breakaway); the relay's script then tries WMI, orcad's refuses.
+ * a job that refuses breakaway); the relay's script then tries WMI, quirkyd's refuses.
  */
 export const WINDOWS_BREAKAWAY_EXIT_CODES = {
   launched: 0,

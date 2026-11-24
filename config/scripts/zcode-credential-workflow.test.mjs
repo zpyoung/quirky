@@ -50,7 +50,7 @@ it('shares one bootstrap across the original modules and operating systems', () 
     job.steps.filter((step) => step.uses === './.github/actions/install-node-dependencies')
   ).toHaveLength(1)
   expect(job.steps.find((step) => step.id === 'dependencies').with['native-runtime']).toBe('node')
-  expect(job.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
+  expect(job.env.QUIRKY_BACKGROUND_LAUNCH).toBe('1')
   expect(job['timeout-minutes']).toBe(20)
   expect(job.steps[0].with['fetch-depth']).toBe(2)
   expect(workflow.on.pull_request.paths).toEqual([
@@ -104,7 +104,7 @@ function executeScope(directory, overrides = {}) {
     cwd: directory,
     env: {
       ...process.env,
-      ORCA_BACKGROUND_LAUNCH: '1',
+      QUIRKY_BACKGROUND_LAUNCH: '1',
       EVENT_NAME: 'pull_request',
       MANUAL_ACCOUNT: 'false',
       MANUAL_CREDENTIALS: 'true',
@@ -124,7 +124,7 @@ function executeScope(directory, overrides = {}) {
 it.skipIf(process.platform === 'win32')(
   'selects the original path groups, including deletions and renames',
   () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-workflow-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-workflow-'))
     const git = (args) => execFileSync('git', args, { cwd: directory, stdio: 'pipe' })
     const write = (file, value) => {
       mkdirSync(dirname(join(directory, file)), { recursive: true })
@@ -195,7 +195,7 @@ it.skipIf(process.platform === 'win32')(
 it.skipIf(process.platform === 'win32')(
   'keeps both manual entry points and missing diff evidence',
   () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-manual-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-manual-'))
     try {
       expect(executeScope(directory)).toEqual({ account: 'true', credentials: 'true' })
       expect(executeScope(directory, { EVENT_NAME: 'workflow_dispatch' })).toEqual({
@@ -218,7 +218,7 @@ it.skipIf(process.platform === 'win32')(
 it.skipIf(process.platform === 'win32')(
   'runs both groups when the full diff fails even if scoped diffs would report no changes',
   () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-zcode-diff-failure-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-zcode-diff-failure-'))
     try {
       const gitShim = join(directory, 'git')
       writeFileSync(

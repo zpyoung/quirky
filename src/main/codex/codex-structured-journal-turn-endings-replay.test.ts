@@ -1,7 +1,7 @@
 // Real `codex app-server` frame orders, replayed through the translator.
 //
 // The fixture is trimmed from captures of the real binary on 0.141.0 (the oldest
-// version Orca exercises) and 0.158.0, with only the upstream provider faked:
+// version Quirky exercises) and 0.158.0, with only the upstream provider faked:
 // statuses, `willRetry`, the provider's sentence and `durationMs`, at the host
 // receipt time `t` each frame arrived. Ids are replaced with synthetic ones.
 

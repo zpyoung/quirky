@@ -25,7 +25,7 @@ export const backgroundModifier = process.platform === 'darwin' ? 'Meta' : 'Cont
 
 export async function refreshBackgroundPopupStatus(): Promise<void> {
   const before = status().revision
-  await guest('route').evaluate('console.log("orca-popup-fixture:snapshot")')
+  await guest('route').evaluate('console.log("quirky-popup-fixture:snapshot")')
   await expect.poll(() => status().revision).toBeGreaterThan(before)
 }
 

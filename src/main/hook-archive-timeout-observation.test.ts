@@ -13,8 +13,8 @@ const REPO: Repo = { id: 'r', path: '/repo', displayName: 'r', badgeColor: '#000
 /** Run a real archive script in a real shell, under a deadline short enough to test. */
 async function runArchive(script: string, timeoutMs = 400) {
   const { runHook } = await import('./hooks')
-  const dir = mkdtempSync(join(tmpdir(), 'orca-hook-deadline-'))
-  writeFileSync(join(dir, 'orca.yaml'), `scripts:\n  archive: |\n    ${script}\n`)
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-hook-deadline-'))
+  writeFileSync(join(dir, 'quirky.yaml'), `scripts:\n  archive: |\n    ${script}\n`)
   try {
     return await runHook('archive', dir, REPO, dir, undefined, timeoutMs)
   } finally {

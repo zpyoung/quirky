@@ -1,5 +1,5 @@
 import type { SshPendingPtyKill } from './ssh-pending-pty-kill'
-import type { OrcadSshProvisioningIntent } from './orcad-ssh-provisioning'
+import type { QuirkydSshProvisioningIntent } from './quirkyd-ssh-provisioning'
 import type { NodeDistMirrorAttempt } from './node-dist-mirror'
 
 // ─── SSH Connection Types ───────────────────────────────────────────
@@ -9,7 +9,7 @@ export const MAX_SSH_RELAY_GRACE_PERIOD_SECONDS = 7 * 24 * 60 * 60
 export const LEGACY_DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS = 3 * 60 * 60
 
 /**
- * Which runtime executes the SSH relay. `pinned-node` runs the D6 ladder on Orca's uploaded Node and
+ * Which runtime executes the SSH relay. `pinned-node` runs the D6 ladder on Quirky's uploaded Node and
  * prebuilt addons (design D5); `legacy` is the opt-in host Node with native deps installed by npm.
  */
 export const SSH_REMOTE_RUNTIMES = ['legacy', 'pinned-node'] as const
@@ -22,17 +22,17 @@ export type SshRemoteRuntimeRung = (typeof SSH_REMOTE_RUNTIME_RUNGS)[number]
 
 /**
  * Main-owned record of the last ladder decision for a host. Valid only while its key
- * (glibc, pinned runtime hash, Orca major) still matches, so an upgrade re-evaluates.
+ * (glibc, pinned runtime hash, Quirky major) still matches, so an upgrade re-evaluates.
  */
 export type SshRemoteRuntimeResolution = {
   rung: SshRemoteRuntimeRung
-  /** The classified refusal that stepped off Orca's pinned Node, when one did. */
+  /** The classified refusal that stepped off Quirky's pinned Node, when one did. */
   pinnedRefusal?: string
   /** Epoch ms the refusal was proved; a refusal the host can lose expires from it. */
   refusedAt?: number
   glibc: string | null
   runtimeSha256: string
-  orcaMajor: number
+  quirkyMajor: number
 }
 
 /** Who created a hidden target as an implementation detail, and so owns its lifecycle. */
@@ -41,7 +41,7 @@ export type SshTargetOwner = { type: 'on-demand-runtime'; runtimeId: string }
 export type SshTarget = {
   id: string
   label: string
-  /** Internal owner for targets that Orca creates as implementation details.
+  /** Internal owner for targets that Quirky creates as implementation details.
    *  Owned targets are hidden from normal SSH-host management surfaces. */
   owner?: SshTargetOwner
   /** Host alias to resolve through OpenSSH config (ssh -G). */
@@ -73,7 +73,7 @@ export type SshTarget = {
   /** Grace period in seconds before relay shuts down after disconnect.
    *  0 disables expiry. Default: 0 (until reset). Max: 604800 (7 days). */
   relayGracePeriodSeconds?: number
-  /** Lets this host's `orca` CLI drive this desktop's Orca browser tabs in the host's own
+  /** Lets this host's `quirky` CLI drive this desktop's Quirky browser tabs in the host's own
    *  workspaces (desktop browser bridge) and its relay-era terminals' orchestration commands.
    *  On unless explicitly `false`; read it through `isRemoteCliControlAllowed`. */
   allowRemoteCliControl?: boolean
@@ -99,12 +99,12 @@ export type SshTarget = {
    *  later target that happens to reuse the id. Never advanced by connect state. */
   generation?: number
   /** Main-owned provisioning intent; never fall back to a relay while it exists. */
-  orcadProvisioning?: OrcadSshProvisioningIntent
+  quirkydProvisioning?: QuirkydSshProvisioningIntent
   /**
-   * Main-owned: this host serves a managed Orca server. Deliberately not `owner`: shipped builds
+   * Main-owned: this host serves a managed Quirky server. Deliberately not `owner`: shipped builds
    * hide owned targets, and a downgraded build must still see and reach the host over its relay.
    */
-  /** Main-owned: managed orcad can't run on this host; retried once this app version changes. */
+  /** Main-owned: managed quirkyd can't run on this host; retried once this app version changes. */
   managedServerUnavailable?: { reason: string; appVersion: string }
   /** Retired with the move offer (hosts convert on connect); kept so a downgraded build doesn't re-offer. */
   managedServerMoveOffered?: { appVersion: string }
@@ -115,7 +115,7 @@ export type SshTarget = {
   managedServerLeaveBehind?: { confirmedAt: string }
   /** Main-owned: updating the managed server to this app version failed; retried once it changes. */
   managedServerUpdateFailure?: { reason: string; appVersion: string }
-  orcadFence?: {
+  quirkydFence?: {
     environmentId: string
     /** An older build changed the retained source rows: the host stays on the relay until moved again. */
     sourceChangedAt?: string
@@ -127,8 +127,8 @@ export type SshTargetCreateInput = Omit<
   SshTarget,
   | 'id'
   | 'generation'
-  | 'orcadProvisioning'
-  | 'orcadFence'
+  | 'quirkydProvisioning'
+  | 'quirkydFence'
   | 'managedServerUnavailable'
   | 'managedServerMoveOffered'
   | 'managedServerLeaveBehind'
@@ -189,10 +189,10 @@ export type SshConfigHostSummary = {
   identityFile?: string
   proxyCommand?: string
   jumpHost?: string
-  /** True when an Orca SSH target already uses this config alias. */
-  alreadyInOrca: boolean
+  /** True when an Quirky SSH target already uses this config alias. */
+  alreadyInQuirky: boolean
   /**
-   * True when the user deleted this alias from Orca (tombstone). Still listed so they
+   * True when the user deleted this alias from Quirky (tombstone). Still listed so they
    * can re-pick it; passive import and "Add all" keep it out until re-adopt / save.
    */
   previouslyRemoved?: boolean
@@ -269,7 +269,7 @@ export type SshConnectionState = {
   supportsFolderDownload?: boolean
   /** Remote OS detected by the SSH relay once available. */
   remotePlatform?: SshRemotePlatform
-  /** Set while connected without the Orca remote server (runtime ladder rung D). */
+  /** Set while connected without the Quirky remote server (runtime ladder rung D). */
   plainSsh?: SshPlainSshMode
   /** Set while the relay runs on the opt-in host-Node runtime, an unsupported configuration. */
   hostNodeRuntime?: boolean
@@ -309,11 +309,11 @@ export type SshManagedServerLinkedProject = {
   automations: number
 }
 
-/** A managed server that did not answer and was not proven serving, with why (and orcad.log's tail). */
+/** A managed server that did not answer and was not proven serving, with why (and quirkyd.log's tail). */
 export type SshManagedServerServingNote = { state: 'unverifiable'; detail: string }
 
 export const SSH_MANAGED_SERVER_RELAY_REASONS = [
-  'orcad_unavailable',
+  'quirkyd_unavailable',
   'relay_terminals_live',
   'relay_terminals_unverifiable',
   'source_changed',
@@ -340,14 +340,14 @@ export type SshManagedServerStatus =
       launchSessionEnded?: true
     }
   | { kind: 'setting-up'; phase: (typeof SSH_MANAGED_SERVER_PHASES)[number] }
-  /** `detail` names the blocker for a refusal, or why orcad can't run on the host. */
+  /** `detail` names the blocker for a refusal, or why quirkyd can't run on the host. */
   | {
       kind: 'relay'
       reason: SshManagedServerRelayReason
       detail?: string
       /** Relay terminals still running, when that is what keeps the host on the relay. */
       terminals?: number
-      /** Those terminals belong to another Orca desktop or session, so this one offers no move. */
+      /** Those terminals belong to another Quirky desktop or session, so this one offers no move. */
       terminalsElsewhere?: boolean
       /** The refusal is only saved state the user may leave on this desktop ("Move anyway"). */
       canLeaveBehind?: true

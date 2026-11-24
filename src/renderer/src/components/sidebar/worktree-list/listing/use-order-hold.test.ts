@@ -9,7 +9,7 @@ import { makeWorktree } from '../../../worktree-jump-palette-test-fixtures'
 import { useOrderHeldWhileEngaged, useProjectRecencyHeldWhileEngaged } from './use-order-hold'
 
 vi.mock('../../../../../../shared/sidebar-inputs-switch', () => ({
-  ORCA_SIDEBAR_INPUTS_IS_MAIN: true
+  QUIRKY_SIDEBAR_INPUTS_IS_MAIN: true
 }))
 
 function mountList() {

@@ -193,7 +193,7 @@ describe('authenticated Jira image reads', () => {
 
 describe('local Jira image protocol', () => {
   it('serves bounded image bytes and headers without exposing authorization', async () => {
-    const url = `orca-jira-image://attachment/${grant()}`
+    const url = `quirky-jira-image://attachment/${grant()}`
     const response = await handleJiraImageRequest(new Request(url))
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('image/png')
@@ -205,7 +205,7 @@ describe('local Jira image protocol', () => {
     expect(await head.text()).toBe('')
   })
   it('refuses unknown, malformed, revoked and non-GET image requests', async () => {
-    const url = `orca-jira-image://attachment/${grant()}`
+    const url = `quirky-jira-image://attachment/${grant()}`
     expect((await handleJiraImageRequest(new Request(`${url}?url=https://evil.test`))).status).toBe(
       404
     )

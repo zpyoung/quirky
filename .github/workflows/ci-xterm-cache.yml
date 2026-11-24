@@ -16,7 +16,7 @@ concurrency:
   group: xterm-cache-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
-  ORCA_BACKGROUND_LAUNCH: '1'
+  QUIRKY_BACKGROUND_LAUNCH: '1'
 jobs:
   seed:
     if: github.ref == 'refs/heads/main'

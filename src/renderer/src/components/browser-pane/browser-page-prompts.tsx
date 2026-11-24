@@ -20,7 +20,7 @@ export type BrowserPagePromptHandler<K extends BrowserPagePromptKind> = {
     details: BrowserPagePromptDetails<K>,
     signal: AbortSignal
   ) => Promise<BrowserPagePromptAnswer<K> | null>
-  /** The user said yes but Orca could not carry it out. */
+  /** The user said yes but Quirky could not carry it out. */
   onFailed?: (details: BrowserPagePromptDetails<K>) => void
 }
 

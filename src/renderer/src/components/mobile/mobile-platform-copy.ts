@@ -12,7 +12,7 @@ export const ANDROID_INSTALL_GUIDE_URL = 'https://github.com/zpyoung/quirky'
 const IOS_CHANNEL_COPY: Record<IosChannel, InstallCopy> = {
   stable: {
     ctaLabel: 'Open App Store',
-    url: 'https://apps.apple.com/app/orca-ide/id6766130217'
+    url: 'https://apps.apple.com/app/quirky-ide/id6766130217'
   },
   preview: {
     ctaLabel: 'Open TestFlight',

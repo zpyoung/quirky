@@ -48,7 +48,7 @@ function remoteSpec(
 const HIDDEN_FIELDS = { detached: true, stdio: 'ignore', windowsHide: true, shell: false }
 const HIDDEN = expect.objectContaining(HIDDEN_FIELDS)
 
-describe('VS Code Remote-SSH launch through @orca/process-host', () => {
+describe('VS Code Remote-SSH launch through @quirky/process-host', () => {
   beforeEach(() => {
     spawnMock.mockReset()
     spawnMock.mockImplementation(spawnedChild)

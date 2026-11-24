@@ -1,6 +1,6 @@
 {
   "recordedAt": "2026-10-10T03:38:12.628Z",
-  "root": "/Users/nwparker/orca/workspaces/orca/perf-2",
+  "root": "/Users/nwparker/quirky/workspaces/quirky/perf-2",
   "baselineRef": "224cae59a671b67ecffdda2a4fa2795b4086ca11",
   "overlaidFile": "mobile/src/session/MobileNativeChatToolRun.tsx",
   "harnessSha256": "cebf78e4d1730b87a8586edfddfabd63d993d875401bd7408535324bf0f3f7f8",
@@ -63,28 +63,28 @@
       "arm": "before",
       "scenario": "unique",
       "expectedBehaviorVerified": true,
-      "screenshot": "/tmp/orca-perf-2-pr-proof/mobile-tool-identity/before-unique.png",
+      "screenshot": "/tmp/quirky-perf-2-pr-proof/mobile-tool-identity/before-unique.png",
       "sha256": "2df2e972df1ab85efc95f4401fe72f8884b3c9fe96e9c02397eb561142bec839"
     },
     {
       "arm": "before",
       "scenario": "duplicates",
       "expectedBehaviorVerified": true,
-      "screenshot": "/tmp/orca-perf-2-pr-proof/mobile-tool-identity/before-duplicates.png",
+      "screenshot": "/tmp/quirky-perf-2-pr-proof/mobile-tool-identity/before-duplicates.png",
       "sha256": "2df2e972df1ab85efc95f4401fe72f8884b3c9fe96e9c02397eb561142bec839"
     },
     {
       "arm": "after",
       "scenario": "unique",
       "expectedBehaviorVerified": true,
-      "screenshot": "/tmp/orca-perf-2-pr-proof/mobile-tool-identity/after-unique.png",
+      "screenshot": "/tmp/quirky-perf-2-pr-proof/mobile-tool-identity/after-unique.png",
       "sha256": "38835af78fbece545bf396d2cb42bc4cfa0ea577720c1c6bef4fc00d8a7a07d2"
     },
     {
       "arm": "after",
       "scenario": "duplicates",
       "expectedBehaviorVerified": true,
-      "screenshot": "/tmp/orca-perf-2-pr-proof/mobile-tool-identity/after-duplicates.png",
+      "screenshot": "/tmp/quirky-perf-2-pr-proof/mobile-tool-identity/after-duplicates.png",
       "sha256": "38835af78fbece545bf396d2cb42bc4cfa0ea577720c1c6bef4fc00d8a7a07d2"
     }
   ],

@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest'
 import type { AgentSessionAttachParams } from '../../../native-chat/agent-session-wire/structured-agent-session-attach'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
 import { recordingStructuredAgentSessionLogger } from '../../../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { commitStructuredAgentSessionCreate } from './structured-agent-session-create'
 
 // A chat created whose tab could not be published is answered as unconfirmed; the cause is logged.
@@ -20,7 +20,7 @@ it('logs a created chat whose tab could not be published, and answers it unconfi
     publishStructuredAgentSessionTab: vi.fn(async () => {
       throw failure
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 
   const result = await commitStructuredAgentSessionCreate({
     runtime,

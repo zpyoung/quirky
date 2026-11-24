@@ -11,7 +11,12 @@ function textSpec() {
 async function registerOnCapablePane(h: AskRpcHarness, requestId = 'req_1') {
   h.setPaneOwner(PANE_KEY, 'term_1')
   h.hasLocalRendererWindow.value = true
-  return h.call('ask.register', { spec: textSpec(), requestId, paneKey: PANE_KEY, cwd: '/repo' }) as Promise<{
+  return h.call('ask.register', {
+    spec: textSpec(),
+    requestId,
+    paneKey: PANE_KEY,
+    cwd: '/repo'
+  }) as Promise<{
     askId: string
   }>
 }
@@ -20,8 +25,8 @@ function framesOfType<T extends AskStreamFrame['type']>(
   frames: unknown[],
   type: T
 ): Extract<AskStreamFrame, { type: T }>[] {
-  return (frames as AskStreamFrame[]).filter((frame): frame is Extract<AskStreamFrame, { type: T }> =>
-    frame.type === type
+  return (frames as AskStreamFrame[]).filter(
+    (frame): frame is Extract<AskStreamFrame, { type: T }> => frame.type === type
   )
 }
 
@@ -63,7 +68,10 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
 
     const { askId } = await registerOnCapablePane(h)
 
-    const resumed = h.subscribe('ask.subscribe', { sinceSeq: watermark.seq, epoch: watermark.epoch })
+    const resumed = h.subscribe('ask.subscribe', {
+      sinceSeq: watermark.seq,
+      epoch: watermark.epoch
+    })
     expect(framesOfType(resumed.frames, 'snapshot')).toHaveLength(0)
     expect(framesOfType(resumed.frames, 'watermark')).toHaveLength(0)
     const events = framesOfType(resumed.frames, 'event')
@@ -80,9 +88,16 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
     await bootstrap.stop()
 
     // Why: this resolves with nobody subscribed — the exact gap listSinceSeq exists to close.
-    await h.call('ask.answer', { askId, answers: { q1: { value: 'Ada', source: 'input' } }, skipped: [] })
+    await h.call('ask.answer', {
+      askId,
+      answers: { q1: { value: 'Ada', source: 'input' } },
+      skipped: []
+    })
 
-    const resumed = h.subscribe('ask.subscribe', { sinceSeq: watermark.seq, epoch: watermark.epoch })
+    const resumed = h.subscribe('ask.subscribe', {
+      sinceSeq: watermark.seq,
+      epoch: watermark.epoch
+    })
     const events = framesOfType(resumed.frames, 'event')
     expect(events).toHaveLength(1)
     expect(events[0].event).toMatchObject({ askId, status: 'answered' })
@@ -99,7 +114,11 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
 
   it('ask.snapshot returns the same pending events a fresh subscribe snapshots', async () => {
     await registerOnCapablePane(h)
-    const snapshotResult = (await h.call('ask.snapshot', {})) as { asks: unknown[]; seq: number; epoch: string }
+    const snapshotResult = (await h.call('ask.snapshot', {})) as {
+      asks: unknown[]
+      seq: number
+      epoch: string
+    }
 
     const sub = h.subscribe('ask.subscribe', {})
     const subscribeSnapshotEvents = framesOfType(sub.frames, 'snapshot').map((frame) => frame.event)
@@ -113,7 +132,11 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
     const snapshotResult = (await h.call('ask.snapshot', {})) as { epoch: string }
 
     const sub = h.subscribe('ask.subscribe', {})
-    await h.call('ask.answer', { askId, answers: { q1: { value: 'Ada', source: 'input' } }, skipped: [] })
+    await h.call('ask.answer', {
+      askId,
+      answers: { q1: { value: 'Ada', source: 'input' } },
+      skipped: []
+    })
     const liveEvent = framesOfType(sub.frames, 'event')[0]
     await sub.stop()
 
@@ -123,7 +146,9 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
 
   it('ask.snapshot honors the paneKey filter', async () => {
     await registerOnCapablePane(h)
-    const filtered = (await h.call('ask.snapshot', { paneKey: 'tab_z:zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz' })) as {
+    const filtered = (await h.call('ask.snapshot', {
+      paneKey: 'tab_z:zzzzzzzz-zzzz-4zzz-8zzz-zzzzzzzzzzzz'
+    })) as {
       asks: unknown[]
     }
     expect(filtered.asks).toEqual([])
@@ -133,14 +158,21 @@ describe('ask.snapshot / ask.subscribe (C4)', () => {
     const { askId: askA } = await registerOnCapablePane(h, 'req_a')
     const { askId: askB } = await registerOnCapablePane(h, 'req_b')
     // Resolving A bumps its seq past B's — the true head now belongs to a row listPending() excludes.
-    await h.call('ask.answer', { askId: askA, answers: { q1: { value: 'Ada', source: 'input' } }, skipped: [] })
+    await h.call('ask.answer', {
+      askId: askA,
+      answers: { q1: { value: 'Ada', source: 'input' } },
+      skipped: []
+    })
 
     const snapshotResult = (await h.call('ask.snapshot', {})) as { seq: number; epoch: string }
     expect(snapshotResult.seq).toBe(h.askDb.currentSeq())
     expect(snapshotResult.seq).toBeGreaterThan(h.askDb.getAsk(askB)?.seq as number)
 
     // A reconnect quoting that watermark already covers the resolved ask, so nothing replays.
-    const resumed = h.subscribe('ask.subscribe', { sinceSeq: snapshotResult.seq, epoch: snapshotResult.epoch })
+    const resumed = h.subscribe('ask.subscribe', {
+      sinceSeq: snapshotResult.seq,
+      epoch: snapshotResult.epoch
+    })
     expect(framesOfType(resumed.frames, 'event')).toHaveLength(0)
     await resumed.stop()
   })

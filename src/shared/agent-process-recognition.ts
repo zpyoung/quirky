@@ -57,7 +57,7 @@ for (const [agent, config] of Object.entries(TUI_AGENT_CONFIG)) {
   ]) {
     const normalized = normalizeProcessName(candidate)
     if (normalized) {
-      // Why: claude-agent-teams is an Orca wrapper whose child process is the
+      // Why: claude-agent-teams is an Quirky wrapper whose child process is the
       // real `claude` binary. Do not let wrapper configs overwrite canonical
       // CLI ownership for the same foreground process name.
       if (!PROCESS_TO_AGENT.has(normalized)) {
@@ -205,7 +205,7 @@ export function recognizeAgentProcessFromCommandLine(
   if (firstNormalized === 'qoder' && tokens[1] && !tokens[1].startsWith('-')) {
     return null
   }
-  // Why: the generic Orca CLI is not an agent; only this subcommand launches its TUI mode.
+  // Why: the generic Quirky CLI is not an agent; only this subcommand launches its TUI mode.
   if (direct?.agent === 'claude-agent-teams' && tokens[1]?.toLowerCase() !== 'claude-teams') {
     direct = null
   }

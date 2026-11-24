@@ -99,7 +99,7 @@ export function projectRuntimeMobileSessionTabs(
         ...tab,
         title: liveTab.title || tab.title,
         url: liveTab.url || tab.url,
-        // Why: bridge "active" means active BrowserView/webContents, not active Orca tab; preserve the renderer's session focus.
+        // Why: bridge "active" means active BrowserView/webContents, not active Quirky tab; preserve the renderer's session focus.
         isActive: tab.isActive
       })
       continue

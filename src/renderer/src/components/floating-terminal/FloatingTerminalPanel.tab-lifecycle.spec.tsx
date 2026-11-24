@@ -62,7 +62,7 @@ describe('FloatingTerminalPanel close behavior', () => {
           canGoForward: false,
           loadError: null,
           sessionProfileId: 'profile-1',
-          sessionPartition: 'persist:orca-browser-session-profile-1',
+          sessionPartition: 'persist:quirky-browser-session-profile-1',
           createdAt: 1
         }
       ]
@@ -98,7 +98,7 @@ describe('FloatingTerminalPanel close behavior', () => {
       {
         title: 'Example',
         sessionProfileId: 'profile-1',
-        sessionPartition: 'persist:orca-browser-session-profile-1',
+        sessionPartition: 'persist:quirky-browser-session-profile-1',
         afterTabId: 'browser-unified-1',
         browserRuntimeEnvironmentId: null
       }
@@ -122,7 +122,7 @@ describe('FloatingTerminalPanel close behavior', () => {
     const openLayers = findByTypeName(openElement, 'WorkspacePaneOverlayLayers')
     expect(openLayers.props.isVisible).toBe(true)
     // Terminal panes mount against the host-resolved floating cwd once the viewport settles.
-    expect(openLayers.props.worktreePath).toBe('/tmp/orca')
+    expect(openLayers.props.worktreePath).toBe('/tmp/quirky')
   })
 
   it('wires the shared pane overlay with the floating parking and shortcut policy', async () => {

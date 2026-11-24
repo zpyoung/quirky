@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 import {
   isOpenCodeClientArgv,
   isOpenCodeClientProcess,

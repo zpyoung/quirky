@@ -14,7 +14,7 @@ import {
   recheckSurfacesAfterAgentSkillTerminal,
   syncSurfacesAfterAgentSkillRecheck
 } from './agent-skill-recheck-surface-sync'
-import { isOrcaCliAvailableOnPath } from '@/lib/agent-skill-cli-prerequisite'
+import { isQuirkyCliAvailableOnPath } from '@/lib/agent-skill-cli-prerequisite'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 
@@ -40,7 +40,7 @@ export function AgentSkillSetupPanel({
   hideHeader = false,
   preInstallNotice,
   getPrerequisiteStatus,
-  isPrerequisiteAvailable = isOrcaCliAvailableOnPath,
+  isPrerequisiteAvailable = isQuirkyCliAvailableOnPath,
   onBeforeOpenTerminal,
   showInstallWhenInstalled = true,
   showRecheckWhenInstalled = true,

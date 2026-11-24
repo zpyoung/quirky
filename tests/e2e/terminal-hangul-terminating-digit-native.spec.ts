@@ -38,7 +38,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { presentNativeIbusWindow } from './terminal-native-ibus-window'
 import { appendImeEngagementReceipt } from './terminal-ime-engagement-receipt'
 import { installTerminalWaylandInputDiagnostics } from './terminal-wayland-input-diagnostics'
@@ -64,31 +64,33 @@ import {
 } from './terminal-ime-byte-reader'
 
 const NATIVE_COMMAND_TIMEOUT_MS = 10_000
-const REPETITIONS = Number(process.env.ORCA_E2E_DIGIT_REPETITIONS ?? 3)
+const REPETITIONS = Number(process.env.QUIRKY_E2E_DIGIT_REPETITIONS ?? 3)
 // Why: nested mutter + IBus occasionally discards a preedit or a keydown before Chromium sees it;
 // those attempts are retried, bounded so a broken IME session still fails.
 const MAX_ATTEMPTS = REPETITIONS * 2
-const INJECTOR = process.env.ORCA_E2E_IME_INJECTOR ?? 'xdotool'
-const WAYLAND_INJECT = process.env.ORCA_E2E_WAYLAND_INJECT ?? '/tmp/ime15299/wayland-inject.py'
+const INJECTOR = process.env.QUIRKY_E2E_IME_INJECTOR ?? 'xdotool'
+const WAYLAND_INJECT = process.env.QUIRKY_E2E_WAYLAND_INJECT ?? '/tmp/ime15299/wayland-inject.py'
 // The nested compositor is one X11 window; keys land on it and mutter routes
 // them to the focused Wayland client through the IME.
-const NESTED_FOCUS_CMD = process.env.ORCA_E2E_NESTED_FOCUS_CMD ?? '/tmp/ime15299/focus-nested.sh'
+const NESTED_FOCUS_CMD = process.env.QUIRKY_E2E_NESTED_FOCUS_CMD ?? '/tmp/ime15299/focus-nested.sh'
 // Dubeolsik: d=ㅇ, k=ㅏ, so `d k` composes 아 and the digit terminates it.
-const KEY_TOKENS = (process.env.ORCA_E2E_DIGIT_KEYS ?? 'd k 1 Return').split(' ').filter(Boolean)
-const EXPECTED_LINE = process.env.ORCA_E2E_DIGIT_EXPECTED ?? '아1'
+const KEY_TOKENS = (process.env.QUIRKY_E2E_DIGIT_KEYS ?? 'd k 1 Return').split(' ').filter(Boolean)
+const EXPECTED_LINE = process.env.QUIRKY_E2E_DIGIT_EXPECTED ?? '아1'
 
 test.use({
-  orcaAppExtraEnv: {
+  quirkyAppExtraEnv: {
     GTK_IM_MODULE: 'ibus',
     IBUS_ENABLE_SYNC_MODE: '1',
     QT_IM_MODULE: 'ibus',
     XMODIFIERS: '@im=ibus',
-    ...(process.env.ORCA_E2E_WAYLAND_INPUT_DIAGNOSTICS === '1' ? { WAYLAND_DEBUG: 'client' } : {}),
-    ...(process.env.ORCA_E2E_EXTRA_APP_ENV
-      ? (JSON.parse(process.env.ORCA_E2E_EXTRA_APP_ENV) as Record<string, string>)
+    ...(process.env.QUIRKY_E2E_WAYLAND_INPUT_DIAGNOSTICS === '1'
+      ? { WAYLAND_DEBUG: 'client' }
+      : {}),
+    ...(process.env.QUIRKY_E2E_EXTRA_APP_ENV
+      ? (JSON.parse(process.env.QUIRKY_E2E_EXTRA_APP_ENV) as Record<string, string>)
       : {})
   },
-  orcaAppExtraArgs: (process.env.ORCA_E2E_EXTRA_APP_ARGS ?? '').split(' ').filter(Boolean)
+  quirkyAppExtraArgs: (process.env.QUIRKY_E2E_EXTRA_APP_ARGS ?? '').split(' ').filter(Boolean)
 })
 
 function injectKeys(tokens: string[]): void {
@@ -130,7 +132,7 @@ function captureNestedScreen(name: string): void {
 
 async function focusNativeTerminalWindow(page: Page): Promise<void> {
   await focusActiveTerminalInput(page)
-  const title = `ORCA_NATIVE_IBUS_${randomUUID()}`
+  const title = `QUIRKY_NATIVE_IBUS_${randomUUID()}`
   await page.evaluate((nextTitle) => {
     document.title = nextTitle
   }, title)
@@ -173,15 +175,15 @@ async function writeEvidence(
 }
 
 test.describe('Hangul terminating digit @headful', () => {
-  test.skip(process.env.ORCA_E2E_NATIVE_IBUS_HANGUL !== '1', 'native ibus harness only')
+  test.skip(process.env.QUIRKY_E2E_NATIVE_IBUS_HANGUL !== '1', 'native ibus harness only')
 
   test('a digit typed right after a Hangul syllable reaches the pty', async ({
     electronApp,
-    orcaPage: page,
+    quirkyPage: page,
     testRepoPath
   }, testInfo) => {
     const diagnostics =
-      process.env.ORCA_E2E_WAYLAND_INPUT_DIAGNOSTICS === '1'
+      process.env.QUIRKY_E2E_WAYLAND_INPUT_DIAGNOSTICS === '1'
         ? await installTerminalWaylandInputDiagnostics(electronApp, page)
         : null
     let completed = false
@@ -193,8 +195,8 @@ test.describe('Hangul terminating digit @headful', () => {
         xdgRuntimeDir: process.env.XDG_RUNTIME_DIR ?? null,
         ozonePlatform: electron.commandLine.getSwitchValue('ozone-platform'),
         disableGpu: electron.commandLine.hasSwitch('disable-gpu'),
-        background: process.env.ORCA_BACKGROUND_LAUNCH,
-        nativeIsolatedDisplay: process.env.ORCA_E2E_NATIVE_IBUS_XVFB,
+        background: process.env.QUIRKY_BACKGROUND_LAUNCH,
+        nativeIsolatedDisplay: process.env.QUIRKY_E2E_NATIVE_IBUS_XVFB,
         windows: BrowserWindow.getAllWindows().map((window) => ({
           visible: window.isVisible(),
           minimized: window.isMinimized(),
@@ -258,7 +260,7 @@ test.describe('Hangul terminating digit @headful', () => {
           // IME/compositor itself never delivered (a discarded preedit, a lost keydown) is retried.
           expect(
             domDelivered,
-            `Orca lost input the page received: ${JSON.stringify(line)}`
+            `Quirky lost input the page received: ${JSON.stringify(line)}`
           ).not.toBe(expectedLine)
           if (line === null) {
             // Why: Ctrl-U drops the partial line a lost Enter leaves in the reader's tty buffer.

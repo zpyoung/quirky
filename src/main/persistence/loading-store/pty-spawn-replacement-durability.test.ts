@@ -2,7 +2,7 @@ import { isTerminalSessionStorageCapacityFailure } from '../../../shared/termina
 import { afterEach, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { deferred, fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { commitPtyIpcSpawn } from '../../ipc/pty/ipc/spawn-commit'
 import { createPtyIpcSpawnState } from '../../ipc/pty/ipc/spawn-state'
 import { commitRuntimePtySpawn } from '../../ipc/pty/runtime/spawn-commit'
@@ -44,7 +44,7 @@ it.each(
   'preserves a successor during $replacementDuring when the predecessor $controller save fails with $code',
   async ({ controller, replacementDuring, code }) => {
     const { store, authority } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     ptyIncarnationById.set(binding.ptyId, binding.incarnationId)
     const deps = createPtySpawnCommitDependencies(runtime, store)
@@ -78,7 +78,7 @@ it.each(
       if (!(error instanceof Error)) {
         throw error
       }
-      expect(error.message).toContain('ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED')
+      expect(error.message).toContain('QUIRKY_TERMINAL_SESSION_STATE_SAVE_FAILED')
       expect(isTerminalSessionStorageCapacityFailure(error.message)).toBe(code === 'ENOSPC')
       return 'rejected'
     })
@@ -116,7 +116,7 @@ it.each(['ipc', 'runtime'])(
   'keeps replacement provider identity when an exited %s spawn finishes saving',
   async (controller) => {
     const { store, authority } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     const deps = createPtySpawnCommitDependencies(runtime, store)
     const claim = runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
@@ -159,7 +159,7 @@ it.each(['ipc', 'runtime'])(
 
 it('does not label an IPC binding ownership refusal as a storage failure', async () => {
   const { store } = await fixture()
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   const deps = createPtySpawnCommitDependencies(runtime, store)
   const ctx = createPtyIpcSpawnState(deps, { ...binding, cols: 80, rows: 24 })
   ctx.result = { id: binding.ptyId, incarnationId: binding.incarnationId }
@@ -176,7 +176,7 @@ it.each(
   'after a failed $controller save and a failed discard shutdown (exit during save: $exitsDuringSave)',
   async ({ controller, exitsDuringSave }) => {
     const { store } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     const deps = createPtySpawnCommitDependencies(runtime, store)
     vi.spyOn(store, 'persistPtyBinding').mockImplementation(async () => {
@@ -230,7 +230,7 @@ it.each(
   'leaves a $controller spawn that exited before its commit began exited (save and shutdown fail: $saveAndShutdownFail)',
   async ({ controller, saveAndShutdownFail }) => {
     const { store } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, binding.incarnationId)
     // The provider's exit listener ran before the commit recorded ownership.
     await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
@@ -272,7 +272,7 @@ it.each(['ipc', 'runtime'])(
   'tracks a %s same-id respawn whose predecessor left an exited verdict',
   async (controller) => {
     const { store } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.onPtySpawned(binding.ptyId, replacementIncarnation)
     await runtime.onPtyExit(binding.ptyId, 0, replacementIncarnation, {
       providerExitObserved: true

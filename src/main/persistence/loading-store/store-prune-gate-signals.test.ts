@@ -15,7 +15,7 @@ import { removeWorktreeMetaRow } from '../host-qualified-worktree-meta'
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -56,8 +56,8 @@ afterEach(async () => {
 })
 
 function createStore(): InstanceType<typeof Store> {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'orca-store-prune-gate-')))
-  const store = createSqliteTestStore(Store, { dataFile: join(dir, 'orca-data.json') })
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-store-prune-gate-')))
+  const store = createSqliteTestStore(Store, { dataFile: join(dir, 'quirky-data.json') })
   stores.push(store)
   return store
 }

@@ -3,7 +3,7 @@ import { makeTuiIdleRuntime } from './tui-idle-wait-test-harness'
 import { waitForTranscriptIdle } from './agent-transcript-pane-test-harness'
 import { RuntimeMachineName } from './runtime-machine-name'
 import type { RuntimeSyncWindowGraph } from '../../shared/runtime-types'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import type { TuiAgent } from '../../shared/tui-agent'
 
 // Follow-ons to #6011. The evidence ranking that fixed the wait path did not reach two
@@ -56,7 +56,7 @@ async function makeRuntime(launchAgent: TuiAgent | null, foreground = 'codex') {
 
 /** Counts real delivery attempts. Spies on the delivery entry point, NOT on the gate
  *  under test — the gate runs for real and decides whether this is ever reached. */
-function watchDelivery(runtime: OrcaRuntimeService) {
+function watchDelivery(runtime: QuirkyRuntimeService) {
   return vi
     .spyOn(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the delivery entry point is protected; the spy only needs its name and signature.
@@ -181,7 +181,7 @@ describe('quiescence treats a missing output clock as quiet', () => {
       .spyOn(RuntimeMachineName.prototype, 'start')
       .mockImplementation(() => {})
     try {
-      // No launch metadata: Orca did not start this agent, so the quiet-foreground lane is
+      // No launch metadata: Quirky did not start this agent, so the quiet-foreground lane is
       // the only evidence available, and `lastOutputAt` is null because nothing ever arrived.
       const { runtime, handle } = await makeRuntime(null, 'codex')
       const leaves =

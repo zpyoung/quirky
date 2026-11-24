@@ -48,16 +48,16 @@ afterEach(async () => {
 
 describe('computeWorkspaceContentIdentity', () => {
   it('tracks Git tree, dirty file hashes and deletions while ignoring reports in the git directory', async () => {
-    const root = await temporaryDirectory('orca-objective-git-')
+    const root = await temporaryDirectory('quirky-objective-git-')
     await git(root, ['init'])
     await writeFile(join(root, 'tracked.txt'), 'committed\n')
     await commitAll(root, 'initial')
     const target = gitTarget(root)
     const cleanIdentity = await computeWorkspaceContentIdentity(target)
 
-    await mkdir(join(root, '.git', 'orca-heimdall', 'objective', 'reports'), { recursive: true })
+    await mkdir(join(root, '.git', 'quirky-heimdall', 'objective', 'reports'), { recursive: true })
     await writeFile(
-      join(root, '.git', 'orca-heimdall', 'objective', 'reports', 'attempt.json'),
+      join(root, '.git', 'quirky-heimdall', 'objective', 'reports', 'attempt.json'),
       '{"plan":[]}'
     )
     await expect(computeWorkspaceContentIdentity(target)).resolves.toBe(cleanIdentity)
@@ -75,7 +75,7 @@ describe('computeWorkspaceContentIdentity', () => {
   it.skipIf(process.platform === 'win32')(
     'ignores index-only staging while tracking worktree, HEAD, rename, deletion, and mode changes',
     async () => {
-      const root = await temporaryDirectory('orca-objective-git-index-')
+      const root = await temporaryDirectory('quirky-objective-git-index-')
       await git(root, ['init'])
       const trackedPath = join(root, 'tracked.txt')
       await writeFile(trackedPath, 'initial\n')
@@ -115,7 +115,7 @@ describe('computeWorkspaceContentIdentity', () => {
   it.skipIf(process.platform === 'win32')(
     'tracks executable mode changes for an untracked Git path',
     async () => {
-      const root = await temporaryDirectory('orca-objective-git-mode-')
+      const root = await temporaryDirectory('quirky-objective-git-mode-')
       await git(root, ['init'])
       await writeFile(join(root, 'tracked.txt'), 'committed\n')
       await commitAll(root, 'initial')
@@ -132,7 +132,7 @@ describe('computeWorkspaceContentIdentity', () => {
   )
 
   it('computes identity for an unborn Git HEAD and remains sensitive to its dirty files', async () => {
-    const root = await temporaryDirectory('orca-objective-git-unborn-')
+    const root = await temporaryDirectory('quirky-objective-git-unborn-')
     await git(root, ['init'])
     const target = gitTarget(root)
     const emptyIdentity = await computeWorkspaceContentIdentity(target)
@@ -143,12 +143,12 @@ describe('computeWorkspaceContentIdentity', () => {
   })
 
   it('fingerprints a dirty submodule without hashing its directory as a blob', async () => {
-    const submoduleSource = await temporaryDirectory('orca-objective-submodule-source-')
+    const submoduleSource = await temporaryDirectory('quirky-objective-submodule-source-')
     await git(submoduleSource, ['init'])
     await writeFile(join(submoduleSource, 'tracked.txt'), 'committed\n')
     await commitAll(submoduleSource, 'submodule initial')
 
-    const root = await temporaryDirectory('orca-objective-submodule-parent-')
+    const root = await temporaryDirectory('quirky-objective-submodule-parent-')
     await git(root, ['init'])
     await writeFile(join(root, 'tracked.txt'), 'committed\n')
     await commitAll(root, 'parent initial')
@@ -173,15 +173,15 @@ describe('computeWorkspaceContentIdentity', () => {
     await expect(computeWorkspaceContentIdentity(target)).resolves.not.toBe(firstDirtyIdentity)
   })
 
-  it('hashes folder file contents, ignores mtimes, and excludes the complete .orca subtree', async () => {
-    const root = await temporaryDirectory('orca-objective-folder-')
+  it('hashes folder file contents, ignores mtimes, and excludes the complete .quirky subtree', async () => {
+    const root = await temporaryDirectory('quirky-objective-folder-')
     await writeFile(join(root, 'a.txt'), 'a')
     const fixedTime = new Date('2026-09-15T00:00:00.000Z')
     await utimes(join(root, 'a.txt'), fixedTime, fixedTime)
     const target = folderTarget(root)
     const initialIdentity = await computeWorkspaceContentIdentity(target)
 
-    const reportDirectory = join(root, '.orca', 'heimdall', 'objective', 'reports')
+    const reportDirectory = join(root, '.quirky', 'heimdall', 'objective', 'reports')
     await mkdir(reportDirectory, { recursive: true })
     await writeFile(join(reportDirectory, 'attempt.json'), 'ignored report content')
     await expect(computeWorkspaceContentIdentity(target)).resolves.toBe(initialIdentity)
@@ -206,7 +206,7 @@ describe('computeObjectiveWorktreeContentDigest', () => {
   it.skipIf(process.platform === 'win32')(
     'tracks a symlink target even when target contents match and tolerates a broken link',
     async () => {
-      const root = await temporaryDirectory('orca-objective-worktree-digest-')
+      const root = await temporaryDirectory('quirky-objective-worktree-digest-')
       await git(root, ['init'])
       await writeFile(join(root, 'target-a.txt'), 'identical\n')
       await writeFile(join(root, 'target-b.txt'), 'identical\n')
@@ -229,7 +229,7 @@ describe('computeObjectiveWorktreeContentDigest', () => {
     }
   )
   it('is unchanged when dirty content is committed unmodified, and changes when it is edited', async () => {
-    const root = await temporaryDirectory('orca-objective-worktree-digest-commit-')
+    const root = await temporaryDirectory('quirky-objective-worktree-digest-commit-')
     await git(root, ['init'])
     await writeFile(join(root, 'tracked.txt'), 'committed\n')
     await commitAll(root, 'initial')

@@ -106,7 +106,7 @@ describe('ACP restart recovery from the agent store', () => {
         clientMessageId: 'held',
         outcome: 'accepted',
         providerItemId: 'msg_2',
-        identity: { provider: 'orca', clientMessageId: 'held' }
+        identity: { provider: 'quirky', clientMessageId: 'held' }
       }
     ])
   })
@@ -184,7 +184,7 @@ describe('ACP restart recovery from the agent store', () => {
     expect(readStoredUserMessages).not.toHaveBeenCalled()
   })
 
-  it('reads nothing for an agent whose store Orca does not read', async () => {
+  it('reads nothing for an agent whose store Quirky does not read', async () => {
     await expect(
       readAcpRecoveryHistory(
         {

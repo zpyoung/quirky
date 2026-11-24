@@ -95,7 +95,7 @@ vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => (
     <div data-testid="context-menu-wrapper">{children}</div>
   ),
-  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope',
+  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope',
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu'
 }))
 
@@ -119,7 +119,7 @@ function makeRepo(): Repo {
   return {
     id: 'repo-1',
     path: '/repo',
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#999999',
     addedAt: 1
   }

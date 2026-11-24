@@ -1,4 +1,4 @@
-// `fork` arm of Orca's child-process chokepoint. Kept beside `run-process.ts` for the same
+// `fork` arm of Quirky's child-process chokepoint. Kept beside `run-process.ts` for the same
 // reason that file exists: callers outside this directory must not import `node:child_process`,
 // and a guard test enforces that against a shrinking allowlist.
 import {

@@ -125,7 +125,7 @@ describe('host model catalog snapshots sync', () => {
     resetHostModelCatalogSnapshotsForTests()
     useAppStore.setState({
       settings: {
-        ...getDefaultSettings('/tmp/orca-workspaces'),
+        ...getDefaultSettings('/tmp/quirky-workspaces'),
         nativeChatSessionOptions: { claude: { model: 'opus[1m]' }, codex: {} }
       },
       runtimeStatusByEnvironmentId: new Map()

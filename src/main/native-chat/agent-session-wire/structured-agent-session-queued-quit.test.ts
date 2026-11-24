@@ -1,6 +1,6 @@
 // A real quit with cards queued behind a running turn. The queue hands nothing off while the host
 // quits, so the chat keeps its restart offer: after the relaunch nothing sends by itself, and
-// resuming runs Orca's carry-on first, then the cards in order.
+// resuming runs Quirky's carry-on first, then the cards in order.
 
 import { afterEach, expect, it, vi } from 'vitest'
 import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'

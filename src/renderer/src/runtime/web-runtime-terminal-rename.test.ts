@@ -48,7 +48,7 @@ describe('desktop rename of a remote server tab', () => {
     vi.unstubAllGlobals()
   })
 
-  // #29975: a desktop rename stayed local, so `orca terminal show` on the server kept the old name.
+  // #29975: a desktop rename stayed local, so `quirky terminal show` on the server kept the old name.
   it("renames the server's terminal by its handle", () => {
     renameHostTerminalTab(state(toRemoteRuntimePtyId('term_7', 'env-1')), TAB, '绑定')
     expect(mocks.call).toHaveBeenCalledWith({

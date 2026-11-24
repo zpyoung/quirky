@@ -20,7 +20,7 @@
  * - a refused socket is `exited` only on a local disk. On a network home another machine's
  *   kernel may hold it, and this machine's connect and `lsof` cannot see that machine.
  */
-import { RELAY_LSOF_PROBE_JS } from '@orca/process-host/posix-lsof-probe'
+import { RELAY_LSOF_PROBE_JS } from '@quirky/process-host/posix-lsof-probe'
 import type { SshConnection } from '../connection/ssh-connection'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import {
@@ -30,7 +30,7 @@ import {
 } from '../relay-daemon-service-children'
 import { execCommand, isUnconfirmedSshCommandTermination } from '../remote-exec/remote-exec-command'
 import { isWindowsRemoteHost, type RemoteHostPlatform } from '../ssh-remote-platform'
-import { filesystemTypeIsLocalDisk } from '../../orcad/orcad-data-root-locality'
+import { filesystemTypeIsLocalDisk } from '../../quirkyd/quirkyd-data-root-locality'
 
 type RelayEndpointVerdict = 'live' | 'unverifiable' | 'exited'
 
@@ -65,8 +65,8 @@ export type RelayEndpointIncumbent = {
   holdersEnumerable: boolean
 }
 
-const PROBE_BEGIN = 'ORCA-INCUMBENT-BEGIN'
-const PROBE_END = 'ORCA-INCUMBENT-END'
+const PROBE_BEGIN = 'QUIRKY-INCUMBENT-BEGIN'
+const PROBE_END = 'QUIRKY-INCUMBENT-END'
 const CONNECT_PROBE_TIMEOUT_MS = 1000
 
 // Why ES5 syntax: nodePath may be a host-resolved system node, not the bundled one.

@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { build } from 'esbuild'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 let scratch = ''
 let childPath = ''
 
 beforeAll(async () => {
-  scratch = await mkdtemp(join(tmpdir(), 'orca-markdown-find-memory-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-markdown-find-memory-'))
   childPath = join(scratch, 'search.cjs')
   await build({
     stdin: {
@@ -41,7 +41,7 @@ describe('Markdown Find memory budget', () => {
     const result = await runProcess({
       program: process.execPath,
       args: ['--max-old-space-size=32', childPath],
-      env: { ...process.env, NODE_OPTIONS: undefined, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, NODE_OPTIONS: undefined, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 10_000,
       maxOutputBytes: 4096
     })

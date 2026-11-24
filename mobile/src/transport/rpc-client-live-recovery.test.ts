@@ -6,8 +6,8 @@
 //
 // Opt-in because the quick scenario takes ~15s wall-clock and the full
 // parked-loop scenario ~8 minutes:
-//   ORCA_MOBILE_LIVE_REPRO=1 pnpm vitest run src/transport/rpc-client-live-recovery.test.ts
-//   ORCA_MOBILE_LIVE_REPRO_FULL=1 ... (adds the 8-minute parked-loop case)
+//   QUIRKY_MOBILE_LIVE_REPRO=1 pnpm vitest run src/transport/rpc-client-live-recovery.test.ts
+//   QUIRKY_MOBILE_LIVE_REPRO_FULL=1 ... (adds the 8-minute parked-loop case)
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { randomBytes } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
@@ -23,8 +23,8 @@ vi.mock('expo-crypto', () => ({
 }))
 
 const RUN_LIVE =
-  process.env.ORCA_MOBILE_LIVE_REPRO === '1' || !!process.env.ORCA_MOBILE_LIVE_REPRO_FULL
-const RUN_FULL = process.env.ORCA_MOBILE_LIVE_REPRO_FULL === '1'
+  process.env.QUIRKY_MOBILE_LIVE_REPRO === '1' || !!process.env.QUIRKY_MOBILE_LIVE_REPRO_FULL
+const RUN_FULL = process.env.QUIRKY_MOBILE_LIVE_REPRO_FULL === '1'
 
 const AUTH_TOKEN = 'repro-device-token'
 

@@ -9,7 +9,7 @@ function connected(targetId: string): [string, SshConnectionState] {
 }
 
 describe('buildActiveConnectionIdsAtShutdown', () => {
-  it('never asks startup to dial an Orca-owned target', () => {
+  it('never asks startup to dial an Quirky-owned target', () => {
     const owned = ['runtime-ssh-vm-1', 'machine-0123']
     const snapshot = {
       sshConnectionStates: new Map([connected('ssh-user'), ...owned.map(connected)])

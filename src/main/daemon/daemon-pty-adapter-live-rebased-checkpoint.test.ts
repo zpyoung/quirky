@@ -183,7 +183,7 @@ describe('DaemonPtyAdapter checkpoints rebased on live', () => {
     const manager = historyAdapter.getHistoryManager()!
     await manager.openSession(sessionId, { cwd: '/tmp', cols: 80, rows: 24 })
     const base = numberedLines(1, 3_000)
-    const marker = '\x1b]777;orca-shell-ready'
+    const marker = '\x1b]777;quirky-shell-ready'
     // Session.prepareForFinalSnapshot emits held bytes before the take, so the take repeats them.
     const drained = `${numberedLines(3_001, 3_100)}HELD_TAIL${marker}`
     const disk = new HeadlessEmulator({

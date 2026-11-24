@@ -144,7 +144,7 @@ function collectMirroredRuntimeUserHookTrustEntries(
   return entries
 }
 
-/** Shifts mirrored user approvals one group down in each event Orca's entry leads. */
+/** Shifts mirrored user approvals one group down in each event Quirky's entry leads. */
 export function moveMirroredRuntimeUserTrustAfterManagedStatusHook(
   entries: readonly MirroredRuntimeUserHookTrustEntry[],
   statusHookLabels: ReadonlySet<CodexEventLabel>

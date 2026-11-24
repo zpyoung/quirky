@@ -43,14 +43,14 @@ const attachments = [
     type: 'pr',
     number: 57,
     title: 'Active review',
-    url: 'https://github.com/acme/orca/pull/57'
+    url: 'https://github.com/acme/quirky/pull/57'
   },
   {
     provider: 'gitlab',
     type: 'mr',
     number: 42,
     title: 'Sibling review',
-    url: 'https://gitlab.example.com/team/orca/-/merge_requests/42'
+    url: 'https://gitlab.example.com/team/quirky/-/merge_requests/42'
   },
   {
     provider: 'linear',
@@ -80,7 +80,7 @@ const review = {
   provider: 'github' as const,
   number: 57,
   title: 'Active review',
-  url: 'https://github.com/acme/orca/pull/57',
+  url: 'https://github.com/acme/quirky/pull/57',
   status: 'success' as const
 }
 function Fixture({
@@ -153,7 +153,7 @@ describe('workspace linked references in hover details', () => {
     expect(screen.getByText('Reviews · 2')).toBeTruthy()
     expect(screen.getByText('Issues & tasks · 2')).toBeTruthy()
     expect(screen.getAllByText('Active review')).toHaveLength(1)
-    expect(screen.getByText('MR !42 · GitLab · gitlab.example.com/team/orca')).toBeTruthy()
+    expect(screen.getByText('MR !42 · GitLab · gitlab.example.com/team/quirky')).toBeTruthy()
     expect(screen.getByText('ENG-215 · Linear · acme')).toBeTruthy()
     const key = getWorkspaceAttachmentKey(attachments[0])
     expect(
@@ -176,7 +176,9 @@ describe('workspace linked references in hover details', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hover workspace' }))
     parentClick.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Open MR !42' }))
-    expect(openUrl).toHaveBeenCalledWith('https://gitlab.example.com/team/orca/-/merge_requests/42')
+    expect(openUrl).toHaveBeenCalledWith(
+      'https://gitlab.example.com/team/quirky/-/merge_requests/42'
+    )
     expect(parentClick).not.toHaveBeenCalled()
     expect(container.querySelector('[data-hover-open]')?.getAttribute('data-hover-open')).toBe(
       'false'

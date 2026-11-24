@@ -18,7 +18,7 @@ import { classifyConnection, verdictDisplayLabel } from './connection-health'
 // label looped "Connecting…" forever.
 //
 // Opt-in like rpc-client-live-recovery.test.ts — needs ~22s wall-clock:
-//   ORCA_MOBILE_LIVE_REPRO=1 pnpm vitest run src/transport/cellular-handshake-stall-real-socket.test.ts
+//   QUIRKY_MOBILE_LIVE_REPRO=1 pnpm vitest run src/transport/cellular-handshake-stall-real-socket.test.ts
 
 vi.mock('./e2ee', () => ({
   generateKeyPair: () => ({ publicKey: new Uint8Array(32), secretKey: new Uint8Array(32) }),
@@ -31,7 +31,7 @@ vi.mock('./e2ee', () => ({
 }))
 
 const RUN_LIVE =
-  process.env.ORCA_MOBILE_LIVE_REPRO === '1' || !!process.env.ORCA_MOBILE_LIVE_REPRO_FULL
+  process.env.QUIRKY_MOBILE_LIVE_REPRO === '1' || !!process.env.QUIRKY_MOBILE_LIVE_REPRO_FULL
 
 // Long enough for three handshake-timeout cycles (≈17s) plus CI scheduling slack.
 const OBSERVE_MS = 22_000

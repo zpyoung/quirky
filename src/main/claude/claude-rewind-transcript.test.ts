@@ -17,7 +17,7 @@ let secondPrompt: string
 let original: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-rewind-transcript-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-rewind-transcript-'))
   home = join(root, 'account')
   project = join(home, 'projects', 'workspace')
   await mkdir(project, { recursive: true })
@@ -65,7 +65,7 @@ afterEach(async () => {
 
 function forkBefore(uuid: string) {
   return resolveClaudeRewindFork({
-    orcaSessionId: 'orca-chat',
+    quirkySessionId: 'quirky-chat',
     rewindOperationId: randomUUID(),
     head: claudeProviderHandle(source, secondPrompt),
     prompt: { sessionId: source, uuid },

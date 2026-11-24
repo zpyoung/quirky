@@ -14,7 +14,7 @@ remain unchanged. No protocol or history-retention policy changes.
 Run from the repository root with dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --max-old-space-size=128 docs/audits/scanner-late-cancel/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --max-old-space-size=128 docs/audits/scanner-late-cancel/reproduce.mjs
 ```
 
 The script loads the checked-out production entry and derives the before version by
@@ -40,7 +40,7 @@ both successful and failed requests, verifies queued/running cancellation, and
 checks shutdown cleanup. No production diagnostics or test-only exports were added.
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ai-vault/session-scanner-service-cancellation.test.ts src/main/ai-vault/session-scanner-service-entry.test.ts src/main/ai-vault/session-scanner-service-client.test.ts
+QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/ai-vault/session-scanner-service-cancellation.test.ts src/main/ai-vault/session-scanner-service-entry.test.ts src/main/ai-vault/session-scanner-service-client.test.ts
 ```
 
 ## Incident scope

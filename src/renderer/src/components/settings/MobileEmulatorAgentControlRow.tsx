@@ -1,7 +1,7 @@
 import { Import } from 'lucide-react'
 import {
-  ORCA_CLI_SKILL_INSTALL_COMMAND,
-  ORCA_CLI_SKILL_NAME
+  QUIRKY_CLI_SKILL_INSTALL_COMMAND,
+  QUIRKY_CLI_SKILL_NAME
 } from '@/lib/agent-feature-install-commands'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { useMobileEmulatorAgentSetupState } from '../emulator-pane/use-mobile-emulator-agent-setup-state'
@@ -11,10 +11,10 @@ import { MobileEmulatorExamples } from './MobileEmulatorExamples'
 import { translate } from '@/i18n/i18n'
 
 const EMULATOR_CLI_COMMANDS = [
-  'orca emulator list --json',
-  'orca emulator attach "iPhone 16 Pro" --json',
-  'orca emulator tap 0.5 0.7 --json',
-  'orca emulator type "hello" --json'
+  'quirky emulator list --json',
+  'quirky emulator attach "iPhone 16 Pro" --json',
+  'quirky emulator tap 0.5 0.7 --json',
+  'quirky emulator type "hello" --json'
 ] as const
 
 export function MobileEmulatorAgentControlRow(): React.JSX.Element {
@@ -22,7 +22,7 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
   const activeSkillRuntime = useActiveProjectSkillRuntime()
   // Why: skill detection here scans the local host only, so keep building host
   // commands; routing them to a WSL runtime would install where we never look.
-  const cliSkillInstallCommand = buildSkillCommandForRuntime(ORCA_CLI_SKILL_INSTALL_COMMAND)
+  const cliSkillInstallCommand = buildSkillCommandForRuntime(QUIRKY_CLI_SKILL_INSTALL_COMMAND)
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/30 p-4">
@@ -37,7 +37,7 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
           <p className="text-xs text-muted-foreground">
             {translate(
               'auto.components.settings.MobileEmulatorAgentControlRow.ff4b7e65d6',
-              'Let coding agents control the active mobile emulator with Orca CLI commands.'
+              'Let coding agents control the active mobile emulator with Quirky CLI commands.'
             )}
           </p>
         </div>
@@ -49,23 +49,23 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
             variant="inline"
             title={translate(
               'auto.components.settings.MobileEmulatorAgentControlRow.67e19ee03c',
-              'Orca CLI skill'
+              'Quirky CLI skill'
             )}
             description={translate(
               'auto.components.settings.MobileEmulatorAgentControlRow.d94ca6a623',
-              'Enables agents to use Orca CLI commands, including mobile emulator control.'
+              'Enables agents to use Quirky CLI commands, including mobile emulator control.'
             )}
             command={cliSkillInstallCommand}
-            terminalTitle="Orca CLI skill setup"
-            terminalAriaLabel="Orca CLI skill install terminal"
-            terminalWorktreeId="settings-mobile-emulator-orca-cli-skill-terminal"
+            terminalTitle="Quirky CLI skill setup"
+            terminalAriaLabel="Quirky CLI skill install terminal"
+            terminalWorktreeId="settings-mobile-emulator-quirky-cli-skill-terminal"
             terminalShellOverride={activeSkillRuntime.terminalShellOverride}
             installed={setup.cliSkillInstalled}
             loading={setup.cliSkillLoading}
             error={setup.cliSkillError}
             onRecheck={setup.refreshCliSkill}
             freshnessSkillName={
-              activeSkillRuntime.canUseLocalSkillFreshness ? ORCA_CLI_SKILL_NAME : undefined
+              activeSkillRuntime.canUseLocalSkillFreshness ? QUIRKY_CLI_SKILL_NAME : undefined
             }
           />
         </div>

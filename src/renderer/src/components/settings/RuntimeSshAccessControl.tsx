@@ -3,7 +3,7 @@ import { useId, useState } from 'react'
 import { toast } from 'sonner'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
 import type { SshTarget } from '../../../../shared/ssh-types'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import { translate } from '@/i18n/i18n'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { Button } from '../ui/button'
@@ -14,7 +14,7 @@ import { SshTargetSelect } from './SshTargetSelect'
 const DEFAULT_REMOTE_PORT = '6768'
 
 type RuntimeSshAccessControlProps = {
-  api: Pick<ManagedOrcadPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'>
+  api: Pick<ManagedQuirkydPreloadApi, 'linkSshAccess' | 'unlinkSshAccess'>
   environment: PublicKnownRuntimeEnvironment
   targets: SshTarget[]
   onChanged: () => void

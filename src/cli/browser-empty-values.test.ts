@@ -6,7 +6,7 @@ vi.mock('./runtime-client', () => {
   class RuntimeClient {
     call = callMock
     getCliStatus = vi.fn()
-    openOrca = vi.fn()
+    openQuirky = vi.fn()
   }
 
   class RuntimeClientError extends Error {
@@ -38,7 +38,7 @@ import { main } from './index'
 import { okFixture, queueFixtures } from './test-fixtures'
 
 // Why: StorageKeyValue requires a non-empty key but accepts any string value, empty included.
-describe('orca cli storage set preserves an empty value', () => {
+describe('quirky cli storage set preserves an empty value', () => {
   beforeEach(() => {
     callMock.mockReset()
     process.exitCode = undefined
@@ -54,7 +54,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
     await main(
       ['storage', 'local', 'set', '--key', 'flag', '--value', '', '--worktree', 'all', '--json'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).toHaveBeenCalledTimes(1)
@@ -71,7 +71,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
     await main(
       ['storage', 'session', 'set', '--key', 'flag', '--value', '', '--worktree', 'all', '--json'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).toHaveBeenCalledTimes(1)
@@ -89,7 +89,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
     await main(
       ['storage', 'local', 'set', '--key=flag', '--value=', '--worktree', 'all', '--json'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).toHaveBeenCalledTimes(1)
@@ -106,7 +106,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
     await main(
       ['storage', 'local', 'set', '--key', '', '--value', 'x', '--worktree', 'all'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).not.toHaveBeenCalled()
@@ -122,7 +122,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
     await main(
       ['storage', 'local', 'set', '--key', 'flag', '--worktree', 'all'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).not.toHaveBeenCalled()
@@ -135,7 +135,7 @@ describe('orca cli storage set preserves an empty value', () => {
 
 // Why: CookieSet.value and SetCredentials.pass accept any string, empty included,
 // while name and user require a non-empty one.
-describe('orca cli cookie set and set credentials preserve an empty value', () => {
+describe('quirky cli cookie set and set credentials preserve an empty value', () => {
   beforeEach(() => {
     callMock.mockReset()
     process.exitCode = undefined
@@ -151,7 +151,7 @@ describe('orca cli cookie set and set credentials preserve an empty value', () =
 
     await main(
       ['cookie', 'set', '--name', 'sid', '--value', '', '--worktree', 'all', '--json'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).toHaveBeenCalledTimes(1)
@@ -168,7 +168,7 @@ describe('orca cli cookie set and set credentials preserve an empty value', () =
 
     await main(
       ['set', 'credentials', '--user', 'token', '--pass', '', '--worktree', 'all', '--json'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).toHaveBeenCalledTimes(1)
@@ -185,7 +185,7 @@ describe('orca cli cookie set and set credentials preserve an empty value', () =
 
     await main(
       ['cookie', 'set', '--name', '', '--value', 'x', '--worktree', 'all'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).not.toHaveBeenCalled()
@@ -201,7 +201,7 @@ describe('orca cli cookie set and set credentials preserve an empty value', () =
 
     await main(
       ['set', 'credentials', '--user', 'token', '--worktree', 'all'],
-      '/tmp/not-an-orca-worktree'
+      '/tmp/not-an-quirky-worktree'
     )
 
     expect(callMock).not.toHaveBeenCalled()

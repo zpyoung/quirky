@@ -14,7 +14,7 @@ import type {
   AgentSessionProcessIdentityField
 } from '../../shared/agent-session-lease-adjudication'
 import type { AgentSessionProcessIdentity } from '../../shared/agent-session-record'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 /** Start times drift by scheduler granularity and clock reads; compare with a tolerance. */
 export const PROCESS_START_TIME_TOLERANCE_MS = 2_000
@@ -178,7 +178,7 @@ export async function probeAgentSessionProcessIdentities(args: {
 }
 
 /**
- * Probe one recorded owner. `observedExit` short-circuits everything: Orca watching that exact
+ * Probe one recorded owner. `observedExit` short-circuits everything: Quirky watching that exact
  * process exit is the strongest evidence available.
  */
 export async function probeAgentSessionProcessIdentity(args: {

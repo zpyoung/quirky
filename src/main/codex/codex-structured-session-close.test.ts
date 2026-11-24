@@ -99,7 +99,7 @@ describe('Codex structured session close lifecycle', () => {
       connection,
       backgroundTasks: new CodexBackgroundTaskTracker('thread-1'),
       ended: false,
-      ...(requestedClose ? { orcaClose: { requested: true, reason: new Error('closed') } } : {}),
+      ...(requestedClose ? { quirkyClose: { requested: true, reason: new Error('closed') } } : {}),
       fence: 7,
       acquisitionGeneration: 'generation-1',
       threadId: THREAD,
@@ -149,7 +149,7 @@ describe('Codex structured session close lifecycle', () => {
         sessionId: 'session-1',
         connection,
         error: new Error('codex session closed'),
-        closedByOrca: true,
+        closedByQuirky: true,
         prompts
       })
     ).toBe(true)

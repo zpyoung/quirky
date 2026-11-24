@@ -28,17 +28,17 @@ export function buildWslExecArgs(
 export function buildWslLoginShellCommand(command: string): string {
   const quotedCommand = quotePosixShell(command)
   return [
-    '_orca_wsl_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)',
-    'if [ -z "$_orca_wsl_shell" ] || [ ! -x "$_orca_wsl_shell" ]; then',
-    '  _orca_wsl_shell="${SHELL:-/bin/bash}"',
+    '_quirky_wsl_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)',
+    'if [ -z "$_quirky_wsl_shell" ] || [ ! -x "$_quirky_wsl_shell" ]; then',
+    '  _quirky_wsl_shell="${SHELL:-/bin/bash}"',
     'fi',
-    'if [ -z "$_orca_wsl_shell" ] || [ ! -x "$_orca_wsl_shell" ]; then',
-    '  _orca_wsl_shell=/bin/sh',
+    'if [ -z "$_quirky_wsl_shell" ] || [ ! -x "$_quirky_wsl_shell" ]; then',
+    '  _quirky_wsl_shell=/bin/sh',
     'fi',
-    '_orca_wsl_shell_name=$(basename "$_orca_wsl_shell" | tr "[:upper:]" "[:lower:]")',
-    'case "$_orca_wsl_shell_name" in',
-    `  sh|dash) exec "$_orca_wsl_shell" -lc ${quotedCommand} ;;`,
-    `  bash|zsh|ksh|mksh|ash) exec "$_orca_wsl_shell" -ilc ${quotedCommand} ;;`,
+    '_quirky_wsl_shell_name=$(basename "$_quirky_wsl_shell" | tr "[:upper:]" "[:lower:]")',
+    'case "$_quirky_wsl_shell_name" in',
+    `  sh|dash) exec "$_quirky_wsl_shell" -lc ${quotedCommand} ;;`,
+    `  bash|zsh|ksh|mksh|ash) exec "$_quirky_wsl_shell" -ilc ${quotedCommand} ;;`,
     `  *) exec /bin/sh -lc ${quotedCommand} ;;`,
     'esac'
   ].join('\n')
@@ -65,40 +65,40 @@ export function buildWslCapturedLoginShellCommand(
 
 export function buildWslInteractiveLoginShellCommand(): string {
   return [
-    '_orca_wsl_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)',
-    'if [ -z "$_orca_wsl_shell" ] || [ ! -x "$_orca_wsl_shell" ]; then',
-    '  _orca_wsl_shell="${SHELL:-/bin/bash}"',
+    '_quirky_wsl_shell=$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)',
+    'if [ -z "$_quirky_wsl_shell" ] || [ ! -x "$_quirky_wsl_shell" ]; then',
+    '  _quirky_wsl_shell="${SHELL:-/bin/bash}"',
     'fi',
-    'if [ -z "$_orca_wsl_shell" ] || [ ! -x "$_orca_wsl_shell" ]; then',
-    '  _orca_wsl_shell=/bin/sh',
+    'if [ -z "$_quirky_wsl_shell" ] || [ ! -x "$_quirky_wsl_shell" ]; then',
+    '  _quirky_wsl_shell=/bin/sh',
     'fi',
-    '_orca_shell_ready_root=""',
+    '_quirky_shell_ready_root=""',
     // Why the explicit root first: the wrapper tree is content-addressed, so its
     // path carries a hash the guest cannot derive. The host publishes the
-    // resolved root and WSLENV /p-translates it. The ORCA_USER_DATA_PATH branch
+    // resolved root and WSLENV /p-translates it. The QUIRKY_USER_DATA_PATH branch
     // stays as the fallback for an older host that exports only that.
-    'if [ -n "${ORCA_SHELL_READY_ROOT:-}" ]; then',
-    '  _orca_shell_ready_root="${ORCA_SHELL_READY_ROOT%/}"',
-    'elif [ -n "${ORCA_USER_DATA_PATH:-}" ]; then',
-    '  _orca_shell_ready_root="${ORCA_USER_DATA_PATH%/}/shell-ready"',
+    'if [ -n "${QUIRKY_SHELL_READY_ROOT:-}" ]; then',
+    '  _quirky_shell_ready_root="${QUIRKY_SHELL_READY_ROOT%/}"',
+    'elif [ -n "${QUIRKY_USER_DATA_PATH:-}" ]; then',
+    '  _quirky_shell_ready_root="${QUIRKY_USER_DATA_PATH%/}/shell-ready"',
     'fi',
-    '_orca_wsl_shell_name=$(basename "$_orca_wsl_shell" | tr "[:upper:]" "[:lower:]")',
-    'case "$_orca_wsl_shell_name" in',
+    '_quirky_wsl_shell_name=$(basename "$_quirky_wsl_shell" | tr "[:upper:]" "[:lower:]")',
+    'case "$_quirky_wsl_shell_name" in',
     '  bash)',
-    '    if [ -n "${_orca_shell_ready_root:-}" ] && [ -f "${_orca_shell_ready_root}/bash/rcfile" ]; then',
-    '      exec "$_orca_wsl_shell" --rcfile "${_orca_shell_ready_root}/bash/rcfile"',
+    '    if [ -n "${_quirky_shell_ready_root:-}" ] && [ -f "${_quirky_shell_ready_root}/bash/rcfile" ]; then',
+    '      exec "$_quirky_wsl_shell" --rcfile "${_quirky_shell_ready_root}/bash/rcfile"',
     '    fi',
     '    ;;',
     // Why: a WSL fish pane gets no shell-ready wrapper or XDG handoff, so this is its only `claude`.
     '  fish)',
-    `    exec "$_orca_wsl_shell" -l -C ${quotePosixShell(getFishClaudeShellFunction())}`,
+    `    exec "$_quirky_wsl_shell" -l -C ${quotePosixShell(getFishClaudeShellFunction())}`,
     '    ;;',
     '  zsh)',
-    '    if [ -n "${_orca_shell_ready_root:-}" ] && [ -d "${_orca_shell_ready_root}/zsh" ]; then',
-    '      export ZDOTDIR="${_orca_shell_ready_root}/zsh"',
+    '    if [ -n "${_quirky_shell_ready_root:-}" ] && [ -d "${_quirky_shell_ready_root}/zsh" ]; then',
+    '      export ZDOTDIR="${_quirky_shell_ready_root}/zsh"',
     '    fi',
     '    ;;',
     'esac',
-    'exec "$_orca_wsl_shell" -l'
+    'exec "$_quirky_wsl_shell" -l'
   ].join('\n')
 }

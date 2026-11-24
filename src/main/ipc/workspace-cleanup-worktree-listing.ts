@@ -31,7 +31,7 @@ export async function listCleanupGitWorktrees(
     return { route, gitWorktrees: [createFolderWorktree(repo)] }
   }
   if (route.kind === 'ssh') {
-    // Why: cleanup should reflect only workspaces Orca can currently inspect.
+    // Why: cleanup should reflect only workspaces Quirky can currently inspect.
     return { route, gitWorktrees: [] }
   }
   const localGitOptions = getLocalProjectWorktreeGitOptions(store, repo)
@@ -61,7 +61,7 @@ export function handleRepoWorktreeListError(args: {
     console.error('Workspace cleanup repo scan failed', error)
   }
   if (isRemoteWorkspaceCleanupHost(repo) && !targeted) {
-    // Why: broad cleanup only shows remote workspaces Orca can inspect now.
+    // Why: broad cleanup only shows remote workspaces Quirky can inspect now.
     // A remote repo that fails mid-scan is omitted, not bannered.
     return { scannedAt, candidates: [], errors: [] }
   }

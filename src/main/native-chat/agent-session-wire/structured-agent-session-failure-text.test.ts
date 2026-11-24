@@ -24,8 +24,8 @@ import {
 } from './structured-agent-session-failure-text'
 import { structuredAgentSessionStartFailureRow } from './structured-agent-session-start-failure-row'
 
-/** What Orca's own error text looks like: a code, a marker, a uuid, a path, an exception. */
-const ORCA_INTERNAL =
+/** What Quirky's own error text looks like: a code, a marker, a uuid, a path, an exception. */
+const QUIRKY_INTERNAL =
   /agent_session_|execution_owner|provider_[a-z_]+|[0-9a-f]{8}-[0-9a-f]{4}-|[/\\][\w.-]+[/\\]|Error:|ENOENT/
 
 describe('structuredAgentSessionStartFailure', () => {
@@ -96,7 +96,7 @@ describe('structuredAgentSessionStartFailure', () => {
         rejection: { kind: 'startFailed', detail: { text: 'code 1\nboom', audience: 'log' } }
       }
     )
-    // Orca's own words, however provider-like, are never promoted to a detail.
+    // Quirky's own words, however provider-like, are never promoted to a detail.
     expect(
       structuredAgentSessionStartFailure({ error: new Error('Not logged in. Run /login.') })
         .rejection
@@ -229,7 +229,7 @@ describe('structuredAgentSessionStartFailure', () => {
     ],
     [
       'agentCommandNotRunnable',
-      "Claude's Command in Settings → Agents must be a program path or name Orca can find, with no arguments or variables. Change it or reset it."
+      "Claude's Command in Settings → Agents must be a program path or name Quirky can find, with no arguments or variables. Change it or reset it."
     ]
   ] as const)('words a start refused for %s by that situation', (reason, sentence) => {
     const code = 'agent_session_operation_invalid'
@@ -247,7 +247,7 @@ describe('structuredAgentSessionStartFailure', () => {
         refusal: refuse(
           'agent_session_ownership_unknown',
           { reason: 'ownerUnproven' },
-          'Orca cannot prove that process 4242 on host-1 has exited.'
+          'Quirky cannot prove that process 4242 on host-1 has exited.'
         )
       },
       { agentName: 'Claude' }
@@ -264,7 +264,7 @@ describe('structuredAgentSessionStartFailure', () => {
     })
   })
 
-  it("reads an exit before the start as a failed start, and an Orca fault as Orca's", () => {
+  it("reads an exit before the start as a failed start, and an Quirky fault as Quirky's", () => {
     expect(
       structuredAgentSessionStartFailure({
         exit: { kind: 'providerExited', detail: { text: 'stderr', audience: 'log' } }
@@ -274,7 +274,7 @@ describe('structuredAgentSessionStartFailure', () => {
       kind: 'hostFault'
     })
     expect(structuredAgentSessionStartFailure({ hostFault: true }).reason).not.toMatch(
-      ORCA_INTERNAL
+      QUIRKY_INTERNAL
     )
   })
 
@@ -329,7 +329,7 @@ describe('structuredAgentSessionStartFailure', () => {
       reason: 'The agent stopped before it finished starting. Send your message to try again.',
       rejection: { kind: 'providerStartFailed', detail: { text: 'code 1', audience: 'log' } }
     })
-    // A start that threw proves nothing about the provider: it may be Orca's, or a failed spawn.
+    // A start that threw proves nothing about the provider: it may be Quirky's, or a failed spawn.
     expect(
       structuredAgentSessionStartFailure({ error: new Error('spawn claude ENOENT') }, {})
     ).toEqual({

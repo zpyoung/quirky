@@ -1,5 +1,5 @@
 // Only root CLI options can precede `app-server`. A prompt or another subcommand
-// would change the process Orca starts, and permission options belong to Orca.
+// would change the process Quirky starts, and permission options belong to Quirky.
 import { parseTomlKeyPath } from './config-toml-key-path'
 import { StructuredAgentArgumentsError } from '../native-chat/structured-agent-arguments-error'
 

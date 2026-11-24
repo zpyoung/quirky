@@ -57,7 +57,7 @@ describe('structured lead Run binding through the RPC dispatcher', () => {
       assigneeHandle: handle,
       assigneePaneKey: paneKey,
       processIncarnation: structuredWorkerProcessIncarnation(SESSION_Y),
-      creator: { kind: 'session', orcaSessionId: SESSION_X },
+      creator: { kind: 'session', quirkySessionId: SESSION_X },
       maxDepth: Number.MAX_SAFE_INTEGER
     }).id
   })

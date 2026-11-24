@@ -118,7 +118,7 @@ describe('openWorkspaceBrowserTab', () => {
 
     await openWorkspaceBrowserTab({
       workspaceId: WORKSPACE_ID,
-      url: 'https://github.com/acme/orca/pull/456',
+      url: 'https://github.com/acme/quirky/pull/456',
       afterTabId: 'source-unified-tab',
       intent: { kind: 'url' },
       focusOnCreate: false,
@@ -127,7 +127,7 @@ describe('openWorkspaceBrowserTab', () => {
 
     expect(createBrowserTab).toHaveBeenCalledWith(
       WORKSPACE_ID,
-      'https://github.com/acme/orca/pull/456',
+      'https://github.com/acme/quirky/pull/456',
       expect.objectContaining({ activate: false, afterTabId: 'source-unified-tab' })
     )
   })
@@ -205,7 +205,7 @@ describe('openWorkspaceBrowserTab', () => {
 
     await openWorkspaceBrowserTab({
       workspaceId: WORKSPACE_ID,
-      url: 'https://gitlab.com/acme/orca/-/merge_requests/77',
+      url: 'https://gitlab.com/acme/quirky/-/merge_requests/77',
       afterTabId: 'source-unified-tab',
       intent: { kind: 'url' },
       focusOnCreate: false,
@@ -217,7 +217,7 @@ describe('openWorkspaceBrowserTab', () => {
         clientAfterTabId: 'source-unified-tab',
         focusOnCreate: false,
         selectWorktree: false,
-        url: 'https://gitlab.com/acme/orca/-/merge_requests/77'
+        url: 'https://gitlab.com/acme/quirky/-/merge_requests/77'
       })
     )
   })
@@ -604,15 +604,15 @@ describe('openWorkspaceBrowserTab', () => {
 
 describe('links from a managed server reached over SSH', () => {
   function sshDeployedRuntimeState(
-    orcadDeployment: Record<string, unknown>,
+    quirkydDeployment: Record<string, unknown>,
     settings: Record<string, unknown> = {}
   ): Record<string, unknown> {
     return {
-      ...ownerState(toRuntimeExecutionHostId('orcad-env')),
-      runtimeEnvironments: [{ id: 'orcad-env', orcadDeployment }],
-      // Headless orcad advertises no screencast backend.
+      ...ownerState(toRuntimeExecutionHostId('quirkyd-env')),
+      runtimeEnvironments: [{ id: 'quirkyd-env', quirkydDeployment }],
+      // Headless quirkyd advertises no screencast backend.
       runtimeStatusByEnvironmentId: new Map([
-        ['orcad-env', { status: { capabilities: [] }, checkedAt: 1 }]
+        ['quirkyd-env', { status: { capabilities: [] }, checkedAt: 1 }]
       ]),
       settings,
       createBrowserTab: vi.fn(),
@@ -631,14 +631,14 @@ describe('links from a managed server reached over SSH', () => {
   it('opens the link in an SSH-routed desktop tab the runtime workspace still owns', async () => {
     mocks.state = sshDeployedRuntimeState(sshDeployment)
 
-    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'orcad-env')).toBe(
+    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'quirkyd-env')).toBe(
       true
     )
     await openWorkspaceBrowserTab({
       workspaceId: WORKSPACE_ID,
       url: 'http://localhost:3000/',
       intent: { kind: 'url' },
-      expectedRuntimeEnvironmentId: 'orcad-env'
+      expectedRuntimeEnvironmentId: 'quirkyd-env'
     })
 
     expect(mocks.state.createBrowserTab).toHaveBeenCalledWith(
@@ -646,7 +646,7 @@ describe('links from a managed server reached over SSH', () => {
       'http://localhost:3000/',
       expect.objectContaining({
         browserRuntimeEnvironmentId: null,
-        executionHostId: toRuntimeExecutionHostId('orcad-env')
+        executionHostId: toRuntimeExecutionHostId('quirkyd-env')
       })
     )
     expect(mocks.createRemote).not.toHaveBeenCalled()
@@ -655,18 +655,18 @@ describe('links from a managed server reached over SSH', () => {
   it('keeps a screencast-capable deployment on its runtime browser', async () => {
     mocks.state = {
       ...sshDeployedRuntimeState(sshDeployment),
-      ...browserCapableRuntime('orcad-env')
+      ...browserCapableRuntime('quirkyd-env')
     }
 
     await openWorkspaceBrowserTab({
       workspaceId: WORKSPACE_ID,
       url: 'http://localhost:3000/',
       intent: { kind: 'url' },
-      expectedRuntimeEnvironmentId: 'orcad-env'
+      expectedRuntimeEnvironmentId: 'quirkyd-env'
     })
 
     expect(mocks.createRemote).toHaveBeenCalledWith(
-      expect.objectContaining({ environmentId: 'orcad-env', waitForRegistration: true })
+      expect.objectContaining({ environmentId: 'quirkyd-env', waitForRegistration: true })
     )
     expect(mocks.state.createBrowserTab).not.toHaveBeenCalled()
   })
@@ -682,7 +682,7 @@ describe('links from a managed server reached over SSH', () => {
   ])('offers only the system browser when %s', async (_label, deployment, settings) => {
     mocks.state = sshDeployedRuntimeState(deployment, settings)
 
-    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'orcad-env')).toBe(
+    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'quirkyd-env')).toBe(
       false
     )
     await expect(
@@ -690,7 +690,7 @@ describe('links from a managed server reached over SSH', () => {
         workspaceId: WORKSPACE_ID,
         url: 'http://localhost:3000/',
         intent: { kind: 'url' },
-        expectedRuntimeEnvironmentId: 'orcad-env'
+        expectedRuntimeEnvironmentId: 'quirkyd-env'
       })
     ).rejects.toThrow('Unable to open URL.')
     expect(mocks.state.createBrowserTab).not.toHaveBeenCalled()
@@ -709,7 +709,7 @@ describe('links from a managed server reached over SSH', () => {
     mocks.pairedWeb = true
     mocks.state = sshDeployedRuntimeState(sshDeployment)
 
-    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'orcad-env')).toBe(
+    expect(canOpenWorkspaceBrowserTabOnRuntime(mocks.getState(), WORKSPACE_ID, 'quirkyd-env')).toBe(
       false
     )
   })

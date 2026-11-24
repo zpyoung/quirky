@@ -38,10 +38,10 @@ describe('a move to the managed server that stops short', () => {
     const { deps } = fencedHost('source-fenced', true)
     const d = deps({
       convert: vi.fn(async () => {
-        throw new Error('Could not connect to the remote Orca runtime.')
+        throw new Error('Could not connect to the remote Quirky runtime.')
       }),
       abandonConversion: vi.fn(async () => {
-        throw new Error('Could not connect to the remote Orca runtime.')
+        throw new Error('Could not connect to the remote Quirky runtime.')
       })
     })
     const result = await resolveHostServerOnConnect(target, d)
@@ -92,7 +92,7 @@ describe('a move to the managed server that stops short', () => {
     const { host, deps } = fencedHost('destination-staged', true)
     const d = deps({
       convert: vi.fn(async () => {
-        throw new Error('orcad_migration_commit_not_committed:staged')
+        throw new Error('quirkyd_migration_commit_not_committed:staged')
       }),
       abandonConversion: vi.fn(async () => {
         host.phase = null
@@ -102,11 +102,11 @@ describe('a move to the managed server that stops short', () => {
     expect(result).toEqual({
       route: 'unserved',
       reason: 'failed',
-      detail: 'orcad_migration_commit_not_committed:staged'
+      detail: 'quirkyd_migration_commit_not_committed:staged'
     })
     if (result.route === 'unserved') {
       expect(unservedHostServerMessage(result)).toBe(
-        'Orca couldn’t start its server on this host. Try connecting again.'
+        'Quirky couldn’t start its server on this host. Try connecting again.'
       )
     }
     warn.mockRestore()
@@ -121,7 +121,7 @@ describe('a move to the managed server that stops short', () => {
       async () => ({
         outcome: 'deferred' as const,
         candidateVersion: '0.1.0+abc',
-        code: 'orcad_update_fence_held',
+        code: 'quirkyd_update_fence_held',
         reason: 'Another desktop is updating this host.'
       })
     ]
@@ -147,7 +147,7 @@ describe('a move to the managed server that stops short', () => {
     const { host, deps } = fencedHost('destination-staged', true)
     const lost = deps({
       convert: vi.fn(async () => {
-        throw new Error('orcad_migration_commit_reply_lost')
+        throw new Error('quirkyd_migration_commit_reply_lost')
       }),
       // The abort's re-read found the commit landed and recorded it.
       abandonConversion: vi.fn(async () => {

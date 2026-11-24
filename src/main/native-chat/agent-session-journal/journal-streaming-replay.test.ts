@@ -51,7 +51,7 @@ function put(row: JournalRow): void {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-stream-replay-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-stream-replay-'))
   opened = openTestJournalHostDatabase(root)
   publishTestJournalEpoch(opened.db, sessionId, epoch)
 })

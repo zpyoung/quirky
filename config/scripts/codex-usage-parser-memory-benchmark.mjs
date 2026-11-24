@@ -53,7 +53,7 @@ async function runWorker() {
   } finally {
     clearInterval(timer)
   }
-  globalThis.__orcaMemoryResult = result
+  globalThis.__quirkyMemoryResult = result
   const final = memorySnapshot('after', started)
   const duringSampleCount = samples.length
   samples.push(final)
@@ -100,7 +100,7 @@ async function runWorker() {
       correctness
     })}\n`
   )
-  delete globalThis.__orcaMemoryResult
+  delete globalThis.__quirkyMemoryResult
 }
 
 function writeFixture(filePath, eventCount) {
@@ -134,7 +134,7 @@ function writeFixture(filePath, eventCount) {
 
 async function runComparison() {
   const { build, version: esbuildVersion } = await import('esbuild')
-  const { runProcessSync } = await import('@orca/process-host')
+  const { runProcessSync } = await import('@quirky/process-host')
   const { describeProcessFailure } = await import('./process-failure-message.mjs')
   const { buildCounterbalancedSchedule } = await import('./counterbalanced-benchmark-schedule.mjs')
   const eventCount = positiveInteger(argument('--events', '100000'), 'events')
@@ -146,7 +146,7 @@ async function runComparison() {
       program,
       args: commandArgs,
       cwd: root,
-      env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 120000,
       maxOutputBytes: 16 * 1024 * 1024
     })
@@ -160,7 +160,7 @@ async function runComparison() {
     '--verify',
     `${argument('--baseline-ref', 'HEAD')}^{commit}`
   ]).trim()
-  const temporary = mkdtempSync(join(tmpdir(), 'orca-codex-parser-memory-'))
+  const temporary = mkdtempSync(join(tmpdir(), 'quirky-codex-parser-memory-'))
   try {
     const sources = {}
     const bundles = {}
@@ -276,7 +276,7 @@ async function runComparison() {
       instrumentationSha256: Object.fromEntries(
         [
           import.meta.filename,
-          fileURLToPath(import.meta.resolve('@orca/process-host')),
+          fileURLToPath(import.meta.resolve('@quirky/process-host')),
           join(import.meta.dirname, 'process-failure-message.mjs'),
           join(import.meta.dirname, 'counterbalanced-benchmark-schedule.mjs')
         ].map((path) => [relative(root, path).split(sep).join('/'), digest(readFileSync(path))])

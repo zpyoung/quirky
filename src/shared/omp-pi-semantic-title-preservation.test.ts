@@ -5,11 +5,11 @@
  * OMP emits NEITHER string. Verified against oh-my-pi
  * (packages/coding-agent/src/utils/title-generator.ts): `DEFAULT_TERMINAL_TITLE = "π"` (:25)
  * and `buildTerminalTitleWithState` (:530-544) compose `π ⠋ <label>` / `π > <label>` /
- * `π ! <label>` — always the π glyph. On an Orca-hosted pane OMP's native titler cedes
- * entirely to Orca's OWN injected extension (src/main/pi/titlebar-extension-source.ts:21,44),
+ * `π ! <label>` — always the π glyph. On an Quirky-hosted pane OMP's native titler cedes
+ * entirely to Quirky's OWN injected extension (src/main/pi/titlebar-extension-source.ts:21,44),
  * which writes `π - <session> - <cwd>` and `⠋ π - <session> - <cwd>` every 80ms.
  *
- * Both flapping strings were manufactured by Orca:
+ * Both flapping strings were manufactured by Quirky:
  *   "OMP" — `driveSyntheticTitleFromHook` (src/main/index.ts), from the omp profile's label.
  *   "Pi"  — `normalizeTerminalTitle` collapsing our own extension's output to a hardcoded
  *           literal, discarding the session name and cwd along with it (#16093).
@@ -30,13 +30,14 @@ import { normalizeCompatibleAgentTitleForOwner } from './agent-title-owner'
 import { getPiCompatibleTitleSeparatorStatus } from './pi-compatible-synthetic-title'
 
 // Verbatim from src/main/pi/titlebar-extension-source.ts:44 and oh-my-pi:530-544.
-const ORCA_EXTENSION_WORKING = (frame: string): string => `${frame} π - fixing the sidebar - orca`
+const QUIRKY_EXTENSION_WORKING = (frame: string): string =>
+  `${frame} π - fixing the sidebar - quirky`
 const OMP_NATIVE_WORKING = (frame: string): string => `π ${frame} fixing the sidebar`
 const FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
 describe('normalizeTerminalTitle keeps the OMP/Pi session label', () => {
   it.each([
-    ['Orca extension (spinner leads)', ORCA_EXTENSION_WORKING],
+    ['Quirky extension (spinner leads)', QUIRKY_EXTENSION_WORKING],
     ['OMP native (spinner is medial)', OMP_NATIVE_WORKING]
   ])('collapses every %s frame to one value without losing the label', (_name, build) => {
     const normalized = new Set(FRAMES.map((frame) => normalizeTerminalTitle(build(frame))))
@@ -52,7 +53,7 @@ describe('normalizeTerminalTitle keeps the OMP/Pi session label', () => {
 
   it('leaves idle and attention titles byte-identical', () => {
     for (const title of [
-      'π - fixing the sidebar - orca',
+      'π - fixing the sidebar - quirky',
       'π > fixing the sidebar',
       'π ! fixing the sidebar',
       'π: fixing the sidebar'
@@ -65,7 +66,7 @@ describe('normalizeTerminalTitle keeps the OMP/Pi session label', () => {
   // and the frame churned straight through (#8032).
   it('collapses frames under a multiplexer prefix', () => {
     const normalized = new Set(
-      FRAMES.map((frame) => normalizeTerminalTitle(`zsh | ${ORCA_EXTENSION_WORKING(frame)}`))
+      FRAMES.map((frame) => normalizeTerminalTitle(`zsh | ${QUIRKY_EXTENSION_WORKING(frame)}`))
     )
 
     expect(normalized.size).toBe(1)
@@ -73,8 +74,8 @@ describe('normalizeTerminalTitle keeps the OMP/Pi session label', () => {
   })
 
   it('keeps two different sessions distinguishable', () => {
-    expect(normalizeTerminalTitle('π - session A - orca')).not.toBe(
-      normalizeTerminalTitle('π - session B - orca')
+    expect(normalizeTerminalTitle('π - session A - quirky')).not.toBe(
+      normalizeTerminalTitle('π - session B - quirky')
     )
   })
 })
@@ -84,7 +85,7 @@ describe('detectAgentStatusFromTitle reads the π state separator', () => {
     ['π ! fixing the sidebar', 'permission'],
     ['π > fixing the sidebar', 'idle'],
     ['π ⠋ fixing the sidebar', 'working'],
-    ['⠋ π - fixing the sidebar - orca', 'working'],
+    ['⠋ π - fixing the sidebar - quirky', 'working'],
     ['π: fixing the sidebar', 'idle']
   ])('classifies %s as %s', (title, expected) => {
     expect(detectAgentStatusFromTitle(title)).toBe(expected)
@@ -93,7 +94,7 @@ describe('detectAgentStatusFromTitle reads the π state separator', () => {
 
 describe('the churn is gone at the suppressor', () => {
   it('treats consecutive animation frames as decoration', () => {
-    for (const build of [ORCA_EXTENSION_WORKING, OMP_NATIVE_WORKING]) {
+    for (const build of [QUIRKY_EXTENSION_WORKING, OMP_NATIVE_WORKING]) {
       for (let index = 1; index < FRAMES.length; index += 1) {
         expect(
           isDecorativeAgentTitleFrameChange(
@@ -108,14 +109,14 @@ describe('the churn is gone at the suppressor', () => {
   it('still commits a real working -> attention transition', () => {
     expect(
       isDecorativeAgentTitleFrameChange(
-        normalizeTerminalTitle(ORCA_EXTENSION_WORKING('⠋')),
+        normalizeTerminalTitle(QUIRKY_EXTENSION_WORKING('⠋')),
         normalizeTerminalTitle('π ! fixing the sidebar')
       )
     ).toBe(false)
   })
 })
 
-describe('Orca stops writing over the working title it does not own', () => {
+describe('Quirky stops writing over the working title it does not own', () => {
   // Why: the agent animates its own working title, so synthesizing there both replaced the
   // session label and fought its frames at 80ms — that pair is the flap.
   it.each(['omp', 'pi'] as const)('synthesizes no working title for %s', (agent) => {
@@ -143,8 +144,8 @@ describe('the owner relabel keeps the label and swaps only the brand', () => {
   // time (#16093); keeping the brand as π would lose the explicit owner identity that #6689,
   // #7633 and #9077 established. Swapping the brand in place satisfies both.
   it.each([
-    ['⠋ π - fixing the sidebar - orca', '⠋ OMP - fixing the sidebar - orca'],
-    ['π - fixing the sidebar - orca', 'OMP - fixing the sidebar - orca'],
+    ['⠋ π - fixing the sidebar - quirky', '⠋ OMP - fixing the sidebar - quirky'],
+    ['π - fixing the sidebar - quirky', 'OMP - fixing the sidebar - quirky'],
     ['π ! fixing the sidebar', 'OMP ! fixing the sidebar'],
     ['π > fixing the sidebar', 'OMP > fixing the sidebar']
   ])('rewrites %s to %s for an omp-owned pane', (title, expected) => {
@@ -154,8 +155,8 @@ describe('the owner relabel keeps the label and swaps only the brand', () => {
   // Why: the owner rewrite feeds status classification downstream, so a rewritten title must
   // classify exactly as its source did — that round-trip is why the old collapse existed.
   it.each([
-    '⠋ π - fixing the sidebar - orca',
-    'π - fixing the sidebar - orca',
+    '⠋ π - fixing the sidebar - quirky',
+    'π - fixing the sidebar - quirky',
     'π ! fixing the sidebar',
     'π > fixing the sidebar',
     '⠋ Pi',
@@ -196,15 +197,15 @@ describe('the state separator does not fire on ordinary titles', () => {
 
 describe('one real OMP turn', () => {
   // Why: the reported symptom was ~12 committed store patches per second on a working OMP tab.
-  // This drives a full turn of the frames Orca's injected extension actually emits and counts
+  // This drives a full turn of the frames Quirky's injected extension actually emits and counts
   // what survives the churn gate. Before the fix each frame alternated "⠋ Pi"/"⠋ OMP" and every
   // one of them committed.
   it('commits twice across 30 working frames plus the idle transition', () => {
     const frames = Array.from(
       { length: 30 },
-      (_, index) => `${FRAMES[index % FRAMES.length]} π - fixing the sidebar - orca`
+      (_, index) => `${FRAMES[index % FRAMES.length]} π - fixing the sidebar - quirky`
     )
-    frames.push('π - fixing the sidebar - orca')
+    frames.push('π - fixing the sidebar - quirky')
 
     const committed: string[] = []
     let previous: string | null = null
@@ -220,7 +221,10 @@ describe('one real OMP turn', () => {
       previous = normalized
     }
 
-    expect(committed).toEqual(['⠋ π - fixing the sidebar - orca', 'π - fixing the sidebar - orca'])
+    expect(committed).toEqual([
+      '⠋ π - fixing the sidebar - quirky',
+      'π - fixing the sidebar - quirky'
+    ])
   })
 })
 
@@ -240,8 +244,8 @@ describe('latent hazards the reviewers flagged', () => {
   // point only because getAgentLabel does not tokenize `omp`/`pi`; if that ever changes, a
   // rewritten title would collapse back to a bare label and lose the session text again.
   it.each([
-    '⠋ π - fixing the sidebar - orca',
-    'π - fixing the sidebar - orca',
+    '⠋ π - fixing the sidebar - quirky',
+    'π - fixing the sidebar - quirky',
     'π ! fixing the sidebar',
     'π ⠙ fixing the sidebar',
     'zsh | ⠙ π - a - b'

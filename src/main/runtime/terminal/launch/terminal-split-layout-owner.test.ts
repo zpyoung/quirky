@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
-import { makePaneKey } from '../../orca-runtime-test-mocks.spec'
+import { makePaneKey } from '../../quirky-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} from '../../orca-runtime-test-fixtures.spec'
-import { createMobileCreateTestNotifier } from '../../orca-runtime-test-scenario-builders.spec'
+} from '../../quirky-runtime-test-fixtures.spec'
+import { createMobileCreateTestNotifier } from '../../quirky-runtime-test-scenario-builders.spec'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
-import { ProvisioningRuntime } from '../../orca-runtime-layout-owner-start-fixture'
+import { ProvisioningRuntime } from '../../quirky-runtime-layout-owner-start-fixture'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const TAB_ID = 'host-tab'
 const NEW_LEAF_ID = '22222222-2222-4222-8222-222222222222'

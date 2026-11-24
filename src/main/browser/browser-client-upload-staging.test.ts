@@ -28,7 +28,7 @@ let stagingRoot = ''
 
 beforeEach(async () => {
   // Why: macOS reports /private/var for a /var mkdtemp path, so compare against the resolved root.
-  stagingRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'orca-upload-staging-')))
+  stagingRoot = await realpath(await mkdtemp(path.join(tmpdir(), 'quirky-upload-staging-')))
 })
 
 afterEach(async () => {

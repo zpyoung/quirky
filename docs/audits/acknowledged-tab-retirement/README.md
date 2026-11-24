@@ -1,13 +1,13 @@
 # Acknowledged terminal-tab retirement
 
-A host-requested whole-tab close can return `closed: true` while its row remains in `orca-data.json`. Once a repository's host topology revision is positive, the Store preserves host membership against a renderer save that merely omits a tab. The renderer acknowledges after its session flush; its graph removal can arrive later. The existing runtime fallback committed retirement only after that graph stopped owning the parent.
+A host-requested whole-tab close can return `closed: true` while its row remains in `quirky-data.json`. Once a repository's host topology revision is positive, the Store preserves host membership against a renderer save that merely omits a tab. The renderer acknowledges after its session flush; its graph removal can arrive later. The existing runtime fallback committed retirement only after that graph stopped owning the parent.
 
 This fixes that acknowledgement ordering path relevant to [#17344](https://github.com/stablyai/orca/issues/17344). It does not establish that every tab in that report followed this path or explain large RSS from the small persisted row alone.
 
 ## Run
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/acknowledged-tab-retirement/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/acknowledged-tab-retirement/reproduce.mjs
 ```
 
 The runner uses temporary Vite configurations and the repository's cross-platform process runner. It reverses only `fix.patch` in memory for the baseline; the checkout remains unchanged. Tests use temporary Store files and inert desktop/provider ports. No application window, shell, SSH connection, or external host is started.

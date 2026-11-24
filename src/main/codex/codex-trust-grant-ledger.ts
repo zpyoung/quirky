@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isDefinitiveAbsence } from '../../shared/definitive-filesystem-absence'
 import { dirname, join } from 'node:path'
-import { resolveOrcaManagedCodexHomePath } from './codex-home-paths'
+import { resolveQuirkyManagedCodexHomePath } from './codex-home-paths'
 import { normalizeCodexProjectPathForLookup } from './config-toml-trust'
 
 // Why: a grant session blocks launch prep, so it may not run on every pane
@@ -33,9 +33,9 @@ type CodexTrustGrantLedgerFile = {
   homes: Record<string, CodexTrustGrantLedgerHome>
 }
 
-// Why resolved, not created: a read for ~/.codex must not make Orca's own home; a write makes the folder.
+// Why resolved, not created: a read for ~/.codex must not make Quirky's own home; a write makes the folder.
 export function getCodexTrustGrantLedgerPath(): string {
-  return join(dirname(resolveOrcaManagedCodexHomePath()), 'trust-grant-ledger.json')
+  return join(dirname(resolveQuirkyManagedCodexHomePath()), 'trust-grant-ledger.json')
 }
 
 export function getCodexTrustGrantHomeKey(runtimeHomePath: string): string {

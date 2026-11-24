@@ -1,10 +1,10 @@
 /** Whether a connect's serving check ends it, or lets the update check run (and redeploy). */
 import type { HostServerUpdateOnConnect } from './managed-server-update-check'
 import {
-  MANAGED_ORCAD_FENCED_DETAIL,
-  MANAGED_ORCAD_NOT_ACTIVATED_DETAIL,
-  type OrcadManagedServing
-} from '../managed-server/lifecycle/orcad-managed-serving'
+  MANAGED_QUIRKYD_FENCED_DETAIL,
+  MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL,
+  type QuirkydManagedServing
+} from '../managed-server/lifecycle/quirkyd-managed-serving'
 import type { HostServerOnConnectResult } from './ssh-host-server-on-connect'
 
 type ManagedRoute = Extract<HostServerOnConnectResult, { route: 'managed' }>
@@ -16,9 +16,9 @@ type ManagedRoute = Extract<HostServerOnConnectResult, { route: 'managed' }>
  */
 export function unservedManagedResult(
   environmentId: string,
-  serving: OrcadManagedServing
+  serving: QuirkydManagedServing
 ): ManagedRoute | null {
-  if (serving.state !== 'unverifiable' || serving.detail === MANAGED_ORCAD_NOT_ACTIVATED_DETAIL) {
+  if (serving.state !== 'unverifiable' || serving.detail === MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL) {
     return null
   }
   // Still the managed route: a stopped server says nothing about the host's terminals.
@@ -26,14 +26,14 @@ export function unservedManagedResult(
     route: 'managed',
     environmentId,
     serving,
-    ...(serving.detail === MANAGED_ORCAD_FENCED_DETAIL ? { fenceHeld: true as const } : {})
+    ...(serving.detail === MANAGED_QUIRKYD_FENCED_DETAIL ? { fenceHeld: true as const } : {})
   }
 }
 
 /** Keeps the "not activated" note when the update did not bring a server back. */
 export function managedResultAfterUpdate(
   environmentId: string,
-  serving: OrcadManagedServing,
+  serving: QuirkydManagedServing,
   { note, reason, fenceBusy }: HostServerUpdateOnConnect
 ): ManagedRoute {
   return {

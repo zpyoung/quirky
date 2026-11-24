@@ -196,7 +196,7 @@ describe('project header host context', () => {
       rows: [header(local), header(ssh), header(paired)],
       hosts: unmerged,
       repoMap: new Map([local, ssh, paired].map((value) => [value.id, value])),
-      runtimeEnvironments: [{ id: 'home', orcadDeployment: { kind: 'ssh', sshTargetId: 'home' } }]
+      runtimeEnvironments: [{ id: 'home', quirkydDeployment: { kind: 'ssh', sshTargetId: 'home' } }]
     })
     expect(contexts.get(`repo:${ssh.id}`)).toEqual({
       hostId: 'runtime:home',
@@ -225,7 +225,9 @@ describe('project header host context', () => {
       rows: [header(local), header(ssh), header(paired)],
       hosts: annotated,
       repoMap: new Map([local, ssh, paired].map((value) => [value.id, value])),
-      runtimeEnvironments: [{ id: 'home', orcadDeployment: { kind: 'ssh', sshTargetId: 'home' } }],
+      runtimeEnvironments: [
+        { id: 'home', quirkydDeployment: { kind: 'ssh', sshTargetId: 'home' } }
+      ],
       sshConnectionStates: new Map([
         ['home', { managedServer: { kind: 'relay', reason: 'failed' } }]
       ])

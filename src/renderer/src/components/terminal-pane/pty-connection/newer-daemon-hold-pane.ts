@@ -6,7 +6,7 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 const CLEAR_HELD_SCREEN = '\x1b[0m\x1b[2J\x1b[3J\x1b[H'
 
 /**
- * Holds a restored local pane main refused to spawn because a newer Orca build's daemon may
+ * Holds a restored local pane main refused to spawn because a newer Quirky build's daemon may
  * still run its session: read-only, with its saved screen, until the hold releases it into
  * `reconnect`.
  */

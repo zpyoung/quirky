@@ -46,7 +46,7 @@ describe('repo clone path helpers', () => {
   )
 
   it('allows safe repository names that start with two dots', async () => {
-    const destination = await mkdtemp(join(tmpdir(), 'orca-clone-path-'))
+    const destination = await mkdtemp(join(tmpdir(), 'quirky-clone-path-'))
     try {
       expect(
         deriveValidatedClonePath({
@@ -65,25 +65,25 @@ describe('repo clone path helpers', () => {
     }
     expect(() =>
       deriveValidatedClonePath({
-        url: 'https://example.com/orca.git',
+        url: 'https://example.com/quirky.git',
         destination: 'C:\\Users\\me\\src'
       })
     ).toThrow('Clone destination must be an absolute path')
     expect(() =>
       deriveValidatedClonePath({
-        url: 'https://example.com/orca.git',
+        url: 'https://example.com/quirky.git',
         destination: '\\\\server\\share'
       })
     ).toThrow('Clone destination must be an absolute path')
     expect(() =>
       deriveValidatedClonePath({
-        url: 'https://example.com/orca.git',
+        url: 'https://example.com/quirky.git',
         destination: '//server/share'
       })
     ).toThrow('Clone destination must be an absolute path')
     expect(() =>
       deriveValidatedClonePath({
-        url: 'https://example.com/orca.git',
+        url: 'https://example.com/quirky.git',
         destination: '//wsl.localhost/Ubuntu/home/me'
       })
     ).toThrow('Clone destination must be an absolute path')

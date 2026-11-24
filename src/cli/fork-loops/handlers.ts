@@ -37,7 +37,7 @@ async function requireLoopsCapability(context: HandlerContext): Promise<void> {
   if (!status.result.capabilities?.includes(LOOPS_RUNTIME_CAPABILITY)) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'The running Orca runtime does not support loops. Update or restart Orca and try again.'
+      'The running Quirky runtime does not support loops. Update or restart Quirky and try again.'
     )
   }
 }

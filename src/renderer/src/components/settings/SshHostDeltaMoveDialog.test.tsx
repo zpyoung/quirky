@@ -4,11 +4,11 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
-  OrcadDeltaMovePreview,
-  OrcadDeltaMoveResult
-} from '../../../../shared/orcad-managed-runtime'
+  QuirkydDeltaMovePreview,
+  QuirkydDeltaMoveResult
+} from '../../../../shared/quirkyd-managed-runtime'
 import type { SshTarget } from '../../../../shared/ssh-types'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import { SshHostDeltaMoveDialog } from './SshHostDeltaMoveDialog'
 
 vi.mock('../ui/dialog', () => ({
@@ -31,7 +31,7 @@ afterEach(() => {
 
 const target: SshTarget = { id: 'ssh-1', label: 'Builder', host: 'b', port: 22, username: 'dev' }
 
-function preview(overrides: Partial<OrcadDeltaMovePreview> = {}): OrcadDeltaMovePreview {
+function preview(overrides: Partial<QuirkydDeltaMovePreview> = {}): QuirkydDeltaMovePreview {
   return {
     sshTargetId: 'ssh-1',
     environmentId: 'env-1',
@@ -45,7 +45,10 @@ function preview(overrides: Partial<OrcadDeltaMovePreview> = {}): OrcadDeltaMove
   }
 }
 
-function api(next: OrcadDeltaMovePreview, result: OrcadDeltaMoveResult): ManagedOrcadPreloadApi {
+function api(
+  next: QuirkydDeltaMovePreview,
+  result: QuirkydDeltaMoveResult
+): ManagedQuirkydPreloadApi {
   const unused = vi.fn(async () => {
     throw new Error('not used by the delta dialog')
   })
@@ -71,7 +74,7 @@ function api(next: OrcadDeltaMovePreview, result: OrcadDeltaMoveResult): Managed
 }
 
 async function render(
-  managed: ManagedOrcadPreloadApi,
+  managed: ManagedQuirkydPreloadApi,
   onFinished = vi.fn()
 ): Promise<HTMLDivElement> {
   const container = document.createElement('div')
@@ -114,18 +117,18 @@ describe('moving what an older build added', () => {
   it('shows a refusal plainly and keeps the dialog open', async () => {
     const managed = api(preview(), {
       outcome: 'refused',
-      code: 'orcad_delta_refused_by_server',
-      reason: 'orcad_migration_repository_id_conflict:repo-2'
+      code: 'quirkyd_delta_refused_by_server',
+      reason: 'quirkyd_migration_repository_id_conflict:repo-2'
     })
     const container = await render(managed)
     await act(async () => confirmButton(container).click())
-    expect(container.textContent).toContain('Orca couldn’t finish this on the server.')
-    expect(container.textContent).not.toContain('orcad_')
+    expect(container.textContent).toContain('Quirky couldn’t finish this on the server.')
+    expect(container.textContent).not.toContain('quirkyd_')
   })
 
   it('keeps a running move when the caller passes a fresh target object', async () => {
     const managed = api(preview(), { outcome: 'moved', migrationId: 'm-2' })
-    managed.moveDelta = vi.fn(() => new Promise<OrcadDeltaMoveResult>(() => {}))
+    managed.moveDelta = vi.fn(() => new Promise<QuirkydDeltaMoveResult>(() => {}))
     const container = document.createElement('div')
     document.body.append(container)
     const root = createRoot(container)

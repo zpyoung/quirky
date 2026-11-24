@@ -1,7 +1,7 @@
 import type { BrowserTabSwitchResult } from '../../shared/runtime-types'
 import { BrowserError } from './cdp-bridge'
 import { AgentBrowserBridgeShutdown } from './agent-browser-bridge-shutdown'
-import { ORCA_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
+import { QUIRKY_TAB_SESSION_PREFIX } from './agent-browser-orphan-sweep'
 import type {
   EnqueueTargetedCommandOptions,
   ResolvedBrowserCommandTarget
@@ -75,7 +75,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
       browserPageId,
       options.requireScopedTarget
     )
-    const sessionName = `${ORCA_TAB_SESSION_PREFIX}${pageId}`
+    const sessionName = `${QUIRKY_TAB_SESSION_PREFIX}${pageId}`
 
     return new Promise<T>((resolve, reject) => {
       let queue = this.commandQueues.get(sessionName)
@@ -117,7 +117,7 @@ export abstract class AgentBrowserBridgeQueue extends AgentBrowserBridgeShutdown
     options: EnqueueTargetedCommandOptions
   ): Promise<T> {
     this.assertCommandAdmission()
-    const sessionName = `${ORCA_TAB_SESSION_PREFIX}${browserPageId}`
+    const sessionName = `${QUIRKY_TAB_SESSION_PREFIX}${browserPageId}`
     // Why: the page's guest can change while queued; bind to the one current at execution.
     const target = this.resolveCommandTarget(worktreeId, browserPageId)
     if (options.ensureSession !== false) {

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/tmp/orca-session-info-tab-test' },
+  app: { getPath: () => '/tmp/quirky-session-info-tab-test' },
   safeStorage: {
     isEncryptionAvailable: () => false,
     encryptString: (plaintext: string) => Buffer.from(plaintext, 'utf-8'),

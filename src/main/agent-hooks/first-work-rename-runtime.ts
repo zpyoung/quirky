@@ -8,7 +8,7 @@ import { moveWorktree } from '../git/worktree'
 import { isWslMoveFolderWorkspaceBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import type { Store } from '../persistence'
 import type { RuntimeStore } from '../runtime/runtime-store-contract'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { resolveWorktreeMetaOwner } from '../persistence/host-qualified-worktree-meta'
 
 const ENABLE_FIRST_WORK_FOLDER_RENAME = false
@@ -26,7 +26,7 @@ export function firstWorkRenameDeps(
   > &
     Partial<Pick<Store, 'migrateWorktreeIdentity' | 'getWorktreeIdForTab'>>,
   runtime: Pick<
-    OrcaRuntimeService,
+    QuirkyRuntimeService,
     | 'getCommitMessageAgentEnvironmentResolvers'
     | 'notifyFolderWorkspaceChanged'
     | 'notifyBranchRenamed'
@@ -62,10 +62,10 @@ export function firstWorkRenameDeps(
             true
         : store.getWorktreeMeta(worktreeId)?.pendingFirstAgentMessageRename === true
     },
-    canRenameOrcaCreatedBranch: (worktreeId) => {
+    canRenameQuirkyCreatedBranch: (worktreeId) => {
       const meta = store.getWorktreeMeta(worktreeId)
-      // Why: a user branch could coincidentally match a creature name; only Orca-stamped worktrees are safe to auto-rename.
-      return !!meta?.orcaCreationSource && meta.preserveBranchOnDelete !== true
+      // Why: a user branch could coincidentally match a creature name; only Quirky-stamped worktrees are safe to auto-rename.
+      return !!meta?.quirkyCreationSource && meta.preserveBranchOnDelete !== true
     },
     setDisplayName: (worktreeId, displayName) => {
       rememberBranchRenameFailureOutput(worktreeId, null)

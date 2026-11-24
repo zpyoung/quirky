@@ -1,7 +1,7 @@
-import type { OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs as MergePreservedHeadlessMobileSessionTabsMethods } from './mobile-session-preservation'
-import type { OrcaRuntimeWithStoredMobileSnapshotHasStalePreservedTab as StoredMobileSnapshotHasStalePreservedTabMethods } from './mobile-session-publication-preservation'
+import type { QuirkyRuntimeWithMergePreservedHeadlessMobileSessionTabs as MergePreservedHeadlessMobileSessionTabsMethods } from './mobile-session-preservation'
+import type { QuirkyRuntimeWithStoredMobileSnapshotHasStalePreservedTab as StoredMobileSnapshotHasStalePreservedTabMethods } from './mobile-session-publication-preservation'
 /* eslint-disable unicorn/no-useless-spread */
-import { OrcaRuntimeWithWriteOrchestrationPointerPty } from '../orchestration/terminal-authority/write-orchestration-pointer-pty'
+import { QuirkyRuntimeWithWriteOrchestrationPointerPty } from '../orchestration/terminal-authority/write-orchestration-pointer-pty'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { getMobileSessionSnapshotTabIdentityKeys } from '../mobile-session-tab-merge'
@@ -10,7 +10,7 @@ import {
   mergeRendererTerminalDockAcrossSnapshot
 } from '../fork-terminal-dock/terminal-dock-session-tab-props'
 
-export abstract class OrcaRuntimeWithSyncMobileSessionTabs extends OrcaRuntimeWithWriteOrchestrationPointerPty {
+export abstract class QuirkyRuntimeWithSyncMobileSessionTabs extends QuirkyRuntimeWithWriteOrchestrationPointerPty {
   protected abstract buildPreservedHeadlessMobileSessionSnapshot(
     ...args: Parameters<
       MergePreservedHeadlessMobileSessionTabsMethods['buildPreservedHeadlessMobileSessionSnapshot']

@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { getElectronPlatformPath } from './electron-platform-path.mjs'
 
 const roots: string[] = []
@@ -13,7 +13,7 @@ afterEach(async () => {
 })
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-reclaim-electron-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-reclaim-electron-'))
   roots.push(root)
   const result = await runProcess({
     program: 'git',
@@ -31,7 +31,7 @@ async function fixture() {
   await writeFile(executable, 'fake electron executable\n')
   const run = (apply = false, flags: string[] = []) =>
     runProcess({
-      program: process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.execPath,
+      program: process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.execPath,
       args: [
         resolve(import.meta.dirname, 'reclaim-electron-dists.mjs'),
         '--repo',
@@ -40,7 +40,7 @@ async function fixture() {
         ...flags
       ],
       cwd: root,
-      env: { ...process.env, CI: '', ORCA_BACKGROUND_LAUNCH: '1' },
+      env: { ...process.env, CI: '', QUIRKY_BACKGROUND_LAUNCH: '1' },
       timeoutMs: 20_000,
       terminationBarrier: true
     })
@@ -60,7 +60,7 @@ it.skipIf(process.platform === 'win32')(
         expect(result.stdout).toContain('0 worktree(s)')
         expect(result.stdout).toContain('skipped 1')
         expect(await readFile(executable, 'utf8')).toBe('fake electron executable\n')
-        await expect(readFile(join(pkg, '.orca-shared-dist'))).rejects.toMatchObject({
+        await expect(readFile(join(pkg, '.quirky-shared-dist'))).rejects.toMatchObject({
           code: 'ENOENT'
         })
       }
@@ -79,7 +79,7 @@ it('shares a writable install and preserves its executable bytes', async () => {
   expect(applied.code, applied.stderr).toBe(0)
   expect(applied.stdout).toContain('Shared 1 worktree(s)')
   expect(await readFile(executable, 'utf8')).toBe('fake electron executable\n')
-  expect(await readFile(join(pkg, '.orca-shared-dist'), 'utf8')).toBe(
+  expect(await readFile(join(pkg, '.quirky-shared-dist'), 'utf8')).toBe(
     `99.1.0-${process.platform}-${process.arch}`
   )
   const repeated = await run()
@@ -96,7 +96,7 @@ it('protects the launching worktree, including when selected through a filesyste
       expect(result.code, result.stderr).toBe(0)
       expect(result.stdout).toContain('0 worktree(s)')
       expect(await readFile(executable, 'utf8')).toBe('fake electron executable\n')
-      await expect(readFile(join(pkg, '.orca-shared-dist'))).rejects.toMatchObject({
+      await expect(readFile(join(pkg, '.quirky-shared-dist'))).rejects.toMatchObject({
         code: 'ENOENT'
       })
     }
@@ -110,6 +110,8 @@ it.each([['--exclude-worktree'], ['--exclude-worktree', '--apply']])(
     const result = await run(true, flags)
     expect(result.code).not.toBe(0)
     expect(result.stderr).toContain('--exclude-worktree requires a directory')
-    await expect(readFile(join(pkg, '.orca-shared-dist'))).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(join(pkg, '.quirky-shared-dist'))).rejects.toMatchObject({
+      code: 'ENOENT'
+    })
   }
 )

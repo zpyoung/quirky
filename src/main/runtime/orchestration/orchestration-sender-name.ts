@@ -1,4 +1,4 @@
-// What a chat shows a message's sender as: the name Orca shows for that agent (its chat tab, or its
+// What a chat shows a message's sender as: the name Quirky shows for that agent (its chat tab, or its
 // sidebar agent row), else the task it was dispatched, else its agent's generic label.
 
 import type { AgentMessageSender } from '../../../shared/agent-session-message-source'
@@ -46,7 +46,7 @@ export function orchestrationSenderName(
   const federated = party.address.startsWith('dispatch:')
   const terminal =
     !federated && party.terminalHandle ? sources.terminal(party.terminalHandle) : null
-  const chat = party.orcaSessionId ? chatNaming(party.orcaSessionId, sources) : null
+  const chat = party.quirkySessionId ? chatNaming(party.quirkySessionId, sources) : null
   const terminalName = terminal?.tab
     ? getAgentRowConversationName(
         terminal.tab,

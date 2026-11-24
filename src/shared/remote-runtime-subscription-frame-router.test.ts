@@ -40,7 +40,7 @@ describe('RemoteRuntimeSubscriptionFrameRouter authentication frames', () => {
     expect(fail).toHaveBeenCalledOnce()
     expect(fail.mock.calls[0][0]).toMatchObject({
       code: 'invalid_runtime_response',
-      message: 'Remote Orca runtime returned an invalid E2EE auth frame.'
+      message: 'Remote Quirky runtime returned an invalid E2EE auth frame.'
     })
   })
 
@@ -56,7 +56,7 @@ describe('RemoteRuntimeSubscriptionFrameRouter authentication frames', () => {
     expect(fail).toHaveBeenCalledOnce()
     expect(fail.mock.calls[0][0]).toMatchObject({
       code: 'unauthorized',
-      message: 'Remote Orca runtime rejected the pairing token.'
+      message: 'Remote Quirky runtime rejected the pairing token.'
     })
   })
 })

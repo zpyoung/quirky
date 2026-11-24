@@ -19,13 +19,13 @@ import type {
   AgentJournalRenderItem,
   AgentJournalSubmission
 } from '../../../../shared/agent-session-journal-types'
-import { latestNativeChatOrcaStopCut } from '../../../../shared/native-chat-orca-stop-cut'
+import { latestNativeChatQuirkyStopCut } from '../../../../shared/native-chat-quirky-stop-cut'
 import {
   latestNativeChatUsageLimitCut,
   NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE
 } from '../../../../shared/native-chat-usage-limit-cut'
 import { AGENT_SESSION_CONTINUE_INTERRUPTED_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-continue-interrupted-capability'
-import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
+import type { NativeChatQuirkyStopView } from './native-chat-quirky-stop-context'
 import { useStructuredAgentSessionHostLabel } from './use-structured-agent-session-host-label'
 import { useNativeChatRestartResuming } from '../native-chat-resume-on-restart-store'
 import { useNativeChatLaunchResumePending } from '../native-chat-launch-resume-decision'
@@ -37,14 +37,14 @@ type ContinueAnswer = { outcome?: string }
 export type NativeChatInterruptedContinuation = {
   /** Told to the chat's rows: the machine's name, whether it is remote, if it can continue, and the
    *  cut row that carries Continue. */
-  view: NativeChatOrcaStopView
+  view: NativeChatQuirkyStopView
   /** A Continue that did not go through, for the composer's notice card: shown while the chat
    *  still sits on that cut and gone once it is continued from anywhere. */
   continueError: (NativeChatComposerNoticeContent & { onDismiss: () => void }) | null
 }
 
 /**
- * Continue, while the chat's latest turn is a reply an Orca stop cut off and nothing was sent since.
+ * Continue, while the chat's latest turn is a reply an Quirky stop cut off and nothing was sent since.
  * Offered only by a host that has the operation; an older host writes no row naming the stop, so it
  * never has a cut to offer it on, and the user continues by sending a message.
  */
@@ -83,7 +83,7 @@ export function useNativeChatInterruptedContinuation(input: {
   const launchPending = useNativeChatLaunchResumePending() && target.kind === 'local'
   const resuming = useNativeChatRestartResuming().includes(sessionId) || launchPending
   const cut = useMemo(
-    () => latestNativeChatOrcaStopCut(input.journalItems, input.submissions),
+    () => latestNativeChatQuirkyStopCut(input.journalItems, input.submissions),
     [input.journalItems, input.submissions]
   )
   // Any host: Continue past a usage limit is the person's own message, which every host takes.
@@ -225,7 +225,7 @@ export function useNativeChatInterruptedContinuation(input: {
   }
 }
 
-/** Continue, on the row that says Orca stopped this reply: the one action that picks it back up. */
+/** Continue, on the row that says Quirky stopped this reply: the one action that picks it back up. */
 export function NativeChatInterruptedContinueButton({
   onContinue,
   disabled,
@@ -233,7 +233,7 @@ export function NativeChatInterruptedContinueButton({
 }: {
   onContinue: (hadFocus?: boolean) => void
   disabled?: boolean
-  /** What Continue does here, when it is not picking up a reply Orca's stop cut off. */
+  /** What Continue does here, when it is not picking up a reply Quirky's stop cut off. */
   explanation?: string
 }): React.JSX.Element {
   const explanationId = useId()

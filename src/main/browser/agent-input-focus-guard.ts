@@ -20,7 +20,7 @@ const PANE_READY_TIMEOUT_MS = 150
 export function focusGuardUnavailableError(): BrowserError {
   return new BrowserError(
     'browser_focus_guard_unavailable',
-    "Orca could not protect the user's keyboard focus for this page, so the input was not sent. Retry, or show the page first."
+    "Quirky could not protect the user's keyboard focus for this page, so the input was not sent. Retry, or show the page first."
   )
 }
 
@@ -29,7 +29,7 @@ export function focusGuardUnavailableError(): BrowserError {
 function userComposingError(): BrowserError {
   return new BrowserError(
     'browser_user_composing',
-    'The user is typing with an input method in Orca, so the input was not sent to keep their unfinished text. Retry in a moment.'
+    'The user is typing with an input method in Quirky, so the input was not sent to keep their unfinished text. Retry in a moment.'
   )
 }
 
@@ -97,7 +97,7 @@ export function isFocusRoutedCdpInput(method: string): boolean {
   return method === 'Input.imeSetComposition'
 }
 
-/** Makes the page treat itself as focused while Orca's window keeps the user's real focus. */
+/** Makes the page treat itself as focused while Quirky's window keeps the user's real focus. */
 export function enablePageFocusEmulation(
   send: (method: string, params: Record<string, unknown>) => Promise<unknown>
 ): Promise<void> {

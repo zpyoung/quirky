@@ -1,8 +1,8 @@
 /**
- * The desktop browser bridge: a managed SSH host's orcad forwards browser commands from the host's
- * own `orca` CLI to a desktop that opted in with "Allow this host's orca CLI to control Orca".
+ * The desktop browser bridge: a managed SSH host's quirkyd forwards browser commands from the host's
+ * own `quirky` CLI to a desktop that opted in with "Allow this host's quirky CLI to control Quirky".
  *
- * Both sides gate on DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY: orcad advertises it in status, and
+ * Both sides gate on DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY: quirkyd advertises it in status, and
  * the desktop declares it on the socket it attaches with. A peer without it never attaches, so the
  * CLI gets DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_CODE instead of a silent hang.
  */
@@ -10,7 +10,7 @@ import { z } from 'zod'
 
 export const DESKTOP_BROWSER_BRIDGE_RUNTIME_CAPABILITY = 'browser.desktopBridge.v1'
 /**
- * Declared by a desktop that understands a `cancel` event. orcad never sends one to a desktop
+ * Declared by a desktop that understands a `cancel` event. quirkyd never sends one to a desktop
  * without it: an older desktop drops its whole attachment on an event type it cannot parse.
  */
 export const DESKTOP_BROWSER_BRIDGE_CANCEL_CAPABILITY = 'browser.desktopBridge.cancel.v1'
@@ -20,9 +20,9 @@ export const DESKTOP_BROWSER_BRIDGE_NOT_FORWARDED_CODE = 'desktop_browser_bridge
 export const DESKTOP_BROWSER_BRIDGE_SCOPE_CODE = 'desktop_browser_bridge_out_of_scope'
 export const DESKTOP_BROWSER_BRIDGE_UNROUTED_CODE = 'desktop_browser_bridge_unrouted'
 
-export const DESKTOP_BROWSER_BRIDGE_SETTING_LABEL = "Allow this host's orca CLI to control Orca"
+export const DESKTOP_BROWSER_BRIDGE_SETTING_LABEL = "Allow this host's quirky CLI to control Quirky"
 
-export const DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE = `No Orca desktop is sharing its browser with this host. On your desktop, open this host's SSH settings, turn on "${DESKTOP_BROWSER_BRIDGE_SETTING_LABEL}", and keep the host connected. The desktop needs an Orca version that supports it.`
+export const DESKTOP_BROWSER_BRIDGE_UNAVAILABLE_MESSAGE = `No Quirky desktop is sharing its browser with this host. On your desktop, open this host's SSH settings, turn on "${DESKTOP_BROWSER_BRIDGE_SETTING_LABEL}", and keep the host connected. The desktop needs an Quirky version that supports it.`
 
 /**
  * The only commands a host may run on the desktop browser. Narrower than the relay bridge before
@@ -104,14 +104,14 @@ export const DesktopBrowserBridgeRequest = z.object({
   type: z.literal('request'),
   requestId: Identity,
   method: z.string().refine(isDesktopBrowserBridgeMethod, 'method is not forwarded'),
-  /** How long orcad waits for this answer; the desktop never starts the command after it. */
+  /** How long quirkyd waits for this answer; the desktop never starts the command after it. */
   timeoutMs: z
     .number()
     .int()
     .positive()
     .max(60 * 60_000)
     .optional(),
-  /** The workspace orcad resolved the caller's selector to; absent when it named none. */
+  /** The workspace quirkyd resolved the caller's selector to; absent when it named none. */
   // Why longer than an identity: a worktree id embeds the repository's absolute path.
   workspaceId: z.string().min(1).max(MAX_WORKSPACE_ID_LENGTH).optional(),
   params: z
@@ -126,7 +126,7 @@ export type DesktopBrowserBridgeRequest = z.infer<typeof DesktopBrowserBridgeReq
 export const DesktopBrowserBridgeEvent = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready'), attachmentId: Identity }),
   DesktopBrowserBridgeRequest,
-  /** orcad stopped waiting for this request; the desktop must not start or continue it. */
+  /** quirkyd stopped waiting for this request; the desktop must not start or continue it. */
   z.object({ type: z.literal('cancel'), requestId: Identity })
 ])
 export type DesktopBrowserBridgeEvent = z.infer<typeof DesktopBrowserBridgeEvent>

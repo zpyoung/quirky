@@ -1,7 +1,7 @@
 # Accumulated-workspace typing benchmark
 
 Use this opt-in Electron benchmark to reproduce typing contention from background
-terminal activity. The launcher sets `ORCA_BACKGROUND_LAUNCH=1`; tests never need to
+terminal activity. The launcher sets `QUIRKY_BACKGROUND_LAUNCH=1`; tests never need to
 reveal or activate the app window.
 
 ## Notification-transition reproduction
@@ -58,10 +58,10 @@ the command above uses neither.
 
 `terminal-typing-measurement-control.spec.ts` injects known renderer stalls and
 requires the harness to detect input and scheduled-dispatch backlog. Run it with
-`ORCA_BACKGROUND_LAUNCH=1` in the environment:
+`QUIRKY_BACKGROUND_LAUNCH=1` in the environment:
 
 ```sh
-ORCA_TYPING_BENCH=1 ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test tests/e2e/terminal-typing-measurement-control.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1
+QUIRKY_TYPING_BENCH=1 QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec playwright test tests/e2e/terminal-typing-measurement-control.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1
 pnpm test tests/e2e/paced-terminal-typing.unit.test.ts tests/e2e/accumulated-workspace-state-builder.unit.test.ts tests/e2e/sustained-agent-typing-load-scripts.unit.test.ts
 ```
 

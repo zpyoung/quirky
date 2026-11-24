@@ -1,9 +1,9 @@
-import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
+import type { QuirkyRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { resolveAdvertisedPairingEndpoint } from '../runtime/pairing-endpoint'
 import { assertServeProjectRoot, renderServePairingQr } from './serve-pairing-output'
 import type { ServeReadiness, ServeReadinessOutput } from './serve-readiness'
 
-/** Endpoint and pairing-offer fields shared by the Electron serve host and orcad. */
+/** Endpoint and pairing-offer fields shared by the Electron serve host and quirkyd. */
 export async function buildServePairingReadiness(
   options: {
     pairingAddress?: string | null
@@ -11,7 +11,7 @@ export async function buildServePairingReadiness(
     mobilePairing?: boolean
     grantDesktopControl?: boolean
   },
-  rpc: Pick<OrcaRuntimeRpcServer, 'getWebSocketEndpoint' | 'createPairingOffer'>
+  rpc: Pick<QuirkyRuntimeRpcServer, 'getWebSocketEndpoint' | 'createPairingOffer'>
 ): Promise<Pick<ServeReadiness, 'boundEndpoint' | 'advertisedEndpoint' | 'pairing'>> {
   const boundEndpoint = rpc.getWebSocketEndpoint()
   const advertised = boundEndpoint

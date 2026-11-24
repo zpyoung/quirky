@@ -918,7 +918,7 @@
       "worktreeFixed": "7f6d7103700246656dba9de0f0c8353d797eb2ba54d0a23529cdb99634c469e1",
       "mainFixed": "7f6d7103700246656dba9de0f0c8353d797eb2ba54d0a23529cdb99634c469e1"
     },
-    "src/renderer/src/lib/orca-hook-trust.ts": {
+    "src/renderer/src/lib/quirky-hook-trust.ts": {
       "worktreeBefore": "9e1c3a360084d848267cb65ec08e700d238665d50b82e0539a5ebdc092c5e9b4",
       "mainBefore": "9e1c3a360084d848267cb65ec08e700d238665d50b82e0539a5ebdc092c5e9b4",
       "worktreeFixed": "9e1c3a360084d848267cb65ec08e700d238665d50b82e0539a5ebdc092c5e9b4",
@@ -3294,13 +3294,13 @@
       "worktreeFixed": "c9fffba3c20ab34a9d0d77f0837e215acd38046dba139b4b1d0cf13c6f3da1f6",
       "mainFixed": "c9fffba3c20ab34a9d0d77f0837e215acd38046dba139b4b1d0cf13c6f3da1f6"
     },
-    "src/renderer/src/store/slices/orca-profiles-auth-actions.ts": {
+    "src/renderer/src/store/slices/quirky-profiles-auth-actions.ts": {
       "worktreeBefore": "862cfb11f333967900a48531c14808c7042e61623c0ed67563d3a3429d6fb364",
       "mainBefore": "862cfb11f333967900a48531c14808c7042e61623c0ed67563d3a3429d6fb364",
       "worktreeFixed": "862cfb11f333967900a48531c14808c7042e61623c0ed67563d3a3429d6fb364",
       "mainFixed": "862cfb11f333967900a48531c14808c7042e61623c0ed67563d3a3429d6fb364"
     },
-    "src/renderer/src/store/slices/orca-profiles.ts": {
+    "src/renderer/src/store/slices/quirky-profiles.ts": {
       "worktreeBefore": "bcc12299354e9ae69279de060f7af03d3e1182d5cd0de257576f71649f538d12",
       "mainBefore": "bcc12299354e9ae69279de060f7af03d3e1182d5cd0de257576f71649f538d12",
       "worktreeFixed": "bcc12299354e9ae69279de060f7af03d3e1182d5cd0de257576f71649f538d12",
@@ -5298,13 +5298,13 @@
       "worktreeFixed": "2af51932ca77ae4d4b6edcc1d25ab181b3fdf392056f75c9defb6a14a93cc5ec",
       "mainFixed": "2af51932ca77ae4d4b6edcc1d25ab181b3fdf392056f75c9defb6a14a93cc5ec"
     },
-    "src/shared/orca-cli-command-name.ts": {
+    "src/shared/quirky-cli-command-name.ts": {
       "worktreeBefore": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
       "mainBefore": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
       "worktreeFixed": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0",
       "mainFixed": "c90b037ec7a6143770a40dd907bf9d053fb2cede21128b60b78a78671c0780c0"
     },
-    "src/shared/orca-dispatch-status-prompt.ts": {
+    "src/shared/quirky-dispatch-status-prompt.ts": {
       "worktreeBefore": "fd9fedb3c839cd9d17b545329937c8fb6b9fa081120eb4678a9fb66f4252629e",
       "mainBefore": "fd9fedb3c839cd9d17b545329937c8fb6b9fa081120eb4678a9fb66f4252629e",
       "worktreeFixed": "fd9fedb3c839cd9d17b545329937c8fb6b9fa081120eb4678a9fb66f4252629e",

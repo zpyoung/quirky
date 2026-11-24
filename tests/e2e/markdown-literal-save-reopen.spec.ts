@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { switchToWorktree, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   cleanupMarkdownFixture,
@@ -23,28 +23,28 @@ const TYPED = '[typed](./target.md)'
 
 for (const workspace of ['git', 'folder', 'paired remote'] as const) {
   test(`preserves literal Markdown and formatted links when saving in ${workspace}`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
     test.setTimeout(180_000)
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
     if (workspace === 'folder') {
-      const folder = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-markdown-folder-')))
+      const folder = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-markdown-folder-')))
       registerPostElectronShutdownCleanup(async () =>
         rmSync(folder, { recursive: true, force: true })
       )
-      await orcaPage.evaluate(async (folderPath) => {
+      await quirkyPage.evaluate(async (folderPath) => {
         const repo = await window.__store!.getState().addNonGitFolder(folderPath)
         if (!repo) {
           throw new Error('Could not add folder workspace')
         }
       }, folder)
       await expect
-        .poll(async () => (await getActiveWorktreeContext(orcaPage)).rootPath)
+        .poll(async () => (await getActiveWorktreeContext(quirkyPage)).rootPath)
         .toBe(folder)
     }
-    const context = await getActiveWorktreeContext(orcaPage)
+    const context = await getActiveWorktreeContext(quirkyPage)
     const filePath = await createMarkdownFixture(
       context,
       'markdown-compatibility',
@@ -56,7 +56,7 @@ for (const workspace of ['git', 'folder', 'paired remote'] as const) {
     try {
       if (workspace === 'paired remote') {
         client = await launchPairedElectronClient(
-          await createRuntimeDesktopPairingOffer(orcaPage),
+          await createRuntimeDesktopPairingOffer(quirkyPage),
           testInfo,
           'Markdown save compatibility'
         )
@@ -68,7 +68,7 @@ for (const workspace of ['git', 'folder', 'paired remote'] as const) {
           { worktreeId: context.worktreeId, environmentId: client.environmentId }
         )
       }
-      const page = client?.page ?? orcaPage
+      const page = client?.page ?? quirkyPage
       await openMarkdownFixture(page, context, filePath)
       if (client) {
         expect(

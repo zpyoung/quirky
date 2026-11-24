@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushActiveProfileBeforeFileMutation } from '../../orca-profiles/profile-persistence-deadline'
+import { flushActiveProfileBeforeFileMutation } from '../../quirky-profiles/profile-persistence-deadline'
 import { openProfileStateDatabaseReadOnly } from '../profile-state/profile-state-database'
 import { readProfileStateSnapshot } from '../profile-state/profile-state-documents'
 import { profileStateDatabaseBackups } from '../profile-state/profile-state-backup-path'
@@ -14,7 +14,7 @@ import { scheduleSave } from './write-scheduling'
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -56,9 +56,9 @@ afterEach(async () => {
 })
 
 async function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-store-backup-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-store-backup-'))
   const databasePath = join(directory, 'profile-state.db')
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const legacyBytes = '{"settings":{"theme":"system"},"legacy":"retained"}'
   writeFileSync(dataFile, legacyBytes)
   const beginning = Date.now()

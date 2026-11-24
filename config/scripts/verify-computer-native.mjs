@@ -45,7 +45,7 @@ const checks = [
       '-c',
       [
         'import importlib.util',
-        'spec=importlib.util.spec_from_file_location("orca_linux","native/computer-use-linux/runtime.py")',
+        'spec=importlib.util.spec_from_file_location("quirky_linux","native/computer-use-linux/runtime.py")',
         'module=importlib.util.module_from_spec(spec)',
         'spec.loader.exec_module(module)',
         'print("import-ok")'
@@ -148,7 +148,7 @@ function verifyMacOSHelperApp() {
     'computer-use-macos',
     '.build',
     'release',
-    'Orca Computer Use.app'
+    'Quirky Computer Use.app'
   )
   if (!existsSync(appPath)) {
     console.error(
@@ -160,7 +160,7 @@ function verifyMacOSHelperApp() {
 }
 
 function verifyWindowsProviderHandshake() {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-computer-use-verify-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-computer-use-verify-'))
   const operationPath = join(dir, 'operation.json')
   try {
     writeFileSync(operationPath, JSON.stringify({ tool: 'handshake' }), { mode: 0o600 })
@@ -199,7 +199,7 @@ function verifyWindowsProviderHandshake() {
 function verifyNativeArgumentGuardrails() {
   const linux = readFileSync(join(repoRoot, 'native/computer-use-linux/runtime.py'), 'utf8')
   const macos = readFileSync(
-    join(repoRoot, 'native/computer-use-macos/Sources/OrcaComputerUseMacOS/main.swift'),
+    join(repoRoot, 'native/computer-use-macos/Sources/QuirkyComputerUseMacOS/main.swift'),
     'utf8'
   )
   const windows = readFileSync(join(repoRoot, 'native/computer-use-windows/runtime.ps1'), 'utf8')
@@ -381,18 +381,20 @@ function verifyNativeArgumentGuardrails() {
     failures.push('Windows keyboard focus checks must verify focus after --restore-window')
   }
   if (
-    !windows.includes('function Test-OrcaSensitiveElement') ||
+    !windows.includes('function Test-QuirkySensitiveElement') ||
     !windows.includes('"verification code"') ||
-    !windows.includes('if (Test-OrcaSensitiveElement $Element) { return "[redacted]" }')
+    !windows.includes('if (Test-QuirkySensitiveElement $Element) { return "[redacted]" }')
   ) {
     failures.push(
       'Windows secure fields must redact labeled verification-code/password-style values'
     )
   }
   if (
-    !windows.includes('function Get-OrcaRequiredString($Value, [string]$Name)') ||
-    !windows.includes('Send-OrcaText $handle (Get-OrcaRequiredString $Operation.text "text")') ||
-    !windows.includes('Send-OrcaKey $handle (Get-OrcaRequiredString $Operation.key "key")')
+    !windows.includes('function Get-QuirkyRequiredString($Value, [string]$Name)') ||
+    !windows.includes(
+      'Send-QuirkyText $handle (Get-QuirkyRequiredString $Operation.text "text")'
+    ) ||
+    !windows.includes('Send-QuirkyKey $handle (Get-QuirkyRequiredString $Operation.key "key")')
   ) {
     failures.push(
       'Windows text/key actions must reject missing payloads instead of sending empty input'
@@ -404,21 +406,23 @@ function verifyNativeArgumentGuardrails() {
     )
   }
   if (
-    !windows.includes('Render-OrcaTree $root $windowFrame (Test-OrcaBrowserProcess $process)') ||
+    !windows.includes(
+      'Render-QuirkyTree $root $windowFrame (Test-QuirkyBrowserProcess $process)'
+    ) ||
     !windows.includes('inactive browser tabs omitted')
   ) {
     failures.push('Windows browser snapshots must compact large inactive browser tab strips')
   }
   if (
     !windows.includes('[bool]$record.isSelected') ||
-    !windows.includes('(Format-OrcaSnapshotText $record.value) -eq "1"')
+    !windows.includes('(Format-QuirkySnapshotText $record.value) -eq "1"')
   ) {
     failures.push('Windows browser tab compaction must preserve selected-tab fallbacks')
   }
   if (!windows.includes('restoreWindow was requested but the target window is still not focused')) {
     failures.push('Windows keyboard focus failures after restore must explain the recovery state')
   }
-  const windowFrameFunction = powerShellFunctionBody(windows, 'Get-OrcaWindowFrame')
+  const windowFrameFunction = powerShellFunctionBody(windows, 'Get-QuirkyWindowFrame')
   if (!windowFrameFunction?.includes('$null')) {
     failures.push('Windows window-frame fallback must return null when bounds are unavailable')
   }
@@ -427,7 +431,7 @@ function verifyNativeArgumentGuardrails() {
   }
   const renderedElementIndexFunction = powerShellFunctionBody(
     windows,
-    'Get-OrcaRenderedElementIndex'
+    'Get-QuirkyRenderedElementIndex'
   )
   if (!renderedElementIndexFunction?.includes('$null')) {
     failures.push('Windows rendered element index parsing must return null for non-index lines')
@@ -437,12 +441,12 @@ function verifyNativeArgumentGuardrails() {
       'Windows rendered element index parsing must not return screenshot failure objects'
     )
   }
-  if (windows.includes('New-OrcaScreenshotPayload $bestBytes $bestWidth $bestHeight')) {
+  if (windows.includes('New-QuirkyScreenshotPayload $bestBytes $bestWidth $bestHeight')) {
     failures.push('Windows screenshot payloads must not return oversized best-effort PNGs')
   }
   const boundedScreenshotFunction = powerShellFunctionBody(
     windows,
-    'Get-OrcaBoundedScreenshotPayload'
+    'Get-QuirkyBoundedScreenshotPayload'
   )
   if (!boundedScreenshotFunction?.includes('error = [pscustomobject]')) {
     failures.push('Windows screenshot cap failures must return a structured error object')
@@ -463,15 +467,17 @@ function verifyNativeArgumentGuardrails() {
   }
   if (
     windows.includes(
-      'Send-OrcaMouseClick $handle $point.x $point.y $Operation.mouse_button ([int]$Operation.click_count)'
+      'Send-QuirkyMouseClick $handle $point.x $point.y $Operation.mouse_button ([int]$Operation.click_count)'
     )
   ) {
-    failures.push('Windows click_count must be validated before Send-OrcaMouseClick')
+    failures.push('Windows click_count must be validated before Send-QuirkyMouseClick')
   }
   if (
-    !windows.includes('$clickCount = Get-OrcaPositiveInteger $Operation.click_count "click_count"')
+    !windows.includes(
+      '$clickCount = Get-QuirkyPositiveInteger $Operation.click_count "click_count"'
+    )
   ) {
-    failures.push('Windows click_count default must be handled by Get-OrcaPositiveInteger')
+    failures.push('Windows click_count default must be handled by Get-QuirkyPositiveInteger')
   }
   if (
     !windows.includes('@("pageup", "page_up")') ||

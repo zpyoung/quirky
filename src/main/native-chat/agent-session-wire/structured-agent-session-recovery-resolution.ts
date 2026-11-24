@@ -5,7 +5,7 @@
  * proven gone. One that outlives the stop, or whose identity cannot be verified, is released
  * anyway: its transport died with the runtime that held it, so nothing can drive it, and no signal
  * is sent to a pid that cannot be verified as the one recorded. Windows never signals a saved pid
- * at all: Orca stops a Windows tree only through a child it still holds. Only a conflicted claim,
+ * at all: Quirky stops a Windows tree only through a child it still holds. Only a conflicted claim,
  * which is how a terminal owner an older build recorded now loads, is waited out and never
  * stopped: it is the user's own agent, and its exit is its way out.
  */

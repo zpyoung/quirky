@@ -1,6 +1,6 @@
 /**
  * Proof that the agent-row signal is the moment OpenCode 2 can submit, from two natural cold
- * `--standalone` starts that replayed Orca's worker-start timing (paste at readiness, Enter 500 ms
+ * `--standalone` starts that replayed Quirky's worker-start timing (paste at readiness, Enter 500 ms
  * plus paste time later, at promptSentAtMs): one pasted on the agent row, one on the box's cursor
  * while a loaded machine kept the agent list from arriving. A third, in a pane too narrow for the
  * row, pasted at the signal's grace instead.
@@ -41,7 +41,7 @@ async function finalScreen(name: string): Promise<string> {
 }
 
 describe('OpenCode 2 submits an Enter sent after the agent row and drops one sent before it', () => {
-  it('submits the brief when Orca pastes on the agent row', async () => {
+  it('submits the brief when Quirky pastes on the agent row', async () => {
     const name = 'opencode-2-0-21-timed-enter-after-agent-row'
     const { promptSentAtMs } = readTimedRuntimeFixture(name)
     expect(readyAtMs(name, AGENT_ROW_SIGNAL)).toBeLessThan(promptSentAtMs!)
@@ -55,14 +55,14 @@ describe('OpenCode 2 submits an Enter sent after the agent row and drops one sen
     const { promptSentAtMs } = readTimedRuntimeFixture(name)
     const boxCursorAt = readyAtMs(name, BOX_CURSOR_SIGNAL)
     const agentRowAt = readyAtMs(name, AGENT_ROW_SIGNAL)
-    // The old rule fired over half a second before the row, so Orca's Enter landed in the gap.
+    // The old rule fired over half a second before the row, so Quirky's Enter landed in the gap.
     expect(agentRowAt - boxCursorAt).toBeGreaterThanOrEqual(500)
     expect(promptSentAtMs!).toBeGreaterThan(boxCursorAt)
     expect(promptSentAtMs!).toBeLessThan(agentRowAt)
     expect(await finalScreen(name)).toContain(HELD_PASTE)
   })
 
-  it('submits the brief Orca pastes at the grace in a pane too narrow for the agent row', async () => {
+  it('submits the brief Quirky pastes at the grace in a pane too narrow for the agent row', async () => {
     const name = 'opencode-2-0-21-timed-narrow-pane'
     const { promptSentAtMs } = readTimedRuntimeFixture(name)
     expect(readyAtMs(name, BOX_CURSOR_SIGNAL)).toBeLessThan(promptSentAtMs!)

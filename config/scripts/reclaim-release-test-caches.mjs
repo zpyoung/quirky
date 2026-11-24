@@ -160,7 +160,7 @@ export async function reclaimReleaseTestCaches({
     }
   }
 
-  const shared = await descend(commonDirectory, ['orca-cache', 'release-source'])
+  const shared = await descend(commonDirectory, ['quirky-cache', 'release-source'])
   if (shared) {
     for (const entry of await readdir(shared, { withFileTypes: true })) {
       const match = /^format-([1-9]\d*)$/.exec(entry.name)
@@ -182,7 +182,9 @@ export async function reclaimReleaseTestCaches({
             key[1],
             format,
             async () =>
-              Boolean(await descend(commonDirectory, ['orca-cache', 'release-source', entry.name])),
+              Boolean(
+                await descend(commonDirectory, ['quirky-cache', 'release-source', entry.name])
+              ),
             verifyLease
           )
         }

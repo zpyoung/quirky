@@ -4,7 +4,7 @@
   "argv": [
     "claude",
     "--settings",
-    "/Users/uuuuuuuuuuuuu/orca-qa/phase0-cancel/settings.json",
+    "/Users/uuuuuuuuuuuuu/quirky-qa/phase0-cancel/settings.json",
     "--dangerously-skip-permissions"
   ],
   "platform": "darwin",

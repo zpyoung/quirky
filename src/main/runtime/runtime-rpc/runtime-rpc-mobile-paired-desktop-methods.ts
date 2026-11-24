@@ -1,4 +1,4 @@
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 
 /** Phone methods the relaying Mac always answers itself, even when the call names a server. */
 export const PAIRED_DESKTOP_METHODS = [
@@ -103,8 +103,8 @@ export const PAIRED_DESKTOP_METHODS = [
   'settings.updateTerminalQuickCommands',
   'terminal.getAutoRestoreFit',
   'terminal.setAutoRestoreFit',
-  // Switch point: the per-section collapse write, the sidebar feed and its icons exist only with ORCA_SIDEBAR_INPUTS=main.
-  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN
+  // Switch point: the per-section collapse write, the sidebar feed and its icons exist only with QUIRKY_SIDEBAR_INPUTS=main.
+  ...(QUIRKY_SIDEBAR_INPUTS_IS_MAIN
     ? (['ui.setCollapsed', 'sidebarInputs.read', 'sidebarInputs.repoIcons'] as const)
     : [])
 ] as const

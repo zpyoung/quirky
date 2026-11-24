@@ -38,8 +38,8 @@ describe('getRequiredReleaseAssetNames', () => {
     expect(getRequiredReleaseAssetNames('v1.4.27')).toEqual(
       expect.arrayContaining([
         'latest-mac.yml',
-        'orca-macos-arm64.dmg',
-        'orca-macos-arm64.dmg.blockmap'
+        'quirky-macos-arm64.dmg',
+        'quirky-macos-arm64.dmg.blockmap'
       ])
     )
   })
@@ -70,13 +70,13 @@ describe('getRequiredReleaseAssetNames', () => {
 describe('extractManifestAssetNames', () => {
   it('extracts relative and absolute manifest asset names', () => {
     const manifest = `files:
-  - url: Orca-1.4.27-arm64-mac.zip
-  - url: https://example.com/downloads/orca-windows-setup.exe
-path: orca-linux.AppImage`
+  - url: Quirky-1.4.27-arm64-mac.zip
+  - url: https://example.com/downloads/quirky-windows-setup.exe
+path: quirky-linux.AppImage`
     expect(extractManifestAssetNames(manifest)).toEqual([
-      'Orca-1.4.27-arm64-mac.zip',
-      'orca-windows-setup.exe',
-      'orca-linux.AppImage'
+      'Quirky-1.4.27-arm64-mac.zip',
+      'quirky-windows-setup.exe',
+      'quirky-linux.AppImage'
     ])
   })
 })
@@ -90,9 +90,9 @@ describe('verifyRequiredReleaseAssets', () => {
     const latestMacAsset = release.assets.find((asset) => asset.name === 'latest-mac.yml')
     const macManifest = `version: 1.4.27
 files:
-  - url: Orca-1.4.27-arm64-mac.zip
+  - url: Quirky-1.4.27-arm64-mac.zip
     sha512: test
-path: Orca-1.4.27-arm64-mac.zip`
+path: Quirky-1.4.27-arm64-mac.zip`
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([release]))
@@ -102,7 +102,7 @@ path: Orca-1.4.27-arm64-mac.zip`
 
     await expect(
       verifyRequiredReleaseAssets({ repo: 'zpyoung/quirky', tag, token: 'token' })
-    ).rejects.toThrow('Missing: Orca-1.4.27-arm64-mac.zip')
+    ).rejects.toThrow('Missing: Quirky-1.4.27-arm64-mac.zip')
     expect(latestMacAsset).toBeTruthy()
   })
 })

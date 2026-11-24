@@ -48,7 +48,7 @@ describe('classifyRuntimeHostRePair', () => {
   })
 
   it('does not call a macOS host moved when an upgrade first adds its binding, or a downgrade drops it', () => {
-    // Older Orca read no macOS machine id, so its descriptor carried no binding (#29259).
+    // Older Quirky read no macOS machine id, so its descriptor carried no binding (#29259).
     const unbound = { installationId: INSTALL_A }
     const bound = { installationId: INSTALL_A, machineBinding: BIND_1 }
     expect(

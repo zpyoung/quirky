@@ -25,7 +25,7 @@ export class CliInstaller extends CliPathRegistration {
     const launcherPath = await this.resolveLauncherPath()
     if (!launcherPath) {
       const detail = this.isPackaged
-        ? 'The bundled CLI launcher is missing from this Orca build.'
+        ? 'The bundled CLI launcher is missing from this Quirky build.'
         : 'Development mode uses a generated launcher for validation only.'
       return {
         platform: this.platform,
@@ -65,7 +65,7 @@ export class CliInstaller extends CliPathRegistration {
     }
     if (status.state === 'conflict') {
       throw new Error(
-        `Refusing to replace non-Orca command at ${status.commandPath}. Remove it and register again if it is no longer needed.`
+        `Refusing to replace non-Quirky command at ${status.commandPath}. Remove it and register again if it is no longer needed.`
       )
     }
 
@@ -82,7 +82,7 @@ export class CliInstaller extends CliPathRegistration {
       return status
     }
     if (status.state === 'conflict') {
-      throw new Error(`Refusing to remove non-Orca command at ${status.commandPath}.`)
+      throw new Error(`Refusing to remove non-Quirky command at ${status.commandPath}.`)
     }
 
     await this.removeSymlink(status.commandPath)

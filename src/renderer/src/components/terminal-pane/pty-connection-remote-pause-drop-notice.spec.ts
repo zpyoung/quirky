@@ -69,7 +69,7 @@ export function registerPtyConnectionRemotePauseDropNoticeTests(): void {
       })
       transportFactoryQueue.push(transport)
       mockStoreState.repos = [
-        { id: 'repo1', connectionId: null, displayName: 'orca', executionHostId: 'runtime:env-1' }
+        { id: 'repo1', connectionId: null, displayName: 'quirky', executionHostId: 'runtime:env-1' }
       ]
       mockStoreState.worktreesByRepo.repo1[0].runtimeOwnerEnvironmentId = 'env-1'
       const pane = createPane(1)

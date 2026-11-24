@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { AppState } from '../store/types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 
@@ -113,18 +113,18 @@ async function captureGraph(): Promise<RuntimeSyncWindowGraph> {
  * parks (mountedLeaves), so the PTY id is main's binding and is not reported here.
  */
 function reportedPanes(graph: RuntimeSyncWindowGraph): Record<string, unknown>[] {
-  return ORCA_LAYOUT_OWNER_IS_MAIN ? (graph.mountedLeaves ?? []) : graph.leaves
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN ? (graph.mountedLeaves ?? []) : graph.leaves
 }
 
 function reportedTabIds(graph: RuntimeSyncWindowGraph): string[] {
-  return ORCA_LAYOUT_OWNER_IS_MAIN
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN
     ? (graph.mountedLeaves ?? []).map((leaf) => leaf.tabId)
     : graph.tabs.map((tab) => tab.tabId)
 }
 
 /** The window's PTY claim, which only a window-owned build reports. */
 function withPty(ptyId: string): { ptyId?: string } {
-  return ORCA_LAYOUT_OWNER_IS_MAIN ? {} : { ptyId }
+  return QUIRKY_LAYOUT_OWNER_IS_MAIN ? {} : { ptyId }
 }
 
 describe('syncRuntimeGraph background automation tabs', () => {

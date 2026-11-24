@@ -17,7 +17,7 @@ import { HEIMDALL_CREATE_HANDLERS } from './create-handler'
 
 const callMock = vi.fn()
 let previousExitCode: typeof process.exitCode
-const previousWorkspaceId = process.env.ORCA_WORKSPACE_ID
+const previousWorkspaceId = process.env.QUIRKY_WORKSPACE_ID
 
 beforeEach(() => {
   previousExitCode = process.exitCode
@@ -29,9 +29,9 @@ afterEach(() => {
   vi.restoreAllMocks()
   process.exitCode = previousExitCode
   if (previousWorkspaceId === undefined) {
-    delete process.env.ORCA_WORKSPACE_ID
+    delete process.env.QUIRKY_WORKSPACE_ID
   } else {
-    process.env.ORCA_WORKSPACE_ID = previousWorkspaceId
+    process.env.QUIRKY_WORKSPACE_ID = previousWorkspaceId
   }
 })
 
@@ -87,7 +87,7 @@ function context(
 
 describe('Heimdall create handlers', () => {
   it('resolves an active folder workspace before enrolling the objective', async () => {
-    process.env.ORCA_WORKSPACE_ID = 'folder:folder-1'
+    process.env.QUIRKY_WORKSPACE_ID = 'folder:folder-1'
     const ctx = context(
       [['objective', 'Ship the report export']],
       [
@@ -329,7 +329,7 @@ describe('Heimdall create handlers', () => {
       },
       _meta: { runtimeId: 'runtime-1' }
     })
-    process.env.ORCA_WORKSPACE_ID = 'folder:folder-1'
+    process.env.QUIRKY_WORKSPACE_ID = 'folder:folder-1'
     const ctx = context([['objective', 'Ship it']])
     callMock.mockImplementation(async (method: string) => {
       if (method === 'status.get') {

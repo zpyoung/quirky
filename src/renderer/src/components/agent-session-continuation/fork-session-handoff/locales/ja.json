@@ -17,7 +17,7 @@
         "createUnavailable": "ワークツリーの作成に利用できる Git リポジトリがありません。",
         "createWorktree": "新しいワークツリーを作成",
         "createdTargetUnavailable": "新しいワークツリーを解決できませんでした。",
-        "deliveryAutomaticRetrySucceeded": "最初の配信に失敗したため、Orca が概要を再送しました。",
+        "deliveryAutomaticRetrySucceeded": "最初の配信に失敗したため、Quirky が概要を再送しました。",
         "deliveryFailedRetry": "概要の配信と自動再試行に失敗しました。",
         "deliverySucceeded": "ハンドオフ概要を送信しました。",
         "deliveryUnconfirmed": "概要の配信を確認できませんでした。",

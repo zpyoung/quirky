@@ -1,14 +1,14 @@
 # Claude transcript branch-proof allocation
 
-Orca verifies the complete conversation ancestry before preserving or resuming a Claude session. This change reads the transcript incrementally instead of keeping the whole file and its split lines in memory. It still checks every record in the observed byte range, including old ancestors and disconnected conflicts. It does not just parse the first line.
+Quirky verifies the complete conversation ancestry before preserving or resuming a Claude session. This change reads the transcript incrementally instead of keeping the whole file and its split lines in memory. It still checks every record in the observed byte range, including old ancestors and disconnected conflicts. It does not just parse the first line.
 
 ## Reproduce
 
 After the repository's normal dependency installation:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/claude-branch-proof-streaming/reproduce.cjs /tmp/claude-branch-streaming-results.json
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/claude-branch-proof-streaming/regressions.mjs /tmp/claude-branch-streaming-regressions.json
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/claude-branch-proof-streaming/reproduce.cjs /tmp/claude-branch-streaming-results.json
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/claude-branch-proof-streaming/regressions.mjs /tmp/claude-branch-streaming-regressions.json
 ```
 
 `diff` is a pinned direct development dependency. The harness reverses `fix.patch` against the checked-out reader in memory and verifies the original reader's SHA-256 before building the comparison. It does not modify production files. esbuild writes temporary modules, which are removed along with their require-cache entries on exit. No window or network access is needed.
@@ -58,7 +58,7 @@ The separate duration control reads one stable 2.79 MB file with 8,193 small rec
 `electron-results.json` uses installed Electron 43.7.0 / Node 24.21.0 in Node-only mode, with no app/window launch:
 
 ```sh
-ELECTRON_RUN_AS_NODE=1 ORCA_BACKGROUND_LAUNCH=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --expose-gc docs/audits/claude-branch-proof-streaming/reproduce.cjs /tmp/claude-branch-streaming-electron.json
+ELECTRON_RUN_AS_NODE=1 QUIRKY_BACKGROUND_LAUNCH=1 node_modules/electron/dist/Electron.app/Contents/MacOS/Electron --expose-gc docs/audits/claude-branch-proof-streaming/reproduce.cjs /tmp/claude-branch-streaming-electron.json
 ```
 
 Other platforms use their installed Electron executable with the same environment and arguments. This is compatibility evidence for the installed runtime, not the historical Electron binary.

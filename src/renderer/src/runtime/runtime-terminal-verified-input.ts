@@ -7,7 +7,7 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { getRemoteRuntimePtyOwner } from './runtime-terminal-stream'
 import { recordRuntimeTerminalInputForPtyId } from './runtime-terminal-input-recording'
 
-const DESKTOP_RUNTIME_CLIENT = { id: 'orca-desktop', type: 'desktop' } as const
+const DESKTOP_RUNTIME_CLIENT = { id: 'quirky-desktop', type: 'desktop' } as const
 
 /**
  * True means accepted, false means refusal. `requireWriteSettlement` asks the local provider or a

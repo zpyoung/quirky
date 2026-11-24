@@ -52,12 +52,12 @@ export type StructuredAgentSessionResumeOutcome =
       diagnostic?: ProviderDiagnostic
       /** The host's own close, Stop or quit aborted the start, so it failed nothing it was for. */
       aborted?: true
-      /** The start went silent or hit its ceiling before it proved itself: Orca stopped it. */
+      /** The start went silent or hit its ceiling before it proved itself: Quirky stopped it. */
       expired?: true
       argumentProblem?: AgentSessionArgumentProblem
     }
 
-/** The attach's caller key: the ledger row a start settles is Orca's own. */
+/** The attach's caller key: the ledger row a start settles is Quirky's own. */
 const AGENT_START_CALLER_KEY = 'trusted-local:agent-start'
 
 export type StructuredAgentSessionStartClaim = {

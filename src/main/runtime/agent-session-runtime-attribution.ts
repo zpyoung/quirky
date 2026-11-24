@@ -1,4 +1,4 @@
-// Which Orca runtime held each chat's agent, and, when that agent is later proven dead, whether it
+// Which Quirky runtime held each chat's agent, and, when that agent is later proven dead, whether it
 // died with that runtime and how the runtime ended. Applied to every store transaction, so a death
 // any transition proves (a restart's adjudication, recovery's stop of a survivor) is told the same
 // way. When anything is unknown (an owner an older build recorded, a terminal's claim, a runtime
@@ -8,14 +8,14 @@ import { randomUUID } from 'node:crypto'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { AgentSessionStoreState } from './agent-session-store-state'
 
-/** This Orca runtime: one per process, so a relaunch is a new one. */
+/** This Quirky runtime: one per process, so a relaunch is a new one. */
 let incarnation = randomUUID()
 
 export function agentSessionRuntimeIncarnation(): string {
   return incarnation
 }
 
-/** For tests that relaunch Orca inside one process. */
+/** For tests that relaunch Quirky inside one process. */
 export function beginAgentSessionRuntimeIncarnationForTest(): void {
   incarnation = randomUUID()
 }
@@ -40,7 +40,7 @@ function attributed(
     deathEvidence.runtimeEnd !== undefined ||
     !heldBy ||
     heldBy === incarnation ||
-    // A terminal's agent, which an older build recorded: its transport was never Orca's.
+    // A terminal's agent, which an older build recorded: its transport was never Quirky's.
     before?.lease.claimStatus === 'conflicted' ||
     !runtimeEnds
   ) {

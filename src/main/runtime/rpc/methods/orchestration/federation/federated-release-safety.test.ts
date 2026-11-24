@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ORCHESTRATION_CONTRACT_VERSION } from '../../../../../../shared/protocol-version'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationDb } from '../../../../orchestration/db'
 import { ORCHESTRATION_METHODS } from '../../orchestration'
 import { eraseRpcMethods } from '../../../core'
@@ -12,11 +12,11 @@ const TERMINAL_HANDLE = 'term_remote'
 
 describe('federated worker release ownership', () => {
   let db: OrchestrationDb
-  let runtime: OrcaRuntimeService
+  let runtime: QuirkyRuntimeService
 
   beforeEach(() => {
     db = new OrchestrationDb(':memory:')
-    runtime = new OrcaRuntimeService()
+    runtime = new QuirkyRuntimeService()
     runtime.setOrchestrationDb(db)
     vi.spyOn(runtime, 'getTerminalPaneKey').mockReturnValue(PANE_KEY)
     vi.spyOn(runtime, 'getTerminalProcessIncarnation').mockReturnValue(PROCESS_INCARNATION)

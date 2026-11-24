@@ -43,9 +43,9 @@ it.each([
   if (kind !== 'missing-artifact') {
     writeFileSync(planPath, JSON.stringify(plan))
   }
-  vi.stubEnv('ORCA_UNIT_SELECTION_PLAN', planPath)
-  vi.stubEnv('ORCA_SHARD_SOURCE_SHA', 'current')
-  vi.stubEnv('ORCA_SHARD_MANIFEST', join(root, 'assignment.json'))
+  vi.stubEnv('QUIRKY_UNIT_SELECTION_PLAN', planPath)
+  vi.stubEnv('QUIRKY_SHARD_SOURCE_SHA', 'current')
+  vi.stubEnv('QUIRKY_SHARD_MANIFEST', join(root, 'assignment.json'))
   const assigned = []
   for (const index of [1, 2]) {
     const sequencer = new TimingSequencer({ config: { root, shard: { index, count: 2 } } })
@@ -78,9 +78,9 @@ it('validates a large selection without scanning the discovered array for each f
     planPath,
     JSON.stringify({ version: 1, sourceSha: 'current', files, executionFiles })
   )
-  vi.stubEnv('ORCA_UNIT_SELECTION_PLAN', planPath)
-  vi.stubEnv('ORCA_SHARD_SOURCE_SHA', 'current')
-  vi.stubEnv('ORCA_SHARD_MANIFEST', join(root, 'assignment.json'))
+  vi.stubEnv('QUIRKY_UNIT_SELECTION_PLAN', planPath)
+  vi.stubEnv('QUIRKY_SHARD_SOURCE_SHA', 'current')
+  vi.stubEnv('QUIRKY_SHARD_MANIFEST', join(root, 'assignment.json'))
   const sequencer = new TimingSequencer({ config: { root, shard: { index: 1, count: 1 } } })
   const specs = files.map((file) => ({ moduleId: join(root, file) }))
   const includes = Array.prototype.includes

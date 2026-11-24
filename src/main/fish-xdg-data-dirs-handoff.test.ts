@@ -12,11 +12,11 @@ import {
   getFishXdgDataDirsLaunchEnv
 } from './fish-xdg-data-dirs-handoff'
 
-const ROOT = '/orca/shell-wrappers/abc'
+const ROOT = '/quirky/shell-wrappers/abc'
 const DATA_DIR = `${ROOT}/fish-xdg-data`
 
 describe('getFishXdgDataDirsLaunchEnv', () => {
-  it('adds the XDG default after Orca when the variable is unset', () => {
+  it('adds the XDG default after Quirky when the variable is unset', () => {
     const expected = `${DATA_DIR}:/usr/local/share:/usr/share`
     expect(getFishXdgDataDirsLaunchEnv(ROOT, undefined)).toEqual({
       XDG_DATA_DIRS: expected,
@@ -51,7 +51,7 @@ describe('getFishXdgDataDirsLaunchEnv', () => {
     })
   })
 
-  // Why: restore must hand back exactly what was inherited, stale Orca entry included.
+  // Why: restore must hand back exactly what was inherited, stale Quirky entry included.
   it('prepends again when the inherited value already names the dir', () => {
     const inherited = `${DATA_DIR}:/opt/a`
     expect(getFishXdgDataDirsLaunchEnv(ROOT, inherited).XDG_DATA_DIRS).toBe(
@@ -71,7 +71,7 @@ describe('fish vendor snippet', () => {
 
   it('lives where fish looks for vendor snippets under the data dir', () => {
     expect(buildFishVendorConfWrapperFile(ROOT)[0]).toBe(
-      `${DATA_DIR}/fish/vendor_conf.d/orca-shell-integration.fish`
+      `${DATA_DIR}/fish/vendor_conf.d/quirky-shell-integration.fish`
     )
   })
 })
@@ -94,11 +94,11 @@ echo "fake-codex $*"
 const STATE_PROBE = [
   'set -q XDG_DATA_DIRS; and echo "xdg=[$XDG_DATA_DIRS]"; or echo xdg=unset',
   `set -q ${FISH_XDG_DATA_DIRS_PREFIX_ENV}; and echo marker-left`,
-  'env | grep "^XDG_DATA_DIRS=\\|ORCA_FISH"; or echo child-clean',
-  'functions -q __orca_fish_xdg_handoff; and echo handoff-left'
+  'env | grep "^XDG_DATA_DIRS=\\|QUIRKY_FISH"; or echo child-clean',
+  'functions -q __quirky_fish_xdg_handoff; and echo handoff-left'
 ].join('\n')
 
-// Why always run: the shell contracts job sets ORCA_REQUIRE_FISH so a missing fish fails, not skips.
+// Why always run: the shell contracts job sets QUIRKY_REQUIRE_FISH so a missing fish fails, not skips.
 it('finds fish when the environment requires it', () => {
   expect(fishRequirementViolation(fishLookup)).toBeNull()
 })
@@ -109,7 +109,7 @@ describe.skipIf(!fish.available)('fish vendor snippet in a real fish', () => {
   let bin: string
 
   beforeEach(() => {
-    sandbox = mkdtempSync(join(tmpdir(), 'orca-fish-xdg-'))
+    sandbox = mkdtempSync(join(tmpdir(), 'quirky-fish-xdg-'))
     root = join(sandbox, 'root')
     bin = join(sandbox, 'bin')
     const [snippetPath, snippet] = buildFishVendorConfWrapperFile(root)
@@ -141,18 +141,18 @@ describe.skipIf(!fish.available)('fish vendor snippet in a real fish', () => {
 
   // Why a baseline: a distro vendor snippet (Ubuntu's snapd) may set XDG_DATA_DIRS itself.
   it.each([['/opt/a:/opt/b/'], ['/opt/a:'], [undefined]] as const)(
-    'leaves fish exactly as it starts without Orca when XDG_DATA_DIRS is %s',
+    'leaves fish exactly as it starts without Quirky when XDG_DATA_DIRS is %s',
     (inherited) => {
       const base: Record<string, string> =
         inherited === undefined ? {} : { XDG_DATA_DIRS: inherited }
-      const withoutOrca = runFish(['-c', STATE_PROBE], base)
-      const withOrca = runFish(['-c', STATE_PROBE], {
+      const withoutQuirky = runFish(['-c', STATE_PROBE], base)
+      const withQuirky = runFish(['-c', STATE_PROBE], {
         ...base,
         ...getFishXdgDataDirsLaunchEnv(root, inherited)
       })
-      expect(withOrca).toBe(withoutOrca)
-      expect(withOrca).not.toContain('marker-left')
-      expect(withOrca).not.toContain('handoff-left')
+      expect(withQuirky).toBe(withoutQuirky)
+      expect(withQuirky).not.toContain('marker-left')
+      expect(withQuirky).not.toContain('handoff-left')
     }
   )
 
@@ -167,7 +167,7 @@ describe.skipIf(!fish.available)('fish vendor snippet in a real fish', () => {
   it('keeps the opt-out', () => {
     const output = runFish(['-i', '-c', 'emit fish_prompt; codex hi'], {
       ...getFishXdgDataDirsLaunchEnv(root, undefined),
-      ORCA_CODEX_ISOLATE: '0'
+      QUIRKY_CODEX_ISOLATE: '0'
     })
     expect(output).toContain('fake-codex hi')
   })
@@ -186,7 +186,7 @@ describe.skipIf(!fish.available)('fish vendor snippet in a real fish', () => {
 
   it('defines nothing in a non-interactive fish', () => {
     const output = runFish(
-      ['-c', 'emit fish_prompt; type -t codex; functions -q __orca_define_codex; and echo hook'],
+      ['-c', 'emit fish_prompt; type -t codex; functions -q __quirky_define_codex; and echo hook'],
       getFishXdgDataDirsLaunchEnv(root, undefined)
     )
     // Why a suffix: the emitted event also runs fish's own greeting handler.

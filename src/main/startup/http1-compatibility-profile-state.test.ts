@@ -18,14 +18,14 @@ afterEach(() => {
 })
 
 function createUserData(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-http1-profile-state-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-http1-profile-state-'))
   temporaryDirectories.push(directory)
   return directory
 }
 
 function writeIndex(userDataPath: string, activeProfileId: string): void {
   writeFileSync(
-    join(userDataPath, 'orca-profile-index.json'),
+    join(userDataPath, 'quirky-profile-index.json'),
     JSON.stringify({
       schemaVersion: 1,
       activeProfileId,
@@ -38,7 +38,7 @@ describe('pre-ready profile-state compatibility lookup', () => {
   it('uses the legacy install-level JSON before a profile index exists', () => {
     const userDataPath = createUserData()
     writeFileSync(
-      join(userDataPath, 'orca-data.json'),
+      join(userDataPath, 'quirky-data.json'),
       JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
     )
 
@@ -52,12 +52,12 @@ describe('pre-ready profile-state compatibility lookup', () => {
     const profileDirectory = join(userDataPath, 'profiles', 'work')
     mkdirSync(profileDirectory, { recursive: true })
     writeFileSync(
-      join(userDataPath, 'orca-data.json'),
+      join(userDataPath, 'quirky-data.json'),
       JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
     )
-    rmSync(join(userDataPath, 'orca-data.json'))
+    rmSync(join(userDataPath, 'quirky-data.json'))
     writeFileSync(
-      join(profileDirectory, 'orca-data.json'),
+      join(profileDirectory, 'quirky-data.json'),
       JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
     )
 
@@ -71,16 +71,16 @@ describe('pre-ready profile-state compatibility lookup', () => {
     const profileDirectory = join(userDataPath, 'profiles', 'work')
     mkdirSync(profileDirectory, { recursive: true })
     writeFileSync(
-      join(profileDirectory, 'orca-data.json'),
+      join(profileDirectory, 'quirky-data.json'),
       JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
     )
     writeFileSync(join(profileDirectory, `profile-state.db${suffix}`), 'orphaned')
 
     expect(readPersistedHttp1CompatibilityMode(userDataPath)).toBe(false)
 
-    writeFileSync(join(userDataPath, 'orca-profile-index.json'), '{ malformed')
+    writeFileSync(join(userDataPath, 'quirky-profile-index.json'), '{ malformed')
     writeFileSync(
-      join(userDataPath, 'orca-data.json'),
+      join(userDataPath, 'quirky-data.json'),
       JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
     )
     expect(readActiveProfileId(userDataPath)).toBe(null)
@@ -94,7 +94,7 @@ describe('pre-ready profile-state compatibility lookup', () => {
       writeIndex(userDataPath, 'work')
       const profileDirectory = join(userDataPath, 'profiles', 'work')
       mkdirSync(profileDirectory, { recursive: true })
-      const dataFile = join(profileDirectory, 'orca-data.json')
+      const dataFile = join(profileDirectory, 'quirky-data.json')
       writeFileSync(
         dataFile,
         JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })
@@ -122,7 +122,7 @@ describe('pre-ready profile-state compatibility lookup', () => {
       writeIndex(userDataPath, 'work')
       const profileDirectory = join(userDataPath, 'profiles', 'work')
       mkdirSync(profileDirectory, { recursive: true })
-      const dataFile = join(profileDirectory, 'orca-data.json')
+      const dataFile = join(profileDirectory, 'quirky-data.json')
       writeFileSync(
         dataFile,
         JSON.stringify({ settings: { electronHttp1CompatibilityMode: true } })

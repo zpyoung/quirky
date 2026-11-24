@@ -1,4 +1,4 @@
-// WebSocket transport letting mobile clients reach the Orca runtime over LAN (ws://); auth is per-device tokens, and E2EE runs above this layer.
+// WebSocket transport letting mobile clients reach the Quirky runtime over LAN (ws://); auth is per-device tokens, and E2EE runs above this layer.
 import { createServer as createHttpServer, type Server as HttpServer } from 'node:http'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { RpcTransport } from './transport'
@@ -41,7 +41,7 @@ export type WebSocketTransportOptions = {
   fallbackPort?: number
   // Why: serve --port clients dial the pinned port; prefer it first so a stale fallback can't steal the pin (issue #8535). Default keeps fallback-first (STA-1511).
   preferPinnedPort?: boolean
-  // Why: an explicit `orca serve --port` must fail when that port is taken, not move elsewhere (#26603).
+  // Why: an explicit `quirky serve --port` must fail when that port is taken, not move elsewhere (#26603).
   requirePinnedPort?: boolean
   // Why: deterministic ports tried before an OS-assigned one, so a fallback stays stable across reboots.
   fallbackLadder?: readonly number[]

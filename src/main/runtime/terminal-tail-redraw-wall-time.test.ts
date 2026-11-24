@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { readPtyTail, runtimeWithLeaf } from './orca-runtime-pty-leaf.test-fixture'
+import { readPtyTail, runtimeWithLeaf } from './quirky-runtime-pty-leaf.test-fixture'
 import { normalizeTerminalChunk } from './terminal-ansi-normalization'
 import { appendNormalizedToTailBuffer } from './terminal-tail-buffer'
 import { appendPerCharacterRedrawReference } from './terminal-tail-per-character-redraw.test-fixture'
@@ -8,11 +8,11 @@ import * as redrawBuffer from './terminal-tail-redraw-buffer'
 import { buildRestoredTerminalTailSeed } from './terminal-tail-restore-seed'
 
 // #11315 review probes, timed against the vendored pre-#11315 row model on all three main-thread
-// entry points. ORCA_TAIL_WALL_TIME_FULL=1 runs them at restore-cap scale; ORCA_TAIL_WALL_TIME_TABLE
+// entry points. QUIRKY_TAIL_WALL_TIME_FULL=1 runs them at restore-cap scale; QUIRKY_TAIL_WALL_TIME_TABLE
 // names a file that receives the measured table.
 
 const ESC = '\x1b'
-const FULL = process.env.ORCA_TAIL_WALL_TIME_FULL === '1'
+const FULL = process.env.QUIRKY_TAIL_WALL_TIME_FULL === '1'
 const WIDTH = FULL ? 128_000 : 8_000
 const BUDGET = FULL ? 256 * 1024 - 16 : 32 * 1024
 const FLOOD_CHUNKS = FULL ? 4 : 1
@@ -21,7 +21,7 @@ const MAX_REVISITS = 4_000
 // Generous so a loaded CI host does not flake; the measured bar is 1.5x.
 const MAX_RATIO = 3
 const SLACK_MS = 30
-const ROUNDS = Number(process.env.ORCA_TAIL_WALL_TIME_ROUNDS ?? 3)
+const ROUNDS = Number(process.env.QUIRKY_TAIL_WALL_TIME_ROUNDS ?? 3)
 
 type Probe = { name: string; chunks: string[] }
 
@@ -168,8 +168,8 @@ describe('terminal tail redraw wall time against the per-character row model', (
     'is no slower than the old row model on any review probe',
     () => {
       const table: string[] = []
-      const tablePath = process.env.ORCA_TAIL_WALL_TIME_TABLE
-      const only = process.env.ORCA_TAIL_WALL_TIME_PROBE
+      const tablePath = process.env.QUIRKY_TAIL_WALL_TIME_TABLE
+      const only = process.env.QUIRKY_TAIL_WALL_TIME_PROBE
       for (const probe of probes().filter((p) => !only || p.name.includes(only))) {
         for (const entry of entries) {
           let current = Number.POSITIVE_INFINITY

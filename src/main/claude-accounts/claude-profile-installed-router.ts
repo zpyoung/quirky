@@ -26,7 +26,7 @@ export function listClaudeProfileHomes(dataRoot: string): string[] {
 
 let installed: ClaudeProfileRouter | undefined
 
-/** Installed by the desktop's account services; workers, child processes and orcad have none. */
+/** Installed by the desktop's account services; workers, child processes and quirkyd have none. */
 export function installClaudeProfileRouter(router: ClaudeProfileRouter | undefined): void {
   installed = router
 }

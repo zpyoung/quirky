@@ -12,7 +12,7 @@ vi.mock('./web-runtime-session-tab-lifecycle', () => ({
 
 import { useAppStore } from '../store'
 import { createWorkspaceTabCloseCommands } from '@/components/tab-group/workspace-tab-close-commands'
-import { ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT } from '@/components/editor/editor-autosave'
+import { QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT } from '@/components/editor/editor-autosave'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
 import {
   ENV,
@@ -92,7 +92,7 @@ describe('tab-strip close of a client-dirty mirrored file after a host republish
     resetWebSessionTabsSyncTestState()
     closeWebRuntimeSessionTabMock.mockClear()
     closeRequests.length = 0
-    window.addEventListener(ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT, onCloseRequest)
+    window.addEventListener(QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT, onCloseRequest)
     useAppStore.setState({
       ...initialState,
       activeWorktreeId: WT,
@@ -103,7 +103,7 @@ describe('tab-strip close of a client-dirty mirrored file after a host republish
   })
 
   afterEach(() => {
-    window.removeEventListener(ORCA_EDITOR_REQUEST_FILE_CLOSE_EVENT, onCloseRequest)
+    window.removeEventListener(QUIRKY_EDITOR_REQUEST_FILE_CLOSE_EVENT, onCloseRequest)
     useAppStore.setState(initialState, true)
   })
 

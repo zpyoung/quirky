@@ -84,7 +84,7 @@ export async function writeSyntheticTranscriptCorpus(
     }
   }
   const random = mulberry32(options.seed ?? 1)
-  const root = await mkdtemp(join(tmpdir(), 'orca-search-corpus-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-search-corpus-'))
   const files: string[] = []
   let transcriptBytes = 0
   let messageCount = 0

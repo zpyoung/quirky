@@ -49,7 +49,7 @@ export async function spawnLocalPty(
       await mkdir(jcodeRuntimeDir, { recursive: true })
     } catch {
       // Why non-fatal: the dir is stamped on every local pane, so an EACCES on a
-      // shared /tmp/orca-jcode or a read-only TMPDIR would otherwise stop a plain
+      // shared /tmp/quirky-jcode or a read-only TMPDIR would otherwise stop a plain
       // shell from opening. Drop the variable and let jcode use its own default.
       delete args.env?.[JCODE_RUNTIME_DIR_ENV_KEY]
     }

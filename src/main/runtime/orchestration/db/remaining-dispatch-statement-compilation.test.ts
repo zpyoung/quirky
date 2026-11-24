@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isOrcaSessionId } from '../../../../shared/orca-session-address'
+import { isQuirkySessionId } from '../../../../shared/quirky-session-address'
 import { OrchestrationDb } from './orchestration-db'
 import { createRootDispatch } from './root-dispatch-test-fixture'
 import { LEGACY_CONTRACT_VERSION } from './contract-constants'
@@ -27,7 +27,7 @@ afterEach(() => {
 })
 
 function fixture(count = 1, version: 'fresh' | 'v41' = 'fresh') {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-remaining-dispatch-compilation-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-remaining-dispatch-compilation-'))
   directories.push(directory)
   const path = join(directory, 'orchestration.db')
   let writer = new OrchestrationDb(path)
@@ -58,15 +58,15 @@ function fixture(count = 1, version: 'fresh' | 'v41' = 'fresh') {
   })
   if (version === 'v41') {
     writer.db.exec(`
-      DROP INDEX idx_runs_coordinator_orca_session_id;
-      DROP INDEX idx_dispatch_assignee_orca_session_id;
+      DROP INDEX idx_runs_coordinator_quirky_session_id;
+      DROP INDEX idx_dispatch_assignee_quirky_session_id;
       DROP TRIGGER trg_runs_remember_coordinator_insert;
       DROP TRIGGER trg_runs_remember_coordinator_update;
       DROP TRIGGER trg_messages_route_coordinator_mail;
-      ALTER TABLE runs DROP COLUMN coordinator_orca_session_id;
-      ALTER TABLE runs DROP COLUMN coordinator_orca_session_id_generation;
-      ALTER TABLE dispatch_contexts DROP COLUMN assignee_orca_session_id;
-      ALTER TABLE dispatch_contexts DROP COLUMN creator_orca_session_id;
+      ALTER TABLE runs DROP COLUMN coordinator_quirky_session_id;
+      ALTER TABLE runs DROP COLUMN coordinator_quirky_session_id_generation;
+      ALTER TABLE dispatch_contexts DROP COLUMN assignee_quirky_session_id;
+      ALTER TABLE dispatch_contexts DROP COLUMN creator_quirky_session_id;
     `)
     writer.db.pragma('user_version = 41')
     databases.pop()
@@ -176,27 +176,27 @@ describe('remaining dispatch metadata statement compilation', () => {
         entries: [{ dispatch }]
       } = fixture(1, version)
       const sessionId = '00000000-0000-4000-8000-000000000001'
-      if (!isOrcaSessionId(sessionId)) {
+      if (!isQuirkySessionId(sessionId)) {
         throw new Error('Invalid session fixture')
       }
       writer.db
-        .prepare('UPDATE dispatch_contexts SET assignee_orca_session_id = ? WHERE id = ?')
+        .prepare('UPDATE dispatch_contexts SET assignee_quirky_session_id = ? WHERE id = ?')
         .run(sessionId, dispatch.id)
       const compile = vi.spyOn(DatabaseSync.prototype, 'prepare')
       for (let call = 0; call < 10; call += 1) {
-        expect(reader.resolveCreatorDepth({ kind: 'session', orcaSessionId: sessionId })).toBe(2)
-        expect(reader.resolveCreatorDispatchId({ kind: 'session', orcaSessionId: sessionId })).toBe(
-          dispatch.id
-        )
+        expect(reader.resolveCreatorDepth({ kind: 'session', quirkySessionId: sessionId })).toBe(2)
+        expect(
+          reader.resolveCreatorDispatchId({ kind: 'session', quirkySessionId: sessionId })
+        ).toBe(dispatch.id)
       }
       writer.db.prepare('UPDATE dispatch_contexts SET depth = ? WHERE id = ?').run(3, dispatch.id)
-      expect(reader.resolveCreatorDepth({ kind: 'session', orcaSessionId: sessionId })).toBe(3)
+      expect(reader.resolveCreatorDepth({ kind: 'session', quirkySessionId: sessionId })).toBe(3)
       writer.db
         .prepare('UPDATE dispatch_contexts SET creator_handle = assignee_handle WHERE id = ?')
         .run(dispatch.id)
-      expect(reader.resolveCreatorDepth({ kind: 'session', orcaSessionId: sessionId })).toBe(0)
+      expect(reader.resolveCreatorDepth({ kind: 'session', quirkySessionId: sessionId })).toBe(0)
       expect(
-        reader.resolveCreatorDispatchId({ kind: 'session', orcaSessionId: sessionId })
+        reader.resolveCreatorDispatchId({ kind: 'session', quirkySessionId: sessionId })
       ).toBeNull()
       expect(fullDispatchReads(compile.mock.calls)).toHaveLength(1)
     }

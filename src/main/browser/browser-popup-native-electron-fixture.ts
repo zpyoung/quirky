@@ -109,15 +109,15 @@ export class BrowserPopupNativeFixture {
   }
 
   handleMessage(message: string): void {
-    if (message === 'orca-popup-fixture:fail-authority') {
+    if (message === 'quirky-popup-fixture:fail-authority') {
       this.failCreation = 'authority'
-    } else if (message === 'orca-popup-fixture:fail-webrtc') {
+    } else if (message === 'quirky-popup-fixture:fail-webrtc') {
       this.failCreation = 'webrtc'
-    } else if (message === 'orca-popup-fixture:fail-close') {
+    } else if (message === 'quirky-popup-fixture:fail-close') {
       this.failCreation = 'close'
-    } else if (message === 'orca-popup-fixture:fail-authority-error') {
+    } else if (message === 'quirky-popup-fixture:fail-authority-error') {
       this.failCreation = 'authority-error'
-    } else if (message === 'orca-popup-fixture:restore-authority') {
+    } else if (message === 'quirky-popup-fixture:restore-authority') {
       this.input.restoreAuthority()
     }
   }

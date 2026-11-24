@@ -15,7 +15,7 @@
     "exitCode": 0
   },
   "actualFullWebTypecheck": {
-    "command": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.tc.web.json",
+    "command": "QUIRKY_BACKGROUND_LAUNCH=1 node node_modules/typescript/bin/tsc --noEmit -p config/tsconfig.tc.web.json",
     "exitCode": 1,
     "diagnostics": [
       "src/renderer/src/components/native-chat/NativeChatMessageList.windowing.test.tsx(12,15): error TS6196: 'NativeChatMessage' is declared but never used."

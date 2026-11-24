@@ -1,9 +1,9 @@
 import { isFolderRepo } from '../../../../../../shared/repo-kind'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 
 export async function assertOrchestrationWorktreeCreationSupported(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   repoSelector: string
   existingPlacement: string
 }): Promise<void> {

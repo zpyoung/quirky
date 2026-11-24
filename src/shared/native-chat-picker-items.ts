@@ -15,7 +15,7 @@ export type NativeChatPickerItem =
       /** How the provider says the command is invoked, e.g. `<objective>`. */
       argumentHint?: string
       skillCollision: boolean
-      orcaOwned?: true
+      quirkyOwned?: true
     }
   | {
       kind: 'skill'
@@ -104,18 +104,18 @@ export function buildNativeChatPickerItems(
     namespacePluginSkills
   )
   const skillNames = new Set(mergedSkills.map((skill) => skill.name))
-  const orcaNames = new Set(commands.filter((c) => c.orcaOwned).map((command) => command.name))
+  const quirkyNames = new Set(commands.filter((c) => c.quirkyOwned).map((command) => command.name))
   const resolvedCommands = commands.filter(
     (command) =>
-      command.orcaOwned ||
+      command.quirkyOwned ||
       !(
-        orcaNames.has(command.name) ||
+        quirkyNames.has(command.name) ||
         (sharedSigil && command.kindUnspecified && skillNames.has(command.name))
       )
   )
-  // Orca runs its own rows whatever the skills are called, so a namesake skill keeps its row.
+  // Quirky runs its own rows whatever the skills are called, so a namesake skill keeps its row.
   const commandNames = new Set(
-    resolvedCommands.filter((command) => !command.orcaOwned).map((command) => command.name)
+    resolvedCommands.filter((command) => !command.quirkyOwned).map((command) => command.name)
   )
   const commandItems = rankItems(
     resolvedCommands.map((command, index) => ({
@@ -130,8 +130,8 @@ export function buildNativeChatPickerItems(
         argumentHint: command.argumentHint
           ? sanitizePickerText(command.argumentHint, 80)
           : undefined,
-        skillCollision: sharedSigil && !command.orcaOwned && skillNames.has(command.name),
-        ...(command.orcaOwned ? { orcaOwned: true as const } : {})
+        skillCollision: sharedSigil && !command.quirkyOwned && skillNames.has(command.name),
+        ...(command.quirkyOwned ? { quirkyOwned: true as const } : {})
       },
       stableOrder: index
     })),

@@ -73,7 +73,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const PASTED_IMAGE_PATH = '/tmp/orca-paste-1-abc.png'
+const PASTED_IMAGE_PATH = '/tmp/quirky-paste-1-abc.png'
 
 function imageClipboardData(): DataTransfer {
   return {

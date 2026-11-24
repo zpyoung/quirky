@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { eraseRpcMethods, type RpcContext } from '../core'
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/orca-state', isPackaged: true }
+  app: { getPath: () => '/quirky-state', isPackaged: true }
 }))
 
 vi.mock('../../../skills/skill-discovery-target', () => ({

@@ -40,7 +40,7 @@ vi.mock('../ssh/config/ssh-config-parser', () => ({
 
 describe('profile-state cutover fixture', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-profile-cutover-fixture-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-profile-cutover-fixture-'))
   })
 
   afterEach(async () => {
@@ -131,7 +131,7 @@ describe('profile-state cutover fixture', () => {
 
       const candidateDirectory = mkdtempSync(join(testState.dir, 'candidate-'))
       const candidate = new Store({
-        dataFile: join(candidateDirectory, 'orca-data.json'),
+        dataFile: join(candidateDirectory, 'quirky-data.json'),
         serializedState: exported
       })
 
@@ -149,7 +149,7 @@ describe('profile-state cutover fixture', () => {
       const persisted: unknown = JSON.parse(candidate.prepareProfileStateExport().json)
       expect(persisted).toHaveProperty('futureTopLevelExtension', fixture.futureTopLevelExtension)
       expect(persisted).toHaveProperty('settings.opencodeSessionCookie')
-      expect(existsSync(join(candidateDirectory, 'orca-data.json'))).toBe(false)
+      expect(existsSync(join(candidateDirectory, 'quirky-data.json'))).toBe(false)
     } finally {
       opened.db.close()
     }

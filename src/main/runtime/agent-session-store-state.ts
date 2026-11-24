@@ -3,7 +3,7 @@
 
 import type { AgentSessionOperationRow } from '../../shared/agent-session-operation-ledger'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
-import type { AgentSessionOrcaStopCause } from '../../shared/agent-session-orca-stop'
+import type { AgentSessionQuirkyStopCause } from '../../shared/agent-session-quirky-stop'
 import type { AgentSessionTabTable } from './agent-session-tab-table'
 
 export type RetiredAgentSessionClaimKey = { keyId: string; retiredAt: number }
@@ -17,8 +17,8 @@ export type AgentSessionStoreState = {
   /** Chat tab id → the conversation it shows; null until this store first records a tab. */
   sessionTabs: AgentSessionTabTable | null
   /** How each earlier runtime recorded here ended: its quit or update, or a crash when it started
-   *  and never ended; read once at load. A runtime it lacks, or null, attributes no death to Orca. */
-  runtimeEnds?: ReadonlyMap<string, AgentSessionOrcaStopCause> | null
+   *  and never ended; read once at load. A runtime it lacks, or null, attributes no death to Quirky. */
+  runtimeEnds?: ReadonlyMap<string, AgentSessionQuirkyStopCause> | null
 }
 
 /** Every session id the state holds a row for, readable or not. */

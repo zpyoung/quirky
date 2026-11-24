@@ -28,7 +28,7 @@ vi.mock('../../worker-thread-entry-path', async (importOriginal) => {
 })
 
 beforeAll(async () => {
-  bundle.directory = mkdtempSync(join(tmpdir(), 'orca-startup-writers-'))
+  bundle.directory = mkdtempSync(join(tmpdir(), 'quirky-startup-writers-'))
   await build({
     entryPoints: [
       resolve('src/main/persistence/profile-state/profile-state-writer-worker-entry.ts'),
@@ -46,7 +46,7 @@ afterAll(() => rmSync(bundle.directory, { recursive: true, force: true }))
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -77,9 +77,9 @@ afterEach(() => {
 
 describe('profile-state startup authority boundary', () => {
   it('imports legacy desktop state by default and reopens acknowledged SQLite state', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-startup-authority-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-startup-authority-'))
     temporaryDirectories.push(directory)
-    const dataFile = join(directory, 'orca-data.json')
+    const dataFile = join(directory, 'quirky-data.json')
     const databaseFile = profileStateDatabaseFile(directory)
     writeFileSync(dataFile, JSON.stringify(buildProfileStateCutoverFixture(directory)))
 
@@ -118,16 +118,16 @@ describe('profile-state startup authority boundary', () => {
     expect(packaged.store.getSettings().theme).toBe('dark')
     await packaged.store.freezeWritesAsync()
 
-    const orcad = await createProfileStateStoreForStartup({
+    const quirkyd = await createProfileStateStoreForStartup({
       ...base,
-      runtime: 'orcad',
+      runtime: 'quirkyd',
       storageAuthority: 'runtime'
     })
-    expect(orcad.backend).toBe('sqlite')
-    await orcad.store.freezeWritesAsync()
+    expect(quirkyd.backend).toBe('sqlite')
+    await quirkyd.store.freezeWritesAsync()
   })
 
-  it('rejects direct orcad startup on an incapable runtime', async () => {
+  it('rejects direct quirkyd startup on an incapable runtime', async () => {
     const original = process.getBuiltinModule
     vi.spyOn(process, 'getBuiltinModule').mockImplementation((id) => {
       if (id === 'node:sqlite') {
@@ -138,20 +138,20 @@ describe('profile-state startup authority boundary', () => {
 
     await expect(
       createProfileStateStoreForStartup({
-        dataFile: join(tmpdir(), 'missing-orca-data.json'),
+        dataFile: join(tmpdir(), 'missing-quirky-data.json'),
         databaseFile: join(tmpdir(), 'missing-profile-state.db'),
         profileId: 'startup-authority-node18-test',
-        runtime: 'orcad',
+        runtime: 'quirkyd',
         storageAuthority: 'runtime'
       })
     ).rejects.toThrowError(ProfileStateStartupAuthorityError)
   })
 
   it('creates an empty desktop profile directly in SQLite and preserves its first acknowledged write', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-default-empty-profile-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-default-empty-profile-'))
     temporaryDirectories.push(directory)
     const options: ProfileStateStartupAuthorityOptions = {
-      dataFile: join(directory, 'orca-data.json'),
+      dataFile: join(directory, 'quirky-data.json'),
       databaseFile: profileStateDatabaseFile(directory),
       profileId: 'default-empty',
       runtime: 'desktop',
@@ -181,10 +181,10 @@ describe('profile-state startup authority boundary', () => {
   it.each(['corrupt', 'future-schema', 'ambiguous'] as const)(
     'refuses %s storage under the desktop default without replacing the authority',
     async (kind) => {
-      const directory = mkdtempSync(join(tmpdir(), 'orca-default-invalid-profile-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-default-invalid-profile-'))
       temporaryDirectories.push(directory)
       const options: ProfileStateStartupAuthorityOptions = {
-        dataFile: join(directory, 'orca-data.json'),
+        dataFile: join(directory, 'quirky-data.json'),
         databaseFile: profileStateDatabaseFile(directory),
         profileId: 'default-invalid',
         runtime: 'desktop',
@@ -220,18 +220,18 @@ describe('profile-state startup authority boundary', () => {
     }
   )
 
-  it('migrates a JSON-only orcad profile when the runtime exposes SQLite', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-orcad-capable-'))
+  it('migrates a JSON-only quirkyd profile when the runtime exposes SQLite', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-quirkyd-capable-'))
     temporaryDirectories.push(directory)
-    const dataFile = join(directory, 'orca-data.json')
+    const dataFile = join(directory, 'quirky-data.json')
     const databaseFile = profileStateDatabaseFile(directory)
     writeFileSync(dataFile, JSON.stringify({ settings: { theme: 'dark' } }))
 
     const result = await createProfileStateStoreForStartup({
       dataFile,
       databaseFile,
-      profileId: 'orcad-capable-test',
-      runtime: 'orcad',
+      profileId: 'quirkyd-capable-test',
+      runtime: 'quirkyd',
       storageAuthority: 'runtime'
     })
 
@@ -248,19 +248,19 @@ describe('profile-state startup authority boundary', () => {
     )
     await expect(
       createProfileStateStoreForStartup({
-        dataFile: join(tmpdir(), 'missing-backup-orca-data.json'),
+        dataFile: join(tmpdir(), 'missing-backup-quirky-data.json'),
         databaseFile: join(tmpdir(), 'missing-backup-profile-state.db'),
         profileId: 'missing-native-backup',
-        runtime: 'orcad',
+        runtime: 'quirkyd',
         storageAuthority: 'runtime'
       })
     ).rejects.toThrowError(ProfileStateStartupAuthorityError)
   })
 
   it('leaves legacy JSON untouched when the runtime cannot own SQLite', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-orcad-node18-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-quirkyd-node18-'))
     temporaryDirectories.push(directory)
-    const dataFile = join(directory, 'orca-data.json')
+    const dataFile = join(directory, 'quirky-data.json')
     const databaseFile = profileStateDatabaseFile(directory)
     const source = JSON.stringify({ settings: { theme: 'dark' } })
     writeFileSync(dataFile, source)
@@ -273,8 +273,8 @@ describe('profile-state startup authority boundary', () => {
       createProfileStateStoreForStartup({
         dataFile,
         databaseFile,
-        profileId: 'orcad-node18-test',
-        runtime: 'orcad',
+        profileId: 'quirkyd-node18-test',
+        runtime: 'quirkyd',
         storageAuthority: 'runtime'
       })
     ).rejects.toThrowError(ProfileStateStartupAuthorityError)

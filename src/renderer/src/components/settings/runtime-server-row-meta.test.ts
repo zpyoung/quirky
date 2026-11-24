@@ -4,7 +4,7 @@ import { getRuntimeServerProblemLine } from './runtime-server-row-meta'
 
 const quietRow = {
   accessRevoked: false,
-  problem: 'Timed out waiting for the remote Orca runtime.',
+  problem: 'Timed out waiting for the remote Quirky runtime.',
   probeFailed: true,
   compatibilityBlocked: false
 }

@@ -27,7 +27,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -107,7 +107,7 @@ describe('pty spawn placement threading', () => {
       worktreeId: WORKTREE,
       tabId: 'tab-placement',
       leafId: LEAF,
-      env: { ORCA_TAB_ID: 'tab-placement', ORCA_WORKTREE_ID: WORKTREE },
+      env: { QUIRKY_TAB_ID: 'tab-placement', QUIRKY_WORKTREE_ID: WORKTREE },
       ...extra
     })
   }
@@ -172,7 +172,7 @@ describe('pty spawn placement threading', () => {
       worktreeId: WORKTREE,
       tabId: 'tab-runtime',
       leafId: LEAF,
-      env: { ORCA_PANE_KEY: makePaneKey('tab-runtime', LEAF) },
+      env: { QUIRKY_PANE_KEY: makePaneKey('tab-runtime', LEAF) },
       persistHostSessionBinding: true,
       placement: SPLIT
     })

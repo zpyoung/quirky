@@ -68,7 +68,7 @@ export const createIssueCommandRunnerScriptMock: ModuleMock = vi.fn()
 export const createSetupRunnerScriptMock: ModuleMock = vi.fn()
 export const getEffectiveHooksFromConfigMock: ModuleMock = vi.fn()
 export const getDefaultTabsLaunchMock: ModuleMock = vi.fn()
-export const parseOrcaYamlMock: ModuleMock = vi.fn()
+export const parseQuirkyYamlMock: ModuleMock = vi.fn()
 export const shouldRunSetupForCreateMock: ModuleMock = vi.fn()
 export const buildPosixRunnerScriptMock: StringArgMock = vi.fn()
 export const buildWindowsRunnerScriptMock: StringArgMock = vi.fn()
@@ -174,7 +174,7 @@ export const worktreeSymlinksModuleMock = (): {
 export const hooksModuleMock = () => ({
   getEffectiveHooks: getEffectiveHooksMock,
   loadHooks: loadHooksMock,
-  parseOrcaYaml: parseOrcaYamlMock,
+  parseQuirkyYaml: parseQuirkyYamlMock,
   runHook: runHookMock,
   hasHooksFile: hasHooksFileMock
 })

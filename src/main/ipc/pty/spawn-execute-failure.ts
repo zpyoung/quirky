@@ -1,13 +1,13 @@
 import type { PtyRegistrationClaim } from '../../runtime/runtime-terminal-state-records'
 import type { PtySpawnResult } from '../../providers/pty-provider-contract'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { normalizeNodePtySpawnError } from './provider/liveness'
 import { ptySizes } from './delivery/visibility-state'
 import { clearProviderPtyState } from './provider/state-cleanup'
 
 /** What both spawn lanes' execute step claims before the provider call, under the same names. */
 type PtySpawnExecuteState = {
-  deps: { runtime?: OrcaRuntimeService }
+  deps: { runtime?: QuirkyRuntimeService }
   isClaudeLaunch: boolean
   effectiveSessionAppId: string | undefined
   hadSessionSizeBeforeAttach: boolean

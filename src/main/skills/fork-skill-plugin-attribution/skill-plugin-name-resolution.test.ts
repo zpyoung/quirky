@@ -8,7 +8,7 @@ const HOME = '/home/alice'
 function root(id: string): SkillScanRoot {
   const found = buildSkillDiscoverySources({
     homeDir: HOME,
-    cwd: '/workspace/orca',
+    cwd: '/workspace/quirky',
     repos: [],
     pathApi: pathPosix
   }).find((candidate) => candidate.id === id)

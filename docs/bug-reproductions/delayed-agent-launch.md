@@ -2,7 +2,7 @@
 
 ## Reproduction (2026-10-12, macOS)
 
-An isolated Orca dev instance ran off screen with `ORCA_BACKGROUND_LAUNCH=1`.
+An isolated Quirky dev instance ran off screen with `QUIRKY_BACKGROUND_LAUNCH=1`.
 In a folder workspace, `terminal create --command 'sleep 30 && claude'` launched
 real Claude Code 2.1.296 after the delay. SessionStart, working and done hooks
 arrived, and a prompt requesting `DELAYED_LAUNCH_OK` completed. A blanket Claude

@@ -106,7 +106,7 @@ export function useNativeChatSessionOptions(args: {
     paneKey ? (state.agentStatusByPaneKey[paneKey]?.model ?? null) : null
   )
   const canSwitchOmpModel = useAppStore((state) =>
-    paneKey ? state.agentStatusByPaneKey[paneKey]?.modelSwitchCommand === 'orca-model' : false
+    paneKey ? state.agentStatusByPaneKey[paneKey]?.modelSwitchCommand === 'quirky-model' : false
   )
   // The hook-reported model this surface last applied. Only a report that CHANGES
   // is evidence: the same value is re-delivered on every status ping, and a

@@ -91,12 +91,15 @@ const cutChat: AgentJournalRenderItem[] = [
     body: { kind: 'turn', turnId: 'cut', state: 'interrupted', startedAt: 1, completedAt: 5 }
   },
   {
-    itemId: agentJournalItemKey({ provider: 'orca', clientMessageId: 'stale-session:s:death-1-5' }),
+    itemId: agentJournalItemKey({
+      provider: 'quirky',
+      clientMessageId: 'stale-session:s:death-1-5'
+    }),
     revision: 1,
     sequence: 2,
     observedAt: 6,
     turnScope: { kind: 'turn', turnItemId: TURN },
-    body: { kind: 'status', text: 'Codex stopped.', tone: 'error', orcaStop: { cause: 'crash' } }
+    body: { kind: 'status', text: 'Codex stopped.', tone: 'error', quirkyStop: { cause: 'crash' } }
   }
 ]
 
@@ -185,7 +188,7 @@ afterEach(() => {
   clearNativeChatComposerDraftsForTests()
 })
 
-describe('Continue on a reply an Orca stop cut off', () => {
+describe('Continue on a reply an Quirky stop cut off', () => {
   it("asks the chat's own host, paired or local, to continue that cut turn", () => {
     mocks.call.mockResolvedValue({ outcome: 'pending' })
     render(<Harness />)
@@ -263,7 +266,7 @@ describe('Continue on a reply an Orca stop cut off', () => {
     expect(continueButton()).toBeNull()
   })
 
-  it('is not offered for a cut no Orca stop explains', () => {
+  it('is not offered for a cut no Quirky stop explains', () => {
     render(<Harness journalItems={cutChat.slice(0, 1)} />)
     expect(continueButton()).toBeNull()
   })

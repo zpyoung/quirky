@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as RunProcess from '@orca/process-host'
+import type * as RunProcess from '@quirky/process-host'
 
 const { childSpawnMock, readFileMock, resolveCodexCommandMock, ptySpawnMock } = vi.hoisted(() => ({
   childSpawnMock: vi.fn(),
@@ -20,7 +20,7 @@ vi.mock(
 )
 vi.mock('node:child_process', () => ({ spawn: childSpawnMock }))
 // The chokepoint is the seam: assertions see what the fetcher asked for, before shim resolution.
-vi.mock('@orca/process-host', async (importOriginal) => ({
+vi.mock('@quirky/process-host', async (importOriginal) => ({
   ...(await importOriginal<typeof RunProcess>()),
   spawnProcess: (spec: { program: string; args?: readonly string[] }) =>
     childSpawnMock(spec.program, spec.args ?? [], spec)
@@ -62,7 +62,7 @@ function makeRpcChild() {
 
 /** A CLI installed under one version manager entry, with its sibling node. */
 function makeVersionManagerCli(cliName = 'codex'): { bin: string; cli: string } {
-  const root = mkdtempSync(join(tmpdir(), 'orca-fetch-pair-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-fetch-pair-'))
   const bin = join(root, '.nvm', 'versions', 'node', 'v20.11.0', 'bin')
   mkdirSync(bin, { recursive: true })
   for (const name of ['node', 'node.exe', cliName]) {

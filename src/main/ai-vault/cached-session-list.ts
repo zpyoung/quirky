@@ -44,8 +44,8 @@ export class AiVaultLocalScanError extends Error {
 }
 
 // Why: codex-home + WSL home dirs must be sourced from a serve-mode-reachable
-// seam (the OrcaRuntimeService deps), NOT the window-only registerCoreHandlers
-// path — `orca serve` never runs that path, so sourcing it there would silently
+// seam (the QuirkyRuntimeService deps), NOT the window-only registerCoreHandlers
+// path — `quirky serve` never runs that path, so sourcing it there would silently
 // drop managed-Codex sessions from remote/SSH results.
 export type AiVaultSessionSources = {
   getAdditionalCodexHomePaths?: () => readonly string[]

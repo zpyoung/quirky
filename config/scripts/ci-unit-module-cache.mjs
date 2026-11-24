@@ -12,7 +12,7 @@ import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { pathToFileURL } from 'node:url'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { collectNodeServerInputs } from './node-server-change-scope.mjs'
 import { workspacePackageManifests } from './workspace-source-exports.mjs'
 import { writeAssignment } from './ci-shard-assignment.mjs'
@@ -110,7 +110,7 @@ export function moduleCacheIdentity({
   return {
     ...identity,
     key: `unit-module-v1-${platform}-${arch}-n${versions.node}-b${versions.bun}-v${versions.vitest}-s${shard.index}of${shard.count}-${digest}`,
-    path: join(resolve(cacheRoot), 'orca-vitest-module-cache')
+    path: join(resolve(cacheRoot), 'quirky-vitest-module-cache')
   }
 }
 
@@ -199,15 +199,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     try {
       const identity = await resolveModuleCacheIdentity({
         shard: {
-          index: Number(process.env.ORCA_UNIT_SHARD_INDEX),
-          count: Number(process.env.ORCA_UNIT_SHARD_COUNT)
+          index: Number(process.env.QUIRKY_UNIT_SHARD_INDEX),
+          count: Number(process.env.QUIRKY_UNIT_SHARD_COUNT)
         },
-        namespace: process.env.ORCA_UNIT_CACHE_NAMESPACE ?? ''
+        namespace: process.env.QUIRKY_UNIT_CACHE_NAMESPACE ?? ''
       })
       writeAssignment(IDENTITY_REPORT, identity)
       output({ key: identity.key, path: identity.path })
       if (process.env.GITHUB_ENV) {
-        appendFileSync(process.env.GITHUB_ENV, `ORCA_UNIT_MODULE_CACHE_PATH=${identity.path}\n`)
+        appendFileSync(process.env.GITHUB_ENV, `QUIRKY_UNIT_MODULE_CACHE_PATH=${identity.path}\n`)
       }
     } catch (error) {
       console.warn(`Unit module cache unavailable: ${String(error)}`)
@@ -216,14 +216,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const identity = JSON.parse(readFileSync(IDENTITY_REPORT, 'utf8'))
     if (phase === 'prepare') {
       const result = await prepareModuleCache(identity, {
-        restoreHit: process.env.ORCA_UNIT_CACHE_RESTORE_HIT === 'true'
+        restoreHit: process.env.QUIRKY_UNIT_CACHE_RESTORE_HIT === 'true'
       })
       writeAssignment(CACHE_REPORT, { key: identity.key, mode: 'restore', ...result })
       console.log(JSON.stringify(result))
     } else if (phase === 'seal') {
       try {
         const result = await finishModuleCache(identity, {
-          sourceSha: process.env.ORCA_SHARD_SOURCE_SHA ?? process.env.GITHUB_SHA
+          sourceSha: process.env.QUIRKY_SHARD_SOURCE_SHA ?? process.env.GITHUB_SHA
         })
         const previous = JSON.parse(readFileSync(CACHE_REPORT, 'utf8'))
         writeAssignment(CACHE_REPORT, { ...previous, produced: result })

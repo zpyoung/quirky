@@ -113,13 +113,13 @@ export function SshHostAdvancedFields({
               <Label className="text-xs font-medium">
                 {translate(
                   'auto.components.settings.SshTargetForm.allowRemoteCliControl',
-                  "Allow this host's orca CLI to control Orca"
+                  "Allow this host's quirky CLI to control Quirky"
                 )}
               </Label>
               <p className="text-muted-foreground">
                 {translate(
                   'auto.components.settings.SshTargetForm.allowRemoteCliControlHelp',
-                  "On by default for new hosts. Lets orca commands run on this host open and drive Orca browser tabs on this desktop, only in this host's workspaces and only while it is connected, and lets terminals started by an older Orca on this host run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Orca server."
+                  "On by default for new hosts. Lets quirky commands run on this host open and drive Quirky browser tabs on this desktop, only in this host's workspaces and only while it is connected, and lets terminals started by an older Quirky on this host run orchestration commands (check, inbox, send, ask, reply) for their own supervised work. They cannot read your files, clipboard or cookies. When off, they reach only this host's own Quirky server."
                 )}
               </p>
             </div>
@@ -134,7 +134,7 @@ export function SshHostAdvancedFields({
               }
               ariaLabel={translate(
                 'auto.components.settings.SshTargetForm.allowRemoteCliControl',
-                "Allow this host's orca CLI to control Orca"
+                "Allow this host's quirky CLI to control Quirky"
               )}
             />
           </div>

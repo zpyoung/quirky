@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   parsePsArgsLine,
   splitCommandLineArgv,
@@ -7,7 +7,7 @@ import {
 } from './opencode/opencode-client-sweep'
 import { LOG_PREDICATE } from './macos-tcc-prompt-watch'
 
-/** The exact argv that Orca builds before the sh wrapper spawned `log stream` directly. */
+/** The exact argv that Quirky builds before the sh wrapper spawned `log stream` directly. */
 const LEGACY_LOG_STREAM_COMMAND = splitCommandLineArgv(
   ['/usr/bin/log', 'stream', '--predicate', LOG_PREDICATE, '--info', '--style', 'compact'].join(' ')
 ).join(' ')
@@ -20,7 +20,7 @@ function isLegacyOrphan(row: ProcessIdentityRow): boolean {
 }
 
 /**
- * Why: older builds left this `log stream` running under launchd whenever Orca died
+ * Why: older builds left this `log stream` running under launchd whenever Quirky died
  * uncleanly, and those orphans outlive every later launch. A live watcher's
  * `log stream` is parented by its wrapper, so only launchd's children (ppid 1) match.
  * `executable` comes from a later `ps` than argv, so a pid recycled between them fails.

@@ -26,15 +26,15 @@ function placement(
   overrides: Partial<SkillFreshnessInstallation> = {}
 ): SkillFreshnessInstallation {
   return {
-    id: 'orca-cli',
-    name: 'orca-cli',
+    id: 'quirky-cli',
+    name: 'quirky-cli',
     rootId: 'home-agents',
     providers: ['agent-skills'],
     sourceKind: 'home',
     sourceLabel: 'Agent skills home',
-    unresolvedPath: '/home/.agents/skills/orca-cli',
-    resolvedPath: '/home/.agents/skills/orca-cli',
-    physicalIdentity: 'physical-orca-cli',
+    unresolvedPath: '/home/.agents/skills/quirky-cli',
+    resolvedPath: '/home/.agents/skills/quirky-cli',
+    physicalIdentity: 'physical-quirky-cli',
     topology: 'canonical-copy',
     status: 'outdated',
     currentPackageDigest: 'current',
@@ -48,7 +48,7 @@ function eligibleInventory(): SkillFreshnessInventory {
   return {
     schemaVersion: 1,
     installations: [placement()],
-    eligibleUpdateNames: ['orca-cli'],
+    eligibleUpdateNames: ['quirky-cli'],
     scanIssues: [],
     scannedAt: 1
   }
@@ -108,7 +108,7 @@ async function rerenderNudge(): Promise<void> {
   })
 }
 
-const DISMISSAL_KEY = ['physical-orca-cli', 'orca-cli', 'current'].join('\0')
+const DISMISSAL_KEY = ['physical-quirky-cli', 'quirky-cli', 'current'].join('\0')
 
 describe('SkillFreshnessNudge', () => {
   beforeEach(() => {
@@ -145,7 +145,7 @@ describe('SkillFreshnessNudge', () => {
     expect(mocks.updateSettings).not.toHaveBeenCalled()
   })
 
-  it('counts only Orca-owned outdated skills', async () => {
+  it('counts only Quirky-owned outdated skills', async () => {
     mocks.inventory = {
       schemaVersion: 1,
       installations: [
@@ -163,15 +163,15 @@ describe('SkillFreshnessNudge', () => {
           lockSource: null
         })
       ],
-      eligibleUpdateNames: ['computer-use', 'orca-cli', 'orchestration'],
+      eligibleUpdateNames: ['computer-use', 'quirky-cli', 'orchestration'],
       scanIssues: [],
       scannedAt: 1
     }
     await renderNudge()
 
     expect(mocks.toastInfo).toHaveBeenCalledTimes(1)
-    expect(mocks.toastInfo.mock.calls[0]?.[0]).toBe('An installed Orca skill is out of date')
-    expect(mocks.toastInfo.mock.calls[0]?.[1].description).toContain('Update orca-cli so')
+    expect(mocks.toastInfo.mock.calls[0]?.[0]).toBe('An installed Quirky skill is out of date')
+    expect(mocks.toastInfo.mock.calls[0]?.[1].description).toContain('Update quirky-cli so')
   })
 
   it('raises no nudge when every outdated copy came from somewhere else', async () => {
@@ -296,12 +296,12 @@ describe('SkillFreshnessNudge', () => {
           id: 'repo-copy',
           topology: 'repo-scope',
           sourceKind: 'repo',
-          unresolvedPath: '/home/projects/work/.agents/skills/orca-cli',
-          resolvedPath: '/home/projects/work/.agents/skills/orca-cli',
-          physicalIdentity: 'physical-repo-orca-cli'
+          unresolvedPath: '/home/projects/work/.agents/skills/quirky-cli',
+          resolvedPath: '/home/projects/work/.agents/skills/quirky-cli',
+          physicalIdentity: 'physical-repo-quirky-cli'
         })
       ],
-      eligibleUpdateNames: ['orca-cli'],
+      eligibleUpdateNames: ['quirky-cli'],
       scanIssues: [],
       scannedAt: 1
     }
@@ -324,10 +324,10 @@ describe('SkillFreshnessNudge', () => {
           id: 'repo-copy',
           topology: 'repo-scope',
           sourceKind: 'repo',
-          physicalIdentity: 'physical-repo-orca-cli-after-checkout'
+          physicalIdentity: 'physical-repo-quirky-cli-after-checkout'
         })
       ],
-      eligibleUpdateNames: ['orca-cli'],
+      eligibleUpdateNames: ['quirky-cli'],
       scanIssues: [],
       scannedAt: 2
     }

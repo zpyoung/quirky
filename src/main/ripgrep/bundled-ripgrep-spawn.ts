@@ -1,5 +1,5 @@
-import { spawnProcess } from '@orca/process-host'
-import type { ChildProcessHandle, ProcessSpec } from '@orca/process-host/process-spec'
+import { spawnProcess } from '@quirky/process-host'
+import type { ChildProcessHandle, ProcessSpec } from '@quirky/process-host/process-spec'
 import { bundledRipgrepCommand } from './bundled-ripgrep-path'
 
 export type BundledRipgrepSpawnOptions = Pick<ProcessSpec, 'cwd' | 'stdio' | 'env'> & {
@@ -9,7 +9,7 @@ export type BundledRipgrepSpawnOptions = Pick<ProcessSpec, 'cwd' | 'stdio' | 'en
 }
 
 /**
- * The single way Orca spawns ripgrep: its own binary, never a bare `rg` resolved from PATH or the
+ * The single way Quirky spawns ripgrep: its own binary, never a bare `rg` resolved from PATH or the
  * spawn cwd.
  */
 export function spawnBundledRipgrep(

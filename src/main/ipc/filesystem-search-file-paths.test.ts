@@ -55,7 +55,7 @@ function createMockProcess(spawned = true): ChildProcess {
   return child
 }
 
-const BUNDLED_ERROR = "Orca's bundled search tool (ripgrep) could not start"
+const BUNDLED_ERROR = "Quirky's bundled search tool (ripgrep) could not start"
 
 // Why Object.create and not `{} as Store`: this path never reads the store, and the changed-code
 // quality gate rejects type assertions.

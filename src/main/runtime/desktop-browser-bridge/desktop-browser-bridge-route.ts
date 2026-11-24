@@ -1,6 +1,6 @@
 /**
- * Decides, on orcad, whether a browser RPC from this host's own `orca` CLI goes to an attached
- * desktop. Only the local CLI is forwarded: a paired client calling orcad is never bounced back
+ * Decides, on quirkyd, whether a browser RPC from this host's own `quirky` CLI goes to an attached
+ * desktop. Only the local CLI is forwarded: a paired client calling quirkyd is never bounced back
  * to a desktop.
  */
 import { BrowserError } from '../../browser/browser-error'
@@ -66,7 +66,7 @@ export async function routeDesktopBrowserBridgeRpc(options: {
     assertClientOpenableUrl(String(params.url))
   }
   let workspaceId: string | undefined
-  // Why resolve here: only orcad knows this host's selectors (path:, branch:, active).
+  // Why resolve here: only quirkyd knows this host's selectors (path:, branch:, active).
   if (typeof params.worktree === 'string' && params.worktree.length > 0) {
     workspaceId = (await options.resolveWorkspace(params.worktree)).id
     params.worktree = `id:${workspaceId}`

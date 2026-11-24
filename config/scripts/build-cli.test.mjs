@@ -10,7 +10,7 @@ import {
 } from 'node:fs'
 import { availableParallelism, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { runProcess, runProcessSync } from '@orca/process-host'
+import { runProcess, runProcessSync } from '@quirky/process-host'
 import { afterEach, expect, it, vi } from 'vitest'
 import { buildCli } from './build-cli.mjs'
 import { resolvePinnedBunExecutable } from './pinned-bun-executable.mjs'
@@ -26,7 +26,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-cli-build-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cli-build-'))
   directories.push(root)
   mkdirSync(join(root, 'config'))
   mkdirSync(join(root, 'src'))
@@ -128,7 +128,7 @@ it('propagates emitter failures', async () => {
 it('rejects unknown compiler selections before emission', async () => {
   const execute = vi.fn()
   await expect(buildCli({ compiler: 'unknown', execute })).rejects.toThrow(
-    'Invalid ORCA_CLI_BUILD_COMPILER'
+    'Invalid QUIRKY_CLI_BUILD_COMPILER'
   )
   expect(execute).not.toHaveBeenCalled()
 })

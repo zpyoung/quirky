@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -65,10 +65,10 @@ function launchCalls(): unknown[][] {
   )
 }
 
-describe('orca cli agent launch', () => {
+describe('quirky cli agent launch', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -163,7 +163,7 @@ describe('orca cli agent launch', () => {
     callMock.mockRejectedValueOnce(
       new RuntimeClientError(
         'runtime_unavailable',
-        'The Orca runtime closed the connection before responding. Restart Orca and try again.'
+        'The Quirky runtime closed the connection before responding. Restart Quirky and try again.'
       )
     )
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
@@ -190,7 +190,7 @@ describe('orca cli agent launch', () => {
       '--retry-launch',
       error.data.operationId
     ])
-    expect(JSON.stringify(error)).not.toContain('Restart Orca and try again')
+    expect(JSON.stringify(error)).not.toContain('Restart Quirky and try again')
     expect(launchCalls()).toHaveLength(1)
   })
 
@@ -245,7 +245,7 @@ describe('orca cli agent launch', () => {
   })
 
   it('uses the caller folder identity after validating its native host and enclosing path', async () => {
-    process.env.ORCA_WORKSPACE_ID = 'folder:caller'
+    process.env.QUIRKY_WORKSPACE_ID = 'folder:caller'
     queueFixtures(
       callMock,
       okFixture('folders', {
@@ -270,7 +270,7 @@ describe('orca cli agent launch', () => {
   })
 
   it('ignores an inherited remote folder identity and uses the local Git fallback', async () => {
-    process.env.ORCA_WORKSPACE_ID = 'folder:remote'
+    process.env.QUIRKY_WORKSPACE_ID = 'folder:remote'
     queueFixtures(
       callMock,
       okFixture('folders', {

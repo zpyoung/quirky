@@ -77,7 +77,7 @@ describe('resolveOpenCodeGoApiKey', () => {
   beforeEach(() => {
     vi.mocked(detectOpenCodeCredentialBackend).mockReset().mockResolvedValue('v2')
     originalEnvironment = Object.fromEntries(ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]))
-    dataHome = mkdtempSync(join(tmpdir(), 'orca-opencode-go-key-'))
+    dataHome = mkdtempSync(join(tmpdir(), 'quirky-opencode-go-key-'))
     process.env.XDG_DATA_HOME = dataHome
     delete process.env.OPENCODE_API_KEY
     delete process.env.OPENCODE_AUTH_CONTENT

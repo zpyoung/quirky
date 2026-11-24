@@ -67,7 +67,7 @@ export const WORKTREE_CREATE_EXECUTION_HOSTS = ['local', 'wsl', 'ssh'] as const
 
 export type WorktreeCreateExecutionHost = (typeof WORKTREE_CREATE_EXECUTION_HOSTS)[number]
 
-/** Which create entry point ran: Orca's own window (`app`) or the runtime API that the CLI,
+/** Which create entry point ran: Quirky's own window (`app`) or the runtime API that the CLI,
  *  agents, the phone app, paired clients and orchestration call (`runtime`). */
 export const WORKSPACE_CREATE_ENTRY_POINTS = ['app', 'runtime'] as const
 

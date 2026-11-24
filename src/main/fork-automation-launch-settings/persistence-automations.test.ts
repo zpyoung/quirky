@@ -31,7 +31,7 @@ vi.mock('electron', () => ({
 
 describe('automation launch settings persistence', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

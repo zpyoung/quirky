@@ -42,7 +42,9 @@ const owner = { target: { kind: 'local' as const }, sessionId: 'session-1', work
 function visualReply(index: number): NativeChatMessage {
   return {
     ...marker(index),
-    blocks: [{ type: 'text', text: 'Here it is:\n::orca-visual{file="usage.html" title="Usage"}' }]
+    blocks: [
+      { type: 'text', text: 'Here it is:\n::quirky-visual{file="usage.html" title="Usage"}' }
+    ]
   }
 }
 

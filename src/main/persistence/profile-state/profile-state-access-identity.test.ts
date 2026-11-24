@@ -2,7 +2,7 @@ import * as fs from 'node:fs'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const native = vi.hoisted(() => ({ runProcessSync: vi.fn() }))
-vi.mock('@orca/process-host', () => ({ runProcessSync: native.runProcessSync }))
+vi.mock('@quirky/process-host', () => ({ runProcessSync: native.runProcessSync }))
 vi.mock('node:fs', async (importOriginal) => ({ ...(await importOriginal<typeof fs>()) }))
 
 const platform = Object.getOwnPropertyDescriptor(process, 'platform')

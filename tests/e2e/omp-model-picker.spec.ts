@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { buildShellCommandFromArgv } from '../../src/shared/tui-agent-startup-shell'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
   execInTerminal,
@@ -10,16 +10,16 @@ import {
 } from './helpers/terminal'
 
 test('OMP model picker dispatches its advertised command and adopts the host report', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }, testInfo) => {
   test.skip(process.platform === 'win32', 'POSIX PTY capture fixture')
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage)
-  const descriptor = await waitForActivePaneHookDescriptor(orcaPage)
-  const ptyId = await waitForActivePanePtyId(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage)
+  const descriptor = await waitForActivePaneHookDescriptor(quirkyPage)
+  const ptyId = await waitForActivePanePtyId(quirkyPage)
   const output = testInfo.outputPath('model-command.txt')
   const script = testInfo.outputPath('capture.cjs')
   await writeFile(
@@ -27,7 +27,7 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
     `const fs = require('node:fs'); let data = ''; process.stdin.setRawMode(true); process.stdin.on('data', chunk => { data += chunk; fs.writeFileSync(${JSON.stringify(output)}, data); });`
   )
   await execInTerminal(
-    orcaPage,
+    quirkyPage,
     ptyId,
     buildShellCommandFromArgv([process.execPath, script], 'posix')
   )
@@ -42,7 +42,7 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
       ]
     }))
   })
-  await orcaPage.evaluate(async ({ paneKey, worktreeId }) => {
+  await quirkyPage.evaluate(async ({ paneKey, worktreeId }) => {
     const settings = await window.api.settings.set({ experimentalNativeChat: true })
     const store = window.__store
     if (!store) {
@@ -57,7 +57,7 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
         prompt: '',
         agentType: 'omp',
         model: 'anthropic/claude-sonnet-4-5',
-        modelSwitchCommand: 'orca-model'
+        modelSwitchCommand: 'quirky-model'
       },
       'OMP',
       undefined,
@@ -72,19 +72,19 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
     }
     state.toggleTabViewMode(tab.id)
   }, descriptor)
-  const picker = orcaPage.getByRole('button', { name: 'Model Sonnet 4.5', exact: true })
+  const picker = quirkyPage.getByRole('button', { name: 'Model Sonnet 4.5', exact: true })
   await expect(picker).toBeVisible()
   await picker.click()
-  await expect(orcaPage.getByRole('option', { name: 'Sonnet 4.6', exact: true })).toBeVisible()
-  await orcaPage.screenshot({
+  await expect(quirkyPage.getByRole('option', { name: 'Sonnet 4.6', exact: true })).toBeVisible()
+  await quirkyPage.screenshot({
     animations: 'disabled',
     path: testInfo.outputPath('omp-model-choices.png')
   })
-  await orcaPage.getByRole('option', { name: 'Sonnet 4.6', exact: true }).click()
+  await quirkyPage.getByRole('option', { name: 'Sonnet 4.6', exact: true }).click()
   await expect
     .poll(async () => readFile(output, 'utf8').catch(() => ''))
-    .toContain('/orca-model anthropic/claude-sonnet-4-6')
-  await orcaPage.evaluate(({ paneKey, worktreeId }) => {
+    .toContain('/quirky-model anthropic/claude-sonnet-4-6')
+  await quirkyPage.evaluate(({ paneKey, worktreeId }) => {
     window.__store?.getState().setAgentStatus(
       paneKey,
       {
@@ -92,7 +92,7 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
         prompt: '',
         agentType: 'omp',
         model: 'anthropic/claude-sonnet-4-6',
-        modelSwitchCommand: 'orca-model'
+        modelSwitchCommand: 'quirky-model'
       },
       'OMP',
       undefined,
@@ -100,9 +100,9 @@ test('OMP model picker dispatches its advertised command and adopts the host rep
     )
   }, descriptor)
   await expect(
-    orcaPage.getByRole('button', { name: 'Model Sonnet 4.6', exact: true })
+    quirkyPage.getByRole('button', { name: 'Model Sonnet 4.6', exact: true })
   ).toBeVisible()
-  await orcaPage.screenshot({
+  await quirkyPage.screenshot({
     animations: 'disabled',
     path: testInfo.outputPath('omp-model-reported.png')
   })

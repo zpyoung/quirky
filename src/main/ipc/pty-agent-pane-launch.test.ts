@@ -33,7 +33,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -174,9 +174,9 @@ describe('a pane that starts its own agent launch', () => {
     await spawnPane()
 
     const env = providerSpawn.mock.calls[0]?.[0]?.env ?? {}
-    expect(env.ORCA_AGENT_LAUNCH_TOKEN).toMatch(/.+/)
+    expect(env.QUIRKY_AGENT_LAUNCH_TOKEN).toMatch(/.+/)
     expect(JSON.stringify(runtime.registerPty.mock.calls)).toContain(
-      JSON.stringify({ launchToken: env.ORCA_AGENT_LAUNCH_TOKEN, launchAgent: 'claude' })
+      JSON.stringify({ launchToken: env.QUIRKY_AGENT_LAUNCH_TOKEN, launchAgent: 'claude' })
     )
   })
 

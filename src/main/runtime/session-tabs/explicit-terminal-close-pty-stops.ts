@@ -1,5 +1,5 @@
-import { OrcaRuntimeWithFocusTerminal } from '../terminal/focus/focus-terminal'
-import { EXPLICIT_TERMINAL_CLOSE_STOP_TIMEOUT_MS } from '../orca-runtime-core'
+import { QuirkyRuntimeWithFocusTerminal } from '../terminal/focus/focus-terminal'
+import { EXPLICIT_TERMINAL_CLOSE_STOP_TIMEOUT_MS } from '../quirky-runtime-core'
 import { SSH_PROVIDER_UNREGISTERED_REASON } from '../../../shared/pty-liveness-verdict'
 import { errorMessage } from '../../../shared/error-message'
 
@@ -8,7 +8,7 @@ export type ExplicitCloseStop = { stopped: boolean }
 
 export const NO_STOP: ExplicitCloseStop = { stopped: false }
 
-export abstract class OrcaRuntimeWithExplicitCloseTabPtyStops extends OrcaRuntimeWithFocusTerminal {
+export abstract class QuirkyRuntimeWithExplicitCloseTabPtyStops extends QuirkyRuntimeWithFocusTerminal {
   protected async stopExplicitlyClosedTabPtys(
     ptyIds: readonly string[],
     addressedPtyId: string

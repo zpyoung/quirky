@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -78,7 +78,7 @@ function colorOf(store: ReturnType<typeof createTestStore>): string | null | und
 
 /** A layout-owner build sends the change to main, whose frame draws it; otherwise the window does. */
 function expectChange(windowShows: () => void, mainGets: Record<string, unknown>): void {
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     expect(layoutApplyTestTransport.sent.at(-1)).toEqual(
       expect.objectContaining({ workspace: WORKTREE, ...mainGets })
     )

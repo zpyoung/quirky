@@ -74,7 +74,7 @@ export function CursorAccountsSection(): React.JSX.Element {
   }, [loadStatus, cursorUsage?.updatedAt])
 
   // Why: the effect below already reloads status when the refresh lands a new
-  // snapshot, and each load is a keychain read for an item Orca does not own.
+  // snapshot, and each load is a keychain read for an item Quirky does not own.
   const handleRefreshUsage = async (): Promise<void> => {
     setRefreshing(true)
     try {
@@ -116,7 +116,7 @@ export function CursorAccountsSection(): React.JSX.Element {
           <p className="text-xs text-muted-foreground">
             {translate(
               'auto.components.settings.CursorAccountsSection.subtitle',
-              'Shows your monthly Cursor plan usage from the sign-in already on this computer. Orca only reads it — it never changes your Cursor login.'
+              'Shows your monthly Cursor plan usage from the sign-in already on this computer. Quirky only reads it — it never changes your Cursor login.'
             )}
           </p>
         </div>
@@ -163,16 +163,16 @@ export function CursorAccountsSection(): React.JSX.Element {
                   ? sourceLabel
                     ? translate(
                         'auto.components.settings.CursorAccountsSection.signedInFrom',
-                        'Signed in. Orca reads the session stored in {{source}}.',
+                        'Signed in. Quirky reads the session stored in {{source}}.',
                         { source: sourceLabel }
                       )
                     : translate(
                         'auto.components.settings.CursorAccountsSection.signedInGeneric',
-                        'Signed in. Orca reads the Cursor session stored on this computer.'
+                        'Signed in. Quirky reads the Cursor session stored on this computer.'
                       )
                   : translate(
                       'auto.components.settings.CursorAccountsSection.expired',
-                      'Sign-in expired — run cursor-agent login on the computer running Orca, then click Refresh usage.'
+                      'Sign-in expired — run cursor-agent login on the computer running Quirky, then click Refresh usage.'
                     )}
               </p>
             </>

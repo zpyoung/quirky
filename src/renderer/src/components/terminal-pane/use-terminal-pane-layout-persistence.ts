@@ -12,7 +12,7 @@ import {
   sanitizeTerminalLayoutPaneTitles
 } from '../../../../shared/terminal-pane-title-sanitization'
 import type { TerminalPaneStartupController } from './use-terminal-pane-startup-actions'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import { notePendingPaneTitleRename } from '@/runtime/pending-pane-title-renames'
 
@@ -224,7 +224,7 @@ export function useTerminalPaneLayoutPersistence(controller: TerminalPaneStartup
       }
       // Switch point: main renames the pane and its frame draws the title.
       if (
-        ORCA_LAYOUT_OWNER_IS_MAIN &&
+        QUIRKY_LAYOUT_OWNER_IS_MAIN &&
         leafId &&
         sendLayoutCommandToOwner(
           worktreeId,

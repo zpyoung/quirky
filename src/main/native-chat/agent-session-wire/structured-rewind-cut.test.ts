@@ -36,7 +36,7 @@ let root: string
 const journals = createTrackedJournalOpener()
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-rewind-cut-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-rewind-cut-'))
 })
 
 afterEach(async () => {
@@ -47,7 +47,7 @@ afterEach(async () => {
 it("keeps a subagent row with the main turn it arrived in, across the subagent's own turn", async () => {
   const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
   const append = async (identity: AgentJournalItemIdentity, value: string, turn?: string) => {
-    const record = turn ? { provider: 'orca' as const, clientMessageId: `turn-${turn}` } : null
+    const record = turn ? { provider: 'quirky' as const, clientMessageId: `turn-${turn}` } : null
     await journal.appendItem(identity, text(value), {
       fence: 1,
       turnScope: record
@@ -57,7 +57,7 @@ it("keeps a subagent row with the main turn it arrived in, across the subagent's
   }
   for (const turn of ['a', 'b']) {
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: `turn-${turn}` },
+      { provider: 'quirky', clientMessageId: `turn-${turn}` },
       { kind: 'turn', turnId: turn, state: 'completed' },
       { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
     )
@@ -101,7 +101,7 @@ it('rewinds only to a message that opened its turn, and still cuts at one alread
     blocks: [{ type: 'text', text: uuid }]
   })
   const turnRecord = async (id: string, opener: string) => {
-    const turn = { provider: 'orca' as const, clientMessageId: id }
+    const turn = { provider: 'quirky' as const, clientMessageId: id }
     await journal.appendItem(
       turn,
       { kind: 'turn', turnId: id, state: 'completed', userItemId: key(opener) },

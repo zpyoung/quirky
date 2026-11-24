@@ -4,7 +4,7 @@ import type { ExecutionHostId, ParsedExecutionHost } from '../../../../shared/ex
 import type { Repo } from '../../../../shared/repo-types'
 import type { SshConnectionState, SshConnectionStatus } from '../../../../shared/ssh-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { OrcaVmRecipe } from '../../../../shared/orca-yaml-hook-types'
+import type { QuirkyVmRecipe } from '../../../../shared/quirky-yaml-hook-types'
 import type { AgentStartupShell } from '../../../../shared/tui-agent-startup-shell'
 import type { ExecutionHostPlatformFact } from '@/lib/execution-host-facts'
 import type { NewWorkspaceProjectOption } from '@/lib/new-workspace-project-options'
@@ -52,7 +52,7 @@ export type ComposerRuntimeTargetModel = {
   selectedRecipeRepoId: string | null
   selectedRecipeRepoConnectionId: string | null
   ephemeralVmsEnabled: boolean
-  ephemeralVmRecipes: OrcaVmRecipe[]
+  ephemeralVmRecipes: QuirkyVmRecipe[]
   selectedEphemeralVmRecipeId: string | null
   setSelectedEphemeralVmRecipeId: (recipeId: string | null) => void
   ephemeralVmRecipeError: string | null

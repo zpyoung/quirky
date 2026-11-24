@@ -1,5 +1,5 @@
 // Where an attachment's pixels can be read, which is not always the path the
-// agent gets: an SSH worktree uploads into the remote `.orca/drops`, so the
+// agent gets: an SSH worktree uploads into the remote `.quirky/drops`, so the
 // chip's path names a remote file and only the client-local original is
 // readable here.
 
@@ -8,7 +8,7 @@ const MAX_REMEMBERED_PREVIEW_SOURCES = 64
 const previewSourceByScopedPath = new Map<string, string>()
 
 /** A remote path is unique only within one host — two SSH connections can both
- *  hold `~/project/.orca/drops/shot.png` and mean different files — and the
+ *  hold `~/project/.quirky/drops/shot.png` and mean different files — and the
  *  JSON pair encoding keeps either side's characters from forging another key. */
 function scopedKey(connectionId: string, attachmentPath: string): string {
   return JSON.stringify([connectionId, attachmentPath])

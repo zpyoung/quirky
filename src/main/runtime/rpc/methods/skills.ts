@@ -12,14 +12,14 @@ import {
   discoverSkillsOnTarget,
   resolveSkillDiscoveryTarget
 } from '../../../skills/skill-discovery-target'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { SkillsDiscoverParams } from '../../../../shared/rpc-contract/skills-params'
 
 /** Exported so the delete plan's root rebuild resolves its target exactly the
  *  way `skills.discover` resolved the scan's — including WSL. */
 export function resolveDiscoveryTarget(
   params: z.infer<typeof SkillDiscoveryTargetSchema>,
-  runtime: Pick<OrcaRuntimeService, 'resolveProjectRuntimeForWorktree'>
+  runtime: Pick<QuirkyRuntimeService, 'resolveProjectRuntimeForWorktree'>
 ) {
   const target = params.projectRuntime
     ? params
@@ -31,7 +31,7 @@ export function resolveDiscoveryTarget(
 }
 
 function skillDeleteDependencies(
-  runtime: Pick<OrcaRuntimeService, 'listRepos' | 'resolveSkillDiscoveryProviderRoots'>
+  runtime: Pick<QuirkyRuntimeService, 'listRepos' | 'resolveSkillDiscoveryProviderRoots'>
 ): SkillDeleteRequestDependencies {
   return {
     repos: () => runtime.listRepos(),

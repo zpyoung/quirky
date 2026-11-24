@@ -101,7 +101,7 @@ export default function NodeDistMirrorDialog(): React.JSX.Element | null {
             <DialogDescription>
               {translate(
                 'auto.components.settings.nodeDistMirrorDialog.description',
-                'Orca’s server needs Node.js, and neither this computer nor this host could download it from nodejs.org. A mirror is a copy of nodejs.org/dist that Orca tries first on both machines.'
+                'Quirky’s server needs Node.js, and neither this computer nor this host could download it from nodejs.org. A mirror is a copy of nodejs.org/dist that Quirky tries first on both machines.'
               )}
             </DialogDescription>
           </DialogHeader>
@@ -133,7 +133,7 @@ export default function NodeDistMirrorDialog(): React.JSX.Element | null {
               <p id={HINT_ID} className="text-xs text-muted-foreground">
                 {translate(
                   'auto.components.settings.nodeDistMirrorDialog.checksum',
-                  'Each download is still checked against the checksum Orca pins for this Node.js release. Saved to Settings > Advanced > Network.'
+                  'Each download is still checked against the checksum Quirky pins for this Node.js release. Saved to Settings > Advanced > Network.'
                 )}
               </p>
             )}

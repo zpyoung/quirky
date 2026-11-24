@@ -4,8 +4,8 @@ import './rpc/unused-default-rpc-methods.test-fixture'
 // terminal worker would.
 
 import { describe, expect, it, vi } from 'vitest'
-import { formatOrcaSessionAddress } from '../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../shared/orca-session-address-test-fixture'
+import { formatQuirkySessionAddress } from '../../shared/quirky-session-address'
+import { testQuirkySessionId } from '../../shared/quirky-session-address-test-fixture'
 import { idOf } from './rpc/orchestration-session-caller-test-fixture'
 import { sendChatTask } from './rpc/methods/orchestration/chat-task-delivery'
 import {
@@ -30,7 +30,7 @@ import {
   turnText
 } from './structured-chat-coordinator-mail-rig.test-fixture'
 
-const WORKER = formatOrcaSessionAddress(testOrcaSessionId(PEER_CHAT))
+const WORKER = formatQuirkySessionAddress(testQuirkySessionId(PEER_CHAT))
 
 /** A person's turn in `sessionId`, started and still running; resolves to its end. */
 async function runningUserTurn(
@@ -83,7 +83,7 @@ function dispatchCount(): unknown {
 }
 
 describe('a chat as the assignee of orchestration dispatch', () => {
-  it('records the chat by its Orca session ID and sends an idle chat its task as a turn', async () => {
+  it('records the chat by its Quirky session ID and sends an idle chat its task as a turn', async () => {
     await openChat(COORDINATOR)
     const worker = await openChat(PEER_CHAT)
     const { runId, taskId } = await coordinatorRunAndTask()
@@ -102,14 +102,14 @@ describe('a chat as the assignee of orchestration dispatch', () => {
     expect(db.getDispatchContextById(dispatchId)).toMatchObject({
       run_id: runId,
       assignee_handle: WORKER,
-      assignee_orca_session_id: PEER_CHAT,
+      assignee_quirky_session_id: PEER_CHAT,
       assignee_pane_key: null,
       process_incarnation: null,
       status: 'dispatched'
     })
     const task = turnText(worker.turns[0]!)
     expect(task).toContain('build it')
-    expect(task).toContain(`Your Orca session ID is: ${WORKER}`)
+    expect(task).toContain(`Your Quirky session ID is: ${WORKER}`)
     expect(task).toContain('The coordinator cannot see this chat')
     expect(task).toContain('it will send this chat a fresh')
     expect(task).not.toContain('this terminal')
@@ -141,9 +141,9 @@ describe('a chat as the assignee of orchestration dispatch', () => {
       senders: [
         {
           party: {
-            address: formatOrcaSessionAddress(testOrcaSessionId(COORDINATOR)),
+            address: formatQuirkySessionAddress(testQuirkySessionId(COORDINATOR)),
             terminalHandle: null,
-            orcaSessionId: COORDINATOR
+            quirkySessionId: COORDINATOR
           }
         }
       ],
@@ -206,13 +206,17 @@ describe('a chat as the assignee of orchestration dispatch', () => {
 
     const error = await refusal(
       'orchestration.dispatch',
-      { task: taskId, to: formatOrcaSessionAddress(testOrcaSessionId(COORDINATOR)), inject: true },
+      {
+        task: taskId,
+        to: formatQuirkySessionAddress(testQuirkySessionId(COORDINATOR)),
+        inject: true
+      },
       COORDINATOR
     )
 
     expect(error).toMatchObject({
       code: 'terminal_is_coordinator',
-      message: expect.stringContaining("is this coordinator's own Orca session ID")
+      message: expect.stringContaining("is this coordinator's own Quirky session ID")
     })
     expect(dispatchCount()).toEqual({ n: 0 })
     expect(db.getTask(taskId)?.status).toBe('ready')
@@ -256,7 +260,7 @@ describe('a chat as the assignee of orchestration dispatch', () => {
 
     await vi.waitFor(() => expect(worker.turns).toHaveLength(1), WAIT)
     expect(turnText(worker.turns[0]!)).toMatch(
-      /^You have 1 orchestration message\. Run `orca(-dev)? orchestration check`\.$/
+      /^You have 1 orchestration message\. Run `quirky(-dev)? orchestration check`\.$/
     )
     expect(await queuedCardTexts(PEER_CHAT)).toEqual([])
     await settleTurn(PEER_CHAT, 0)

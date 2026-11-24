@@ -212,7 +212,7 @@ export function shouldReplaceMarker(
   return incoming.teardownId === current.teardownId
 }
 
-/** Records "dismiss all" leaves as they were: this host does not list them (a newer Orca's chats). */
+/** Records "dismiss all" leaves as they were: this host does not list them (a newer Quirky's chats). */
 export type KeepRecord = (marker: AgentSessionResumeMarker) => boolean
 
 /** What a "dismiss all" keeps, and how many pending offers it ends. */

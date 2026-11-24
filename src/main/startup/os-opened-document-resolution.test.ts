@@ -16,8 +16,8 @@ describe('resolveOsOpenedDocuments', () => {
 
   beforeEach(async () => {
     vi.mocked(ensureDefaultFloatingWorkspacePath).mockClear()
-    floatingRoot = await mkdtemp(join(tmpdir(), 'orca-os-open-root-'))
-    fileRoot = await mkdtemp(join(tmpdir(), 'orca-os-open-files-'))
+    floatingRoot = await mkdtemp(join(tmpdir(), 'quirky-os-open-root-'))
+    fileRoot = await mkdtemp(join(tmpdir(), 'quirky-os-open-files-'))
     vi.mocked(ensureDefaultFloatingWorkspacePath).mockResolvedValue(floatingRoot)
   })
 

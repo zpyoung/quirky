@@ -46,7 +46,7 @@ export function createMainWindowServiceStub(
     once: vi.fn(),
     webContents: {
       id: 1,
-      getURL: vi.fn(() => 'file:///opt/orca/renderer/index.html'),
+      getURL: vi.fn(() => 'file:///opt/quirky/renderer/index.html'),
       isDestroyed: vi.fn(() => false),
       isLoadingMainFrame: vi.fn(() => true),
       on: vi.fn(),

@@ -10,7 +10,7 @@ accepted steering.
 ## Coordinator delivery loop
 
 `check` names its caller with `--terminal <handle>` and is the only verb that
-rejects `--from`. Omit `--terminal` inside an Orca terminal, where Orca resolves
+rejects `--from`. Omit `--terminal` inside an Quirky terminal, where Quirky resolves
 the caller; pass it explicitly from anywhere else, including a dispatched
 worker reading coordinator follow-ups.
 
@@ -31,7 +31,7 @@ expected Dispatch settles. Heartbeat or visible activity means alive, not done.
 Use a stable Dispatch address for attempt-specific coordinator guidance:
 
 ```text
-ORCA orchestration send --to dispatch:<dispatch_id> --subject "Follow-up" --body "<guidance>" --json
+QUIRKY orchestration send --to dispatch:<dispatch_id> --subject "Follow-up" --body "<guidance>" --json
 ```
 
 Do not substitute a remote terminal handle. Omit `--from` for ordinary
@@ -60,9 +60,9 @@ worker resumes by message ID. The coordinator answers that message with `reply`.
 Use a gate only for a coordinator-owned Task-DAG decision:
 
 ```text
-ORCA orchestration gate-create --task <task_id> --question "<decision>" --options <json_array> --json
-ORCA orchestration gate-resolve --id <gate_id> --resolution "<choice>" --json
-ORCA orchestration gate-list --task <task_id> --json
+QUIRKY orchestration gate-create --task <task_id> --question "<decision>" --options <json_array> --json
+QUIRKY orchestration gate-resolve --id <gate_id> --resolution "<choice>" --json
+QUIRKY orchestration gate-list --task <task_id> --json
 ```
 
 Pass `json_array` using the quoting rules of the active shell; do not copy POSIX

@@ -37,7 +37,7 @@ async function openStore(
   seed: (window: WindowSession) => void,
   hostId?: string
 ): Promise<{ store: Store; directory: string }> {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-layout-create-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-layout-create-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = new WindowSession(getDefaultWorkspaceSession())

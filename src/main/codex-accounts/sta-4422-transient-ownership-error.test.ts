@@ -144,7 +144,7 @@ describe('STA-4422 Codex sessions keep logging out', () => {
     // Hold the marker for the whole window, the way an AV scan does. A
     // single-shot fault would be too weak: it could be masked by any future
     // retry and would green-light an unimplemented fix.
-    const markerPath = join(realpathSync(managedHomePath), '.orca-managed-home')
+    const markerPath = join(realpathSync(managedHomePath), '.quirky-managed-home')
     lstatFaults.hold(markerPath)
 
     const duringLock = service.prepareForRateLimitFetch()
@@ -192,7 +192,7 @@ describe('STA-4422 Codex sessions keep logging out', () => {
       createCodexAuthJson('user@example.com', 'acct-1', 'refresh-1')
     )
     // A proven trust failure: the marker names a different account.
-    writeFileSync(join(managedHomePath, '.orca-managed-home'), 'someone-else\n', 'utf-8')
+    writeFileSync(join(managedHomePath, '.quirky-managed-home'), 'someone-else\n', 'utf-8')
     const store = createStore(
       createSettings({
         realHomeRoutable: true,

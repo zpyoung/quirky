@@ -42,7 +42,7 @@ const isPending = (): boolean => waitForPendingWorktreeRemoval(removal.worktreeI
 let directory = ''
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-worktree-removal-records-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-worktree-removal-records-'))
   await loadWorktreeRemovalRecords(directory)
 })
 

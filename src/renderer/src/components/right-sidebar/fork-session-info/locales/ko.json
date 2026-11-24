@@ -58,7 +58,7 @@
       "statusLine": "상태 표시줄",
       "statusLineAvailable": "사용자 상태 표시줄 감지됨",
       "statusLineChained": "연결됨",
-      "statusLineConsent": "Orca가 기존 상태 표시줄 명령을 보존하고 실행합니다.",
+      "statusLineConsent": "Quirky가 기존 상태 표시줄 명령을 보존하고 실행합니다.",
       "statusLineDisabled": "활성화되지 않음",
       "statusLineDrifted": "사용자 상태 표시줄이 변경됨",
       "statusLineError": "확인 필요",

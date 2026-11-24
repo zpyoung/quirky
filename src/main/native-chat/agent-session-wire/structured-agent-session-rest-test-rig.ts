@@ -144,7 +144,7 @@ export async function createRestTestRig(
 ): Promise<RestTestRig> {
   resetHostTestOperationIds()
   ordinal = 0
-  const root = await mkdtemp(join(tmpdir(), 'orca-rest-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-rest-'))
   const clock = { now: HOST_TEST_NOW }
   const statusEvents: AgentSessionStatusEvent[] = []
   const sink: RestTestRig['sink'] = {

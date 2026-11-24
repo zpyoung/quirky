@@ -24,7 +24,7 @@ import type {
 } from '../../shared/automations-types'
 import type { SshTarget } from '../../shared/ssh-types'
 import {
-  isManagedOrcadSshTarget,
+  isManagedQuirkydSshTarget,
   isRuntimeOwnedSshTarget
 } from '../ssh/connection/ssh-connection-store'
 
@@ -53,7 +53,7 @@ function resolveSshScope(
     throw externalAutomationTargetRemovedError()
   }
   // Why: checked before the generation compare so a hidden target reveals nothing about its registration.
-  if (isRuntimeOwnedSshTarget(target) || isManagedOrcadSshTarget(target)) {
+  if (isRuntimeOwnedSshTarget(target) || isManagedQuirkydSshTarget(target)) {
     throw new ExternalAutomationScopeError(EXTERNAL_AUTOMATION_SCOPE_CODES.targetHidden)
   }
   const current = sanitizeSshTargetGeneration(target.generation)

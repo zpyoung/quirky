@@ -18,7 +18,7 @@ function row(worktreeId: string): Worktree {
     worktreeId,
     repoId: 'repo-1',
     hostId: host.hostId,
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'main',
     displayName: worktreeId,
     path: `/srv/${worktreeId}`,

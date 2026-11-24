@@ -36,10 +36,10 @@ const source = JSON.stringify({ settings: { theme: 'dark' }, extension: { origin
 const current = JSON.stringify({ settings: { theme: 'light' }, extension: { acknowledged: true } })
 
 function fixture(kind: 'empty' | 'json' | 'sqlite') {
-  const root = fs.mkdtempSync(join(tmpdir(), 'orca-authority-marker-'))
+  const root = fs.mkdtempSync(join(tmpdir(), 'quirky-authority-marker-'))
   roots.push(root)
   const options = {
-    dataFile: join(root, 'orca-data.json'),
+    dataFile: join(root, 'quirky-data.json'),
     databaseFile: join(root, 'profile-state.db'),
     profileId: 'marker-profile',
     allowEmptyProfileState: true

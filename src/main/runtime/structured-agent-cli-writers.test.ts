@@ -8,7 +8,7 @@ import {
   assertCliConversationWritersExited,
   type CliWriterHost
 } from './structured-agent-cli-writers'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import {
   OPEN_CODE_WRITER_TOPOLOGY,
   tmuxCliWriterEvent
@@ -190,7 +190,7 @@ describe('execution-host conversation writer inspection', () => {
     const leaf = '11111111-1111-4111-8111-111111111111'
     const pane = `tab-a:${leaf}`
     let rows: AgentStatusIpcPayload[] = []
-    const runtime = new OrcaRuntimeService(null, undefined, {
+    const runtime = new QuirkyRuntimeService(null, undefined, {
       getAgentProviderSessionSnapshot: () => rows,
       readHookCliWriterObservation: () => ({
         current: () => true,

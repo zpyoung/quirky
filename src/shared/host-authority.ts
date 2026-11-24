@@ -1,5 +1,5 @@
 /**
- * Which host a resource belongs to, as the pair the client needs to reach it: the Orca endpoint that
+ * Which host a resource belongs to, as the pair the client needs to reach it: the Quirky endpoint that
  * serves it (this app, or a paired server) and the place on that endpoint where it executes (the
  * endpoint's own machine, or one of its SSH targets).
  *

@@ -16,24 +16,24 @@ import {
   type StatPath
 } from './worktree-orphan-gitdir-proof'
 
-const ORCA_CREATION_SOURCES = new Set<NonNullable<WorktreeMeta['orcaCreationSource']>>([
+const QUIRKY_CREATION_SOURCES = new Set<NonNullable<WorktreeMeta['quirkyCreationSource']>>([
   'desktop',
   'runtime',
   'cli',
   'ssh'
 ])
-const ORCA_OWNED_PROVENANCE_META_KEYS = [
-  'orcaCreatedAt',
-  'orcaCreationSource',
-  'orcaCreationWorkspaceLayout',
+const QUIRKY_OWNED_PROVENANCE_META_KEYS = [
+  'quirkyCreatedAt',
+  'quirkyCreationSource',
+  'quirkyCreationWorkspaceLayout',
   'automationProvenance',
   'cliProvenance',
   'creatorProvenance'
 ] as const
-type UnregisteredOrcaCleanupMeta = Pick<
+type UnregisteredQuirkyCleanupMeta = Pick<
   WorktreeMeta,
-  | 'orcaCreatedAt'
-  | 'orcaCreationSource'
+  | 'quirkyCreatedAt'
+  | 'quirkyCreationSource'
   | 'createdAt'
   | 'createdWithAgent'
   | 'pushTarget'
@@ -163,34 +163,34 @@ export async function canSafelyRemoveOrphanedWorktreeDirectory(
   })
 }
 
-export function canCleanupUnregisteredOrcaWorktreeDirectory(args: {
-  meta: UnregisteredOrcaCleanupMeta | null | undefined
+export function canCleanupUnregisteredQuirkyWorktreeDirectory(args: {
+  meta: UnregisteredQuirkyCleanupMeta | null | undefined
 }): boolean {
-  if (hasCurrentOrcaCreationProvenance(args.meta)) {
+  if (hasCurrentQuirkyCreationProvenance(args.meta)) {
     return true
   }
 
-  if (hasLegacyOrcaCreationEvidence(args.meta)) {
+  if (hasLegacyQuirkyCreationEvidence(args.meta)) {
     return true
   }
 
   // Why: path shape alone is not authority; users can create plain Git
-  // worktrees inside Orca's workspace directory too.
+  // worktrees inside Quirky's workspace directory too.
   return false
 }
 
-function hasCurrentOrcaCreationProvenance(
-  meta: Pick<WorktreeMeta, 'orcaCreatedAt' | 'orcaCreationSource'> | null | undefined
+function hasCurrentQuirkyCreationProvenance(
+  meta: Pick<WorktreeMeta, 'quirkyCreatedAt' | 'quirkyCreationSource'> | null | undefined
 ): boolean {
   return (
-    typeof meta?.orcaCreatedAt === 'number' &&
-    !!meta.orcaCreationSource &&
-    ORCA_CREATION_SOURCES.has(meta.orcaCreationSource)
+    typeof meta?.quirkyCreatedAt === 'number' &&
+    !!meta.quirkyCreationSource &&
+    QUIRKY_CREATION_SOURCES.has(meta.quirkyCreationSource)
   )
 }
 
-function hasLegacyOrcaCreationEvidence(
-  meta: UnregisteredOrcaCleanupMeta | null | undefined
+function hasLegacyQuirkyCreationEvidence(
+  meta: UnregisteredQuirkyCleanupMeta | null | undefined
 ): boolean {
   return Boolean(
     meta?.createdAt ||
@@ -202,11 +202,11 @@ function hasLegacyOrcaCreationEvidence(
   )
 }
 
-export function stripOrcaProvenanceMetaUpdates(
+export function stripQuirkyProvenanceMetaUpdates(
   updates: Partial<WorktreeMeta> | null | undefined
 ): Partial<WorktreeMeta> {
   const sanitized = { ...updates }
-  for (const key of ORCA_OWNED_PROVENANCE_META_KEYS) {
+  for (const key of QUIRKY_OWNED_PROVENANCE_META_KEYS) {
     delete sanitized[key]
   }
   return sanitized

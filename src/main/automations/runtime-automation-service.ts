@@ -1,11 +1,11 @@
 /**
  * The AutomationService a runtime host executes schedules with. Shared by Electron startup and
- * orcad so both hosts dispatch through the same headless path.
+ * quirkyd so both hosts dispatch through the same headless path.
  */
 import type { ClaudeUsageStore } from '../claude-usage/store'
 import type { CodexUsageStore } from '../codex-usage/store'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { AutomationService } from './service'
 import { createHeadlessRunTerminalRetention } from './headless-run-terminal-retention'
 import {
@@ -20,7 +20,7 @@ const MAX_REMEMBERED_LAUNCHES = 256
 
 export function createRuntimeAutomationService(input: {
   store: Store
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   claudeUsage?: ClaudeUsageStore
   codexUsage?: CodexUsageStore
   /** A server process: it executes remote_host_service-owned schedules and dispatches headlessly. */
@@ -76,7 +76,7 @@ export function createRuntimeAutomationService(input: {
 function bindHeadlessRunTerminalRetention(
   service: AutomationService,
   store: Store,
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
 ): void {
   const retention = createHeadlessRunTerminalRetention({
     listRuns: () => store.listAutomationRuns(),

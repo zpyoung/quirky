@@ -11,7 +11,7 @@ describe('buildMarkdownExportHtml', () => {
     expect(html).toContain('<meta charset="utf-8"')
     expect(html).toContain('<title>Hello</title>')
     expect(html).toContain('<h1>Hello</h1><p>world</p>')
-    expect(html).toContain('class="orca-export-root"')
+    expect(html).toContain('class="quirky-export-root"')
     expect(html).toContain('<style>')
   })
 
@@ -32,7 +32,7 @@ describe('buildMarkdownExportHtml', () => {
   it('hides preview annotation controls even if DOM scrubbing misses them', () => {
     const html = buildMarkdownExportHtml({ title: 'Notes', renderedHtml: '<p>x</p>' })
     expect(html).toContain('.markdown-annotation-controls')
-    expect(html).toContain('[data-orca-export-hide')
+    expect(html).toContain('[data-quirky-export-hide')
     expect(html).toContain('display: none')
   })
 })

@@ -6,7 +6,7 @@ import { findUnsafePatternReason } from './agent-state-rule-pattern-safety'
 
 /**
  * One file per agent (`<agent>.json` beside this schema), plus `unknown-pane.json` for panes whose
- * agent Orca does not know. Every object is strict, so a misspelled field rejects the file instead
+ * agent Quirky does not know. Every object is strict, so a misspelled field rejects the file instead
  * of silently dropping a condition. Every rule and anchor is `when` (a region and what it must
  * show) plus `answer`. Once a version ships, adding a region, predicate or answer bumps
  * `engineVersion`; until then version 1 is still being defined.

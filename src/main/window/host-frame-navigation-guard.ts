@@ -5,7 +5,7 @@ import { PLUGIN_PANEL_FRAME_NAME_PREFIX } from '../../shared/plugins/plugin-pane
 type NavigationFrame = Pick<WebFrameMain, 'frameTreeNodeId' | 'isDestroyed' | 'name'>
 
 /**
- * Host-built srcdoc frames that hold content Orca did not write. Each kind is only a navigation
+ * Host-built srcdoc frames that hold content Quirky did not write. Each kind is only a navigation
  * containment class: registering a frame grants it nothing (no plugin identity, no actions).
  */
 const HOST_FRAME_KINDS = [

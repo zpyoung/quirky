@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CLOSE_TERMINAL_PANE_EVENT } from '@/constants/terminal'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 
 import { applyClosedTerminalLeafNotice } from './closed-terminal-leaf-notice'

@@ -110,7 +110,7 @@ function qualifiedWorktreeResult(
       authoritative: true,
       source: 'git',
       worktrees: [
-        { ...worktree, ownership: 'orca-managed', selectedCheckout: false, visible: true }
+        { ...worktree, ownership: 'quirky-managed', selectedCheckout: false, visible: true }
       ]
     }
   }
@@ -269,7 +269,12 @@ describe('SSH repo host reconciliation', () => {
           authoritative: true,
           source: 'git',
           worktrees: [
-            { ...staleWorktree, ownership: 'orca-managed', selectedCheckout: false, visible: true }
+            {
+              ...staleWorktree,
+              ownership: 'quirky-managed',
+              selectedCheckout: false,
+              visible: true
+            }
           ]
         }
       }
@@ -298,7 +303,7 @@ describe('SSH repo host reconciliation', () => {
     expect(store.getState().detectedWorktreesByRepo[repoId].worktrees).toEqual([
       {
         ...directSshWorktree('ssh-new', 'stale'),
-        ownership: 'orca-managed',
+        ownership: 'quirky-managed',
         selectedCheckout: false,
         visible: true
       }

@@ -2,7 +2,7 @@ import type { EditorGet, EditorSet } from '../types/editor-set-get'
 import type { EditorSlice } from '../types/editor-slice'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
 import type { Tab } from '../../../../../../shared/tab-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
 import {
   previewEditorTabsOf,
@@ -103,7 +103,7 @@ export function createOpenFileMutations(
         if (buffer.isDirty === dirty && !needsPreviewClear && !dropDraft) {
           return s
         }
-        if (ORCA_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
+        if (QUIRKY_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
           promoted.push(...previewEditorTabsOf(s.unifiedTabsByWorktree, fileId))
         }
         return {
@@ -131,7 +131,7 @@ export function createOpenFileMutations(
         }
       })
       // Switch point: main records that an edit made a preview tab permanent.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
         recordPromotedEditorTabsInLayoutOwner(get(), promoted)
       }
     },

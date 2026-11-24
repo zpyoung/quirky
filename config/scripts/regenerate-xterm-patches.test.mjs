@@ -50,7 +50,7 @@ afterEach(async () => {
 })
 
 async function createDirectory() {
-  const directory = await mkdtemp(path.join(tmpdir(), 'orca-xterm-patch-'))
+  const directory = await mkdtemp(path.join(tmpdir(), 'quirky-xterm-patch-'))
   temporaryDirectories.push(directory)
   return directory
 }

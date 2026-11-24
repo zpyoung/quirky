@@ -12,7 +12,7 @@ import { ProfileStateSqliteAuthority } from './profile-state-sqlite-authority'
 const fixtures: { authority: ProfileStateSqliteAuthority; directory: string }[] = []
 
 function fixture(established: boolean) {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-complete-domain-write-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-complete-domain-write-'))
   const databasePath = join(directory, 'state.db')
   openProfileStateDatabase(databasePath, 'profile').db.close()
   const authority = new ProfileStateSqliteAuthority(databasePath, 'profile')

@@ -20,7 +20,7 @@ const bundle = built.outputFiles[0].text
 const { CdpClientResponseWriter } = await import(
   `data:text/javascript;base64,${Buffer.from(bundle).toString('base64')}`
 )
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
   throw new Error('Background policy required')
 }
 const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })

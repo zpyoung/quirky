@@ -50,7 +50,7 @@ describe('Repository settings complete translation templates', () => {
         expect(issue?.textContent).toContain('{{artifact_url}}')
         expect(issue?.textContent).not.toContain('<artifactUrl>')
         const defaultHelp = paragraphs.find(
-          (p) => p.querySelector('code')?.textContent === 'orca.yaml'
+          (p) => p.querySelector('code')?.textContent === 'quirky.yaml'
         )
         if (language === 'ko') {
           expect(issue?.textContent).toContain('변수를 사용하세요.')
@@ -63,7 +63,7 @@ describe('Repository settings complete translation templates', () => {
             language === 'ko' ? '로컬 명령이 모두' : 'and local commands exist'
           )
         )
-        expect(sourceHelp?.querySelector('code')?.textContent).toBe('orca.yaml')
+        expect(sourceHelp?.querySelector('code')?.textContent).toBe('quirky.yaml')
       }
     )
   }

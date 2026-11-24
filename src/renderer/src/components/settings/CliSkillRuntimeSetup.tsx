@@ -85,12 +85,12 @@ export function buildSkillCommandForRuntime(
 
 /**
  * Where a built skill command is going: the user's clipboard (their own shell)
- * or the setup terminal Orca spawns itself.
+ * or the setup terminal Quirky spawns itself.
  */
-type SkillCommandTarget = 'copied-command' | 'orca-setup-terminal'
+type SkillCommandTarget = 'copied-command' | 'quirky-setup-terminal'
 
 /**
- * Adapts a copied skill command for Orca's inline setup terminal auto-paste.
+ * Adapts a copied skill command for Quirky's inline setup terminal auto-paste.
  * Host Windows installs may gain an npx preflight; WSL-targeted PowerShell wrappers
  * must become bash-native because the daemon forces wsl.exe for WSL worktrees.
  */
@@ -116,7 +116,7 @@ export function buildSkillSetupTerminalCommand(
   return wrapWindowsSkillCommandWithNpxPrerequisite(
     copiedCommand,
     currentPlatform,
-    'orca-setup-terminal'
+    'quirky-setup-terminal'
   )
 }
 

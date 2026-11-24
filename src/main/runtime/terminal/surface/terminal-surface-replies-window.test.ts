@@ -10,12 +10,12 @@ import {
 } from './terminal-surface-replies.test-fixture'
 
 // The recorded reference is the window-owned build's, whatever switch the suite runs with.
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: false }))
 
 const golden = (name: string): string => path.join(__dirname, '__fixtures__', name)
 
 function expectRecorded(replies: string, name: string): void {
-  if (process.env.ORCA_RECORD_SURFACE_REPLIES === '1') {
+  if (process.env.QUIRKY_RECORD_SURFACE_REPLIES === '1') {
     writeFileSync(golden(name), `${JSON.stringify(JSON.parse(replies), null, 2)}\n`)
   }
   expect(replies).toBe(recordedSurfaceReplies(golden(name)))

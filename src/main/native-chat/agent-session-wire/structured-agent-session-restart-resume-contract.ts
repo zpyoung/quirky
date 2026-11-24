@@ -39,13 +39,13 @@ export type StructuredAgentSessionRestartResume = {
     failed?: StructuredAgentSessionResumeFailure[]
   }>
   /** Named sessions forget their offer or failure; unnamed, every record this host lists goes (a
-   *  newer Orca's stay). An audience limits either to the agents it sees. */
+   *  newer Quirky's stay). An audience limits either to the agents it sees. */
   dismiss: (
     sessionIds?: readonly string[],
     audience?: StructuredAgentSessionRestartAudience
   ) => Promise<number>
   /** The chat's agent proved a start: its offer ends unless the start is a resume's own. */
   onAgentStarted: (sessionId: string) => void
-  /** Continue on a reply an Orca stop cut off, offer or not; the send itself retires any offer. */
+  /** Continue on a reply an Quirky stop cut off, offer or not; the send itself retires any offer. */
   continueInterrupted: ReturnType<typeof createInterruptedContinuation>
 }

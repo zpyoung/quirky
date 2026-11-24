@@ -18,7 +18,7 @@ afterEach(async () => {
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }))
 })
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-shared-static-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-shared-static-'))
   roots.push(root)
   const renderer = join(root, 'renderer')
   const files = [
@@ -40,7 +40,7 @@ function fixture() {
     mkdirSync(dirname(join(renderer, file)), { recursive: true })
     writeFileSync(join(renderer, file), file)
   }
-  writeFileSync(join(renderer, '.orca-web-client-files.json'), JSON.stringify(files))
+  writeFileSync(join(renderer, '.quirky-web-client-files.json'), JSON.stringify(files))
   return { renderer, files }
 }
 async function serve(root: string) {
@@ -57,7 +57,7 @@ async function serve(root: string) {
 it('serves only the web closure at root and through a reverse proxy, including worker/PDF files', async () => {
   const { renderer, files } = fixture()
   const endpoint = await serve(renderer)
-  for (const prefix of ['', '/proxy/orca']) {
+  for (const prefix of ['', '/proxy/quirky']) {
     for (const file of files) {
       const response = await fetch(`${endpoint}${prefix}/${file}`)
       expect(response.status, `${prefix}/${file}`).toBe(200)
@@ -68,7 +68,7 @@ it('serves only the web closure at root and through a reverse proxy, including w
       'space.html',
       'assets/desktop.js',
       'assets/shared.js.map',
-      '.orca-web-client-files.json'
+      '.quirky-web-client-files.json'
     ]) {
       expect((await fetch(`${endpoint}${prefix}/${file}`)).status, file).toBe(404)
     }
@@ -80,7 +80,7 @@ it('serves only the web closure at root and through a reverse proxy, including w
 })
 it('fails closed when a renderer has no manifest or a corrupt manifest', async () => {
   const { renderer } = fixture()
-  rmSync(join(renderer, '.orca-web-client-files.json'))
+  rmSync(join(renderer, '.quirky-web-client-files.json'))
   const endpoint = await serve(renderer)
   expect((await fetch(`${endpoint}/assets/desktop.js`)).status).toBe(404)
 })
@@ -89,7 +89,7 @@ it('disables only the browser client when the manifest is truncated or invalid',
   try {
     for (const manifest of ['{', JSON.stringify(['../index.html'])]) {
       const { renderer } = fixture()
-      writeFileSync(join(renderer, '.orca-web-client-files.json'), manifest)
+      writeFileSync(join(renderer, '.quirky-web-client-files.json'), manifest)
       const endpoint = await serve(renderer)
       for (const file of ['', 'web-index.html', 'assets/shared.js', 'assets/desktop.js']) {
         expect((await fetch(`${endpoint}/${file}`)).status, file).toBe(404)

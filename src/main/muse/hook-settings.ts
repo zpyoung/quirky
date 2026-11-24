@@ -62,7 +62,7 @@ export function getMuseRemoteConfigPath(remoteHome: string): string {
 }
 
 export function getMuseRemoteManagedHooksPath(remoteHome: string): string {
-  return `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/${MUSE_MANAGED_HOOKS_FILE_NAME}`
+  return `${remoteHome.replace(/\/$/, '')}/.quirky/agent-hooks/${MUSE_MANAGED_HOOKS_FILE_NAME}`
 }
 
 export function getMuseManagedCommand(scriptPath: string): string {
@@ -75,7 +75,7 @@ export function getMuseRemoteManagedCommand(scriptPath: string): string {
   return wrapPosixHookCommand(scriptPath)
 }
 
-// Why: the managed file is fully Orca-owned (muse runs it without a trust
+// Why: the managed file is fully Quirky-owned (muse runs it without a trust
 // step via `managed_hooks_path`), so generate it wholesale — no user content
 // to preserve, unlike an inline `hooks` block in settings.json.
 export function buildMuseManagedHooksFile(command: string): string {

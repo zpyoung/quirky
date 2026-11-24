@@ -21,7 +21,7 @@ type MobileTerminalTabAgentIdentity = {
   launchAgent?: TuiAgent | null
 }
 
-/** Agent identity Orca owns, excluding the display-only title fallback. */
+/** Agent identity Quirky owns, excluding the display-only title fallback. */
 export function resolveMobileTerminalTabOwnedAgentId(
   tab: MobileTerminalTabAgentIdentity
 ): string | null {

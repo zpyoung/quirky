@@ -135,12 +135,12 @@ describe('Pi session changes', () => {
     expect(posts(harness).at(-2)).not.toHaveProperty('session_boundary')
   })
 
-  it('gives up on a completion Orca keeps refusing, then sends what came after', async () => {
+  it('gives up on a completion Quirky keeps refusing, then sends what came after', async () => {
     let attempts = 0
     const harness = createPi(async () => {
       attempts += 1
       if (attempts >= 3 && attempts <= 6) {
-        throw new Error('Orca down')
+        throw new Error('Quirky down')
       }
       return { ok: true }
     })
@@ -200,7 +200,7 @@ describe('Pi session changes', () => {
       attempts += 1
       // The close-out follows session_start and agent_start; fail its first delivery.
       if (attempts === 3) {
-        throw new Error('Orca restarting')
+        throw new Error('Quirky restarting')
       }
       return { ok: true }
     })
@@ -656,7 +656,7 @@ describe('OMP session switches', () => {
         sharedEventBus: true,
         seedEventBus: (bus) => {
           Object.assign(bus, {
-            __orcaPiSubagents: {
+            __quirkyPiSubagents: {
               active: new Set(['old-child']),
               waiting: false,
               listener: () => {},

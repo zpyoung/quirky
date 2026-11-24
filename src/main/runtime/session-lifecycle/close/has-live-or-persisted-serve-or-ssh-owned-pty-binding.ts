@@ -1,16 +1,16 @@
-import type { OrcaRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RendererTerminalRescue } from '../../session-tabs/renderer-session-terminal-rescue'
-import type { OrcaRuntimeWithCloseStructuredAgentSessionTab as StructuredSessionClose } from '../../session-tabs/structured-session-tab-close'
-import type { OrcaRuntimeWithTransitionGraphReloadToTerminalState as SessionGraphAuthority } from '../../session-graph/session-graph-authority'
-import type { OrcaRuntimeWithWaitForMobileTerminalSurface as MobileTerminalSurface } from '../../terminal/view/mobile-terminal-surface'
-import type { OrcaRuntimeWithCloseHeadlessMobileTerminalTab as HeadlessTerminalClose } from '../../session-tabs/headless-terminal-tab-close'
-import { OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs } from '../projection/reconcile-headless-mobile-session-browser-tabs'
+import type { QuirkyRuntimeWithRestoreLivePairedRendererSessionOwnedMobileTerminals as RendererTerminalRescue } from '../../session-tabs/renderer-session-terminal-rescue'
+import type { QuirkyRuntimeWithCloseStructuredAgentSessionTab as StructuredSessionClose } from '../../session-tabs/structured-session-tab-close'
+import type { QuirkyRuntimeWithTransitionGraphReloadToTerminalState as SessionGraphAuthority } from '../../session-graph/session-graph-authority'
+import type { QuirkyRuntimeWithWaitForMobileTerminalSurface as MobileTerminalSurface } from '../../terminal/view/mobile-terminal-surface'
+import type { QuirkyRuntimeWithCloseHeadlessMobileTerminalTab as HeadlessTerminalClose } from '../../session-tabs/headless-terminal-tab-close'
+import { QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs } from '../projection/reconcile-headless-mobile-session-browser-tabs'
 import type {
   RuntimeMobileSessionTabsSnapshot,
   RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
-import { SSH_PANE_RECOVERY_GRACE_MS } from '../../orca-runtime-core'
+import { SSH_PANE_RECOVERY_GRACE_MS } from '../../quirky-runtime-core'
 
-export abstract class OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding extends OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs {
+export abstract class QuirkyRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding extends QuirkyRuntimeWithReconcileHeadlessMobileSessionBrowserTabs {
   protected abstract setPairedRendererSessionOwnership(
     ...args: Parameters<RendererTerminalRescue['setPairedRendererSessionOwnership']>
   ): ReturnType<RendererTerminalRescue['setPairedRendererSessionOwnership']>

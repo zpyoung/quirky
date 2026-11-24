@@ -20,7 +20,7 @@ vi.mock('./runtime-local-worktree-create', () => ({
   createRuntimeLocalManagedWorktree: createRuntimeLocalManagedWorktreeMock
 }))
 
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
 const TARGET_ID = 'remote-1'
@@ -32,12 +32,12 @@ type RuntimeInternals = {
   recordCreatedWorktreeLineage: (worktree: unknown, resolution: unknown) => unknown
 }
 
-function makeRuntime(repo: Record<string, unknown>): OrcaRuntimeService {
+function makeRuntime(repo: Record<string, unknown>): QuirkyRuntimeService {
   const store = {
     getSettings: () => ({ disabledTuiAgents: [], workspaceDir: '/tmp/workspaces' }),
     getProjectHostSetups: () => []
   }
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   const internals = runtime as unknown as RuntimeInternals
   vi.spyOn(internals, 'resolveRepoSelector').mockResolvedValue(repo)
   vi.spyOn(internals, 'resolveLineageForWorktreeCreate').mockResolvedValue(null)

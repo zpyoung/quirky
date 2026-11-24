@@ -11,7 +11,7 @@ This extends [ML-018 / #20960](https://github.com/stablyai/orca/pull/20960).
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/claude-task-retention/reproduce.cjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/claude-task-retention/reproduce.cjs
 ```
 
 The script bundles the actual tracker and its retention classes. Its baseline

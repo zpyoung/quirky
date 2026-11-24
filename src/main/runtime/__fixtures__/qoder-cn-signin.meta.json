@@ -4,9 +4,9 @@
   "command": [
     "qoderclicn",
     "--config-dir",
-    "/tmp/orca-qoder-validation-1002/cn-config",
+    "/tmp/quirky-qoder-validation-1002/cn-config",
     "--cwd",
-    "/tmp/orca-qoder-validation-1002/workspace"
+    "/tmp/quirky-qoder-validation-1002/workspace"
   ],
   "cols": 120,
   "rows": 40,

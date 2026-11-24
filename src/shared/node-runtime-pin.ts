@@ -1,5 +1,5 @@
 /**
- * The one Node runtime Orca runs outside Electron (docs/reference/node-runtime-design.html, D1).
+ * The one Node runtime Quirky runs outside Electron (docs/reference/node-runtime-design.html, D1).
  *
  * Keep this file erasable-only TypeScript — build scripts import it directly under Node's
  * type stripping, which rejects enums, namespaces and parameter properties.
@@ -31,8 +31,8 @@ export const COMPAT_SERVER_TARGET_BASES: Record<CompatServerTarget, ServerTarget
 }
 
 // Every target: Windows SSH relays take their node-pty/ConPTY slot from here (design D5), even
-// though managed orcad launch stays POSIX-only (orcad-remote-host-support.ts).
-export const ORCAD_TEMPLATE_TARGETS: readonly ServerTarget[] = SERVER_TARGETS
+// though managed quirkyd launch stays POSIX-only (quirkyd-remote-host-support.ts).
+export const QUIRKYD_TEMPLATE_TARGETS: readonly ServerTarget[] = SERVER_TARGETS
 
 export type NodeRuntimePin = {
   version: string

@@ -39,7 +39,7 @@ type OldRunOutcome = (
 
 // Loads a real old build, including cold extraction and transforms.
 test('an older host and client read a call a stop cut short as the failure they always showed', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-interrupted-tool-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-interrupted-tool-downgrade-'))
   const journals = createTrackedJournalOpener()
   try {
     // This build: a call a stop cut short, with the partial output it left.

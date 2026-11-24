@@ -65,7 +65,7 @@ describe('superseded macOS provider startup cleanup', () => {
       const rejection = expect(startup).rejects.toThrow()
       const ownDirectory = directories[0]!
       expect(existsSync(join(ownDirectory, 'provider.token'))).toBe(true)
-      const replacementDirectory = mkdtempSync(join(tmpdir(), 'orca-computer-use-replacement-'))
+      const replacementDirectory = mkdtempSync(join(tmpdir(), 'quirky-computer-use-replacement-'))
       directories.push(replacementDirectory)
       const replacementToken = join(replacementDirectory, 'provider.token')
       writeFileSync(replacementToken, 'replacement-token')

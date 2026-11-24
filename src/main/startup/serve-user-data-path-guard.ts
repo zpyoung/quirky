@@ -2,7 +2,7 @@ import { SERVE_USER_DATA_PATH_ENV, isSameUserDataPath } from '../../shared/serve
 
 /**
  * Returns the refusal message when this serve launch landed on a profile other than the one
- * `orca serve` resolved, or null when it may continue to the instance lock.
+ * `quirky serve` resolved, or null when it may continue to the instance lock.
  *
  * Why before the lock: losing another profile's lock delivers a second-instance request to
  * whatever app owns that profile, often the user's own desktop.
@@ -23,5 +23,5 @@ export function checkServeUserDataPath(options: {
   if (isSameUserDataPath(expected, options.userDataPath, options.platform)) {
     return null
   }
-  return `[serve] orca serve chose the profile at ${expected}, but this launch resolved ${options.userDataPath}; refusing to start so it cannot touch another profile's running Orca.`
+  return `[serve] quirky serve chose the profile at ${expected}, but this launch resolved ${options.userDataPath}; refusing to start so it cannot touch another profile's running Quirky.`
 }

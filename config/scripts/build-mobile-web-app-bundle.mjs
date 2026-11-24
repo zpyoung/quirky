@@ -148,7 +148,7 @@ export const MOBILE_WEB_APP_ROOT_RESET =
  * portal to `document.body`. Fields opt back in, callout too, since WebKit inherits it.
  */
 export const MOBILE_WEB_APP_NATIVE_PARITY_STYLE =
-  '<style id="orca-native-parity">:where(input:focus,textarea:focus){outline:none}' +
+  '<style id="quirky-native-parity">:where(input:focus,textarea:focus){outline:none}' +
   ':where(body){-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
   ':where(input,textarea,[contenteditable]){-webkit-user-select:text;user-select:text;' +
   '-webkit-touch-callout:default}</style>'
@@ -200,9 +200,9 @@ const MOBILE_ZOD_PACKAGE = join(mobileDir, 'node_modules', 'zod')
 const ZOD_JITLESS_BANNER =
   'globalThis.__zod_globalConfig ??= {}; globalThis.__zod_globalConfig.jitless = true;'
 
-const ROUTE_MANIFEST_PLUGIN_NAME = 'orca-route-manifest'
-const LUCIDE_PLUGIN_NAME = 'orca-lucide-barrel-provider'
-const HAIRLINE_PLUGIN_NAME = 'orca-hairline-device-pixel'
+const ROUTE_MANIFEST_PLUGIN_NAME = 'quirky-route-manifest'
+const LUCIDE_PLUGIN_NAME = 'quirky-lucide-barrel-provider'
+const HAIRLINE_PLUGIN_NAME = 'quirky-hairline-device-pixel'
 
 /** The entry output's name, so classifying the outputs never has to guess which one it is. */
 const ENTRY_CHUNK_NAME = 'entry'
@@ -634,7 +634,7 @@ export async function buildMobileWebAppBundle({
   // type="module", because the entry is esm and reaches its routes through import(). Same-origin
   // module and chunk both load under the shell's script-src 'self'; the policy is unchanged.
   const html =
-    '<!doctype html>\n<html lang="en" data-orca-scrollbars="sleek">\n<head>\n<meta charset="utf-8" />\n' +
+    '<!doctype html>\n<html lang="en" data-quirky-scrollbars="sleek">\n<head>\n<meta charset="utf-8" />\n' +
     // No viewport-fit=cover: the page never asks to extend under the system bars. The shell owns
     // the safe area: it pads the WebView and, on Android, zeroes the insets the WebView would
     // report via env(); on iOS the padded WKWebView reports none.
@@ -643,7 +643,7 @@ export async function buildMobileWebAppBundle({
     // answers 403, the path being in no manifest. Empty rather than an asset: a WebView document
     // has no tab for an icon, and the bundle's images are route assets named by their own bytes.
     '<link rel="icon" href="data:," />\n' +
-    `<title>Orca</title>\n${MOBILE_WEB_APP_ROOT_RESET}\n${MOBILE_WEB_APP_NATIVE_PARITY_STYLE}\n<style id="orca-scrollbars">${scrollbarStyle}</style>\n</head>\n<body>\n<div id="root"></div>\n` +
+    `<title>Quirky</title>\n${MOBILE_WEB_APP_ROOT_RESET}\n${MOBILE_WEB_APP_NATIVE_PARITY_STYLE}\n<style id="quirky-scrollbars">${scrollbarStyle}</style>\n</head>\n<body>\n<div id="root"></div>\n` +
     `<script type="module" src="/${scriptAsset.path}"></script>\n</body>\n</html>\n`
   const indexBytes = Buffer.from(html, 'utf8')
   const indexAsset = {

@@ -79,7 +79,7 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         await turn('running')
         await note()
         await rig.journal.appendItem(
-          { provider: 'orca', clientMessageId: 'newer' },
+          { provider: 'quirky', clientMessageId: 'newer' },
           { kind: 'status', text: 'Newer' },
           { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
         )
@@ -116,7 +116,7 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         const held = rig.journal.cursor()
         for (const clientMessageId of ['large-a', 'large-b']) {
           await rig.journal.appendItem(
-            { provider: 'orca', clientMessageId },
+            { provider: 'quirky', clientMessageId },
             {
               kind: 'message',
               role: 'assistant',
@@ -172,7 +172,7 @@ export function describeReleasedStopNoteProjection(port: ScenarioPort): void {
         }
       )
       it('preserves removal when the operation note is re-keyed before the interrupted end', async () => {
-        const op = { provider: 'orca', clientMessageId: 'stop:operation-1' } as const
+        const op = { provider: 'quirky', clientMessageId: 'stop:operation-1' } as const
         await rig.journal.appendItem(op, unconfirmed, {
           fence: 1,
           turnScope: AGENT_JOURNAL_THREAD_SCOPE

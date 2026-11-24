@@ -6,10 +6,10 @@ import { scanAiVaultSessions } from './session-scanner'
 import { isolatedScanRoots } from './session-scanner-test-fixtures'
 import { antigravitySessionOrigin } from '../../shared/antigravity-session-origin'
 
-it.skipIf(process.env.ORCA_REAL_ANTIGRAVITY_HISTORY !== '1')(
+it.skipIf(process.env.QUIRKY_REAL_ANTIGRAVITY_HISTORY !== '1')(
   'scans bounded existing official artifacts without publishing their content',
   async () => {
-    const sandbox = await mkdtemp(join(tmpdir(), 'orca-agy-recorded-'))
+    const sandbox = await mkdtemp(join(tmpdir(), 'quirky-agy-recorded-'))
     try {
       const home = homedir()
       const rootPresence = await Promise.all(
@@ -47,9 +47,9 @@ it.skipIf(process.env.ORCA_REAL_ANTIGRAVITY_HISTORY !== '1')(
           cliResume: session.resumeCommand.includes('--conversation')
         }))
       }
-      if (process.env.ORCA_ANTIGRAVITY_HISTORY_PROOF_PATH) {
+      if (process.env.QUIRKY_ANTIGRAVITY_HISTORY_PROOF_PATH) {
         await writeFile(
-          process.env.ORCA_ANTIGRAVITY_HISTORY_PROOF_PATH,
+          process.env.QUIRKY_ANTIGRAVITY_HISTORY_PROOF_PATH,
           `${JSON.stringify(proof, null, 2)}\n`
         )
       }

@@ -5,14 +5,14 @@ import {
 } from '../../shared/fork-hosted-review-sitter/agent-prompt'
 import { sanitizeWorktreeDisplayName } from '../ipc/worktree-display-name'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 
 /**
  * Human-only entry shared by the manual "Fix Broken Checks" surfaces.
  * Watcher actions must use ExecuteContext.dispatchWorker instead.
  */
 export async function launchHostedReviewSitterFixAgent(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   input: HostedReviewAgentLaunchInput
 ): Promise<HostedReviewAgentLaunchResult> {

@@ -15,7 +15,7 @@ import { reconcileOrphanedPrRemotesWithExec } from './worktree-push-target-recon
 const execFileAsync = promisify(execFile)
 
 const REPO_ID = 'repo-1'
-const FORK_REMOTE = 'pr-contributor-orca'
+const FORK_REMOTE = 'pr-contributor-quirky'
 
 let scratchDir = ''
 let repoPath = ''
@@ -52,13 +52,13 @@ function storeOf(entries: Record<string, GitPushTarget | undefined>): WorktreePu
 
 beforeEach(async () => {
   // realpath: macOS hands out /var/... temp paths while Git reports /private/var/...
-  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-pr-remote-reconcile-')))
+  scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-pr-remote-reconcile-')))
   repoPath = join(scratchDir, 'repo')
   forkPath = join(scratchDir, 'fork')
   await mkdir(repoPath, { recursive: true })
   await git(['init', '-q'], repoPath)
-  await git(['config', 'user.name', 'Orca Test'], repoPath)
-  await git(['config', 'user.email', 'orca@example.test'], repoPath)
+  await git(['config', 'user.name', 'Quirky Test'], repoPath)
+  await git(['config', 'user.email', 'quirky@example.test'], repoPath)
   await git(['config', 'commit.gpgSign', 'false'], repoPath)
   await git(['config', 'core.hooksPath', '.git/no-hooks'], repoPath)
   await writeFile(join(repoPath, 'seed.txt'), 'seed\n')
@@ -67,8 +67,8 @@ beforeEach(async () => {
 
   // A second local "fork" repo the pr-* remote points at, so `remote add`/fetch behave normally.
   await git(['clone', '-q', repoPath, forkPath], scratchDir)
-  await git(['config', 'user.name', 'Orca Test'], forkPath)
-  await git(['config', 'user.email', 'orca@example.test'], forkPath)
+  await git(['config', 'user.name', 'Quirky Test'], forkPath)
+  await git(['config', 'user.email', 'quirky@example.test'], forkPath)
   await git(['config', 'commit.gpgSign', 'false'], forkPath)
   await git(['config', 'core.hooksPath', '.git/no-hooks'], forkPath)
   await git(['checkout', '-qb', 'contributor/fix'], forkPath)
@@ -152,10 +152,10 @@ describe('reconcileOrphanedPrRemotesWithExec against the real Git binary', () =>
     await expect(git(['remote'], repoPath)).resolves.not.toContain(FORK_REMOTE)
   })
 
-  it('reclaims a remote orphaned by a worktree removed outside Orca (path 3)', async () => {
+  it('reclaims a remote orphaned by a worktree removed outside Quirky (path 3)', async () => {
     const worktreePath = join(scratchDir, 'wt-externally-removed')
     await git(['worktree', 'add', '-q', worktreePath, '-b', 'contributor/fix-local-2'], repoPath)
-    // Simulate a plain `git worktree remove` the user ran outside Orca: Orca's metadata for
+    // Simulate a plain `git worktree remove` the user ran outside Quirky: Quirky's metadata for
     // that worktree is still sitting in the store (nothing told it to clean up), but the
     // worktree itself is gone.
     await git(['worktree', 'remove', '--force', worktreePath], repoPath)

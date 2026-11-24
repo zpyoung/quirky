@@ -80,7 +80,7 @@ async function launchExternalApp(url: string): Promise<'failed' | undefined> {
 }
 
 /**
- * Asks the window showing the page whether to open the link in its app; Orca launches it only on
+ * Asks the window showing the page whether to open the link in its app; Quirky launches it only on
  * a yes. Returns false when refused without asking: a web scheme, or no window on this machine (a
  * page streamed from a server must never launch apps on that server).
  */

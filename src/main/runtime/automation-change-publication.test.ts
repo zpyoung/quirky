@@ -23,7 +23,7 @@ import { AUTOMATION_OWNER_CONFLICT_CODES } from '../../shared/automation-owner-c
 import type { AutomationOwnerPrecondition } from '../../shared/automation-owner-precondition'
 import { AutomationService } from '../automations/service'
 import { Store, initDataPath } from '../persistence'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import * as worktreeChangeInvalidators from '../ipc/worktree-change-invalidators'
 import { _resetTerminalModelQueryAuthorityForTest } from './terminal-model-query-authority'
 import { _resetTerminalViewAttributesForTest } from './terminal-view-attribute-store'
@@ -103,7 +103,7 @@ const AUTOMATIONS = [
 async function makeRuntime() {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
-    join(testState.dir, 'orca-data.json'),
+    join(testState.dir, 'quirky-data.json'),
     JSON.stringify({
       ...getDefaultPersistedState(testState.dir),
       repos: REPOS,
@@ -114,8 +114,8 @@ async function makeRuntime() {
     'utf-8'
   )
   initDataPath()
-  const store = createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
-  const runtime = new OrcaRuntimeService(store as never)
+  const store = createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
+  const runtime = new QuirkyRuntimeService(store as never)
   const published: AutomationsChangedPayload[] = []
   vi.spyOn(runtime, 'notifyAutomationsChanged').mockImplementation(
     (payload: AutomationsChangedPayload = {}) => {
@@ -146,7 +146,7 @@ const runNow = async (
 
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'automation-publish-'))
-  // Why: the store resolves orca-data.json through the app environment, so the
+  // Why: the store resolves quirky-data.json through the app environment, so the
   // suite's fixture directory must be what `userData` answers with.
   installFakeAppEnvironment({
     getPath: (name) => (name === 'userData' ? testState.dir : tmpdir())

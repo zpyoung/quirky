@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const require = createRequire(import.meta.url)
 const projectDir = resolve(import.meta.dirname, '../..')
@@ -60,7 +60,7 @@ function focusedArguments() {
 it('focused IME and golden commands discover only their requested files with the installed Playwright CLI', async () => {
   const commands = focusedArguments()
   expect(commands).toHaveLength(4)
-  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'orca-playwright-focused-')))
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-playwright-focused-')))
   const config = join(directory, 'playwright.config.cjs')
   const testPackage = JSON.stringify(require.resolve('@stablyai/playwright-test'))
   try {
@@ -89,7 +89,7 @@ it('focused IME and golden commands discover only their requested files with the
             '--reporter=json',
             ...args
           ],
-          env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+          env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
           timeoutMs: 20_000
         })
         expect(result.code, result.stderr).toBe(0)

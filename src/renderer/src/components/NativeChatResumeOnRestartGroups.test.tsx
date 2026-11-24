@@ -46,7 +46,7 @@ afterEach(() => {
 })
 
 const LOCAL_TREE = [
-  '1:project:orca',
+  '1:project:quirky',
   '2:workspace:parent',
   '3:chat:in-parent',
   '3:workspace:child',
@@ -88,7 +88,7 @@ it('keeps every checkbox in the left column and indents what follows it 18px a l
 it('reads levels apart by weight, with no row dividers or bands', () => {
   render({ candidates: seedTree() })
 
-  expect(itemOf(nodeBox('orca')).querySelector('.font-semibold')?.textContent).toBe('orca')
+  expect(itemOf(nodeBox('quirky')).querySelector('.font-semibold')?.textContent).toBe('quirky')
   expect(itemOf(nodeBox('parent')).querySelector('.font-medium')?.textContent).toBe('parent')
   // Every row element but the checkboxes, which keep their own outline.
   const rows = container.querySelectorAll(
@@ -129,7 +129,7 @@ it('heads a single SSH host with its machine node, named and marked SSH', () => 
   expect(itemOf(nodeBox('parent')).textContent).not.toContain(machine)
 })
 
-// A paired Orca server's runtime host is not this machine, but it is not SSH either.
+// A paired Quirky server's runtime host is not this machine, but it is not SSH either.
 it('heads a runtime host with its machine node and no SSH chip', () => {
   const runtime: ExecutionHostId = 'runtime:env-1'
   render({ candidates: seedTree({ parent: runtime, child: runtime }) })
@@ -161,12 +161,12 @@ it('gives each machine its own branch when chats span hosts', () => {
   // The child is on another host, so it does not nest under the local parent.
   expect(treeOutline()).toEqual([
     `1:machine:${machine}`,
-    '2:project:orca',
+    '2:project:quirky',
     '3:workspace:child',
     '4:chat:in-child',
     '4:chat:also-in-child',
     `1:machine:${local}`,
-    '2:project:orca',
+    '2:project:quirky',
     '3:workspace:parent',
     '4:chat:in-parent',
     '3:workspace:other',

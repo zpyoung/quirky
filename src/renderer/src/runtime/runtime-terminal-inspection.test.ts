@@ -117,7 +117,7 @@ describe('runtime terminal owner routing', () => {
         params: {
           terminal: 'terminal-1',
           text: 'x',
-          client: { id: 'orca-desktop', type: 'desktop' }
+          client: { id: 'quirky-desktop', type: 'desktop' }
         },
         timeoutMs: 15_000
       })
@@ -416,7 +416,7 @@ describe('runtime terminal owner routing', () => {
       params: {
         terminal: 'terminal-1',
         text: 'x',
-        client: { id: 'orca-desktop', type: 'desktop' }
+        client: { id: 'quirky-desktop', type: 'desktop' }
       },
       timeoutMs: 15_000
     })

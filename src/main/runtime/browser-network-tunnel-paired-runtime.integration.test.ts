@@ -8,8 +8,8 @@ import { PairedRuntimeBrowserNetworkRoute } from '../browser/paired-runtime-brow
 import { PairedRuntimeBrowserHostLease } from '../browser/paired-runtime-browser-host-lease'
 import { parsePairingCode } from '../../shared/pairing'
 import { getBrowserHostLeaseRegistry } from './browser-host/browser-host-lease-registry-instance'
-import { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { ALL_RPC_METHODS } from './rpc/methods'
 
 const resources: (() => Promise<void> | void)[] = []
@@ -22,10 +22,10 @@ afterEach(async () => {
 
 describe('paired runtime browser network tunnel', () => {
   it('returns page command results on the exact authenticated attach connection', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-command-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-command-'))
     resources.push(() => rmSync(userDataPath, { recursive: true, force: true }))
-    const runtime = new OrcaRuntimeService({} as never)
-    const rpc = new OrcaRuntimeRpcServer({
+    const runtime = new QuirkyRuntimeService({} as never)
+    const rpc = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       enableWebSocket: true,
@@ -103,10 +103,10 @@ describe('paired runtime browser network tunnel', () => {
   })
 
   it('commits same-runtime reconciliation placement after a real paired command result', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-reconciliation-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-reconciliation-'))
     resources.push(() => rmSync(userDataPath, { recursive: true, force: true }))
-    const runtime = new OrcaRuntimeService({} as never)
-    const rpc = new OrcaRuntimeRpcServer({
+    const runtime = new QuirkyRuntimeService({} as never)
+    const rpc = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       enableWebSocket: true,
@@ -199,10 +199,10 @@ describe('paired runtime browser network tunnel', () => {
     const destinationAddress = await listen(destination)
     resources.push(() => closeServer(destination))
 
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-tunnel-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-tunnel-'))
     resources.push(() => rmSync(userDataPath, { recursive: true, force: true }))
-    const runtime = new OrcaRuntimeService({} as never)
-    const rpc = new OrcaRuntimeRpcServer({
+    const runtime = new QuirkyRuntimeService({} as never)
+    const rpc = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       enableWebSocket: true,

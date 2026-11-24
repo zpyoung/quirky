@@ -27,7 +27,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
       store.writes += 1
       if (store.refuse) {
         throw new Error(
-          'Orca could not save orca:custom-accessory-keys: a stored value may be too large.'
+          'Quirky could not save quirky:custom-accessory-keys: a stored value may be too large.'
         )
       }
       store.raw = value
@@ -70,7 +70,7 @@ import { CustomKeyModal } from './CustomKeyModal'
 import { loadCustomKeys, removeCustomKey, saveCustomKeys } from '../terminal/terminal-custom-keys'
 import { readMirroredStorage } from '../storage/mirrored-storage-keys'
 
-const CUSTOM_KEYS = 'orca:custom-accessory-keys'
+const CUSTOM_KEYS = 'quirky:custom-accessory-keys'
 
 /** What a later `init` would carry for this key, which is the map and not the store. */
 function mirrored(): string | undefined {
@@ -133,7 +133,7 @@ beforeEach(() => {
 /**
  * The page refuses a write the app would have taken, and the modal is one of its callers.
  *
- * `orca:custom-accessory-keys` is in the session route's page allowlist, and on the page a write
+ * `quirky:custom-accessory-keys` is in the session route's page allowlist, and on the page a write
  * over `PAGE_STORAGE_MAX_VALUE_CHARS` rejects rather than dropping — that is the size contract of
  * ruling 33.4, and ruling 33.6 adds the key `init` could not carry at all. Every other allowlisted
  * writer in this closure catches its save; this one awaited it inside a `void` call, so the

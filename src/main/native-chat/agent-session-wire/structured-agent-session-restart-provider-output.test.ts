@@ -289,7 +289,7 @@ describe('provider output survives host restart', () => {
       throw new Error('provider output was not translated')
     }
     events.appendItem(
-      { provider: 'orca', clientMessageId: 'provider-frame:codex:acquisition:1' },
+      { provider: 'quirky', clientMessageId: 'provider-frame:codex:acquisition:1' },
       fallback.body,
       { turnScope: TURN_SCOPE }
     )
@@ -300,7 +300,7 @@ describe('provider output survives host restart', () => {
     }
     rig.clock.now = SAVED_AT
     await journal.appendItem(
-      { provider: 'orca', clientMessageId: 'host-notice' },
+      { provider: 'quirky', clientMessageId: 'host-notice' },
       { kind: 'status', text: 'host notice' },
       { fence: 1, turnScope: TURN_SCOPE }
     )

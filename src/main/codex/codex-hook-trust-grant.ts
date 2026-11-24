@@ -40,7 +40,7 @@ import {
 } from './codex-trust-grant-cooldown'
 
 /** Ops escape hatch (not a setting): forces the fallback lane for every trust grant. */
-const DISABLE_ENV_FLAG = 'ORCA_DISABLE_CODEX_TRUST_RPC'
+const DISABLE_ENV_FLAG = 'QUIRKY_DISABLE_CODEX_TRUST_RPC'
 
 export type { CodexManagedTrustGrantPlan }
 export type { CodexTrustGrantFallbackReason }
@@ -162,7 +162,7 @@ async function runGrantAttempt(
   beforeSession: (() => void) | undefined
 ): Promise<CodexManagedTrustGrantOutcome> {
   // Why no config.toml restore on failure: the session writes trust only at
-  // Orca's own keys, bound to Orca's command by its hash, and each caller settles
+  // Quirky's own keys, bound to Quirky's command by its hash, and each caller settles
   // those keys itself. A restore would undo anything saved meanwhile.
   const attempt: GrantAttempt = {
     plan,
@@ -212,7 +212,7 @@ async function runGrantAttempt(
 }
 
 /**
- * Grants trust for Orca's managed Codex hooks through codex's own app-server
+ * Grants trust for Quirky's managed Codex hooks through codex's own app-server
  * RPCs, verified by re-list. Returns the granted entries carrying Codex's
  * verbatim hashes, or a fallback marker — the caller then writes
  * computeTrustedHash trust. Never

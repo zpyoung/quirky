@@ -34,7 +34,7 @@ describe('the route a switch hands the shell', () => {
   it('is nothing when a file path is longer than a param may be', () => {
     // Not hypothetical: this is the shape a Windows long path arrives in, and the first assertion
     // is what says the schema really refuses it. Without the guard the screen hands it over,
-    // bridge-host drops the route to null, and the page paints "Update Orca to open this
+    // bridge-host drops the route to null, and the page paints "Update Quirky to open this
     // workspace" over a native screen that works.
     const route = previewRoute(`/logs/${'a'.repeat(BRIDGE_MAX_ROUTE_PARAM_CHARS)}.txt`)
     expect(BridgeInitRouteSchema.safeParse(route).success).toBe(false)

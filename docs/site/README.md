@@ -1,9 +1,9 @@
-# @orca/docs
+# @quirky/docs
 
 This package contains the product documentation and public media intended to
-ship alongside Orca's source code.
+ship alongside Quirky's source code.
 
-Open-source product documentation for [Orca](https://www.onorca.dev), served at `/docs` (same URL shape as `https://www.onorca.dev/docs`).
+Open-source product documentation for [Quirky](https://www.onorca.dev), served at `/docs` (same URL shape as `https://www.onorca.dev/docs`).
 
 This package is a **self-contained Next.js app**. It is intentionally **not** a root monorepo workspace member, so installing Electron app dependencies does not pull Next/fumadocs.
 

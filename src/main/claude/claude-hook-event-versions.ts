@@ -1,5 +1,5 @@
 import { hasReachedAppVersion, isValidAppVersion } from '../../shared/app-version'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import path from 'node:path'
 
 // Why: Claude 1.0.23 through 2.1.100 validate `hooks` against a closed event enum and discard the
@@ -26,7 +26,7 @@ export const CLAUDE_HOOK_EVENT_FIRST_VERSIONS = {
 // `statusLine` joined their schema only in 1.0.64. Pinned by the same fixture's topLevelSettings.
 export const CLAUDE_STATUS_LINE_FIRST_VERSION = '1.0.64'
 
-// Why: an unresolved version gets what the first release accepting Orca's core lifecycle events and
+// Why: an unresolved version gets what the first release accepting Quirky's core lifecycle events and
 // statusLine knows, and nothing newer; a Claude older than that is gated only once its version resolves.
 export const UNRESOLVED_CLAUDE_VERSION = CLAUDE_STATUS_LINE_FIRST_VERSION
 

@@ -105,7 +105,7 @@ export function registerPtyConnectionForegroundAgentRoutingTests(): void {
       expect(mockStoreState.removeAgentStatus).not.toHaveBeenCalled()
     })
 
-    it('clears pre-hook launch config when an Orca-started command exits', async () => {
+    it('clears pre-hook launch config when an Quirky-started command exits', async () => {
       vi.useFakeTimers({ toFake: ['setTimeout'] })
       const { connectPanePty } = await import('./pty-connection')
       vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValue('zsh')
@@ -240,7 +240,7 @@ export function registerPtyConnectionForegroundAgentRoutingTests(): void {
       expect(resolveMockPaneWindowsShiftEnterEncoding(mockStoreState, paneKey)).toBe('csi-u')
     })
 
-    it('confirms an Orca-launched Droid fresh spawn in a no-OSC shell (Git Bash)', async () => {
+    it('confirms an Quirky-launched Droid fresh spawn in a no-OSC shell (Git Bash)', async () => {
       // Why: no-OSC shells (Git Bash/cmd) emit no command boundary, so without a fresh-spawn sample the pane never earns routing trust and Shift+Enter regresses to Esc+CR (#7620).
       vi.useFakeTimers()
       const { connectPanePty } = await import('./pty-connection')

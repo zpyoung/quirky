@@ -73,7 +73,7 @@ export function ConnectionDiagnosticsView({
               <Text style={styles.diagnosisHeading}>What this suggests</Text>
               <Text style={styles.diagnosisText}>{diagnosis.likelyCause}</Text>
               <Text style={styles.diagnosisNext}>{diagnosis.nextStep}</Text>
-              {diagnosis.reportability === 'orca-relay' && (
+              {diagnosis.reportability === 'quirky-relay' && (
                 <>
                   <Text style={styles.privacyHint}>
                     Sends a size-limited redacted report including host name, endpoint, versions,
@@ -96,7 +96,7 @@ export function ConnectionDiagnosticsView({
                           ? 'Diagnostics sent'
                           : submissionState === 'failed'
                             ? 'Retry sending'
-                            : 'Send diagnostics to Orca'}
+                            : 'Send diagnostics to Quirky'}
                     </Text>
                   </Pressable>
                 </>

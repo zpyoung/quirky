@@ -286,11 +286,11 @@ describe('TerminalHost dead-session reaping (leak regression)', () => {
         streamClient: { onData: vi.fn(), onExit: vi.fn() }
       })
 
-      lastSubprocess._onDataCb?.('\x1b]777;orca-shell-ready')
+      lastSubprocess._onDataCb?.('\x1b]777;quirky-shell-ready')
       await host.dispose()
 
       expect(onFinalCheckpoint).toHaveBeenCalledWith('session-1', expect.any(Object), [
-        { kind: 'output', data: '\x1b]777;orca-shell-ready' }
+        { kind: 'output', data: '\x1b]777;quirky-shell-ready' }
       ])
     })
 

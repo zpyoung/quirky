@@ -1,22 +1,22 @@
 /** A server managed over SSH refused this desktop's token: pair again over SSH, or say why not. */
 import { errorMessage } from '../../../shared/error-message'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
-import { getOrcadSshDeployment } from '../../../shared/runtime-environments'
-import { OrcadManagedPairingRepairFailedError } from '../../managed-server/lifecycle/orcad-managed-pairing-repair-failure'
+import { getQuirkydSshDeployment } from '../../../shared/runtime-environments'
+import { QuirkydManagedPairingRepairFailedError } from '../../managed-server/lifecycle/quirkyd-managed-pairing-repair-failure'
 import {
-  managedOrcadPairingFailureStands,
-  recoverRefusedManagedOrcadPairing
-} from '../../managed-server/lifecycle/orcad-managed-tunnel'
+  managedQuirkydPairingFailureStands,
+  recoverRefusedManagedQuirkydPairing
+} from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
 import { getRuntimeEnvironmentStatusOwner } from './runtime-environment-request-connections'
 
 /** Null for anything but a server managed over SSH; other servers are paired by their user. */
 export function recoverRefusedManagedPairing(
   userDataPath: string,
   environmentId: string,
-  recover: typeof recoverRefusedManagedOrcadPairing = recoverRefusedManagedOrcadPairing
+  recover: typeof recoverRefusedManagedQuirkydPairing = recoverRefusedManagedQuirkydPairing
 ): Promise<'built' | 'repaired'> | null {
   try {
-    if (!getOrcadSshDeployment(resolveEnvironment(userDataPath, environmentId))) {
+    if (!getQuirkydSshDeployment(resolveEnvironment(userDataPath, environmentId))) {
       return null
     }
   } catch {
@@ -29,8 +29,8 @@ export function recoverRefusedManagedPairing(
 export function handleManagedSharedControlRefusal(
   userDataPath: string,
   environmentId: string,
-  recover: typeof recoverRefusedManagedOrcadPairing = recoverRefusedManagedOrcadPairing,
-  failureStands: typeof managedOrcadPairingFailureStands = managedOrcadPairingFailureStands
+  recover: typeof recoverRefusedManagedQuirkydPairing = recoverRefusedManagedQuirkydPairing,
+  failureStands: typeof managedQuirkydPairingFailureStands = managedQuirkydPairingFailureStands
 ): Promise<'retry' | 'stop'> | null {
   const recovery = recoverRefusedManagedPairing(userDataPath, environmentId, recover)
   if (!recovery) {
@@ -42,7 +42,7 @@ export function handleManagedSharedControlRefusal(
     (error: unknown) => {
       // Why fenced: a newer pairing stored meanwhile has a successor owner this failure never judged.
       if (
-        error instanceof OrcadManagedPairingRepairFailedError &&
+        error instanceof QuirkydManagedPairingRepairFailedError &&
         failureStands(userDataPath, environmentId)
       ) {
         // Why stop: the verdict stands until the user connects again.
@@ -57,7 +57,7 @@ export function handleManagedSharedControlRefusal(
       }
       // Lost contact or a foreign answer is not a verdict on the pairing.
       console.warn(
-        '[runtime-environments] Could not re-pair the managed Orca server:',
+        '[runtime-environments] Could not re-pair the managed Quirky server:',
         errorMessage(error)
       )
       return 'retry'

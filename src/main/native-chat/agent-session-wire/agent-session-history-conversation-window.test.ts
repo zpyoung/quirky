@@ -99,7 +99,7 @@ function read(request: Omit<AgentSessionHistoryRequest, 'sessionId'>): AgentSess
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-wire-history-window-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-wire-history-window-'))
   clock = 1_000
   ordinal = 0
   journal = await journals.open({
@@ -219,7 +219,7 @@ describe('a history page over a session with a subagent', () => {
     expect(textsOf(tail)[0]).toBe('Kicked off subagent Audit')
     expect(textsOf(older)).toEqual(named('own-', 1, 3))
     expect(folded([tail])).toEqual([
-      { row: 'orca:subagent%3Aa', labels: ['a=Audit', 'b=Audit 2', 'c=Audit 3'] }
+      { row: 'quirky:subagent%3Aa', labels: ['a=Audit', 'b=Audit 2', 'c=Audit 3'] }
     ])
     expect(folded([older, tail])).toEqual(folded([tail]))
   })
@@ -308,7 +308,7 @@ describe('a history page names the subagents whose roster row is older than it',
 
     expect(page.subagentRoster).toEqual([
       expect.objectContaining({
-        itemId: 'orca:subagent%3Atask-1',
+        itemId: 'quirky:subagent%3Atask-1',
         entry: { id: 'task-1', label: 'run task-1', state: 'working' }
       })
     ])

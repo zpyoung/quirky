@@ -16,7 +16,7 @@ export type OpenHttpLinkOptions = {
   allowRemoteInApp?: boolean
   /** Unconditional: always use the system browser regardless of settings. */
   forceSystemBrowser?: boolean
-  /** Unconditional for local sources: open inside Orca regardless of settings. */
+  /** Unconditional for local sources: open inside Quirky regardless of settings. */
   forceInApp?: boolean
   /** The Shift escape-hatch modifier was held; resolveModifierRouting decides what it means. */
   modifierHeld?: boolean
@@ -107,14 +107,14 @@ function resolveModifierRouting(
   modifierHeld: boolean,
   openLinksInApp: boolean,
   modifierInverts: boolean
-): { wantsOrca: boolean; wantsSystemBrowser: boolean } {
+): { wantsQuirky: boolean; wantsSystemBrowser: boolean } {
   if (!modifierHeld) {
-    return { wantsOrca: false, wantsSystemBrowser: false }
+    return { wantsQuirky: false, wantsSystemBrowser: false }
   }
   if (!modifierInverts) {
-    return { wantsOrca: false, wantsSystemBrowser: true }
+    return { wantsQuirky: false, wantsSystemBrowser: true }
   }
-  return { wantsOrca: !openLinksInApp, wantsSystemBrowser: openLinksInApp }
+  return { wantsQuirky: !openLinksInApp, wantsSystemBrowser: openLinksInApp }
 }
 
 export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void {
@@ -141,14 +141,14 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
     openLinksInApp,
     state?.settings?.openLinksInAppModifierInverts === true
   )
-  const wantsOrca =
+  const wantsQuirky =
     !forceSystemBrowser &&
     !modifier.wantsSystemBrowser &&
     Boolean(worktreeId) &&
-    (forceInApp || openLinksInApp || modifier.wantsOrca)
+    (forceInApp || openLinksInApp || modifier.wantsQuirky)
 
   if (
-    wantsOrca &&
+    wantsQuirky &&
     allowRemoteInApp &&
     worktreeId &&
     (effectiveSourceOwner?.kind === 'runtime' ||
@@ -176,7 +176,7 @@ export function openHttpLink(url: string, opts: OpenHttpLinkOptions = {}): void 
     return
   }
 
-  if (wantsOrca && sourceIsLocal && worktreeId && state) {
+  if (wantsQuirky && sourceIsLocal && worktreeId && state) {
     // Why: http clicks from inside a worktree should not push a worktree-switch
     // history entry — the user isn't changing worktrees, they're opening a tab
     // in the one they're already in. activateAndRevealWorktree is reserved for

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { LEGACY_MAX_QUICK_COMMAND_AGENT_PROMPT_LENGTH } from '../../../../shared/terminal-quick-command-prompt-limit'
 import type { TerminalQuickCommand } from '../../../../shared/terminal-quick-command-types'
 import { TERMINAL_QUICK_COMMAND_LONG_PROMPTS_RUNTIME_CAPABILITY } from '../../../../shared/terminal-quick-command-capabilities'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
 import { CLIENT_UI_METHODS } from './client-ui'
@@ -39,7 +39,7 @@ describe('quick-command prompts longer than older clients accept', () => {
       getRuntimeId: () => 'test-runtime',
       getClientTerminalQuickCommands: vi.fn(() => [shortCommand, longCommand]),
       updateClientTerminalQuickCommands: update
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     return { dispatcher: new RpcDispatcher({ runtime, methods: CLIENT_UI_METHODS }), update }
   }
 

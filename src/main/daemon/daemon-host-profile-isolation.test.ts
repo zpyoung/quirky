@@ -47,7 +47,7 @@ function materializedBuild(): string {
 
 function seedDir(path: string, exe: string): string {
   mkdirSync(join(path, 'resources'), { recursive: true })
-  writeFileSync(join(path, 'Orca.exe'), exe)
+  writeFileSync(join(path, 'Quirky.exe'), exe)
   return path
 }
 
@@ -57,7 +57,7 @@ beforeEach(() => {
   process.env.LOCALAPPDATA = localAppData
   setProcessProp('platform', 'win32')
   buildInstallFixture(join(tempDir, 'app'))
-  setProcessProp('execPath', join(tempDir, 'app', 'Orca.exe'))
+  setProcessProp('execPath', join(tempDir, 'app', 'Quirky.exe'))
   setProcessProp('resourcesPath', join(tempDir, 'app', 'resources'))
   vi.spyOn(process, 'kill').mockImplementation((pid) => {
     if (pid === DEAD_WRITER_PID) {
@@ -90,7 +90,7 @@ describe('daemon-host profile isolation under a shared LOCALAPPDATA', () => {
     const buildB = materializedBuild()
 
     expect(rootA).not.toBe(rootB)
-    expect(dirname(rootA)).toBe(join(localAppData, 'Orca', 'daemon-host-profiles'))
+    expect(dirname(rootA)).toBe(join(localAppData, 'Quirky', 'daemon-host-profiles'))
     expect(dirname(dirname(buildA))).toBe(rootA)
     expect(dirname(dirname(buildB))).toBe(rootB)
     // The same profile spelled differently must not fork a second mirror.
@@ -132,20 +132,20 @@ describe('daemon-host profile isolation under a shared LOCALAPPDATA', () => {
       [stagingA, 'a-staging'],
       [oldVersionA, 'a-old']
     ] as const) {
-      expect(existsSync(join(dir, 'Orca.exe'))).toBe(true)
+      expect(existsSync(join(dir, 'Quirky.exe'))).toBe(true)
       if (exe) {
-        expect(readFileSync(join(dir, 'Orca.exe'), 'utf8')).toBe(exe)
+        expect(readFileSync(join(dir, 'Quirky.exe'), 'utf8')).toBe(exe)
       }
     }
-    expect(existsSync(join(buildB, 'Orca.exe'))).toBe(true)
-    expect(existsSync(join(liveStagingB, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(buildB, 'Quirky.exe'))).toBe(true)
+    expect(existsSync(join(liveStagingB, 'Quirky.exe'))).toBe(true)
     expect(existsSync(staleB)).toBe(true)
     expect(existsSync(deadStagingB)).toBe(false)
     expect(existsSync(oldVersionB)).toBe(false)
   })
 
   it('keeps legacy unscoped mirrors that older daemons may still run from', () => {
-    const legacyRoot = join(localAppData, 'Orca', 'daemon-host')
+    const legacyRoot = join(localAppData, 'Quirky', 'daemon-host')
     const legacyCurrent = seedDir(join(legacyRoot, '9.9.9', 'build-legacy-000000000000'), 'cur')
     const legacyStaging = seedDir(
       join(legacyRoot, '9.9.9', daemonHostStagingName(DEAD_WRITER_PID, '000000000000')),
@@ -157,9 +157,9 @@ describe('daemon-host profile isolation under a shared LOCALAPPDATA', () => {
 
     pruneOldDaemonHosts({ status: 'complete', versionLiveness: new Map() })
 
-    expect(existsSync(join(legacyCurrent, 'Orca.exe'))).toBe(true)
-    expect(existsSync(join(legacyStaging, 'Orca.exe'))).toBe(true)
-    expect(existsSync(join(legacyOld, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(legacyCurrent, 'Quirky.exe'))).toBe(true)
+    expect(existsSync(join(legacyStaging, 'Quirky.exe'))).toBe(true)
+    expect(existsSync(join(legacyOld, 'Quirky.exe'))).toBe(true)
   })
 
   it('stays under userData when LOCALAPPDATA is unset', () => {

@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ORCA_BACKGROUND_LAUNCH: '1'
+  QUIRKY_BACKGROUND_LAUNCH: '1'
   NODE_OPTIONS: --max-old-space-size=4096
 
 jobs:
@@ -62,7 +62,7 @@ jobs:
         run: |
           RELEASE_TAG="v$(node -p 'require("./package.json").version')"
           export RELEASE_TAG
-          echo "ORCA_BUILD_IDENTITY=$(node config/scripts/release-javascript-artifact.mjs identity)" >> "$GITHUB_ENV"
+          echo "QUIRKY_BUILD_IDENTITY=$(node config/scripts/release-javascript-artifact.mjs identity)" >> "$GITHUB_ENV"
       - name: Download shared JavaScript
         if: matrix.mode == 'shared'
         uses: actions/download-artifact@v8
@@ -73,7 +73,7 @@ jobs:
         shell: bash
         env:
           MEASUREMENT_MODE: ${{ matrix.mode }}
-          ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: ${{ needs.bundle.outputs.source_sha }}
+          QUIRKY_RELEASE_JAVASCRIPT_SOURCE_SHA: ${{ needs.bundle.outputs.source_sha }}
         run: node config/scripts/release-javascript-benchmark.mjs "$MEASUREMENT_MODE"
       - uses: actions/upload-artifact@v7
         with:

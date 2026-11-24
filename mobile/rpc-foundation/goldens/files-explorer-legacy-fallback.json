@@ -138,7 +138,7 @@
       },
       "labels": ["Back to session"],
       "rows": ["dir:src", "file:README.md"],
-      "text": ["Files", "orca-files", " - Showing first 5000"]
+      "text": ["Files", "quirky-files", " - Showing first 5000"]
     },
     "e91880eefe86": {
       "crash": {
@@ -154,7 +154,7 @@
       },
       "labels": ["Back to session"],
       "rows": [],
-      "text": ["Files", "orca-files"]
+      "text": ["Files", "quirky-files"]
     },
     "eb79a9b3682a": {
       "status": "fulfilled",

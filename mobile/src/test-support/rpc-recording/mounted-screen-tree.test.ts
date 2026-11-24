@@ -50,14 +50,14 @@ describe('a mounted screen', () => {
           'View',
           null,
           createElement('Text', { accessibilityLabel: 'title' }, 'Files'),
-          createElement('Text', null, 'orca-files')
+          createElement('Text', null, 'quirky-files')
         ),
       effectSink().effect
     )
     screen.mount()
     expect(projectMountedScreen(screen)).toEqual({
       elements: { View: 1, Text: 2 },
-      text: ['Files', 'orca-files'],
+      text: ['Files', 'quirky-files'],
       labels: ['title'],
       crash: null
     })

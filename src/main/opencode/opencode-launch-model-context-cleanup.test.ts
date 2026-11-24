@@ -2,18 +2,18 @@ import { z } from 'zod'
 import { ChildProcess } from 'node:child_process'
 import { PassThrough } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import {
   forceTerminateProcessTree,
   signalProcessTree
-} from '@orca/process-host/process-tree-termination'
+} from '@quirky/process-host/process-tree-termination'
 import { probeOpenCodeLaunchModelContext } from './opencode-launch-model-context'
 import { readFetchResponseJsonWithinLimit } from '../../shared/fetch-response-body'
 import { PROVIDER_SUPERVISOR_MAX_STOP_MS } from '../provider-process/provider-process-supervisor'
 import { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 
-vi.mock('@orca/process-host', () => ({ spawnProcess: vi.fn() }))
-vi.mock('@orca/process-host/process-tree-termination', () => ({
+vi.mock('@quirky/process-host', () => ({ spawnProcess: vi.fn() }))
+vi.mock('@quirky/process-host/process-tree-termination', () => ({
   signalProcessTree: vi.fn(),
   forceTerminateProcessTree: vi.fn()
 }))
@@ -71,8 +71,8 @@ const options = { executable: '/private/opencode', cwd: directory, env: {} }
 
 function decodedSupervisorSpec(env: unknown): unknown {
   const encoded =
-    typeof env === 'object' && env !== null && 'ORCA_PROVIDER_SUPERVISOR_SPEC' in env
-      ? String(env.ORCA_PROVIDER_SUPERVISOR_SPEC)
+    typeof env === 'object' && env !== null && 'QUIRKY_PROVIDER_SUPERVISOR_SPEC' in env
+      ? String(env.QUIRKY_PROVIDER_SUPERVISOR_SPEC)
       : ''
   return JSON.parse(Buffer.from(encoded, 'base64').toString() || 'null')
 }

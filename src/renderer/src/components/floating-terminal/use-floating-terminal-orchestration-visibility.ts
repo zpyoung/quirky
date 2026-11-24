@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react'
-import { isOrcaCliAvailableOnPath } from '@/lib/agent-skill-cli-prerequisite'
+import { isQuirkyCliAvailableOnPath } from '@/lib/agent-skill-cli-prerequisite'
 import {
   ORCHESTRATION_SETUP_STATE_EVENT,
   hasOrchestrationSetupMarker,
@@ -29,7 +29,7 @@ export function useFloatingTerminalOrchestrationVisibility({
     try {
       const status = await window.api.cli.getInstallStatus()
       if (mountedRef.current) {
-        setShowOrchestrationSetup(!isOrcaCliAvailableOnPath(status))
+        setShowOrchestrationSetup(!isQuirkyCliAvailableOnPath(status))
       }
     } catch {
       if (mountedRef.current) {

@@ -27,7 +27,7 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
   runtimeEnvironmentSupportsCapability: runtimeRpcMocks.runtimeEnvironmentSupportsCapability
 }))
 
-const prRepo = { host: 'github.com', owner: 'stablyai', repo: 'orca-sta1015-sandbox' }
+const prRepo = { host: 'github.com', owner: 'stablyai', repo: 'quirky-sta1015-sandbox' }
 const review: HostedReviewActionInfo = {
   provider: 'github',
   number: 1015,
@@ -170,7 +170,7 @@ describe('useHostedReviewActions', () => {
     expect(runtimeRpcMocks.assertRuntimeEnvironmentCapability).toHaveBeenCalledWith(
       'env-1',
       'github.markPRReadyForReview',
-      expect.stringContaining('newer Orca server')
+      expect.stringContaining('newer Quirky server')
     )
     expect(runtimeRpcMocks.callRuntimeRpc).toHaveBeenCalledWith(
       { kind: 'environment', environmentId: 'env-1' },

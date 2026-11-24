@@ -56,7 +56,7 @@ const event = {
   sender: {
     id: 17,
     getType: () => 'window',
-    getURL: () => 'file:///orca/index.html',
+    getURL: () => 'file:///quirky/index.html',
     isDestroyed: () => false
   }
 }
@@ -110,7 +110,7 @@ describe('macOS clipboard image data beside a file URL', () => {
       expect(mocks.readImage).not.toHaveBeenCalled()
 
       const savedPath = await invoke('clipboard:saveImageAsTempFile')
-      expect(savedPath).toMatch(/orca-paste-.+\.png$/)
+      expect(savedPath).toMatch(/quirky-paste-.+\.png$/)
       expect(mocks.writeFile).toHaveBeenCalledWith(savedPath, PNG)
       expect(mocks.readBuffer).not.toHaveBeenCalled()
     }
@@ -148,7 +148,7 @@ describe('macOS clipboard image data beside a file URL', () => {
 
     expect(invoke('clipboard:hasImage')).toBe(true)
     const savedPath = await invoke('clipboard:saveImageAsTempFile')
-    expect(savedPath).toMatch(/orca-paste-.+\.png$/)
+    expect(savedPath).toMatch(/quirky-paste-.+\.png$/)
     expect(mocks.writeFile).toHaveBeenCalledWith(savedPath, PNG)
     expect(invoke('clipboard:readImageThumbnail')).toEqual({
       dataUrl: 'data:image/png;base64,PREVIEW',

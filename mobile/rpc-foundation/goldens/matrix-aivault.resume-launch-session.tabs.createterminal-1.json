@@ -7,7 +7,7 @@
     "0bce25f5646d": {
       "name": "session.tabs.createTerminal#1",
       "ordinal": 2,
-      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"ORCA_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
+      "json": "{\"id\":\"frame-1\",\"deviceToken\":\"recording-device\",\"method\":\"session.tabs.createTerminal\",\"params\":{\"worktree\":\"id:workspace-1\",\"env\":{\"QUIRKY_RESUME\":\"1\"},\"envToDelete\":[\"CODEX_HOME\"],\"launchAgent\":\"codex\",\"clientMutationId\":\"resume-mutation-1\",\"activate\":false,\"select\":true,\"navigation\":\"caller\"}}"
     },
     "133463600de6": {
       "failure": "Failed to create terminal",
@@ -57,7 +57,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -97,7 +97,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -141,7 +141,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -195,7 +195,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -258,7 +258,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -303,7 +303,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -349,7 +349,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -390,7 +390,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -448,7 +448,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -557,7 +557,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",
@@ -604,7 +604,7 @@
             "activate": false,
             "clientMutationId": "resume-mutation-1",
             "env": {
-              "ORCA_RESUME": "1"
+              "QUIRKY_RESUME": "1"
             },
             "envToDelete": ["CODEX_HOME"],
             "launchAgent": "codex",

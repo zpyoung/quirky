@@ -88,7 +88,7 @@ it("keeps the quit's notice through a continuation that carries the chat on", as
   ])
 })
 
-// A message Orca took but cannot read back cannot be proven undelivered: filed unconfirmed,
+// A message Quirky took but cannot read back cannot be proven undelivered: filed unconfirmed,
 // and it stays on record while the agent that may be carrying on keeps running.
 it('keeps an unconfirmed failure while the agent the continuation started keeps running', async () => {
   const { host } = await interruptedRestart()

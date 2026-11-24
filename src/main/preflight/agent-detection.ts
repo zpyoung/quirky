@@ -1,5 +1,5 @@
 /**
- * Agent/tool preflight detection. Split out of `ipc/preflight.ts` so the Orca
+ * Agent/tool preflight detection. Split out of `ipc/preflight.ts` so the Quirky
  * runtime — which calls `detectInstalledAgentsWithShellPathHydration`
  * during normal operation — can reach this logic without
  * dragging `ipcMain` into its module graph. The Electron handler registration
@@ -121,7 +121,7 @@ export type RefreshAgentsResult = {
 /**
  * Re-spawn the user's login shell to refresh process.env.PATH, then re-run
  * agent detection. Called by the Agents settings pane when the user clicks
- * Refresh — handles the "installed a new CLI, Orca doesn't see it yet" case
+ * Refresh — handles the "installed a new CLI, Quirky doesn't see it yet" case
  * without requiring an app restart.
  */
 export async function refreshShellPathAndDetectAgents(
@@ -218,7 +218,7 @@ async function executePreflightCheck(
   if (force) {
     // Why: the GitLab known-hosts cache (gl-utils) is populated lazily on the
     // first GitLab request and never invalidated within a session. A user who
-    // runs `glab auth login` for a self-hosted host after Orca starts would
+    // runs `glab auth login` for a self-hosted host after Quirky starts would
     // otherwise see "No GitLab project found" until app relaunch. The Re-check
     // path in IntegrationsPane forces preflight, so piggyback on that signal
     // to refresh the host list too.

@@ -31,7 +31,7 @@ function message(
 ): ClaudeStructuredSessionEvent {
   return {
     type: 'message',
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     message: {
       type: role,
       uuid,
@@ -42,7 +42,7 @@ function message(
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-provider-fallback-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-provider-fallback-'))
 })
 
 afterEach(async () => {
@@ -62,7 +62,7 @@ describe('Claude provider fallback', () => {
     const translator = createClaudeJournalTranslator({ sink })
     const initEvent: ClaudeStructuredSessionEvent = {
       type: 'message',
-      sessionId: 'orca-session',
+      sessionId: 'quirky-session',
       message: {
         type: 'system',
         subtype: 'init',

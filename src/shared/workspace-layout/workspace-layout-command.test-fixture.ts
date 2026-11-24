@@ -5,7 +5,7 @@ import type { LayoutTerminalTab, WorkspaceLayoutModel } from './workspace-layout
 import type { ProcessExitFacts } from './workspace-layout-process-exit'
 import { checkWorkspaceLayoutModelRules, emptyLayoutBeside } from './workspace-layout-model-rules'
 
-export const WS = 'repo-1::/Users/dev/orca'
+export const WS = 'repo-1::/Users/dev/quirky'
 
 /** Deterministic ids; pane ids are UUIDs as pane keys require. */
 export function testContext(): LayoutContext {

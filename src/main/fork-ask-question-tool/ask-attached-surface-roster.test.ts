@@ -9,12 +9,16 @@ import {
 import { ASK_SURFACE_CLIENT_CAPABILITY } from '../../shared/fork-ask-question-tool/ask-question-capability'
 
 function roster(hasLocalRendererWindow = false) {
-  const host: AskAttachedSurfaceRosterHost = { hasLocalRendererWindow: () => hasLocalRendererWindow }
+  const host: AskAttachedSurfaceRosterHost = {
+    hasLocalRendererWindow: () => hasLocalRendererWindow
+  }
   return createAskAttachedSurfaceRoster(host)
 }
 
 function rosterWithLivenessSink(hasLocalRendererWindow = false) {
-  const host: AskAttachedSurfaceRosterHost = { hasLocalRendererWindow: () => hasLocalRendererWindow }
+  const host: AskAttachedSurfaceRosterHost = {
+    hasLocalRendererWindow: () => hasLocalRendererWindow
+  }
   const sink: AskPaneLivenessSink = { notePaneDetached: vi.fn(), notePaneAttached: vi.fn() }
   return { roster: createAskAttachedSurfaceRoster(host, sink), sink }
 }

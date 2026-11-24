@@ -9,7 +9,7 @@ import { handleBrowserGuestLogin } from '../browser/browser-http-auth-prompt'
 import { installMainThreadHangWatchdog } from '../hang-watchdog/main-thread-hang-watchdog'
 import { preservePreviousHangDetection } from '../hang-watchdog/previous-hang-detection'
 import { browserCertificateTrustController } from '../browser/browser-manager'
-import { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
+import { ensureActiveQuirkyProfile } from '../quirky-profiles/profile-index-store'
 import { getCanonicalUserDataPath } from '../persistence'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { loadWslMoveFence } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
@@ -18,7 +18,7 @@ import { initializeBrowserClientHostId } from '../browser/browser-client-host-id
 import { scheduleSecretProtectionGapReport } from '../host/deferred-secret-protection-report'
 import { withholdUnreachableKeychainForServe } from '../host/serve-keychain-guard'
 import { initSshHostKeyStoreFile } from '../ssh/ssh-host-key-store'
-import { initOrcadHeldFenceTokenFile } from '../ssh/orcad-held-fence-tokens'
+import { initQuirkydHeldFenceTokenFile } from '../ssh/quirkyd-held-fence-tokens'
 import { neutralizeLegacyTerminalShimDir } from '../pty/legacy-terminal-shim-dir'
 import { applyAppIcon } from '../app-icon'
 import {
@@ -95,8 +95,8 @@ export async function initializeReadyFoundation(): Promise<void> {
       usesMockKeychain: app.commandLine.hasSwitch('use-mock-keychain')
     })
   }
-  const profile = ensureActiveOrcaProfile()
-  state.activeOrcaProfile = profile
+  const profile = ensureActiveQuirkyProfile()
+  state.activeQuirkyProfile = profile
   // Why this early: the first window stamps the hosting id into its renderer's argv, so the durable
   // read has to have happened by then or the renderer and the browser-host lease disagree.
   initializeBrowserClientHostId(profile.profileDirectory)
@@ -144,7 +144,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   // and must not gate the first window (STA-5765).
   scheduleSecretProtectionGapReport({
     dataFile: profile.dataFile,
-    force: process.env.ORCA_ALWAYS_REPORT_SECRET_PROTECTION === '1',
+    force: process.env.QUIRKY_ALWAYS_REPORT_SECRET_PROTECTION === '1',
     deferUntilFirstWindow: !state.isServeMode,
     skipInDevelopment: is.dev
   })
@@ -152,11 +152,11 @@ export async function initializeReadyFoundation(): Promise<void> {
   // it. Left unbound it reports nothing trusted, which is safe but silently discards our own
   // accept records on every launch.
   initSshHostKeyStoreFile(profile.dataFile)
-  initOrcadHeldFenceTokenFile(profile.dataFile)
+  initQuirkydHeldFenceTokenFile(profile.dataFile)
   // Why: must precede PTY handler registration and run in headless serve too, which returns before openMainWindow.
   neutralizeLegacyTerminalShimDir(app.getPath('userData'))
   logStartupMilestone('store-loaded')
-  // Why: pre-`ready` startup reads this flag from a marker so it never has to parse orca-data.json.
+  // Why: pre-`ready` startup reads this flag from a marker so it never has to parse quirky-data.json.
   writeHttp1CompatibilityMarker(
     canonicalUserDataPath,
     store.getSettings().electronHttp1CompatibilityMode === true,
@@ -191,7 +191,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   registerDocPreviewGrantHandlers()
   // Why: browser sessions serve desktop webviews and runtime profile commands, so init at app startup rather than via a renderer IPC path.
   initializeBrowserSessionsForApp({
-    orcaProfileId: profile.profile.id,
+    quirkyProfileId: profile.profile.id,
     profileDirectory: profile.profileDirectory,
     // Why: local direct-SSH partitions are scoped to targets, and the orphan
     // sweep must see the live target list or it would clear their cookie jars.

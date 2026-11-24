@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import {
   createPluginWorkerRuntime,
-  type PluginWorkerOrcaApi,
+  type PluginWorkerQuirkyApi,
   type PluginWorkerRuntime
 } from './plugin-host-runtime'
 
@@ -10,7 +10,7 @@ export class UninstallWorkerPort extends EventEmitter {
   connected = true
   readonly stdout = new PassThrough()
   readonly stderr = new PassThrough()
-  private api: PluginWorkerOrcaApi | null = null
+  private api: PluginWorkerQuirkyApi | null = null
   private readonly runtime: PluginWorkerRuntime
 
   constructor() {
@@ -18,7 +18,7 @@ export class UninstallWorkerPort extends EventEmitter {
     this.runtime = createPluginWorkerRuntime({
       send: (message) => this.emit('message', message),
       importModule: async () => ({
-        default: (api: PluginWorkerOrcaApi) => {
+        default: (api: PluginWorkerQuirkyApi) => {
           this.api = api
           api.commands.register('run', () => {
             for (let index = 0; index < 205; index += 1) {

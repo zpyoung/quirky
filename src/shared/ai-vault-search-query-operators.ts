@@ -66,7 +66,7 @@ function isBoundary(char: string | undefined): boolean {
 /**
  * A quoted span, or null when this is not one.
  *
- * What keeps the apostrophes in `it's a repo:orca thing's` from opening a span
+ * What keeps the apostrophes in `it's a repo:quirky thing's` from opening a span
  * that swallows the operator is the caller: this only ever runs at a token
  * start, and the quote in `it's` is not at one. The closing quote is then just
  * the next one, wherever it falls, so `"a b"c` reads as the panel has always

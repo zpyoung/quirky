@@ -21,7 +21,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-parsed-profile-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-parsed-profile-'))
   directories.push(directory)
   return openProfileStateDatabase(join(directory, 'profile-state.db'), 'parsed-profile').db
 }

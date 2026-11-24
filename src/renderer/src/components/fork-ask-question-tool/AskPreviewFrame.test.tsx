@@ -9,7 +9,10 @@ afterEach(() => cleanup())
 
 describe('buildAskPreviewSrcDoc', () => {
   it('strips a <script> tag out of html-format preview content', () => {
-    const preview: AskPreview = { format: 'html', content: '<p>hi</p><script>window.pwned = true</script>' }
+    const preview: AskPreview = {
+      format: 'html',
+      content: '<p>hi</p><script>window.pwned = true</script>'
+    }
 
     const srcDoc = buildAskPreviewSrcDoc(preview)
 
@@ -19,7 +22,10 @@ describe('buildAskPreviewSrcDoc', () => {
   })
 
   it('strips an inline event handler from html-format preview content', () => {
-    const preview: AskPreview = { format: 'html', content: '<img src="x" onerror="window.pwned = true">' }
+    const preview: AskPreview = {
+      format: 'html',
+      content: '<img src="x" onerror="window.pwned = true">'
+    }
 
     const srcDoc = buildAskPreviewSrcDoc(preview)
 
@@ -27,7 +33,10 @@ describe('buildAskPreviewSrcDoc', () => {
   })
 
   it('strips a raw <script> embedded in markdown-format preview content', () => {
-    const preview: AskPreview = { format: 'markdown', content: '# Title\n\n<script>window.pwned = true</script>' }
+    const preview: AskPreview = {
+      format: 'markdown',
+      content: '# Title\n\n<script>window.pwned = true</script>'
+    }
 
     const srcDoc = buildAskPreviewSrcDoc(preview)
 
@@ -48,7 +57,10 @@ describe('buildAskPreviewSrcDoc', () => {
 
 describe('AskPreviewFrame', () => {
   it('renders a sandboxed iframe with no allow-scripts and a sanitized srcDoc, never the raw model markup', () => {
-    const preview: AskPreview = { format: 'html', content: '<script>window.pwned = true</script><p>safe</p>' }
+    const preview: AskPreview = {
+      format: 'html',
+      content: '<script>window.pwned = true</script><p>safe</p>'
+    }
 
     const { container } = render(<AskPreviewFrame preview={preview} />)
     const iframe = container.querySelector('iframe')

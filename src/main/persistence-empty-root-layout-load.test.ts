@@ -48,7 +48,7 @@ function loadOldSession(layout: TerminalLayoutSnapshot) {
 
 describe('a saved layout with an empty root', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

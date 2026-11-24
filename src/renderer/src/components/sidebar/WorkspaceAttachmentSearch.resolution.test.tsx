@@ -58,18 +58,18 @@ const initialState = useAppStore.getInitialState()
 const repo: Repo = {
   id: 'repo',
   path: '/repo',
-  displayName: 'orca',
+  displayName: 'quirky',
   badgeColor: '',
   addedAt: 1,
   executionHostId: 'ssh:dev',
   gitRemoteIdentity: {
-    canonicalKey: 'github.com/acme/orca',
+    canonicalKey: 'github.com/acme/quirky',
     remoteName: 'origin',
-    remoteUrl: 'https://github.com/acme/orca.git'
+    remoteUrl: 'https://github.com/acme/quirky.git'
   }
 }
-const jiraUrl = 'https://company.atlassian.net/browse/ORCA-123'
-const linearUrl = 'https://linear.app/acme/issue/ORCA-123/fix-it'
+const jiraUrl = 'https://company.atlassian.net/browse/QUIRKY-123'
+const linearUrl = 'https://linear.app/acme/issue/QUIRKY-123/fix-it'
 const site: JiraSite = {
   id: 'site-2',
   siteUrl: 'https://company.atlassian.net',
@@ -79,11 +79,11 @@ const site: JiraSite = {
 }
 const jiraIssue: JiraIssue = {
   id: 'issue-123',
-  key: 'ORCA-123',
+  key: 'QUIRKY-123',
   title: 'Fix it',
   url: jiraUrl,
   siteId: site.id,
-  project: { id: 'project-jira', key: 'ORCA', name: 'Orca' },
+  project: { id: 'project-jira', key: 'QUIRKY', name: 'Quirky' },
   issueType: { id: 'bug', name: 'Bug' },
   status: { id: 'open', name: 'Open', categoryKey: 'new', categoryName: 'To do' },
   labels: [],
@@ -92,13 +92,13 @@ const jiraIssue: JiraIssue = {
 }
 const linearIssue: LinearIssue = {
   id: 'linear-123',
-  identifier: 'ORCA-123',
+  identifier: 'QUIRKY-123',
   title: 'Fix it',
   url: linearUrl,
   workspaceId: 'acme-workspace',
   workspaceName: 'Acme',
   state: { name: 'Todo', type: 'unstarted', color: '' },
-  team: { id: 'team', name: 'Orca', key: 'ORCA' },
+  team: { id: 'team', name: 'Quirky', key: 'QUIRKY' },
   labels: [],
   labelIds: [],
   priority: 0,
@@ -143,7 +143,7 @@ function input(): HTMLElement {
   return screen.getByRole('combobox', { name: 'Search references' })
 }
 function direct(): HTMLElement {
-  return screen.getByRole('option', { name: /^Add ORCA-123/ })
+  return screen.getByRole('option', { name: /^Add QUIRKY-123/ })
 }
 function enter(): void {
   fireEvent.keyDown(input(), { key: 'Enter' })
@@ -319,7 +319,7 @@ describe('workspace reference URL resolution and recovery', () => {
         repo={repo}
         disabled={false}
         initialKind="linear-issue"
-        initialInput="ORCA-123"
+        initialInput="QUIRKY-123"
         inputRef={createRef()}
         onAdd={onAdd}
         onSave={vi.fn()}

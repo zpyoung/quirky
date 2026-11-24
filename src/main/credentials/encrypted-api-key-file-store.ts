@@ -11,7 +11,7 @@ import type { SecretAtRestProtection } from '../../shared/secret-at-rest-protect
 import { ApiKeyFileUnreadableError } from './api-key-file-unreadable-error'
 
 type EncryptedApiKeyFileStore = {
-  /** Where the envelope lives and how it starts, for orcad's plaintext migration. */
+  /** Where the envelope lives and how it starts, for quirkyd's plaintext migration. */
   envelopeFile: () => { path: string; envelopePrefix: string }
   protection: () => SecretAtRestProtection | null
   has: () => boolean
@@ -39,12 +39,12 @@ export function createEncryptedApiKeyFileStore({
     payload: Buffer
   }
 
-  function getOrcaDir(): string {
-    return join(homedir(), '.orca')
+  function getQuirkyDir(): string {
+    return join(homedir(), '.quirky')
   }
 
   function getApiKeyPath(): string {
-    return join(getOrcaDir(), fileName)
+    return join(getQuirkyDir(), fileName)
   }
 
   function encodeApiKeyEnvelope(kind: ApiKeyEnvelope['kind'], payload: Buffer): string {

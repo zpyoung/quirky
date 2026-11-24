@@ -58,7 +58,7 @@
       "statusLine": "状态栏",
       "statusLineAvailable": "检测到自定义状态栏",
       "statusLineChained": "已串联",
-      "statusLineConsent": "Orca 将保留并运行你现有的状态栏命令。",
+      "statusLineConsent": "Quirky 将保留并运行你现有的状态栏命令。",
       "statusLineDisabled": "未启用",
       "statusLineDrifted": "自定义状态栏已更改",
       "statusLineError": "需要处理",

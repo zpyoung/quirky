@@ -10,9 +10,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 describe('loadAppUpdatePreferences', () => {
   it('drops only a corrupt update record, keeping the check time and dismissal beside it', async () => {
-    stored.set('orca:appUpdate:lastCheckedAt', '1700000000000')
-    stored.set('orca:appUpdate:latest', '{not json')
-    stored.set('orca:appUpdate:dismissedVersion', '0.0.51')
+    stored.set('quirky:appUpdate:lastCheckedAt', '1700000000000')
+    stored.set('quirky:appUpdate:latest', '{not json')
+    stored.set('quirky:appUpdate:dismissedVersion', '0.0.51')
     await expect(loadAppUpdatePreferences()).resolves.toEqual({
       lastCheckedAt: 1700000000000,
       latest: null,
@@ -22,7 +22,7 @@ describe('loadAppUpdatePreferences', () => {
 
   it('reads a well-formed update record', async () => {
     stored.set(
-      'orca:appUpdate:latest',
+      'quirky:appUpdate:latest',
       JSON.stringify({ version: '0.0.52', url: 'https://x.test' })
     )
     await expect(loadAppUpdatePreferences()).resolves.toMatchObject({

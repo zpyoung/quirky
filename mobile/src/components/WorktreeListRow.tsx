@@ -32,7 +32,7 @@ type Props = {
   repoColor: string
   repoIcon?: MobileRenderableRepoIcon | null
   // When the list is already grouped under this repo's section header, the row
-  // omits its own repo icon+name to avoid the redundant "📁 orca" on every row.
+  // omits its own repo icon+name to avoid the redundant "📁 quirky" on every row.
   hideRepo?: boolean
   /** What the desktop's shared Card layout and properties show, and where identity goes. */
   cardDetails: WorktreeCardDetails

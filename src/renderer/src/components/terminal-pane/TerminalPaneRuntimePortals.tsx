@@ -5,7 +5,7 @@ import { CodexSharedServerBanner } from './CodexSharedServerBanner'
 import { ClaudeOldTerminalBanner } from './ClaudeOldTerminalBanner'
 import { ClaudeDiffPanelNoticeBanner } from './ClaudeDiffPanelNoticeBanner'
 import { NewerDaemonHoldBanner } from './NewerDaemonHoldBanner'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { TerminalSshReconnectOverlay } from './TerminalSshReconnectOverlay'
 import { useManagedPairingRefusedEnvironmentId } from './use-managed-pairing-refused'
 import { DelayedRemoteRuntimeReconnectBanner } from './TerminalRemoteRuntimeReconnectBanner'
@@ -48,7 +48,7 @@ export function TerminalPaneCodexRestartPortals({
         )
         if (!ptyId) {
           // Switch point: a server's held pane has no terminal handle to bind until it reopens.
-          return ORCA_LAYOUT_OWNER_IS_MAIN
+          return QUIRKY_LAYOUT_OWNER_IS_MAIN
             ? createPortal(holdBanner, pane.container, `codex-restart-${pane.id}`)
             : null
         }
@@ -197,7 +197,7 @@ export function TerminalPaneRecoveryPortals({
               const retry = (): void => {
                 paneTransportsRef.current.get(pane.id)?.retryRecovery?.()
               }
-              // Why connect first: it asks Orca to pair again, which a pane retry alone does not.
+              // Why connect first: it asks Quirky to pair again, which a pane retry alone does not.
               if (pairingRefusedEnvironmentId) {
                 void window.api.runtimeEnvironments
                   .connect({ selector: pairingRefusedEnvironmentId })

@@ -24,7 +24,7 @@ describe('stale-working title clear and completion recovery', () => {
   // Synthetic: Codex's done hook, then a final native spinner that only the timer clears (#19243).
   it('delivers mail once the clear confirms a live Codex behind a fresh done hook', async () => {
     vi.useFakeTimers()
-    const db = createDatabase('orca-stale-title-completion-')
+    const db = createDatabase('quirky-stale-title-completion-')
     const hook: AgentStatusIpcPayload = {
       paneKey: PANE_KEY,
       terminalHandle: TERMINAL_HANDLE,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import {
   openCodexAppServerConnection,
   type CodexAppServerConnection
@@ -13,7 +13,7 @@ const FORCE_KILL_APP_SERVER = String.raw`
   const descendant = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 60000)"], {
     stdio: 'ignore'
   })
-  const exitMode = process.env.ORCA_TEST_PROVIDER_EXIT_MODE
+  const exitMode = process.env.QUIRKY_TEST_PROVIDER_EXIT_MODE
   const send = (payload) => process.stdout.write(JSON.stringify(payload) + '\n')
   readline.createInterface({ input: process.stdin }).on('line', (line) => {
     const message = JSON.parse(line)
@@ -57,8 +57,8 @@ async function openServer(
       command: process.execPath,
       args: ['-e', FORCE_KILL_APP_SERVER],
       env: {
-        [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: `teardown-test-${process.pid}-${exitMode ?? 'forced'}-${iteration}`,
-        ...(exitMode ? { ORCA_TEST_PROVIDER_EXIT_MODE: exitMode } : {})
+        [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: `teardown-test-${process.pid}-${exitMode ?? 'forced'}-${iteration}`,
+        ...(exitMode ? { QUIRKY_TEST_PROVIDER_EXIT_MODE: exitMode } : {})
       }
     },
     {

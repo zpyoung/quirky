@@ -1,20 +1,20 @@
 import { createHash } from 'node:crypto'
 
-/** A stable UUID (v4 layout) for the Claude conversation behind an Orca chat. */
-export function claudeSessionIdForOrcaSession(
+/** A stable UUID (v4 layout) for the Claude conversation behind an Quirky chat. */
+export function claudeSessionIdForQuirkySession(
   sessionId: string,
   clearOperationId?: string
 ): string {
   return stableUuid(
     clearOperationId
-      ? `orca-claude:${sessionId}:context-clear:${clearOperationId}`
-      : `orca-claude:${sessionId}`
+      ? `quirky-claude:${sessionId}:context-clear:${clearOperationId}`
+      : `quirky-claude:${sessionId}`
   )
 }
 
 /** The Claude conversation a rewind continues the chat in; stable, so a retried rewind names it again. */
 export function claudeSessionIdForRewind(sessionId: string, rewindOperationId: string): string {
-  return stableUuid(`orca-claude:${sessionId}:rewind:${rewindOperationId}`)
+  return stableUuid(`quirky-claude:${sessionId}:rewind:${rewindOperationId}`)
 }
 
 function stableUuid(identity: string): string {

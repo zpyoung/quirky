@@ -5,7 +5,7 @@ export const MAX_TERMINAL_CONTRAST_RATIO = 21
 
 /**
  * Clamps a user-supplied contrast floor (#10754). `undefined` means "unset", so callers fall back to
- * Orca's automatic background-luminance floor; anything unusable is treated the same way rather than
+ * Quirky's automatic background-luminance floor; anything unusable is treated the same way rather than
  * handed to xterm, which throws on a non-finite option.
  */
 export function normalizeTerminalMinimumContrastRatio(value: unknown): number | undefined {

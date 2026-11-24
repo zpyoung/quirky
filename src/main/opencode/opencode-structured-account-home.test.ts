@@ -92,7 +92,7 @@ describe('structured OpenCode account binding', () => {
     ).toEqual(baseEnvironment)
   })
 
-  it("undoes Orca's inherited managed overlay before passing the environment through", () => {
+  it("undoes Quirky's inherited managed overlay before passing the environment through", () => {
     const accounts = managedAccounts()
     accounts.select(null)
     const environment = environmentForStructuredOpenCodeAccountHome(
@@ -100,10 +100,10 @@ describe('structured OpenCode account binding', () => {
       {
         managedAccounts: accounts,
         baseEnvironment: {
-          ORCA_DATA_ACCOUNT_PROVIDER: 'opencode',
-          ORCA_DATA_ACCOUNT_DATA_HOME: '/old/data',
-          ORCA_DATA_ACCOUNT_STATE_HOME: '/old/state',
-          ORCA_DATA_ACCOUNT_ORIGINAL_ENV: JSON.stringify({
+          QUIRKY_DATA_ACCOUNT_PROVIDER: 'opencode',
+          QUIRKY_DATA_ACCOUNT_DATA_HOME: '/old/data',
+          QUIRKY_DATA_ACCOUNT_STATE_HOME: '/old/state',
+          QUIRKY_DATA_ACCOUNT_ORIGINAL_ENV: JSON.stringify({
             XDG_DATA_HOME: '/original/data',
             XDG_STATE_HOME: null,
             OPENCODE_DB: 'original.db',

@@ -22,7 +22,7 @@ vi.mock('./legacy-relay-bridge-panes', () => ({
 installTerminalLinkTestEnvironment(doubles)
 
 const WORKTREE_ID = 'repo-1::/home/u/proj'
-// What the bridge transport reports while an older Orca's relay still runs the pane.
+// What the bridge transport reports while an older Quirky's relay still runs the pane.
 const relayPtyId = toAppSshPtyId('box', 'pty2:0360053e-409a-415b-8dee-dd911e8330ba:3')
 const bridgedTransport = {
   getPtyId: () => relayPtyId,

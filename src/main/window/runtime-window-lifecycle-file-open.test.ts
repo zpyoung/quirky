@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow } from 'electron'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { RuntimeNotifier } from '../runtime/runtime-notifier-contract'
 
 vi.mock('electron', () => ({ ipcMain: { on: vi.fn(), removeListener: vi.fn() } }))
@@ -35,7 +35,7 @@ function attachNotifier(): { notifier: RuntimeNotifier; send: ReturnType<typeof 
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration only reads id, isDestroyed, on and webContents.
     mainWindow as unknown as BrowserWindow,
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration only calls the stubbed runtime members.
-    runtime as unknown as OrcaRuntimeService
+    runtime as unknown as QuirkyRuntimeService
   )
   if (!attached.notifier) {
     throw new Error('runtime notifier was not attached')

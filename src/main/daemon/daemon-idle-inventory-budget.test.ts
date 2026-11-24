@@ -61,7 +61,7 @@ function spawn(): MockSubprocess {
 }
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-idle-inventory-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-idle-inventory-'))
   clients.length = 0
   processes.length = 0
   seed.uuid = 0

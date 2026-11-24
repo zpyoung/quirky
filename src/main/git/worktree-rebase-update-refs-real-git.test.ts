@@ -21,7 +21,7 @@ async function git(args: string[], cwd = repo): Promise<{ stdout: string; stderr
 }
 
 beforeEach(async () => {
-  root = await realpath(await mkdtemp(join(tmpdir(), 'orca-rebase-reservation-')))
+  root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-rebase-reservation-')))
   fixture = new GitBinaryTestFixture(root)
   await fixture.start()
   repo = join(root, 'repo')

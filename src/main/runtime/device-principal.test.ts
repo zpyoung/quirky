@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { devicePrincipalOf } from './device-principal'
 import { DeviceRegistry, type DeviceEntry } from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
-import type { OrcaRuntimeService } from './orca-runtime'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import type { QuirkyRuntimeService } from './quirky-runtime'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import type { AuthenticatedMobileSocket } from './rpc/mobile-socket-wiring'
 
 function legacyRow(overrides: Partial<DeviceEntry> = {}): DeviceEntry {
@@ -23,7 +23,7 @@ function legacyRow(overrides: Partial<DeviceEntry> = {}): DeviceEntry {
 }
 
 function registryWith(rows: unknown[]): { registry: DeviceRegistry; path: string } {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-principal-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-principal-'))
   const path = join(userDataPath, DEVICE_REGISTRY_FILENAME)
   writeFileSync(path, JSON.stringify(rows))
   return { registry: new DeviceRegistry(userDataPath), path }
@@ -109,14 +109,14 @@ describe('device principal', () => {
   })
 
   it('dispatches an old phone with its token as client id and refuses it once re-credentialed', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-device-principal-rpc-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-device-principal-rpc-'))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: status.get only reads these three members.
     const runtime = {
       configureNotificationDismissalStore: () => {},
       getRuntimeId: () => 'test-runtime',
       getStatus: vi.fn().mockResolvedValue({ graphStatus: 'ok' })
-    } as unknown as OrcaRuntimeService
-    const server = new OrcaRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
+    } as unknown as QuirkyRuntimeService
+    const server = new QuirkyRuntimeRpcServer({ runtime, userDataPath, enableWebSocket: false })
     const registry = new DeviceRegistry(userDataPath)
     server['deviceRegistry'] = registry
     const phone = registry.addDevice('phone', 'mobile')

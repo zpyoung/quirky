@@ -71,7 +71,7 @@ beforeEach(async () => {
   // The floating folder resolves through the app environment, as the headless runtime does too.
   installFakeAppEnvironment({ getPath: () => userData.path })
   invalidateAuthorizedRootsCache()
-  base = await mkdtemp(join(await realpath(tmpdir()), 'orca-file-access-'))
+  base = await mkdtemp(join(await realpath(tmpdir()), 'quirky-file-access-'))
   project = join(base, 'project')
   outside = join(base, 'outside')
   userData.path = join(base, 'user-data')

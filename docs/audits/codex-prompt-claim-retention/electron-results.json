@@ -285,7 +285,7 @@
           "sha256": "91bd2a883048a56f8c3966057a062bac75f48f9e1b5670d8d7958f8c7fe21140"
         },
         {
-          "path": "src/main/orca-chromium-process-pids.ts",
+          "path": "src/main/quirky-chromium-process-pids.ts",
           "sha256": "960a15f005ff997fa379972a8c2abe3410b78c6facee449e8a5350754cfce965"
         },
         {
@@ -397,7 +397,7 @@
           "sha256": "518b8e5a2f6dc4f8e46e01366c0a61830d6c805b68101484726bd62bbfc831a8"
         },
         {
-          "path": "src/shared/orca-dispatch-status-prompt.ts",
+          "path": "src/shared/quirky-dispatch-status-prompt.ts",
           "sha256": "fd9fedb3c839cd9d17b545329937c8fb6b9fa081120eb4678a9fb66f4252629e"
         },
         {
@@ -862,7 +862,7 @@
           "sha256": "91bd2a883048a56f8c3966057a062bac75f48f9e1b5670d8d7958f8c7fe21140"
         },
         {
-          "path": "src/main/orca-chromium-process-pids.ts",
+          "path": "src/main/quirky-chromium-process-pids.ts",
           "sha256": "960a15f005ff997fa379972a8c2abe3410b78c6facee449e8a5350754cfce965"
         },
         {
@@ -974,7 +974,7 @@
           "sha256": "518b8e5a2f6dc4f8e46e01366c0a61830d6c805b68101484726bd62bbfc831a8"
         },
         {
-          "path": "src/shared/orca-dispatch-status-prompt.ts",
+          "path": "src/shared/quirky-dispatch-status-prompt.ts",
           "sha256": "fd9fedb3c839cd9d17b545329937c8fb6b9fa081120eb4678a9fb66f4252629e"
         },
         {

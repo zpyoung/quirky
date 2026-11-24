@@ -2,7 +2,7 @@ import { withDurableRuntimeStore } from './runtime-durable-store-fixture'
 import { describe, expect, it } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { makePaneKey } from '../../shared/stable-pane-id'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 
 export function registerPtyInventoryPartialRelayLivenessTests(): void {
@@ -68,7 +68,7 @@ export function registerPtyInventoryPartialRelayLivenessTests(): void {
       flushOrThrow: () => {}
     }) as never
     const calls: ListCall[] = []
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.setPtyController({
       write: () => true,
       kill: () => true,

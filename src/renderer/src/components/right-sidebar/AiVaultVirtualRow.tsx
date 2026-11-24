@@ -19,7 +19,7 @@ import {
   type AiVaultSessionWorktreeInfo
 } from './ai-vault-session-worktree'
 import {
-  canOpenAiVaultSessionLogInOrca,
+  canOpenAiVaultSessionLogInQuirky,
   canUseLocalAiVaultSessionPathActions
 } from './ai-vault-session-path-actions'
 import { resolveAiVaultSessionHandoffWorktreeId } from '@/components/agent-session-continuation/fork-session-handoff/ai-vault-handoff-action'
@@ -164,10 +164,10 @@ export function AiVaultVirtualRow({
         }
   const canOpenLocalSessionPaths =
     row.type === 'session' && canUseLocalAiVaultSessionPathActions(row.session.executionHostId)
-  // Why: in-Orca View Log additionally withholds synthetic (SQLite/OpenCode)
+  // Why: in-Quirky View Log additionally withholds synthetic (SQLite/OpenCode)
   // identities that have no single file to open, while Reveal/CWD stay on the
   // existing local-path gate.
-  const canOpenLogInOrca = row.type === 'session' && canOpenAiVaultSessionLogInOrca(row.session)
+  const canOpenLogInQuirky = row.type === 'session' && canOpenAiVaultSessionLogInQuirky(row.session)
   const searchResumeAllowed = searchHit ? canResumeAiVaultSearchHit(searchHit) : true
   const searchPathAllowed = searchHit ? hasAiVaultSearchHitPath(searchHit) : true
   const usesLegacyResumeCommand = row.type === 'session' && !row.session.structuredSession
@@ -280,7 +280,7 @@ export function AiVaultVirtualRow({
           onCopyId={() => onCopyId(row.session)}
           onCopyPath={searchPathAllowed ? () => onCopyPath(row.session) : undefined}
           onOpenLog={
-            searchPathAllowed && canOpenLogInOrca ? () => onOpenLog(row.session) : undefined
+            searchPathAllowed && canOpenLogInQuirky ? () => onOpenLog(row.session) : undefined
           }
           onRevealLog={
             searchPathAllowed && canOpenLocalSessionPaths

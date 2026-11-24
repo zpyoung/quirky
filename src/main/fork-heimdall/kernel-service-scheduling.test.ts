@@ -263,56 +263,59 @@ describe('Heimdall kernel enrollment and scheduling', () => {
   it.each([
     { label: 'git worktree', worktreeId: 'worktree-1' },
     { label: 'folder workspace', worktreeId: null }
-  ])('terminates an enrolled $label removed from Orca without retrying', async ({ worktreeId }) => {
-    const world = await harness({
-      lease: () => ({ status: 'workspace-removed', reason: 'workspace-removed' })
-    })
-    world.service.registerKind(kind())
-    const input = { ...enrollmentInput(), worktreeId }
-    const enrolled = await world.service.enroll(input)
-    if (enrolled.status !== 'enrolled') {
-      throw new Error('expected enrollment')
+  ])(
+    'terminates an enrolled $label removed from Quirky without retrying',
+    async ({ worktreeId }) => {
+      const world = await harness({
+        lease: () => ({ status: 'workspace-removed', reason: 'workspace-removed' })
+      })
+      world.service.registerKind(kind())
+      const input = { ...enrollmentInput(), worktreeId }
+      const enrolled = await world.service.enroll(input)
+      if (enrolled.status !== 'enrolled') {
+        throw new Error('expected enrollment')
+      }
+      const watcherId = enrolled.entry.enrollment.watcherId
+      world.schedule.mockClear()
+      await world.service.reconcileForTesting(watcherId)
+
+      expect(world.enrollmentStore.get(watcherId)).toMatchObject({
+        enabled: false,
+        terminalAtMs: 100
+      })
+      expect(world.service.ledger(watcherId).entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'terminal',
+            state: 'workspace-removed',
+            reason: 'Workspace removed from Quirky'
+          })
+        ])
+      )
+      expect(world.ledgerStore.readTerminalSummary(watcherId)).toMatchObject({
+        terminalState: 'workspace-removed',
+        reason: 'Workspace removed from Quirky',
+        totals: { activeMs: 0, turns: 0, exhausted: null }
+      })
+      expect((await world.service.list())[0]).toMatchObject({
+        status: { state: 'terminal', reason: 'Workspace removed from Quirky', nextPulseAtMs: null }
+      })
+      expect(world.schedule).not.toHaveBeenCalled()
+      await expect(world.service.enroll(input)).resolves.toMatchObject({ status: 'enrolled' })
+      await world.service.stopForShutdown()
+
+      const restarted = await harness({ directory: world.directory })
+      restarted.service.registerKind(kind())
+      restarted.service.resume()
+      expect(
+        (await restarted.service.list()).find((entry) => entry.enrollment.watcherId === watcherId)
+      ).toMatchObject({
+        enrollment: { terminalAtMs: 100 },
+        status: { state: 'terminal', reason: 'Workspace removed from Quirky' }
+      })
+      await restarted.service.stopForShutdown()
     }
-    const watcherId = enrolled.entry.enrollment.watcherId
-    world.schedule.mockClear()
-    await world.service.reconcileForTesting(watcherId)
-
-    expect(world.enrollmentStore.get(watcherId)).toMatchObject({
-      enabled: false,
-      terminalAtMs: 100
-    })
-    expect(world.service.ledger(watcherId).entries).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'terminal',
-          state: 'workspace-removed',
-          reason: 'Workspace removed from Orca'
-        })
-      ])
-    )
-    expect(world.ledgerStore.readTerminalSummary(watcherId)).toMatchObject({
-      terminalState: 'workspace-removed',
-      reason: 'Workspace removed from Orca',
-      totals: { activeMs: 0, turns: 0, exhausted: null }
-    })
-    expect((await world.service.list())[0]).toMatchObject({
-      status: { state: 'terminal', reason: 'Workspace removed from Orca', nextPulseAtMs: null }
-    })
-    expect(world.schedule).not.toHaveBeenCalled()
-    await expect(world.service.enroll(input)).resolves.toMatchObject({ status: 'enrolled' })
-    await world.service.stopForShutdown()
-
-    const restarted = await harness({ directory: world.directory })
-    restarted.service.registerKind(kind())
-    restarted.service.resume()
-    expect(
-      (await restarted.service.list()).find((entry) => entry.enrollment.watcherId === watcherId)
-    ).toMatchObject({
-      enrollment: { terminalAtMs: 100 },
-      status: { state: 'terminal', reason: 'Workspace removed from Orca' }
-    })
-    await restarted.service.stopForShutdown()
-  })
+  )
 
   it('does not claim a running worker exited when its registered workspace disappears', async () => {
     const world = await harness({

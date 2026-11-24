@@ -49,12 +49,12 @@ let previousUserDataPath: string | undefined
 let previousDisableTrustRpc: string | undefined
 
 beforeEach(() => {
-  previousDisableTrustRpc = process.env.ORCA_DISABLE_CODEX_TRUST_RPC
-  delete process.env.ORCA_DISABLE_CODEX_TRUST_RPC
-  tmpHome = mkdtempSync(join(tmpdir(), 'orca-codex-home-'))
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-codex-user-data-'))
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  previousDisableTrustRpc = process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC
+  delete process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC
+  tmpHome = mkdtempSync(join(tmpdir(), 'quirky-codex-home-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-codex-user-data-'))
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   homedirMock.mockReturnValue(tmpHome)
   resolveCodexCommandMock.mockReturnValue(process.execPath)
   getPathMock.mockImplementation((name: string) => {
@@ -72,16 +72,16 @@ afterEach(() => {
   trustGrantInternals.resetDiagnostics()
   codexAppServerCapabilityCache.clear()
   if (previousDisableTrustRpc === undefined) {
-    delete process.env.ORCA_DISABLE_CODEX_TRUST_RPC
+    delete process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC
   } else {
-    process.env.ORCA_DISABLE_CODEX_TRUST_RPC = previousDisableTrustRpc
+    process.env.QUIRKY_DISABLE_CODEX_TRUST_RPC = previousDisableTrustRpc
   }
   rmSync(tmpHome, { recursive: true, force: true })
   rmSync(userDataDir, { recursive: true, force: true })
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   vi.clearAllMocks()
 })
@@ -147,7 +147,7 @@ describe('CodexHookService opt-out of the real-home entry', () => {
       const hooksPath = join(systemHome, 'hooks.json')
       const targetPath = join(tmpHome, 'dotfiles-hooks.json')
       const material = getCodexManagedHookInstallMaterial()
-      const userHook = { type: 'command' as const, command: 'after-orca.sh' }
+      const userHook = { type: 'command' as const, command: 'after-quirky.sh' }
       writeFileSync(
         targetPath,
         `${JSON.stringify(

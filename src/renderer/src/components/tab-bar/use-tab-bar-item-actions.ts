@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { clearClientHostedBrowserRowSelection } from '@/lib/pane-manager/client-hosted-browser-row-state'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { TabBarItem } from './tab-bar-item-model'
 import type { TabBarProps } from './tab-bar-props'
 import { withLayoutOwnerTabProps } from './tab-bar-layout-owner-props'
@@ -95,7 +95,7 @@ export function useTabBarItemActions(source: TabBarItemActionSource): TabBarItem
       toggleViewMode: (tabId) => latest.current.toggleTabViewMode(tabId)
     }
     // Switch point: pin goes to main first (rename, color and view do from their store actions).
-    return ORCA_LAYOUT_OWNER_IS_MAIN
+    return QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? { ...actions, ...withLayoutOwnerTabProps(actions, () => latest.current.props.worktreeId) }
       : actions
   }, [])

@@ -94,7 +94,7 @@ export function JiraBoardMoveDialog({
           <p className="text-sm text-muted-foreground">
             {translate(
               'jira.transitions.unsupported',
-              'Jira requires fields Orca cannot collect yet: {{fields}}.',
+              'Jira requires fields Quirky cannot collect yet: {{fields}}.',
               { fields: requirement.fields.map((field) => field.name).join(', ') }
             )}
           </p>

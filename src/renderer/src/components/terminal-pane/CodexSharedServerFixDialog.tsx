@@ -122,7 +122,7 @@ function FixStep({
         </div>
       </div>
       <div className="flex min-w-0 flex-col gap-1 pl-8">
-        {/* Why always shown: the user sees exactly what Orca runs on their behalf. */}
+        {/* Why always shown: the user sees exactly what Quirky runs on their behalf. */}
         <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
           {translate('terminal.codexSharedServerBanner.runs', 'Runs')}
           <code className="min-w-0 rounded-sm bg-muted px-1.5 py-0.5 font-mono break-all">
@@ -164,7 +164,7 @@ function ConfirmStopDialog({
           <DialogDescription>
             {translate(
               'terminal.codexSharedServerBanner.confirmStopDescription',
-              'This closes any open Codex sessions that share it, including ones outside Orca.'
+              'This closes any open Codex sessions that share it, including ones outside Quirky.'
             )}
           </DialogDescription>
         </DialogHeader>
@@ -209,7 +209,7 @@ export function CodexSharedServerFixDialog({
           <DialogDescription>
             {translate(
               'terminal.codexSharedServerBanner.dialogDescription',
-              'Codex sessions started directly in a terminal share one background server. Orca keeps the Codex sessions it starts separate. When sessions share a server, closing one can end the others, and agent status can be wrong.'
+              'Codex sessions started directly in a terminal share one background server. Quirky keeps the Codex sessions it starts separate. When sessions share a server, closing one can end the others, and agent status can be wrong.'
             )}
           </DialogDescription>
         </DialogHeader>
@@ -227,12 +227,12 @@ export function CodexSharedServerFixDialog({
             doneLabel={translate('terminal.codexSharedServerBanner.turnedOff', 'Turned off')}
             failedLabel={translate(
               'terminal.codexSharedServerBanner.turnOffFailed',
-              "Orca couldn't turn this off."
+              "Quirky couldn't turn this off."
             )}
             onAction={() => void turnOff.start()}
             note={translate(
               'terminal.codexSharedServerBanner.step1Note',
-              'This changes your Codex settings, so it also applies outside Orca.'
+              'This changes your Codex settings, so it also applies outside Quirky.'
             )}
           />
           <FixStep
@@ -248,7 +248,7 @@ export function CodexSharedServerFixDialog({
             doneLabel={translate('terminal.codexSharedServerBanner.stopped', 'Stopped')}
             failedLabel={translate(
               'terminal.codexSharedServerBanner.stopFailed',
-              "Orca couldn't stop the server."
+              "Quirky couldn't stop the server."
             )}
             onAction={() => setConfirmStopOpen(true)}
             // Why: with sharing still on, the next Codex restarts the server it just closed sessions to stop.

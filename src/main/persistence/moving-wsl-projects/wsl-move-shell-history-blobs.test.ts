@@ -12,12 +12,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  parseOrcadMigrationBlobDescriptor,
-  type OrcadMigrationBlobDescriptor
-} from '../../../shared/orcad-migration/orcad-migration-blob-transfer'
-import { rewriteOrcadMigrationWorktreeId } from '../../ssh/orcad-migration-path-rewrite'
+  parseQuirkydMigrationBlobDescriptor,
+  type QuirkydMigrationBlobDescriptor
+} from '../../../shared/quirkyd-migration/quirkyd-migration-blob-transfer'
+import { rewriteQuirkydMigrationWorktreeId } from '../../ssh/quirkyd-migration-path-rewrite'
 import { hashWorktreeId } from '../../terminal-history-id'
-import { parseOrcadMigrationShellHistoryHeader } from '../migrating-orcad-catalog/orcad-migration-shell-history-format'
+import { parseQuirkydMigrationShellHistoryHeader } from '../migrating-quirkyd-catalog/quirkyd-migration-shell-history-format'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
 import {
   buildWslMoveShellHistoryBlobs,
@@ -25,7 +25,7 @@ import {
 } from './wsl-move-shell-history-blobs'
 
 const SOURCE_ID = 'repo-a::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'
-const DESTINATION_ID = rewriteOrcadMigrationWorktreeId(
+const DESTINATION_ID = rewriteQuirkydMigrationWorktreeId(
   SOURCE_ID,
   createUncToLinuxPathRewriter('Ubuntu')
 )
@@ -49,7 +49,7 @@ function build(
 
 async function readAll(
   blobs: WslMoveShellHistoryBlobs,
-  descriptor: OrcadMigrationBlobDescriptor,
+  descriptor: QuirkydMigrationBlobDescriptor,
   chunk: number
 ): Promise<Buffer> {
   const parts: Buffer[] = []
@@ -61,7 +61,7 @@ async function readAll(
 
 describe('WSL move shell history blobs', () => {
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'orca-wsl-move-history-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-wsl-move-history-'))
   })
 
   afterEach(() => {
@@ -80,12 +80,12 @@ describe('WSL move shell history blobs', () => {
     expect(keys).toEqual([`${hash}-zsh`, `${hash}-bash`])
     expect(keys.some((key) => key.startsWith(hashWorktreeId(SOURCE_ID)))).toBe(false)
     for (const descriptor of blobs.descriptors) {
-      expect(parseOrcadMigrationBlobDescriptor(descriptor)).toEqual(descriptor)
+      expect(parseQuirkydMigrationBlobDescriptor(descriptor)).toEqual(descriptor)
       // Read in pieces that straddle the header boundary.
       const bytes = await readAll(blobs, descriptor, 7)
       expect(bytes.length).toBe(descriptor.byteLength)
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(descriptor.sha256)
-      const header = parseOrcadMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
+      const header = parseQuirkydMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
       expect(header.worktreeId).toBe(DESTINATION_ID)
     }
     const zsh = await readAll(blobs, blobs.descriptors[0], 1024)
@@ -107,7 +107,8 @@ describe('WSL move shell history blobs', () => {
     const loginShell = await Promise.all(
       blobs.descriptors.map(async (descriptor) => {
         const bytes = await readAll(blobs, descriptor, descriptor.byteLength)
-        return parseOrcadMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length).loginShell
+        return parseQuirkydMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
+          .loginShell
       })
     )
     expect(loginShell).toEqual([false, false, true])
@@ -134,7 +135,7 @@ describe('WSL move shell history blobs', () => {
     truncateSync(path, 64 * 1024 * 1024)
 
     await expect(build()).rejects.toThrow(
-      `orcad_migration_shell_history_too_large:${hashWorktreeId(DESTINATION_ID)}-bash`
+      `quirkyd_migration_shell_history_too_large:${hashWorktreeId(DESTINATION_ID)}-bash`
     )
   })
 
@@ -157,7 +158,7 @@ describe('WSL move shell history blobs', () => {
     const [descriptor] = blobs.descriptors
     const bytes = await readAll(blobs, descriptor, 5)
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(descriptor.sha256)
-    const header = parseOrcadMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
+    const header = parseQuirkydMigrationShellHistoryHeader(descriptor.key, bytes, bytes.length)
     expect(bytes.subarray(header.byteLength).toString('utf8')).toBe('old one\nold two\nnew one\n')
   })
 
@@ -168,10 +169,10 @@ describe('WSL move shell history blobs', () => {
     appendFileSync(path, 'two\n')
 
     await expect(blobs.source.readChunk(descriptor, 0, 1024)).rejects.toThrow(
-      'orcad_migration_source_blob_changed:shell-history'
+      'quirkyd_migration_source_blob_changed:shell-history'
     )
     await expect(
       blobs.source.readChunk({ ...descriptor, sha256: 'f'.repeat(64) }, 0, 1)
-    ).rejects.toThrow('orcad_migration_source_blob_changed:shell-history')
+    ).rejects.toThrow('quirkyd_migration_source_blob_changed:shell-history')
   })
 })

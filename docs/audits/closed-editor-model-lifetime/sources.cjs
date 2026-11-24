@@ -27,8 +27,8 @@ function apply(source, patch, reverse = false) {
 }
 
 function loadSources({
-  graph = process.env.ORCA_CLOSED_MODEL_GRAPH ?? 'worktree',
-  variant = process.env.ORCA_CLOSED_MODEL_VARIANT ?? 'fixed',
+  graph = process.env.QUIRKY_CLOSED_MODEL_GRAPH ?? 'worktree',
+  variant = process.env.QUIRKY_CLOSED_MODEL_VARIANT ?? 'fixed',
   read = readText,
   exists = existsSync
 } = {}) {

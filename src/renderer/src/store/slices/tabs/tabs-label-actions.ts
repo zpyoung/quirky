@@ -14,7 +14,7 @@ import {
 import { sendTabChangeToLayoutOwner } from '../../terminals/tab-change-through-layout-owner'
 import { recordTabOrderInLayoutOwner } from './tab-order-layout-owner'
 import { withPreviewEnded } from './tab-preview-flag'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 
 function oppositeViewMode(mode: 'terminal' | 'chat'): 'terminal' | 'chat' {
   return mode === 'chat' ? 'terminal' : 'chat'
@@ -164,7 +164,7 @@ export function createTabsLabelActions(
         return state
       })
       // Switch point: main takes the window's new order unless the caller already asked it.
-      if (ORCA_LAYOUT_OWNER_IS_MAIN && !opts?.layoutOwnerHandled) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN && !opts?.layoutOwnerHandled) {
         for (const change of changes) {
           recordTabOrderInLayoutOwner(get(), groupId, change)
         }
@@ -181,14 +181,14 @@ export function createTabsLabelActions(
     setTabViewMode: (tabId, mode) => {
       const local = (): void => setTabViewModeHere(tabId, mode)
       // Switch point: main switches its copy first, then the window shows the same mode.
-      if (!ORCA_LAYOUT_OWNER_IS_MAIN || !sendViewMode(tabId, mode, local)) {
+      if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !sendViewMode(tabId, mode, local)) {
         local()
       }
     },
 
     toggleTabViewMode: (tabId) => {
       // Switch point: as setTabViewMode, with the mode chosen before main is asked.
-      if (!ORCA_LAYOUT_OWNER_IS_MAIN || !sendViewModeToggle(tabId)) {
+      if (!QUIRKY_LAYOUT_OWNER_IS_MAIN || !sendViewModeToggle(tabId)) {
         toggleTabViewModeHere(tabId)
       }
     },

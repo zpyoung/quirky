@@ -29,7 +29,7 @@ describe('mailbox consumer lifecycle fencing', () => {
   }
 
   function databasePath(): string {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-mailbox-consumer-lifecycle-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-mailbox-consumer-lifecycle-'))
     directories.push(directory)
     return join(directory, 'orchestration.db')
   }

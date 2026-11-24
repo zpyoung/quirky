@@ -32,8 +32,8 @@ import { loadWorktreeRemovalRecordsForStore } from './worktree-removal-records-l
 import { runAfterFirstWindowShown } from './first-window-deferral'
 import { logStartupMilestone } from './startup-diagnostics'
 import { refreshInstalledOpenCodeStatusPlugins } from '../opencode/opencode-status-plugin-startup-refresh'
-import { pruneDesktopOrcadArtifactCache } from '../orcad/orcad-artifact-cache-retention'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { pruneDesktopQuirkydArtifactCache } from '../quirkyd/quirkyd-artifact-cache-retention'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { repairDuplicatePtyPanesOnStart } from '../runtime/moved-pane-owner-rekey'
 
 // Headless serve never opens a window, so the sweep still has to run off a timer there.
@@ -75,7 +75,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     }
   })
   // Emulator bridge (serve-sim). macOS-only feature (gated in CLI/runtime); always ship like agent-browser.
-  // Why: externally started serve-sim processes must stay independent — only Orca-managed/attached helpers belong to a workspace.
+  // Why: externally started serve-sim processes must stay independent — only Quirky-managed/attached helpers belong to a workspace.
   state.emulatorBridge = new EmulatorBridge()
   runtime.setEmulatorBridge(state.emulatorBridge)
   // Why: older releases renamed removed checkouts into a trash root and deleted them in the background,
@@ -95,8 +95,8 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     refreshInstalledOpenCodeStatusPlugins(store.getSettings())
   }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
   runAfterFirstWindowShown(() => {
-    void pruneDesktopOrcadArtifactCache(app.getPath('userData')).catch((error) => {
-      console.warn('[orcad-artifacts] Failed to bound the slot cache:', error)
+    void pruneDesktopQuirkydArtifactCache(app.getPath('userData')).catch((error) => {
+      console.warn('[quirkyd-artifacts] Failed to bound the slot cache:', error)
     })
   }, WORKTREE_TRASH_SWEEP_FALLBACK_MS)
   nativeTheme.themeSource = store.getSettings().theme ?? 'system'
@@ -142,7 +142,7 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
     }
   })
   // Switch point: awaited, as it queues behind in-flight writes and every later phase must read its tree.
-  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+  if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
     await repairDuplicatePtyPanesOnStart(store, runtime)
   }
   logStartupMilestone('services-initialized')

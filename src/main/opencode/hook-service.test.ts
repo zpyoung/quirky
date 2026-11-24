@@ -32,7 +32,7 @@ import {
 import { resolveOpenCodeConfigDirectory } from '../../shared/opencode-config-directory'
 
 beforeEach(() => {
-  vi.stubEnv('ORCA_OPENCODE_PLUGIN_API', 'v2')
+  vi.stubEnv('QUIRKY_OPENCODE_PLUGIN_API', 'v2')
   setAppEnvironment({
     getPath: getPathMock,
     getAppPath: () => process.cwd(),
@@ -97,7 +97,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
   const originalXdgConfigHome = process.env.XDG_CONFIG_HOME
 
   beforeAll(() => {
-    userDataDir = mkdtempSync(join(tmpdir(), 'orca-opencode-hooks-'))
+    userDataDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-hooks-'))
     process.env.XDG_CONFIG_HOME = userDataDir
     getPathMock.mockImplementation((name: string) => {
       if (name === 'userData') {
@@ -126,7 +126,11 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     const env = service.buildPtyEnv(daemonSessionId)
 
     expect(env).toEqual({})
-    const pluginPath = join(resolveOpenCodeConfigDirectory(), 'plugins', 'orca-opencode-status.js')
+    const pluginPath = join(
+      resolveOpenCodeConfigDirectory(),
+      'plugins',
+      'quirky-opencode-status.js'
+    )
     expect(existsSync(pluginPath)).toBe(true)
     // Sanity-check the file has plugin source, not a stray write.
     const pluginSource = readFileSync(pluginPath, 'utf8')
@@ -135,7 +139,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     const tuiEntry = join(
       resolveOpenCodeConfigDirectory(),
       'plugins',
-      'orca-opencode-status-tui',
+      'quirky-opencode-status-tui',
       'tui.js'
     )
     const past = new Date('2020-01-01T00:00:00Z')
@@ -148,7 +152,11 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
   it('leaves a current installed plugin untouched and replaces a stale one', () => {
     const service = new OpenCodeHookService()
     service.buildPtyEnv(daemonSessionId)
-    const pluginPath = join(resolveOpenCodeConfigDirectory(), 'plugins', 'orca-opencode-status.js')
+    const pluginPath = join(
+      resolveOpenCodeConfigDirectory(),
+      'plugins',
+      'quirky-opencode-status.js'
+    )
     const past = new Date('2020-01-01T00:00:00Z')
     utimesSync(pluginPath, past, past)
 
@@ -168,9 +176,9 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
       const pluginPath = join(
         resolveOpenCodeConfigDirectory(),
         'plugins',
-        'orca-opencode-status.js'
+        'quirky-opencode-status.js'
       )
-      const targetPath = join(userDataDir, 'dotfiles-orca-opencode-status.js')
+      const targetPath = join(userDataDir, 'dotfiles-quirky-opencode-status.js')
       writeFileSync(targetPath, _internals.getOpenCodePluginSource())
       rmSync(pluginPath, { force: true })
       symlinkSync(targetPath, pluginPath)
@@ -192,8 +200,8 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
   // Why: a service that reloads between the two writes must already find the TUI copy and stand down.
   it('writes the TUI copy before the server plugin file', () => {
     const pluginsDir = join(resolveOpenCodeConfigDirectory(), 'plugins')
-    const serverPath = join(pluginsDir, 'orca-opencode2-status.js')
-    const tuiDir = join(pluginsDir, 'orca-opencode2-status-tui')
+    const serverPath = join(pluginsDir, 'quirky-opencode2-status.js')
+    const tuiDir = join(pluginsDir, 'quirky-opencode2-status-tui')
     rmSync(serverPath, { recursive: true, force: true })
     rmSync(tuiDir, { recursive: true, force: true })
     // A directory in the server file's place makes that write fail.
@@ -214,7 +222,11 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     const service = new OpenCodeHookService()
     service.buildPtyEnv(daemonSessionId)
 
-    const pluginPath = join(resolveOpenCodeConfigDirectory(), 'plugins', 'orca-opencode-status.js')
+    const pluginPath = join(
+      resolveOpenCodeConfigDirectory(),
+      'plugins',
+      'quirky-opencode-status.js'
+    )
     // Why: a .mjs copy so Node parses the installed file as ESM without a package.json.
     const modulePath = join(userDataDir, `installed-opencode-plugin-${Date.now()}.mjs`)
     writeFileSync(modulePath, readFileSync(pluginPath, 'utf8'))
@@ -223,14 +235,14 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
       default?: { id?: unknown; server?: unknown; setup?: unknown }
     }
 
-    expect(module.default?.id).toBe('orca-opencode-status')
+    expect(module.default?.id).toBe('quirky-opencode-status')
     // v1 loader: "must default export an object with server()".
     expect(module.default?.server).toBeTypeOf('function')
     // v2 loader: "Plugin must export a default definition with an id and an effect or setup function."
     expect(module.default?.setup).toBeTypeOf('function')
   })
 
-  // Why: pre-1.4.209 Orca wrote a server()-only plugin into <userData>/opencode-hooks/shared and
+  // Why: pre-1.4.209 Quirky wrote a server()-only plugin into <userData>/opencode-hooks/shared and
   // stopped maintaining it; shells and OpenCode 2 background services still pointing there got
   // "Plugin must export a default definition with an id and an effect or setup function."
   it('refreshes a stale plugin left in the retired shared hooks dir', async () => {
@@ -239,12 +251,12 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
       'opencode-hooks',
       'shared',
       'plugins',
-      'orca-opencode-status.js'
+      'quirky-opencode-status.js'
     )
     mkdirSync(join(legacyPluginPath, '..'), { recursive: true })
     writeFileSync(
       legacyPluginPath,
-      'export default { id: "orca-opencode-status", server: async () => ({}) };\n'
+      'export default { id: "quirky-opencode-status", server: async () => ({}) };\n'
     )
 
     new OpenCodeHookService().buildPtyEnv(daemonSessionId)
@@ -255,19 +267,25 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     const module = (await import(pathToFileURL(modulePath).href)) as {
       default?: { id?: unknown; server?: unknown; setup?: unknown }
     }
-    expect(module.default?.id).toBe('orca-opencode-status')
+    expect(module.default?.id).toBe('quirky-opencode-status')
     expect(module.default?.server).toBeTypeOf('function')
     expect(module.default?.setup).toBeTypeOf('function')
     // A service loading this dir stands down only when the TUI copy sits beside it.
     expect(
-      readFileSync(join(legacyPluginPath, '..', 'orca-opencode-status-tui', 'tui.js'), 'utf8')
+      readFileSync(join(legacyPluginPath, '..', 'quirky-opencode-status-tui', 'tui.js'), 'utf8')
     ).toContain('tui: setupLegacyOpenCodeTui')
   })
 
   it('repairs late and overwritten legacy plugins atomically on the same service', () => {
     const service = new OpenCodeHookService()
     service.refreshLegacySharedPlugin()
-    const path = join(userDataDir, 'opencode-hooks', 'shared', 'plugins', 'orca-opencode-status.js')
+    const path = join(
+      userDataDir,
+      'opencode-hooks',
+      'shared',
+      'plugins',
+      'quirky-opencode-status.js'
+    )
     mkdirSync(join(path, '..'), { recursive: true })
     for (const stale of ['// late old install', '// old process overwrote repair']) {
       writeFileSync(path, stale)
@@ -277,8 +295,8 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
         expect(readFileSync(path, 'utf8')).toBe(getOpenCodePluginSource())
         expect(readFileSync(reader, 'utf8')).toBe(stale)
         expect(readdirSync(join(path, '..')).sort()).toEqual([
-          'orca-opencode-status-tui',
-          'orca-opencode-status.js'
+          'quirky-opencode-status-tui',
+          'quirky-opencode-status.js'
         ])
       } finally {
         closeSync(reader)
@@ -288,7 +306,13 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
 
   it('reports repair failures and retries after the obstruction is removed', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const path = join(userDataDir, 'opencode-hooks', 'shared', 'plugins', 'orca-opencode-status.js')
+    const path = join(
+      userDataDir,
+      'opencode-hooks',
+      'shared',
+      'plugins',
+      'quirky-opencode-status.js'
+    )
     const service = new OpenCodeHookService()
     try {
       service.refreshLegacySharedPlugin()
@@ -314,7 +338,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     new OpenCodeHookService().buildPtyEnv(daemonSessionId)
     expect(existsSync(legacyDir)).toBe(false)
 
-    const legacyPluginPath = join(legacyDir, 'shared', 'plugins', 'orca-opencode-status.js')
+    const legacyPluginPath = join(legacyDir, 'shared', 'plugins', 'quirky-opencode-status.js')
     mkdirSync(join(legacyPluginPath, '..'), { recursive: true })
     writeFileSync(legacyPluginPath, getOpenCodePluginSource())
     const past = new Date('2020-01-01T00:00:00Z')
@@ -326,7 +350,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
 
   // Why: #22506 — both variants install side by side in one global plugins dir, and
   // OpenCode 2 kills every plugin after the first that reuses an id ("Duplicate plugin
-  // ID"). Discovery sorts by path, so orca-opencode-status.js always wins and the
+  // ID"). Discovery sorts by path, so quirky-opencode-status.js always wins and the
   // opencode2 plugin never loads. Assert the installed files, not just the sources.
   it('installs both family plugins into one config dir under distinct ids', async () => {
     expect(new OpenCodeHookService().buildPtyEnv(daemonSessionId)).toEqual({})
@@ -335,7 +359,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
 
     const pluginsDir = join(resolveOpenCodeConfigDirectory(), 'plugins')
     const ids: string[] = []
-    for (const fileName of ['orca-opencode-status.js', 'orca-opencode2-status.js']) {
+    for (const fileName of ['quirky-opencode-status.js', 'quirky-opencode2-status.js']) {
       // Why: a .mjs copy so Node parses the installed file as ESM without a package.json.
       const modulePath = join(userDataDir, `installed-${fileName}-${Date.now()}.mjs`)
       writeFileSync(modulePath, readFileSync(join(pluginsDir, fileName), 'utf8'))
@@ -346,7 +370,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
       ids.push(String(module.default?.id))
     }
 
-    expect(ids).toEqual(['orca-opencode-status', 'orca-opencode2-status'])
+    expect(ids).toEqual(['quirky-opencode-status', 'quirky-opencode2-status'])
   })
 
   it('clearPty leaves the shared OpenCode config dir off the teardown hot path', () => {
@@ -375,7 +399,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
   it('buildPtyEnv preserves a user-set OPENCODE_CONFIG_DIR when the id is unusable', () => {
     // Why: even when the id is rejected, don't blow away the user's own OPENCODE_CONFIG_DIR.
     const service = new OpenCodeHookService()
-    const userDir = mkdtempSync(join(tmpdir(), 'orca-opencode-userdir-'))
+    const userDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-userdir-'))
     try {
       expect(service.buildPtyEnv('', userDir)).toEqual({ OPENCODE_CONFIG_DIR: userDir })
     } finally {
@@ -388,7 +412,7 @@ describe('OpenCodeHookService buildPtyEnv / clearPty round-trip', () => {
     service.buildPtyEnv(plainUuidId)
 
     const configDir = resolveOpenCodeConfigDirectory()
-    expect(existsSync(join(configDir, 'plugins', 'orca-opencode-status.js'))).toBe(true)
+    expect(existsSync(join(configDir, 'plugins', 'quirky-opencode-status.js'))).toBe(true)
 
     service.clearPty(plainUuidId)
     expect(existsSync(configDir)).toBe(true)
@@ -402,7 +426,7 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
   let userConfigDir: string
 
   beforeAll(() => {
-    userDataDir = mkdtempSync(join(tmpdir(), 'orca-opencode-overlay-userdata-'))
+    userDataDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-overlay-userdata-'))
     getPathMock.mockImplementation((name: string) => {
       if (name === 'userData') {
         return userDataDir
@@ -416,7 +440,7 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
   })
 
   beforeEach(() => {
-    userConfigDir = mkdtempSync(join(tmpdir(), 'orca-opencode-overlay-userconfig-'))
+    userConfigDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-overlay-userconfig-'))
     // Realistic user config: top-level files plus a plugins/ dir with a user plugin.
     writeFileSync(join(userConfigDir, 'opencode.json'), '{"userTheme":"solarized"}')
     writeFileSync(join(userConfigDir, 'auth.json'), 'user-auth-token')
@@ -440,7 +464,7 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
     )
   }
 
-  it('builds an overlay under userData and exposes user config + Orca plugin together', () => {
+  it('builds an overlay under userData and exposes user config + Quirky plugin together', () => {
     const service = new OpenCodeHookService()
     const env = service.buildPtyEnv(ptyId, userConfigDir)
 
@@ -460,10 +484,10 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
       'export default () => {}'
     )
 
-    // Orca's status plugin is a sibling, not a replacement.
-    const orcaPluginPath = join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'orca-opencode-status.js')
-    expect(existsSync(orcaPluginPath)).toBe(true)
-    expect(readFileSync(orcaPluginPath, 'utf8')).toContain('OrcaOpenCodeStatusPlugin')
+    // Quirky's status plugin is a sibling, not a replacement.
+    const quirkyPluginPath = join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'quirky-opencode-status.js')
+    expect(existsSync(quirkyPluginPath)).toBe(true)
+    expect(readFileSync(quirkyPluginPath, 'utf8')).toContain('QuirkyOpenCodeStatusPlugin')
 
     expectUserConfigIntact()
   })
@@ -471,14 +495,14 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
   it.skipIf(process.platform === 'win32')(
     'mirrors top-level entries via symlinks so plugins/ is a real directory',
     () => {
-      // Why: only plugins/ needs per-entry mirroring (Orca drops a sibling); other entries are single symlinks so user edits propagate live.
+      // Why: only plugins/ needs per-entry mirroring (Quirky drops a sibling); other entries are single symlinks so user edits propagate live.
       const service = new OpenCodeHookService()
       const env = service.buildPtyEnv(ptyId, userConfigDir)
 
       const overlay = env.OPENCODE_CONFIG_DIR!
       expect(lstatSync(join(overlay, 'opencode.json')).isSymbolicLink()).toBe(true)
       expect(lstatSync(join(overlay, 'auth.json')).isSymbolicLink()).toBe(true)
-      // plugins/ must be a real dir in the overlay so Orca can drop its sibling plugin.
+      // plugins/ must be a real dir in the overlay so Quirky can drop its sibling plugin.
       expect(lstatSync(join(overlay, 'plugins')).isDirectory()).toBe(true)
       expect(lstatSync(join(overlay, 'plugins')).isSymbolicLink()).toBe(false)
       // user-plugin.js inside plugins/ is mirrored entry-by-entry.
@@ -486,37 +510,37 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
     }
   )
 
-  it("does not overwrite a user plugin file with the same filename as Orca's plugin", () => {
-    // Why: a user plugin named orca-opencode-status.js must not be symlinked into the overlay, or writeFileSync would clobber it.
-    const userOrcaSentinel = 'USER OWNED ORCA-NAMED PLUGIN — DO NOT CLOBBER'
-    writeFileSync(join(userConfigDir, 'plugins', 'orca-opencode-status.js'), userOrcaSentinel)
+  it("does not overwrite a user plugin file with the same filename as Quirky's plugin", () => {
+    // Why: a user plugin named quirky-opencode-status.js must not be symlinked into the overlay, or writeFileSync would clobber it.
+    const userQuirkySentinel = 'USER OWNED QUIRKY-NAMED PLUGIN — DO NOT CLOBBER'
+    writeFileSync(join(userConfigDir, 'plugins', 'quirky-opencode-status.js'), userQuirkySentinel)
 
     const service = new OpenCodeHookService()
     const env = service.buildPtyEnv(ptyId, userConfigDir)
 
     // User's source file must be untouched.
-    expect(readFileSync(join(userConfigDir, 'plugins', 'orca-opencode-status.js'), 'utf8')).toBe(
-      userOrcaSentinel
+    expect(readFileSync(join(userConfigDir, 'plugins', 'quirky-opencode-status.js'), 'utf8')).toBe(
+      userQuirkySentinel
     )
 
-    // Overlay copy is Orca's real plugin source, not the user's file.
+    // Overlay copy is Quirky's real plugin source, not the user's file.
     const overlayPlugin = readFileSync(
-      join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'orca-opencode-status.js'),
+      join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'quirky-opencode-status.js'),
       'utf8'
     )
-    expect(overlayPlugin).toContain('OrcaOpenCodeStatusPlugin')
-    expect(overlayPlugin).not.toBe(userOrcaSentinel)
+    expect(overlayPlugin).toContain('QuirkyOpenCodeStatusPlugin')
+    expect(overlayPlugin).not.toBe(userQuirkySentinel)
     expectUserConfigIntact()
   })
 
   it('installs the TUI copy in the overlay without mirroring a user dir of the same name', () => {
-    const userTuiDir = join(userConfigDir, 'plugins', 'orca-opencode-status-tui')
+    const userTuiDir = join(userConfigDir, 'plugins', 'quirky-opencode-status-tui')
     mkdirSync(userTuiDir)
     writeFileSync(join(userTuiDir, 'tui.js'), 'USER OWNED')
 
     const env = new OpenCodeHookService().buildPtyEnv(ptyId, userConfigDir)
 
-    const overlayTui = join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'orca-opencode-status-tui')
+    const overlayTui = join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'quirky-opencode-status-tui')
     expect(lstatSync(overlayTui).isSymbolicLink()).toBe(false)
     expect(readFileSync(join(overlayTui, 'tui.js'), 'utf8')).toContain(
       'tui: setupLegacyOpenCodeTui'
@@ -530,8 +554,8 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
   it.skipIf(process.platform === 'win32')(
     'does not write through a symlinked plugins/ directory into the user filesystem',
     () => {
-      // Why: writing Orca's plugin through a symlinked plugins/ would leak into the user's fs (docs/opencode-config-dir-collision.md).
-      const realPluginsDir = mkdtempSync(join(tmpdir(), 'orca-real-plugins-'))
+      // Why: writing Quirky's plugin through a symlinked plugins/ would leak into the user's fs (docs/opencode-config-dir-collision.md).
+      const realPluginsDir = mkdtempSync(join(tmpdir(), 'quirky-real-plugins-'))
       try {
         writeFileSync(join(realPluginsDir, 'real-plugin.js'), 'REAL USER PLUGIN')
 
@@ -542,13 +566,13 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
         const service = new OpenCodeHookService()
         const env = service.buildPtyEnv(ptyId, userConfigDir)
 
-        // The user's real filesystem must NOT receive Orca's status plugin.
-        expect(existsSync(join(realPluginsDir, 'orca-opencode-status.js'))).toBe(false)
+        // The user's real filesystem must NOT receive Quirky's status plugin.
+        expect(existsSync(join(realPluginsDir, 'quirky-opencode-status.js'))).toBe(false)
         // Overlay's plugins/ must be a real dir, else writes leak into the user's filesystem.
         expect(lstatSync(join(env.OPENCODE_CONFIG_DIR!, 'plugins')).isSymbolicLink()).toBe(false)
-        // Orca's status plugin lands in the overlay only.
+        // Quirky's status plugin lands in the overlay only.
         expect(
-          existsSync(join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'orca-opencode-status.js'))
+          existsSync(join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'quirky-opencode-status.js'))
         ).toBe(true)
         // User's real plugin is reachable via the overlay (plugins mirrored entry-by-entry after resolving the symlink target).
         expect(
@@ -561,9 +585,9 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
   )
 
   it("preserves the user's OPENCODE_CONFIG_DIR when the path does not exist", () => {
-    // Why: leave a nonexistent user path alone so OpenCode surfaces the typo instead of Orca silently hiding it.
+    // Why: leave a nonexistent user path alone so OpenCode surfaces the typo instead of Quirky silently hiding it.
     const service = new OpenCodeHookService()
-    const missingPath = join(tmpdir(), `orca-opencode-nope-${Date.now()}`)
+    const missingPath = join(tmpdir(), `quirky-opencode-nope-${Date.now()}`)
     expect(existsSync(missingPath)).toBe(false)
 
     const env = service.buildPtyEnv(ptyId, missingPath)
@@ -633,15 +657,15 @@ describe('OpenCodeHookService overlay mode (user OPENCODE_CONFIG_DIR set)', () =
     const env = service.buildPtyEnv(ptyId, userConfigDir)
 
     expect(
-      readFileSync(join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'orca-opencode-status.js'), 'utf8')
-    ).toContain('OrcaOpenCodeStatusPlugin')
+      readFileSync(join(env.OPENCODE_CONFIG_DIR!, 'plugins', 'quirky-opencode-status.js'), 'utf8')
+    ).toContain('QuirkyOpenCodeStatusPlugin')
     expectUserConfigIntact()
   })
 
   it('leaves a current overlay plugin file in place across spawns', () => {
     const service = new OpenCodeHookService()
     const overlayDir = service.buildPtyEnv(ptyId, userConfigDir).OPENCODE_CONFIG_DIR!
-    const pluginPath = join(overlayDir, 'plugins', 'orca-opencode-status.js')
+    const pluginPath = join(overlayDir, 'plugins', 'quirky-opencode-status.js')
     const past = new Date('2020-01-01T00:00:00Z')
     utimesSync(pluginPath, past, past)
 

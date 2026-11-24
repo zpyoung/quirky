@@ -170,7 +170,7 @@ describe('notifications:dismiss by acknowledged subject', () => {
   })
   // Positioned alerts outlive a no-read or earlier-bounded dismiss: a view ack can run before the transcript shows the edge.
   it('pane dismissal retires older-host structured alerts but not positioned ones past the read', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-pane-boundary-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-pane-boundary-'))
     const controller = new RuntimeMobileNotificationController()
     try {
       controller.configureDismissalStore(directory)
@@ -237,7 +237,7 @@ describe('notifications:dismiss by acknowledged subject', () => {
     }
   })
   it('the click-time read a Mark read sends closes and retires every alert it covers', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-explicit-read-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-explicit-read-'))
     const controller = new RuntimeMobileNotificationController()
     try {
       controller.configureDismissalStore(directory)
@@ -295,7 +295,7 @@ describe('notifications:dismiss by acknowledged subject', () => {
   })
 
   it('settles only the relayed prompt alerts of a session its host reports none pending for', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-relay-settle-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-relay-settle-'))
     const controller = new RuntimeMobileNotificationController()
     try {
       controller.configureDismissalStore(directory)

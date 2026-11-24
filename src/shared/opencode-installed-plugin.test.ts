@@ -12,8 +12,8 @@ describe('installed OpenCode plugin currency', () => {
   let pluginPath: string
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-opencode-installed-plugin-'))
-    pluginPath = join(dir, 'orca-opencode-status.js')
+    dir = mkdtempSync(join(tmpdir(), 'quirky-opencode-installed-plugin-'))
+    pluginPath = join(dir, 'quirky-opencode-status.js')
   })
 
   afterEach(() => {

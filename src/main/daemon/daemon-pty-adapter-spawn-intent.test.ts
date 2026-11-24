@@ -35,8 +35,8 @@ describe('daemon spawn intent wire', () => {
       snapshot: null
     })
     const adapter = new DaemonPtyAdapter({
-      socketPath: '/tmp/orca-intent.sock',
-      tokenPath: '/tmp/orca-intent.token'
+      socketPath: '/tmp/quirky-intent.sock',
+      tokenPath: '/tmp/quirky-intent.token'
     })
     try {
       await adapter.spawn({
@@ -67,8 +67,8 @@ describe('daemon spawn intent wire', () => {
       snapshot: null
     })
     const adapter = new DaemonPtyAdapter({
-      socketPath: '/tmp/orca-intent-claim.sock',
-      tokenPath: '/tmp/orca-intent-claim.token'
+      socketPath: '/tmp/quirky-intent-claim.sock',
+      tokenPath: '/tmp/quirky-intent-claim.token'
     })
     try {
       await adapter
@@ -99,8 +99,8 @@ describe('daemon spawn intent wire', () => {
       .spyOn(DaemonClient.prototype, 'request')
       .mockRejectedValue(new Error('terminal_spawn_deferred:paused'))
     const adapter = new DaemonPtyAdapter({
-      socketPath: '/tmp/orca-intent-deferred.sock',
-      tokenPath: '/tmp/orca-intent-deferred.token'
+      socketPath: '/tmp/quirky-intent-deferred.sock',
+      tokenPath: '/tmp/quirky-intent-deferred.token'
     })
     try {
       await expect(

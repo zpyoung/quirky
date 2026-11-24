@@ -5,7 +5,7 @@ import { appendFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/pro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { loadClaudeUsageBenchmarkScanner } from './claude-usage-benchmark-scanner.mjs'
 import {
   claudeBenchmarkSha256,
@@ -56,7 +56,7 @@ function readStore(mode, commit) {
     cwd: ROOT,
     timeoutMs: 10_000,
     maxOutputBytes: 1024 * 1024,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
   })
   assert.equal(result.code, 0, `${mode}: ${result.stderr}`)
   return result.stdout
@@ -77,7 +77,7 @@ function fileComponents(file) {
   }
 }
 
-const home = await mkdtemp(join(tmpdir(), 'orca-claude-persisted-bytes-'))
+const home = await mkdtemp(join(tmpdir(), 'quirky-claude-persisted-bytes-'))
 try {
   const project = join(home, '.claude', 'projects', 'benchmark')
   const cwd = join(home, 'repo')

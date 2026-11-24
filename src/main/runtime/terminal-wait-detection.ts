@@ -19,7 +19,7 @@ import {
   isUnblockedAfter
 } from './agent-state-rules/blocked-text-layer'
 
-// Why agent-agnostic: Orca's own `<Agent> ready` titles, and any agent title stating rest in words.
+// Why agent-agnostic: Quirky's own `<Agent> ready` titles, and any agent title stating rest in words.
 const EXPLICIT_IDLE_TITLE_RE = /(^|\s)(ready|idle|done)(\s|$|[.!?])/i
 
 function computeExplicitIdleStatusFromTitle(title: string): AgentStatus | null {

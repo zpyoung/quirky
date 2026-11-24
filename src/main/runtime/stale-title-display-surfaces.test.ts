@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
-import './orca-runtime-test-lifecycle.spec'
+import { QuirkyRuntimeService } from './quirky-runtime-test-mocks.spec'
+import './quirky-runtime-test-lifecycle.spec'
 import { assertTerminalAgentSendable } from './rpc/terminal-agent-send-guard'
 import {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   store,
   syncSinglePty
-} from './orca-runtime-test-fixtures.spec'
+} from './quirky-runtime-test-fixtures.spec'
 
-async function psStatus(runtime: OrcaRuntimeService): Promise<string | undefined> {
+async function psStatus(runtime: QuirkyRuntimeService): Promise<string | undefined> {
   return (await runtime.getWorktreePs()).worktrees.find((w) => w.worktreeId === TEST_WORKTREE_ID)
     ?.status
 }
@@ -20,7 +20,7 @@ describe('display surfaces after the stale-working title clear', () => {
   it('worktree ps and the phone show the cleared status for a terminal with no renderer pane', async () => {
     vi.useFakeTimers()
     try {
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.setPtyController({
         spawn: vi.fn().mockResolvedValue({ id: 'bg-pty' }),
         write: () => true,
@@ -82,7 +82,7 @@ describe('display surfaces after the stale-working title clear', () => {
   it('a reattach restore seed does not bring the cleared working status back', async () => {
     vi.useFakeTimers()
     try {
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.setPtyController({
         write: () => true,
         kill: () => true,
@@ -111,7 +111,7 @@ describe('display surfaces after the stale-working title clear', () => {
     vi.useFakeTimers()
     try {
       const sshPtyId = 'ssh:conn-1@@relay-9'
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.setPtyController({
         write: () => true,
         kill: () => true,
@@ -147,7 +147,7 @@ describe('display surfaces after the stale-working title clear', () => {
       vi.useFakeTimers()
       try {
         let foreground: string | null = 'codex'
-        const runtime = new OrcaRuntimeService(store)
+        const runtime = new QuirkyRuntimeService(store)
         runtime.setPtyController({
           write: () => true,
           kill: () => true,
@@ -173,7 +173,7 @@ describe('display surfaces after the stale-working title clear', () => {
   it('a renderer pane title older than the clear cannot prove presence', async () => {
     vi.useFakeTimers()
     try {
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.setPtyController({
         write: () => true,
         kill: () => true,
@@ -201,7 +201,7 @@ describe('display surfaces after the stale-working title clear', () => {
   it('a live agent with an unrecognized process keeps presence through its cleared name title', async () => {
     vi.useFakeTimers()
     try {
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.setPtyController({
         spawn: vi.fn().mockResolvedValue({ id: 'bg-pty' }),
         write: () => true,
@@ -237,7 +237,7 @@ describe('display surfaces after the stale-working title clear', () => {
       vi.useFakeTimers()
       try {
         const ptyId = mode === 'rendererless' ? 'bg-pty' : 'pty-1'
-        const runtime = new OrcaRuntimeService(store)
+        const runtime = new QuirkyRuntimeService(store)
         runtime.setPtyController({
           spawn: vi.fn().mockResolvedValue({ id: ptyId }),
           write: () => true,
@@ -307,7 +307,7 @@ describe('display surfaces after the stale-working title clear', () => {
       vi.useFakeTimers()
       try {
         const ptyId = mode === 'rendererless' ? 'bg-pty' : 'pty-1'
-        const runtime = new OrcaRuntimeService(store)
+        const runtime = new QuirkyRuntimeService(store)
         runtime.setPtyController({
           spawn: vi.fn().mockResolvedValue({ id: ptyId }),
           write: (_ptyId, data) => {

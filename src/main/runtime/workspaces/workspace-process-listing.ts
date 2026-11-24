@@ -1,8 +1,8 @@
 import { resolveStructuredCodexAccountKind } from '../structured-agent-account-home'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { collectRuntimeWorktreeAgentSources } from '../runtime-worktree-agent-sources'
-import { OrcaRuntimeWithWorktreePsDependencies } from './workspace-process-listing-dependencies'
-import { DEFAULT_WORKTREE_PS_LIMIT } from '../orca-runtime-postlude'
+import { QuirkyRuntimeWithWorktreePsDependencies } from './workspace-process-listing-dependencies'
+import { DEFAULT_WORKTREE_PS_LIMIT } from '../quirky-runtime-postlude'
 import type { RuntimeWorktreePsResult } from '../../../shared/runtime-types'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import { buildRuntimeWorktreePsSummaries } from '../runtime-worktree-ps-summaries'
@@ -38,7 +38,7 @@ import { maybeAutoRenameWorkspaceOnFirstStructuredTurn } from '../../agent-hooks
 import { firstWorkRenameDeps } from '../../agent-hooks/first-work-rename-runtime'
 import { createStructuredChatNamingHandler } from '../../native-chat/structured-chat-naming'
 import { structuredChatNamingDeps } from '../structured-chat-naming-runtime'
-import { getProfileUserDataPath } from '../../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../../quirky-profiles/profile-storage-paths'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { buildWorktreeListingPage } from '../worktree-listing-host-scope'
 import {
@@ -61,7 +61,7 @@ import {
 } from '../runtime-visible-catalog'
 import { isWorkspaceNotificationMuted } from '../workspace-notification-mute'
 
-export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktreePsDependencies {
+export abstract class QuirkyRuntimeWithGetWorktreePs extends QuirkyRuntimeWithWorktreePsDependencies {
   async getWorktreePs(
     limit = DEFAULT_WORKTREE_PS_LIMIT,
     sourceDefaultsSupported = true
@@ -254,7 +254,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       stateDirectory: getProfileUserDataPath(),
       hostId: LOCAL_EXECUTION_HOST_ID,
       claimKeyId: this.agentSessionClaimSigner.keyId,
-      // The host's local trace file (the desktop's or orcad's own), plus the console.
+      // The host's local trace file (the desktop's or quirkyd's own), plus the console.
       logger,
       // Resolves folder workspaces as well as git worktrees, so a chat session
       // in a plain folder lands in the folder rather than failing to resolve.

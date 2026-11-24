@@ -191,7 +191,7 @@ export class WatcherRunnerStatusLifecycle {
     const fired = {
       predicateId: 'workspace-removed',
       disposition: 'terminal',
-      reason: 'Workspace removed from Orca'
+      reason: 'Workspace removed from Quirky'
     } as const
     const enrollment = persist(runner, fired)
     this.finishTerminal(runner, enrollment, fired.reason, false)

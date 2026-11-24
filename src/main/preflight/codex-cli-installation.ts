@@ -3,7 +3,7 @@ import {
   parseCodexCliVersion,
   type CodexCliInstallation
 } from '../../shared/codex-cli-installation'
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import { readAgentCliVersion } from '../agent-cli-version-probe'
 
 export async function readCodexCliInstallation(

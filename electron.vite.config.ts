@@ -25,7 +25,7 @@ const BUNDLED_MAIN_DEPENDENCIES = new Set([
   // not race the later resources/node_modules copy.
   'zod'
 ])
-const orcaBuildIdentity = process.env.ORCA_BUILD_IDENTITY
+const quirkyBuildIdentity = process.env.QUIRKY_BUILD_IDENTITY
 
 const darkBuildSwitches: {
   darkBuildDefines: () => Record<string, string>
@@ -36,7 +36,7 @@ const DARK_BUILD_DEFINES = darkBuildSwitches.darkBuildDefines()
 /** Marks a dark switched-on main build so packaging refuses it. */
 function createDarkBuildMarkerPlugin(): Plugin {
   return {
-    name: 'orca-dark-build-marker',
+    name: 'quirky-dark-build-marker',
     generateBundle() {
       for (const marker of darkBuildSwitches.darkBuildMarkers()) {
         this.emitFile({ type: 'asset', fileName: marker.fileName, source: marker.text })
@@ -47,13 +47,13 @@ function createDarkBuildMarkerPlugin(): Plugin {
 
 // Why: official skill installs pin to the commit the build came from, so they match the
 // bundled skills on every channel. Main runs the installer; the renderer prints the command.
-const ORCA_BUILD_COMMIT_LITERAL = JSON.stringify(resolveBuildSourceCommit())
+const QUIRKY_BUILD_COMMIT_LITERAL = JSON.stringify(resolveBuildSourceCommit())
 
 function createStartupDiagnosticsBanner(chunkName: string): string {
   return `
 ;(() => {
   const env = typeof process !== 'undefined' ? process.env : undefined
-  const mode = env?.ORCA_STARTUP_DIAGNOSTICS
+  const mode = env?.QUIRKY_STARTUP_DIAGNOSTICS
   if (mode !== '1' && mode !== 'trace') {
     return
   }
@@ -76,7 +76,7 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
     openSync = undefined
     writeSync = undefined
   }
-  const diagnosticFile = env?.ORCA_STARTUP_DIAGNOSTICS_FILE
+  const diagnosticFile = env?.QUIRKY_STARTUP_DIAGNOSTICS_FILE
   if (typeof diagnosticFile === 'string' && diagnosticFile.length > 0 && typeof openSync === 'function') {
     try {
       diagnosticFileDescriptor = openSync(diagnosticFile, 'a', 0o600)
@@ -99,8 +99,8 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
   }
   const chunkName = ${JSON.stringify(chunkName)}
   writeLine('[bootstrap] bundle-enter chunk=' + safeJson(chunkName) + ' pid=' + process.pid + ' ppid=' + process.ppid + ' execPath=' + safeJson(process.execPath) + ' argv=' + safeJson(process.argv) + ' electronRunAsNode=' + safeJson(env?.ELECTRON_RUN_AS_NODE ?? null))
-  if (!globalThis.__ORCA_BOOTSTRAP_EXIT_LOG_INSTALLED__) {
-    globalThis.__ORCA_BOOTSTRAP_EXIT_LOG_INSTALLED__ = true
+  if (!globalThis.__QUIRKY_BOOTSTRAP_EXIT_LOG_INSTALLED__) {
+    globalThis.__QUIRKY_BOOTSTRAP_EXIT_LOG_INSTALLED__ = true
     process.once('exit', (code) => {
       writeLine('[bootstrap] process-exit code=' + code)
       if (typeof closeSync === 'function' && typeof diagnosticFileDescriptor === 'number') {
@@ -120,12 +120,12 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
       writeLine('[bootstrap] unhandled-rejection error=' + safeJson(String(message)))
     })
   }
-  if (mode === 'trace' && !globalThis.__ORCA_BOOTSTRAP_REQUIRE_TRACE_INSTALLED__) {
-    globalThis.__ORCA_BOOTSTRAP_REQUIRE_TRACE_INSTALLED__ = true
+  if (mode === 'trace' && !globalThis.__QUIRKY_BOOTSTRAP_REQUIRE_TRACE_INSTALLED__) {
+    globalThis.__QUIRKY_BOOTSTRAP_REQUIRE_TRACE_INSTALLED__ = true
     try {
       const Module = require('node:module')
       const originalLoad = Module._load
-      const parsedTraceLimit = Number(env?.ORCA_STARTUP_DIAGNOSTICS_TRACE_LIMIT ?? 20000)
+      const parsedTraceLimit = Number(env?.QUIRKY_STARTUP_DIAGNOSTICS_TRACE_LIMIT ?? 20000)
       const traceLimit = Number.isFinite(parsedTraceLimit) && parsedTraceLimit > 0 ? parsedTraceLimit : 20000
       let traceLineCount = 0
       let traceLimitReported = false
@@ -163,7 +163,7 @@ function createStartupDiagnosticsBanner(chunkName: string): string {
 
 function createMainBootstrapPlugin() {
   return {
-    name: 'orca-main-bootstrap',
+    name: 'quirky-main-bootstrap',
     generateBundle(_options, bundle) {
       const mainChunk = bundle['index.js']
       if (!mainChunk || mainChunk.type !== 'chunk') {
@@ -188,7 +188,7 @@ function createMainBootstrapPlugin() {
  * main process attributes self time to real function names. Release builds never
  * set this, and `pnpm build` does not read it.
  */
-const MAIN_MINIFY: 'oxc' | false = process.env.ORCA_UNMINIFIED_MAIN === '1' ? false : 'oxc'
+const MAIN_MINIFY: 'oxc' | false = process.env.QUIRKY_UNMINIFIED_MAIN === '1' ? false : 'oxc'
 
 export const electronViteConfig: UserConfig = {
   main: {
@@ -202,9 +202,9 @@ export const electronViteConfig: UserConfig = {
       // uploads them so minified crash traces stay decodable.
       sourcemap: 'hidden',
       // PR fixtures discard maps; official releases must always retain them.
-      ...(process.env.ORCA_CI_MAIN_SOURCEMAPS === '0' &&
-      orcaBuildIdentity !== 'stable' &&
-      orcaBuildIdentity !== 'rc'
+      ...(process.env.QUIRKY_CI_MAIN_SOURCEMAPS === '0' &&
+      quirkyBuildIdentity !== 'stable' &&
+      quirkyBuildIdentity !== 'rc'
         ? { sourcemap: false }
         : {}),
       // Why: daemon-entry.js is asar-unpacked so child_process.fork() can
@@ -234,7 +234,7 @@ export const electronViteConfig: UserConfig = {
       }
     },
     define: {
-      ORCA_BUILD_COMMIT: ORCA_BUILD_COMMIT_LITERAL,
+      QUIRKY_BUILD_COMMIT: QUIRKY_BUILD_COMMIT_LITERAL,
       ...DARK_BUILD_DEFINES
     },
     // Why: @xterm/headless declares "exports": null in package.json, which
@@ -260,7 +260,7 @@ export const electronViteConfig: UserConfig = {
     // Shared node_modules installs must not share dependency optimization state across worktrees.
     cacheDir: resolve('.cache/vite/renderer'),
     define: {
-      ORCA_BUILD_COMMIT: ORCA_BUILD_COMMIT_LITERAL,
+      QUIRKY_BUILD_COMMIT: QUIRKY_BUILD_COMMIT_LITERAL,
       ...DARK_BUILD_DEFINES
     },
     resolve: {
@@ -318,7 +318,7 @@ export default defineConfig(({ command }) => {
         ...electronViteConfig.main?.build,
         minify: false,
         sourcemap:
-          process.env.ORCA_DEV_MAIN_SOURCEMAPS === '0'
+          process.env.QUIRKY_DEV_MAIN_SOURCEMAPS === '0'
             ? false
             : electronViteConfig.main?.build?.sourcemap
       }

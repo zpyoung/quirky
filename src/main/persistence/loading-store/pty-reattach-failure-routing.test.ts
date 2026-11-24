@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { commitPtyIpcSpawn } from '../../ipc/pty/ipc/spawn-commit'
 import { createPtyIpcSpawnState } from '../../ipc/pty/ipc/spawn-state'
 import { commitRuntimePtySpawn } from '../../ipc/pty/runtime/spawn-commit'
@@ -38,7 +38,7 @@ describe.each(['ipc', 'runtime'])('%s failed reattach routing', (controller) => 
     'preserves host evidence after a failed save: $outcome, $incarnationId',
     async ({ incarnationId, outcome }) => {
       const { store, authority, readState } = await fixture()
-      const runtime = new OrcaRuntimeService(store)
+      const runtime = new QuirkyRuntimeService(store)
       runtime.onPtySpawned(binding.ptyId, incarnationId)
       const deps = createPtySpawnCommitDependencies(runtime, store)
       const publish = vi.spyOn(deps, 'sendPtySpawnedToRenderer')
@@ -72,7 +72,7 @@ describe.each(['ipc', 'runtime'])('%s failed reattach routing', (controller) => 
         commit = () => commitRuntimePtySpawn(ctx)
       }
       const gate = authority.pause()
-      const pending = expect(commit()).rejects.toThrow('ORCA_TERMINAL_SESSION_STATE_SAVE_FAILED')
+      const pending = expect(commit()).rejects.toThrow('QUIRKY_TERMINAL_SESSION_STATE_SAVE_FAILED')
       await gate.started.promise
       const ownerWhileSaving = ptyOwnership.get(binding.ptyId)
       if (outcome !== 'live') {

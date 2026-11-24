@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-// With ORCA_LAYOUT_OWNER=main, a chat tab's open and close reach main as commands, so the window's
+// With QUIRKY_LAYOUT_OWNER=main, a chat tab's open and close reach main as commands, so the window's
 // next save changes nothing in main's model (what the save-divergence detector checks).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
@@ -40,7 +40,7 @@ const mocks = vi.hoisted((): Mocks => ({
 }))
 
 vi.mock('../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))

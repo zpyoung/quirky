@@ -118,7 +118,7 @@ async function createFrom(repo: RepoSummary) {
     runtimeTaskSettings: {},
     tasksSupported: true,
     taskStateHydrated: true,
-    trustedOrcaHooks: {},
+    trustedQuirkyHooks: {},
     workspaceAgent: 'blank',
     workspaceAgentOverridden: true,
     workspaceCreateDraft: { item },
@@ -133,7 +133,7 @@ async function createFrom(repo: RepoSummary) {
     setActionItem: noop,
     setCreatingKey: noop,
     setError: noop,
-    setOrcaYamlTrustPrompt: noop,
+    setQuirkyYamlTrustPrompt: noop,
     setRuntimeTaskSettings: noop,
     setSetupPrompt: noop,
     setWorkspaceAgent: noop,
@@ -166,13 +166,13 @@ describe('creating a workspace from a task on a server repo', () => {
     expect(ranOn(client, 'worktree.create')).toEqual(['runtime:vm'])
     expect(ranOn(client, 'preflight.detectAgents')).toEqual(['runtime:vm'])
     expect(pushed).toHaveLength(1)
-    expect(new URL(pushed[0]!, 'orca://x').searchParams.get('executionHost')).toBe('runtime:vm')
+    expect(new URL(pushed[0]!, 'quirky://x').searchParams.get('executionHost')).toBe('runtime:vm')
   })
 
   it("keeps a desktop repo's workspace on the desktop", async () => {
     const { client, pushed } = await createFrom(DESKTOP_REPO)
     expect(ranOn(client, 'worktree.create')).toEqual(['desktop'])
     expect(ranOn(client, 'preflight.detectAgents')).toEqual(['desktop'])
-    expect(new URL(pushed[0]!, 'orca://x').searchParams.get('executionHost')).toBeNull()
+    expect(new URL(pushed[0]!, 'quirky://x').searchParams.get('executionHost')).toBeNull()
   })
 })

@@ -1,17 +1,17 @@
 import { createHash } from 'node:crypto'
 import { win32 as pathWin32 } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { resolveWindowsShellStartupFamily } from '../../shared/windows-terminal-shell'
 import {
   resolveProfileLoadingFallbackShell,
   resolveProfileLoadingShell
 } from './hydrate-shell-path'
 
-const START_MARKER = '__ORCA_LOGIN_SHELL_ENV_START__'
-const END_MARKER = '__ORCA_LOGIN_SHELL_ENV_END__'
+const START_MARKER = '__QUIRKY_LOGIN_SHELL_ENV_START__'
+const END_MARKER = '__QUIRKY_LOGIN_SHELL_ENV_END__'
 const SPAWN_TIMEOUT_MS = 5000
 
-/** Whether a profile-loading shell produced the env, or Orca fell back to its own. */
+/** Whether a profile-loading shell produced the env, or Quirky fell back to its own. */
 export type LoginShellEnvironmentCapture = {
   status: 'captured' | 'fallback'
   env: NodeJS.ProcessEnv
@@ -172,8 +172,8 @@ export type ResolveLoginShellEnvironmentOptions = {
   spawner?: (shell: string, env: NodeJS.ProcessEnv) => Promise<NodeJS.ProcessEnv | null>
 }
 
-/** Captures the environment seen by commands launched from Orca's profile-loading terminal
- *  shell, saying whether the shell produced it or it is Orca's own env as a fallback. One cache
+/** Captures the environment seen by commands launched from Quirky's profile-loading terminal
+ *  shell, saying whether the shell produced it or it is Quirky's own env as a fallback. One cache
  *  per shell and env owns the result, the run in progress and which run's result wins. */
 export function captureLoginShellEnvironment(
   options: ResolveLoginShellEnvironmentOptions = {}
@@ -237,7 +237,7 @@ export function captureLoginShellEnvironment(
   return Promise.resolve(last)
 }
 
-/** Resolves the environment seen by commands launched from Orca's profile-loading terminal shell. */
+/** Resolves the environment seen by commands launched from Quirky's profile-loading terminal shell. */
 export function resolveLoginShellEnvironment(
   options: ResolveLoginShellEnvironmentOptions = {}
 ): Promise<NodeJS.ProcessEnv> {

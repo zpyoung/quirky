@@ -1,4 +1,4 @@
-// What a start checks on this host before it spawns the agent. A runtime Orca manages is installed
+// What a start checks on this host before it spawns the agent. A runtime Quirky manages is installed
 // only when the person asks, so a start that finds no copy refuses rather than downloading one.
 
 import {

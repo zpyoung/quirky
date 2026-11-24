@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH } from '../../../shared/__fixtures__/layout-owner-written-session-golden-paths'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { emptyTerminalSessionProfile, openTopologyStore } from './terminal-topology-profile-fixture'
@@ -21,14 +21,14 @@ afterEach(() => {
   }
 })
 
-describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+describe.skipIf(QUIRKY_LAYOUT_OWNER_IS_MAIN)(
   'a switch-off build loading the session a layout-owner build wrote (downgrade probe, L8)',
   () => {
     it('hands the window the session exactly as written', async () => {
       const golden: WorkspaceSessionState = JSON.parse(
         readFileSync(LAYOUT_OWNER_WRITTEN_SESSION_GOLDEN_PATH, 'utf8')
       )
-      const directory = mkdtempSync(join(tmpdir(), 'orca-layout-owner-downgrade-'))
+      const directory = mkdtempSync(join(tmpdir(), 'quirky-layout-owner-downgrade-'))
       directories.push(directory)
       const profile = { ...JSON.parse(emptyTerminalSessionProfile()), workspaceSession: golden }
 

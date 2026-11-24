@@ -1,13 +1,13 @@
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { IsAgentLaunchPaneLive } from '../../../agent-launch/agent-launch-pane-attachment'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { resolveStablePaneOwner } from './stable-owner'
 
 /** Whether a process holds a launch pane: live, or by the persisted binding a restored pane whose
  *  agent survived in the daemon is adopted by. A read that fails leaves the spawn as it was. */
 export function agentLaunchPaneLiveness(
-  deps: { runtime?: OrcaRuntimeService; store?: Store },
+  deps: { runtime?: QuirkyRuntimeService; store?: Store },
   pane: { worktreeId: string; tabId: string; leafId: string; connectionId?: string | null }
 ): IsAgentLaunchPaneLive {
   const { runtime, store } = deps

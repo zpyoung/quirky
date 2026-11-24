@@ -36,7 +36,7 @@ const SESSION_ID = 'claude_repro_session'
 const AGENT_TAB_ID = `agent-session:${SESSION_ID}`
 
 function detected(worktree: Worktree): DetectedWorktree {
-  return { ...worktree, ownership: 'orca-managed', selectedCheckout: false, visible: true }
+  return { ...worktree, ownership: 'quirky-managed', selectedCheckout: false, visible: true }
 }
 
 function seedCreatedWorkspaceWithPendingLaunch(

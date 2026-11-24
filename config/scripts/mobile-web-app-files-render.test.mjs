@@ -92,12 +92,12 @@ beforeAll(async () => {
   cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-files-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-files-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 240_000)
 
@@ -131,7 +131,7 @@ async function openPreview() {
     }
   })
   await page.goto(`${origin}/`, { waitUntil: 'load' })
-  await page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
+  await page.waitForFunction(() => document.documentElement.dataset.quirkyWebEntry === 'mounted', {
     timeout: 60_000,
     polling: 250
   })

@@ -31,7 +31,7 @@ function sender(nodes: AXNode[], cursor = false): CdpCommandSender {
       return { node: { backendNodeId: 100 } }
     }
     if (method === 'Runtime.evaluate') {
-      if (params?.expression === 'window.__orcaCursorInteractive[0]') {
+      if (params?.expression === 'window.__quirkyCursorInteractive[0]') {
         return { result: { objectId: 'cursor-object' } }
       }
       return { result: { value: JSON.stringify(cursor ? [{ text: 'Cursor', tag: 'div' }] : []) } }

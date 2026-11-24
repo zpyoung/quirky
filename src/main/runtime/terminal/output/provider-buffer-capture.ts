@@ -2,7 +2,7 @@ import type {
   RuntimeHeadlessTerminal,
   RuntimeVisibleTerminalState
 } from '../../runtime-terminal-state-records'
-import { OrcaRuntimeWithSerializeTerminalBufferFromAvailableState } from './terminal-buffer-selection'
+import { QuirkyRuntimeWithSerializeTerminalBufferFromAvailableState } from './terminal-buffer-selection'
 import type { PtyProviderBufferSnapshot } from '../../../providers/pty-provider-contract'
 import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 import type { RuntimeTerminalRead } from '../../../../shared/runtime-types'
@@ -12,17 +12,17 @@ import {
   shouldFallbackToVisibleTerminalSnapshot,
   terminalReadLimit
 } from '../../terminal-tail-read'
-import type { RuntimeTerminalProjection } from '../../orca-runtime-core'
+import type { RuntimeTerminalProjection } from '../../quirky-runtime-core'
 import { DEFAULT_TERMINAL_READ_LIMIT } from '../../terminal-tail-limits'
 import { HeadlessEmulator } from '../../../daemon/headless-emulator'
 import {
   projectTerminalTailLines,
   projectTerminalVisibleLines
-} from '../../orca-runtime-terminal-projection'
-import { VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from '../../orca-runtime-postlude'
+} from '../../quirky-runtime-terminal-projection'
+import { VISIBLE_TERMINAL_SNAPSHOT_TIMEOUT_MS } from '../../quirky-runtime-postlude'
 import { isNativeWindowsConptyPty } from '../../terminal-model-query-authority'
 
-export abstract class OrcaRuntimeWithCaptureProviderTerminalBuffer extends OrcaRuntimeWithSerializeTerminalBufferFromAvailableState {
+export abstract class QuirkyRuntimeWithCaptureProviderTerminalBuffer extends QuirkyRuntimeWithSerializeTerminalBufferFromAvailableState {
   protected abstract readVisibleTerminalState(
     ptyId: string
   ): Promise<RuntimeVisibleTerminalState | null>

@@ -1,6 +1,6 @@
 import type { WorkerDispatchRow } from '../../types'
 import type { OrchestrationDb } from '../orchestration-db'
-import { dispatchAssigneeOrcaSessionId } from '../../dispatch-assignee-orca-session-id'
+import { dispatchAssigneeQuirkySessionId } from '../../dispatch-assignee-quirky-session-id'
 
 /**
  * A start that dies before `prepareStartingWorkerAuthority` never filled the Dispatch context in,
@@ -20,14 +20,14 @@ export function recordFailedStartDispatchIdentity(
   db.db
     .prepare(
       `UPDATE dispatch_contexts
-         SET assignee_handle = ?, assignee_pane_key = ?, assignee_orca_session_id = ?,
+         SET assignee_handle = ?, assignee_pane_key = ?, assignee_quirky_session_id = ?,
              process_incarnation = ?, host_scope = ?
        WHERE id = ? AND status IN ('failed', 'circuit_broken') AND process_incarnation IS NULL`
     )
     .run(
       resource.terminal_handle,
       resource.pane_key,
-      dispatchAssigneeOrcaSessionId({
+      dispatchAssigneeQuirkySessionId({
         handle: resource.terminal_handle,
         processIncarnation: resource.process_incarnation
       }),

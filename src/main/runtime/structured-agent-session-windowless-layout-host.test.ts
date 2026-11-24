@@ -13,7 +13,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { closeTestJournalHostDatabases } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import { recordingStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { seedTestAgentSessionRecordStore } from './agent-session-record-store-test-harness'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { withChatTabChanges } from './agent-session-tab-layout'
 import {
   ensureStructuredAgentSessionHost,
@@ -38,7 +38,7 @@ const EMPTY_SESSION: WorkspaceSessionState = {
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-windowless-chat-layout-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-windowless-chat-layout-'))
 })
 
 afterEach(async () => {
@@ -88,7 +88,7 @@ async function runtimeWithSavedChats(
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
-  const runtime = new OrcaRuntimeService(store as never)
+  const runtime = new QuirkyRuntimeService(store as never)
   for (const sessionId of sessionIds) {
     await runtime.publishStructuredAgentSessionTab({
       workspaceId: WT,
@@ -100,7 +100,7 @@ async function runtimeWithSavedChats(
   return { runtime, state }
 }
 
-function installHost(runtime: OrcaRuntimeService) {
+function installHost(runtime: QuirkyRuntimeService) {
   return ensureStructuredAgentSessionHost({
     logger: recordingStructuredAgentSessionLogger().logger,
     stateDirectory: root,
@@ -115,7 +115,7 @@ function installHost(runtime: OrcaRuntimeService) {
 }
 
 /** A runtime whose startup restore installs a host rooted at `root`, with no PTY daemon. */
-function restoringRuntime(runtime: OrcaRuntimeService): void {
+function restoringRuntime(runtime: QuirkyRuntimeService): void {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are the runtime's own protected members; the test roots the host at `root` and stubs the PTY daemon.
   const internal = runtime as unknown as {
     hasPersistedStructuredAgentSessionStore(): boolean

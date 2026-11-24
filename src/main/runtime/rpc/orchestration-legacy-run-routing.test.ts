@@ -87,7 +87,7 @@ describe('legacy coordinator gate run routing', () => {
       error: {
         code: 'consumer_fenced',
         data: {
-          recoveryCommand: `orca orchestration run-use --id ${harness.adoptedRunId} --takeover-legacy`
+          recoveryCommand: `quirky orchestration run-use --id ${harness.adoptedRunId} --takeover-legacy`
         }
       }
     })

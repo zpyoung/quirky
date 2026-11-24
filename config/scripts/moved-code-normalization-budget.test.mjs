@@ -22,7 +22,7 @@ const createMatcher = (blocks) =>
 
 describe('moved-code base normalization budget', () => {
   it('normalizes fixed base lines once across repeated changed-line diagnostics', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-moved-code-budget-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-moved-code-budget-'))
     const file = join(root, 'fixture.mjs')
     const source = 'brandNewCall()\n'
     writeFileSync(file, source)
@@ -105,7 +105,7 @@ describe('moved-code base normalization budget', () => {
   })
 
   it('shares the matcher across diagnostics and scans in the actual main entrypoint', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-moved-code-main-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-moved-code-main-'))
     const file = join(root, 'fixture.mjs')
     writeFileSync(file, 'brandNewCall()\n')
     vi.stubEnv('GITHUB_EVENT_NAME', '')

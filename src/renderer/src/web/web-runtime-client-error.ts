@@ -29,12 +29,12 @@ function webRuntimeAuthFailureMessage(reason: WebRuntimeAuthFailureReason): stri
     case 'insecure-origin':
       return translate(
         'auto.web.runtimeAuth.insecureOrigin',
-        'Orca refused to pair from this page: it is plain http on another machine, so anyone on the network path could replace it and take the pairing code. Open the web client over https, at localhost on this computer, or through an SSH tunnel. To allow it anyway, the server operator can restart Orca with ORCA_ALLOW_INSECURE_WEB_PAIRING=1.'
+        'Quirky refused to pair from this page: it is plain http on another machine, so anyone on the network path could replace it and take the pairing code. Open the web client over https, at localhost on this computer, or through an SSH tunnel. To allow it anyway, the server operator can restart Quirky with QUIRKY_ALLOW_INSECURE_WEB_PAIRING=1.'
       )
     case 'device-downgraded':
       return translate(
         'auto.web.runtimeAuth.deviceDowngraded',
-        'This Orca server no longer supports this browser’s sign-in key (it may have been downgraded). Update the server, or pair this browser again.'
+        'This Quirky server no longer supports this browser’s sign-in key (it may have been downgraded). Update the server, or pair this browser again.'
       )
     case 'device-revoked':
     case 'unauthorized':

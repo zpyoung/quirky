@@ -269,7 +269,7 @@ describe('assertRebuiltConptyDeniesMsysBreakaway', () => {
     ).not.toThrow()
   })
 
-  // PE_MACHINE covers what Orca ships; an arch it does not know is not one this
+  // PE_MACHINE covers what Quirky ships; an arch it does not know is not one this
   // can judge, and guessing would fail a rebuild that was fine.
   it('does not judge an architecture it has no machine value for', () => {
     const nodePtyDir = rebuiltInto({ 'build/Release/conpty.node': { arch: 'x64' } })

@@ -53,8 +53,8 @@ const sshResult = {
 }
 
 function setupManagedSshRecipe(): { userDataPath: string } {
-  const userDataPath = tempDir('orca-vm-managed-user-data-')
-  const repoPath = tempDir('orca-vm-managed-repo-')
+  const userDataPath = tempDir('quirky-vm-managed-user-data-')
+  const repoPath = tempDir('quirky-vm-managed-repo-')
   getPath.mockReturnValue(userDataPath)
   const script = (name: string, body: string): string => {
     const scriptPath = join(repoPath, name)
@@ -63,7 +63,7 @@ function setupManagedSshRecipe(): { userDataPath: string } {
   }
   const printResult = `console.log(${JSON.stringify(JSON.stringify(sshResult))})`
   writeFileSync(
-    join(repoPath, 'orca.yaml'),
+    join(repoPath, 'quirky.yaml'),
     [
       'environmentRecipes:',
       '  - id: cloud-sandbox',

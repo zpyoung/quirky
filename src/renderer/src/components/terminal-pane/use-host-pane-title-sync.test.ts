@@ -5,7 +5,7 @@ import { hostPaneTitleUpdates } from './use-host-pane-title-sync'
 
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
 vi.mock('../../../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))

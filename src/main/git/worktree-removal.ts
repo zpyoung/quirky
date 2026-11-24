@@ -113,7 +113,7 @@ function deleteBranchOfRemovedWorktree(
 
 /**
  * Finishes a removal whose checkout Git no longer registers and is gone from disk: stale admin
- * records, then the branch. Deletes no files: Orca removes a checkout only through Git.
+ * records, then the branch. Deletes no files: Quirky removes a checkout only through Git.
  * `assertCheckoutGone` refuses while anything is still at the path.
  */
 export async function finishUnregisteredWorktreeRemoval(

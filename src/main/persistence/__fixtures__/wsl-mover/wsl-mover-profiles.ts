@@ -1,7 +1,7 @@
 /**
  * Synthetic profiles for the WSL mover's projection tests. Each profile is one logical state,
  * rendered as the desktop holds it before a move (UNC paths, host `local`) or as the distro's
- * orcad holds it after (Linux paths, the host's own `local` view). Rows outside the move scope
+ * quirkyd holds it after (Linux paths, the host's own `local` view). Rows outside the move scope
  * exist only on the source side, as they would.
  */
 import type {

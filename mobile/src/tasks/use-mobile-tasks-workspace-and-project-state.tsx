@@ -7,7 +7,7 @@ import {
   type GitHubProjectSettings,
   type GitHubProjectSummary,
   type GitHubProjectViewSummary,
-  type PersistedTrustedOrcaHooks,
+  type PersistedTrustedQuirkyHooks,
   type SparsePreset,
   type WorkspaceAgentChoice,
   useState
@@ -20,8 +20,8 @@ import {
   type GitHubProjectRow,
   type GitHubProjectTable,
   type LinearState,
-  type OrcaYamlTrustPrompt,
-  type ProjectRepoNotInOrcaPrompt,
+  type QuirkyYamlTrustPrompt,
+  type ProjectRepoNotInQuirkyPrompt,
   type ProjectSortOverride,
   type RuntimeTaskSettings,
   type SetupPrompt,
@@ -88,8 +88,10 @@ export function useMobileTasksWorkspaceAndProjectState(model: RouteAndItemStateM
   const [linearSubIssueTitle, setLinearSubIssueTitle] = useState('')
   const [taskStateHydrated, setTaskStateHydrated] = useState(false)
   const [runtimeTaskSettings, setRuntimeTaskSettings] = useState<RuntimeTaskSettings>({})
-  const [trustedOrcaHooks, setTrustedOrcaHooks] = useState<PersistedTrustedOrcaHooks>({})
-  const [orcaYamlTrustPrompt, setOrcaYamlTrustPrompt] = useState<OrcaYamlTrustPrompt | null>(null)
+  const [trustedQuirkyHooks, setTrustedQuirkyHooks] = useState<PersistedTrustedQuirkyHooks>({})
+  const [quirkyYamlTrustPrompt, setQuirkyYamlTrustPrompt] = useState<QuirkyYamlTrustPrompt | null>(
+    null
+  )
   const [githubProjectSettings, setGithubProjectSettings] = useState<GitHubProjectSettings>(
     EMPTY_GITHUB_PROJECT_SETTINGS
   )
@@ -145,8 +147,8 @@ export function useMobileTasksWorkspaceAndProjectState(model: RouteAndItemStateM
   const [projectIssueTypesLoading, setProjectIssueTypesLoading] = useState(false)
   const [projectIssueTypesError, setProjectIssueTypesError] = useState('')
   const [projectMutating, setProjectMutating] = useState(false)
-  const [projectRepoNotInOrca, setProjectRepoNotInOrca] =
-    useState<ProjectRepoNotInOrcaPrompt | null>(null)
+  const [projectRepoNotInQuirky, setProjectRepoNotInQuirky] =
+    useState<ProjectRepoNotInQuirkyPrompt | null>(null)
   return Object.assign(model, {
     workspaceRepoPickerItem,
     setWorkspaceRepoPickerItem,
@@ -226,10 +228,10 @@ export function useMobileTasksWorkspaceAndProjectState(model: RouteAndItemStateM
     setTaskStateHydrated,
     runtimeTaskSettings,
     setRuntimeTaskSettings,
-    trustedOrcaHooks,
-    setTrustedOrcaHooks,
-    orcaYamlTrustPrompt,
-    setOrcaYamlTrustPrompt,
+    trustedQuirkyHooks,
+    setTrustedQuirkyHooks,
+    quirkyYamlTrustPrompt,
+    setQuirkyYamlTrustPrompt,
     githubProjectSettings,
     setGithubProjectSettings,
     githubProjects,
@@ -316,8 +318,8 @@ export function useMobileTasksWorkspaceAndProjectState(model: RouteAndItemStateM
     setProjectIssueTypesError,
     projectMutating,
     setProjectMutating,
-    projectRepoNotInOrca,
-    setProjectRepoNotInOrca
+    projectRepoNotInQuirky,
+    setProjectRepoNotInQuirky
   })
 }
 

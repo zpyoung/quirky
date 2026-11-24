@@ -48,7 +48,7 @@ vi.mock('electron', () => ({
 
 describe('Store', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -67,7 +67,7 @@ describe('Store.migrateTabSwitchKeybindings', () => {
   // Freezes the tab-switch cohort on first load, keying on `fileExistedOnLoad` (not field presence) so the verdict survives later launches.
 
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -124,7 +124,7 @@ describe('Store.migrateWorktreeIdentity', () => {
   const NEW_WORKSPACE_KEY = worktreeWorkspaceKey(NEW)
 
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

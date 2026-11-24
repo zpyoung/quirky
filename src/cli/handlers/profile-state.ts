@@ -73,7 +73,7 @@ async function requireStoppedRuntime(client: RuntimeClient): Promise<void> {
   if (status.result.runtime.reachable || status.result.app.running) {
     throw new RuntimeClientError(
       'runtime_error',
-      'Stop Orca before profile-state rollback so no process can write the SQLite database.'
+      'Stop Quirky before profile-state rollback so no process can write the SQLite database.'
     )
   }
 }

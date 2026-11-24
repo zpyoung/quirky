@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { RuntimeSubscriptionRegistry } from '../../runtime-subscription-registry'
 import { RpcDispatcher } from '../dispatcher'
@@ -56,7 +56,7 @@ function makeHost(options: { structuredChat?: boolean } = {}) {
     cleanupSubscriptionsByPrefix: registry.cleanupByPrefix.bind(registry),
     cleanupSubscriptionsForConnection: registry.cleanupForConnection.bind(registry),
     getSubscriptionRegistrationVersion: registry.getRegistrationVersion.bind(registry)
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
   return {
     runtime,

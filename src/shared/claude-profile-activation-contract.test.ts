@@ -13,7 +13,7 @@ it('advertises the Claude sign-in the CLI needs before it starts a login', () =>
 
 it('gives a WSL fish pane the account function, and leaves other WSL commands alone', () => {
   const pane = buildWslInteractiveLoginShellCommand()
-  expect(pane).toContain('"$_orca_wsl_shell" -l -C')
-  expect(getFishClaudeShellFunction()).toContain('ORCA_CLAUDE_PROFILE_POINTER')
+  expect(pane).toContain('"$_quirky_wsl_shell" -l -C')
+  expect(getFishClaudeShellFunction()).toContain('QUIRKY_CLAUDE_PROFILE_POINTER')
   expect(buildWslLoginShellCommand('true')).not.toContain('fish')
 })

@@ -13,11 +13,11 @@ import type {
   RuntimeMarkdownReadTabResult,
   RuntimeMarkdownSaveTabResult
 } from '../../src/shared/mobile-markdown-document'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   addRepoWorktree,
   cliClient,
-  orcadNodeExecutable,
+  quirkydNodeExecutable,
   pairedClient,
   startHeadlessOracleHost,
   type HeadlessHostKind
@@ -72,12 +72,12 @@ async function readTab(phone: RuntimeClient, worktree: string, tabId: string) {
     .result
 }
 
-const HOSTS: HeadlessHostKind[] = ['electron', 'orcad']
+const HOSTS: HeadlessHostKind[] = ['electron', 'quirkyd']
 
 for (const kind of HOSTS) {
   test(`a phone reads and saves a Markdown tab on a headless ${kind} server`, async () => {
-    // Why skip in CI too: only the orcad mode-switch job builds out/orcad.
-    test.skip(kind === 'orcad' && !orcadNodeExecutable(), 'out/orcad is not built')
+    // Why skip in CI too: only the quirkyd mode-switch job builds out/quirkyd.
+    test.skip(kind === 'quirkyd' && !quirkydNodeExecutable(), 'out/quirkyd is not built')
     test.setTimeout(240_000)
     const host = await startHeadlessOracleHost(kind)
     try {

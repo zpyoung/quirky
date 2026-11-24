@@ -223,7 +223,7 @@ async function cancelAndNote(
       throw error
     }
     interruptFailed = true
-    // The adapter's error is Orca's; the row says only that the stop is unconfirmed.
+    // The adapter's error is Quirky's; the row says only that the stop is unconfirmed.
     note = {
       kind: 'status',
       ...agentSessionFailureWords(agentSessionFailureFact('cancelUnconfirmed'), { surface: 'row' })

@@ -1,9 +1,9 @@
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 import { structuredAgentRuntimeMetadata } from '../structured-agent-runtime-metadata'
-import { getProfileUserDataPath } from '../../orca-profiles/profile-storage-paths'
-import { OrcaRuntimeWithStructuredSessionCliWriterHost } from './structured-session-cli-writer-host'
+import { getProfileUserDataPath } from '../../quirky-profiles/profile-storage-paths'
+import { QuirkyRuntimeWithStructuredSessionCliWriterHost } from './structured-session-cli-writer-host'
 
-export abstract class OrcaRuntimeWithStructuredSessionAccountHome extends OrcaRuntimeWithStructuredSessionCliWriterHost {
+export abstract class QuirkyRuntimeWithStructuredSessionAccountHome extends QuirkyRuntimeWithStructuredSessionCliWriterHost {
   /** Where a launch of `agent` finds its account, resolved on this host by the agent's own
    *  registration; null for an agent this runtime does not register, whose create is refused. */
   protected structuredAgentAccountHomeResolver(

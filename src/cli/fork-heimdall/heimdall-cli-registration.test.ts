@@ -15,7 +15,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('orca heimdall CLI registration', () => {
+describe('quirky heimdall CLI registration', () => {
   it('normalizes the watcher id positional and accepts output flags', () => {
     const parsed = normalizeCommandPositionals(
       COMMAND_SPECS,

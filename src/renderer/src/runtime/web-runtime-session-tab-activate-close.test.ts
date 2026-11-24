@@ -94,7 +94,7 @@ afterEach(() => {
 
 describe('web runtime session tab actions', () => {
   beforeEach(() => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     const intents = createPairedTerminalTabCloseIntentTestStore()
     mocks.getState.mockImplementation(() => ({
       settings: {

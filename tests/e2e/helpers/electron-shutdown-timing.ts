@@ -6,8 +6,8 @@ export function recordElectronShutdownTiming(
   details: Record<string, number | string | boolean | null | undefined> = {}
 ): void {
   if (
-    process.env.ORCA_E2E_SHUTDOWN_TIMING !== '1' &&
-    process.env.ORCA_E2E_FORWARD_APP_LOGS !== '1'
+    process.env.QUIRKY_E2E_SHUTDOWN_TIMING !== '1' &&
+    process.env.QUIRKY_E2E_FORWARD_APP_LOGS !== '1'
   ) {
     return
   }

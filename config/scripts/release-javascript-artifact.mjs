@@ -12,7 +12,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { describeProcessFailure } from './process-failure-message.mjs'
 import { isDirectInvocation } from './script-entry-detection.mjs'
 import { DESKTOP_RC_TAG, DESKTOP_STABLE_TAG } from './release-tag-patterns.mjs'
@@ -24,7 +24,7 @@ const REQUIRED_FILES = [
   'preload/index.js',
   'renderer/index.html',
   'renderer/.vite/manifest.json',
-  'renderer/.orca-web-client-files.json',
+  'renderer/.quirky-web-client-files.json',
   'web/web-index.html',
   'mobile-web/manifest.json',
   'package.json'
@@ -55,23 +55,23 @@ export function releaseBuildIdentity(tag) {
 export function releaseJavascriptConfiguration(root, env = process.env) {
   const sourceSha = command('git', ['rev-parse', 'HEAD'], root)
   assert.match(sourceSha, /^[a-f0-9]{40}$/)
-  if (env.ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA) {
+  if (env.QUIRKY_RELEASE_JAVASCRIPT_SOURCE_SHA) {
     assert.equal(
       sourceSha,
-      env.ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA,
+      env.QUIRKY_RELEASE_JAVASCRIPT_SOURCE_SHA,
       'Release checkout differs from bundle source'
     )
   }
   const { version, packageManager } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
-  const requestedIdentity = env.ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY
+  const requestedIdentity = env.QUIRKY_RELEASE_JAVASCRIPT_BUILD_IDENTITY
   const identity = requestedIdentity === 'dev' ? 'dev' : releaseBuildIdentity(`v${version}`)
   if (requestedIdentity) {
     assert.equal(requestedIdentity, identity, 'Invalid JavaScript build identity')
   }
   if (identity === 'dev') {
-    assert(!env.ORCA_BUILD_IDENTITY, 'Development bundle must not set an official build identity')
+    assert(!env.QUIRKY_BUILD_IDENTITY, 'Development bundle must not set an official build identity')
   } else {
-    assert.equal(env.ORCA_BUILD_IDENTITY, identity, 'Release build identity differs from version')
+    assert.equal(env.QUIRKY_BUILD_IDENTITY, identity, 'Release build identity differs from version')
   }
   return { sourceSha, version, packageManager, identity }
 }
@@ -81,7 +81,9 @@ export function javascriptInventory(directory, prefix = '', { excludeHostOutput 
     .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))
     .flatMap((entry) => {
       const name = prefix ? `${prefix}/${entry.name}` : entry.name
-      const hostOutput = ['relay', 'orcad-template', 'orcad-prebuilds'].includes(name.split('/')[0])
+      const hostOutput = ['relay', 'quirkyd-template', 'quirkyd-prebuilds'].includes(
+        name.split('/')[0]
+      )
       if (excludeHostOutput && hostOutput) {
         return []
       }

@@ -133,7 +133,7 @@ export type AgentSessionAttachmentClipboardTarget = Omit<
   'environmentId'
 >
 
-/** `orca-paste-…png`, the name every pasted image gets, so it reads as "Pasted image". */
+/** `quirky-paste-…png`, the name every pasted image gets, so it reads as "Pasted image". */
 export function agentSessionPastedImageName(now: number, unique: string): string {
-  return `orca-paste-${now}-${unique}.png`
+  return `quirky-paste-${now}-${unique}.png`
 }

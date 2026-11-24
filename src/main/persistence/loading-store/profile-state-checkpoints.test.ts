@@ -29,9 +29,9 @@ afterEach(async () => {
 })
 
 function fixture() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-profile-checkpoint-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-checkpoint-'))
   const databasePath = join(directory, 'profile-state.db')
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const authority = new ProfileStateSqliteAuthority(databasePath, PROFILE_ID)
   const backup = vi.spyOn(authority, 'scheduleBackup').mockImplementation(() => {})
   authority.writeSerializedState(

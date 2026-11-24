@@ -39,7 +39,7 @@ export function installDiffCommentAddButtonOverlay({
 }: AddButtonOverlayArgs): DiffCommentAddButtonOverlayHandle {
   const plus = document.createElement('button')
   plus.type = 'button'
-  plus.className = 'orca-diff-comment-add-btn'
+  plus.className = 'quirky-diff-comment-add-btn'
   plus.title = addButtonLabel
   plus.setAttribute('aria-label', addButtonLabel)
   plus.innerHTML =
@@ -98,7 +98,7 @@ export function installDiffCommentAddButtonOverlay({
       // sweeping — but it still rides the growing end of the selection, which is the only thing
       // telling the user the drag is live.
       plus.style.pointerEvents = isDragging ? 'none' : ''
-      editorDomNode.classList.toggle('orca-diff-comment-range-dragging', isDragging)
+      editorDomNode.classList.toggle('quirky-diff-comment-range-dragging', isDragging)
       if (isDragging && focusLine !== null) {
         hoverLineRef.current = focusLine
         positionAtLine(focusLine)
@@ -151,7 +151,7 @@ export function installDiffCommentAddButtonOverlay({
         d.dispose()
       }
       rangeDrag.dispose()
-      editorDomNode.classList.remove('orca-diff-comment-range-dragging')
+      editorDomNode.classList.remove('quirky-diff-comment-range-dragging')
       plus.remove()
     },
     setPendingRange: rangeDrag.setPendingRange,

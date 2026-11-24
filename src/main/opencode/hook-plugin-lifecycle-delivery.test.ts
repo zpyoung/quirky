@@ -1,6 +1,6 @@
 /**
  * Executes the generated OpenCode plugin source because this delivery state
- * lives inside OpenCode's process, not in Orca's TypeScript runtime.
+ * lives inside OpenCode's process, not in Quirky's TypeScript runtime.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -34,10 +34,10 @@ type RecordedPost = {
 }
 
 const ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_AGENT_HOOK_PORT',
-  'ORCA_AGENT_HOOK_TOKEN',
-  'ORCA_AGENT_HOOK_ENDPOINT'
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_AGENT_HOOK_PORT',
+  'QUIRKY_AGENT_HOOK_TOKEN',
+  'QUIRKY_AGENT_HOOK_ENDPOINT'
 ] as const
 
 describe('OpenCode plugin lifecycle delivery', () => {
@@ -47,16 +47,16 @@ describe('OpenCode plugin lifecycle delivery', () => {
   let savedFetch: typeof globalThis.fetch
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-opencode-lifecycle-plugin-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-lifecycle-plugin-'))
     posts = []
     savedEnv = {}
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key]
     }
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
-    process.env.ORCA_AGENT_HOOK_PORT = '45678'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
-    delete process.env.ORCA_AGENT_HOOK_ENDPOINT
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_AGENT_HOOK_PORT = '45678'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
+    delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
     savedFetch = globalThis.fetch
     globalThis.fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       posts.push(readPayload(init))
@@ -90,12 +90,12 @@ describe('OpenCode plugin lifecycle delivery', () => {
   }
 
   async function loadHooksWithSession(session: SessionClientFixture): Promise<PluginHooks> {
-    const pluginPath = join(tempDir, 'orca-opencode-status.mjs')
+    const pluginPath = join(tempDir, 'quirky-opencode-status.mjs')
     writeFileSync(pluginPath, _internals.getOpenCodePluginSource())
     const module = (await import(pathToFileURL(pluginPath).href)) as {
-      OrcaOpenCodeStatusPlugin: (ctx: unknown) => Promise<PluginHooks>
+      QuirkyOpenCodeStatusPlugin: (ctx: unknown) => Promise<PluginHooks>
     }
-    return module.OrcaOpenCodeStatusPlugin({ client: { session } })
+    return module.QuirkyOpenCodeStatusPlugin({ client: { session } })
   }
 
   async function loadHandler(
@@ -157,9 +157,9 @@ describe('OpenCode plugin lifecycle delivery', () => {
     const endpointPath = join(tempDir, 'endpoint.env')
     writeFileSync(
       endpointPath,
-      'not-an-assignment\nORCA_AGENT_HOOK_TOKEN=file-token\nBROKEN LINE\n'
+      'not-an-assignment\nQUIRKY_AGENT_HOOK_TOKEN=file-token\nBROKEN LINE\n'
     )
-    process.env.ORCA_AGENT_HOOK_ENDPOINT = endpointPath
+    process.env.QUIRKY_AGENT_HOOK_ENDPOINT = endpointPath
 
     const fetchMock = vi.fn(
       async (_url: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 })
@@ -172,12 +172,12 @@ describe('OpenCode plugin lifecycle delivery', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]!
     expect(String(url)).toBe('http://127.0.0.1:45678/hook/opencode')
-    expect(new Headers(init?.headers).get('X-Orca-Agent-Hook-Token')).toBe('file-token')
+    expect(new Headers(init?.headers).get('X-Quirky-Agent-Hook-Token')).toBe('file-token')
   })
 
   it('warns once for an unreadable endpoint without exposing hook credentials', async () => {
-    process.env.ORCA_AGENT_HOOK_ENDPOINT = tempDir
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'fallback-secret-token'
+    process.env.QUIRKY_AGENT_HOOK_ENDPOINT = tempDir
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'fallback-secret-token'
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     try {
@@ -792,15 +792,15 @@ describe('OpenCode plugin lifecycle delivery', () => {
       posts.push(readPayload(init))
       deliveries.push({
         url: String(url),
-        token: new Headers(init?.headers).get('X-Orca-Agent-Hook-Token')
+        token: new Headers(init?.headers).get('X-Quirky-Agent-Hook-Token')
       })
       return new Response(null, { status: 204 })
     }) as typeof globalThis.fetch
     const handler = await loadHandler()
 
     await handler({ event: status('busy') })
-    process.env.ORCA_AGENT_HOOK_PORT = '56789'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'refreshed-token'
+    process.env.QUIRKY_AGENT_HOOK_PORT = '56789'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'refreshed-token'
     await handler({ event: delta('still working') })
 
     expect(names()).toEqual(['SessionBusy', 'SessionBusy'])

@@ -453,9 +453,9 @@ describe('staged background worktree creation', () => {
       provider: 'jira' as const,
       type: 'issue' as const,
       number: 0,
-      title: 'ORCA-123 Durable Jira link',
-      url: 'https://company.atlassian.net/browse/ORCA-123',
-      jiraIdentifier: 'ORCA-123'
+      title: 'QUIRKY-123 Durable Jira link',
+      url: 'https://company.atlassian.net/browse/QUIRKY-123',
+      jiraIdentifier: 'QUIRKY-123'
     }
     const linkedTaskSourceContext = {
       kind: 'task-source' as const,
@@ -467,7 +467,7 @@ describe('staged background worktree creation', () => {
         provider: 'jira' as const,
         siteId: 'site-1',
         siteUrl: 'https://company.atlassian.net',
-        projectKey: 'ORCA'
+        projectKey: 'QUIRKY'
       },
       accountLabel: 'dev@company.test'
     }
@@ -612,7 +612,7 @@ describe('staged background worktree creation', () => {
   it('opens only the setup tab despite templates when the composer choice is cleared', async () => {
     store.activeView = 'terminal'
     store.activePendingCreationId = 'creation-1'
-    const setup = { runnerScriptPath: '/repo/.orca/setup.sh', envVars: {} }
+    const setup = { runnerScriptPath: '/repo/.quirky/setup.sh', envVars: {} }
     store.createWorktree.mockResolvedValueOnce({
       worktree: { id: 'wt-1', repoId: 'repo-1', path: '/repo/wt-1' },
       setup,
@@ -652,7 +652,7 @@ describe('staged background worktree creation', () => {
 
   it('seeds only setup despite templates when the user moved on before completion', async () => {
     store.activeView = 'tasks'
-    const setup = { runnerScriptPath: '/repo/.orca/setup.sh', envVars: {} }
+    const setup = { runnerScriptPath: '/repo/.quirky/setup.sh', envVars: {} }
     store.createWorktree.mockResolvedValueOnce({
       worktree: { id: 'wt-1', repoId: 'repo-1', path: '/repo/wt-1' },
       setup,

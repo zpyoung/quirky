@@ -1,7 +1,7 @@
 // What became of the offers an action spent, kept for the surfaces that must still name them.
 //
 // The reattach spends the offer, so this record is what the status bar and the resume dialog list,
-// with a retry, for a chat Orca could not carry on. The capsule holds the record; this decides what
+// with a retry, for a chat Quirky could not carry on. The capsule holds the record; this decides what
 // goes in and when it leaves.
 //
 // A record ends when the chat's agent is started again outside a resume action — the host retires
@@ -58,7 +58,7 @@ export type StructuredAgentSessionRestartFailureLedger = {
     }
   ) => Promise<void>
   /** Named sessions forget their offer or failure; unnamed, every record this host lists goes (a
-   *  newer Orca's stay). With an audience, only records of agents it sees go, and an unnamed
+   *  newer Quirky's stay). With an audience, only records of agents it sees go, and an unnamed
    *  dismissal is no fence. */
   dismiss: (
     sessionIds: readonly string[] | undefined,
@@ -79,9 +79,9 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** The predicate a retry applies to the failure's marker. */
   retryable: (marker: AgentSessionResumeMarker) => boolean
-  /** Whether a newer Orca saved the chat: its failure is kept for that Orca but not shown here,
+  /** Whether a newer Quirky saved the chat: its failure is kept for that Quirky but not shown here,
    *  where no retry can land. */
-  savedByNewerOrca: (sessionId: string) => boolean
+  savedByNewerQuirky: (sessionId: string) => boolean
   /** Makes the failed chats readable here, so `retryable` reads each one's journal. */
   reveal: (markers: readonly AgentSessionResumeMarker[]) => Promise<void>
   logger: StructuredAgentSessionLogger
@@ -105,7 +105,7 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
     failure: AgentSessionResumeFailureRecord
   ): StructuredAgentSessionResumeFailure[] => {
     const record = deps.getRecord(failure.marker.sessionId)
-    if (!record || deps.savedByNewerOrca(failure.marker.sessionId)) {
+    if (!record || deps.savedByNewerQuirky(failure.marker.sessionId)) {
       return []
     }
     const model = normalizeOptionalField(record.options?.model, AGENT_MODEL_MAX_LENGTH)
@@ -157,12 +157,12 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
     ])
     for (const outcome of outcomes) {
       const resumed = outcome.outcome === 'resumed'
-      // A newer Orca's refusal spends nothing: the rollback below reopens the offer for the Orca
+      // A newer Quirky's refusal spends nothing: the rollback below reopens the offer for the Quirky
       // that can continue it, and nothing is filed for a chat no retry here could continue.
       if (
         !resumed &&
         outcome.reason === 'agent_session_journal_unreadable' &&
-        outcome.details?.reason === 'journalWrittenByNewerOrca'
+        outcome.details?.reason === 'journalWrittenByNewerQuirky'
       ) {
         continue
       }
@@ -229,13 +229,13 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
         if (audience) {
           // Decided under the capsule lock. A record whose chat this host cannot read names no
           // agent the audience was shown, so it stays.
-          // An unnamed dismissal keeps a newer Orca's records too: they were never listed here.
+          // An unnamed dismissal keeps a newer Quirky's records too: they were never listed here.
           const hidden = (marker: AgentSessionResumeMarker) => {
             const record = deps.getRecord(marker.sessionId)
             return (
               record === null ||
               !audience(record.provider) ||
-              (sessionIds === undefined && deps.savedByNewerOrca(marker.sessionId))
+              (sessionIds === undefined && deps.savedByNewerQuirky(marker.sessionId))
             )
           }
           if (sessionIds === undefined) {
@@ -249,8 +249,8 @@ export function createStructuredAgentSessionRestartFailureLedger(deps: {
           return (await deps.capsule?.dismiss(sessionIds, deps.now())) ?? 0
         }
         await beforeClearAll()
-        // A newer Orca's offers and failures were never shown here, so "dismiss all" keeps them.
-        const keep = (marker: AgentSessionResumeMarker) => deps.savedByNewerOrca(marker.sessionId)
+        // A newer Quirky's offers and failures were never shown here, so "dismiss all" keeps them.
+        const keep = (marker: AgentSessionResumeMarker) => deps.savedByNewerQuirky(marker.sessionId)
         return (await deps.capsule?.clearAll(deps.now(), keep)) ?? 0
       })
   }

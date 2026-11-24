@@ -36,7 +36,7 @@ const set = (m = marker(), r = value()) =>
     supportsRecord: () => true,
     latestPrompt: () => 'prior prompt',
     movedOn: () => false,
-    savedByNewerOrca: () => false
+    savedByNewerQuirky: () => false
   })
 
 describe('restart offers after context clear', () => {

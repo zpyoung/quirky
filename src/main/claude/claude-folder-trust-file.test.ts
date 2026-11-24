@@ -29,7 +29,7 @@ import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-au
 let root: string
 
 beforeEach(() => {
-  root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-claude-trust-')))
+  root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-claude-trust-')))
 })
 
 afterEach(() => {
@@ -172,7 +172,7 @@ describe('grantClaudeFolderTrust', () => {
     const lockDir = `${file}.lock`
     mkdirSync(lockDir)
     const oldTime = new Date(Date.now() - 60_000)
-    // Why: a lock older than Claude's 10 s stale window must still not be broken by Orca.
+    // Why: a lock older than Claude's 10 s stale window must still not be broken by Quirky.
     utimesSync(lockDir, oldTime, oldTime)
     await expect(grantClaudeFolderTrust({ configFile: file, folderKeys: ['/wt'] })).resolves.toBe(
       'locked'

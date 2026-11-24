@@ -134,7 +134,7 @@ describe('getPRForBranch', () => {
 
   it('reports upstream error when fallback branch discovery fails transiently then retry misses', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock
@@ -174,7 +174,7 @@ describe('getPRForBranch', () => {
 
   it('propagates a Retry-After cooldown into the rate-limited retry schedule', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     // gh puts the diagnostic on `.stderr`; a secondary limit carries Retry-After.
@@ -202,7 +202,7 @@ describe('getPRForBranch', () => {
 
   it('reports no PR when fallback branch discovery cleanly misses', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock.mockResolvedValueOnce({ stdout: JSON.stringify([]) })
@@ -215,7 +215,7 @@ describe('getPRForBranch', () => {
 
   it('returns found when fallback branch discovery retry finds the PR', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock
@@ -259,14 +259,14 @@ describe('getPRForBranch', () => {
       pr: {
         number: 42,
         title: 'Hydrated retry branch PR',
-        prRepo: { owner: 'stablyai', repo: 'orca' }
+        prRepo: { owner: 'stablyai', repo: 'quirky' }
       }
     })
   })
 
   it('lets fallback PR number recovery win after fallback branch queries throw', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock
@@ -315,7 +315,7 @@ describe('getPRForBranch', () => {
 
   it('reports upstream error when fallback branch discovery has a network failure', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock
@@ -332,7 +332,7 @@ describe('getPRForBranch', () => {
 
   it('reports a GitHub server error when fallback branch discovery receives 5xx responses', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
       headRepo: null
     })
     ghExecFileAsyncMock
@@ -350,8 +350,8 @@ describe('getPRForBranch', () => {
   it('keeps a pending fallback branch error when a later candidate cleanly misses', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'stablyai', repo: 'orca' },
-        { owner: 'fork', repo: 'orca' }
+        { owner: 'stablyai', repo: 'quirky' },
+        { owner: 'fork', repo: 'quirky' }
       ],
       headRepo: null
     })
@@ -372,7 +372,7 @@ describe('getPRForBranch', () => {
         'pr',
         'list',
         '--repo',
-        'fork/orca',
+        'fork/quirky',
         '--head',
         'feature/test',
         '--state',
@@ -515,10 +515,10 @@ describe('getPRForBranch', () => {
 
   it('does not carry a merged upstream branch head repo into a fallback PR number', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
-      candidates: [{ owner: 'stablyai', repo: 'orca' }],
-      headRepo: { owner: 'origin-owner', repo: 'orca' }
+      candidates: [{ owner: 'stablyai', repo: 'quirky' }],
+      headRepo: { owner: 'origin-owner', repo: 'quirky' }
     })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork-owner', repo: 'orca' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork-owner', repo: 'quirky' })
     gitExecFileAsyncMock.mockResolvedValueOnce({
       stdout: 'local-created-from-pr\0fork/contributor/original\n',
       stderr: ''
@@ -579,7 +579,7 @@ describe('getPRForBranch', () => {
     expect(pr).toMatchObject({
       number: 42,
       title: 'Open fallback PR',
-      headRepo: { owner: 'origin-owner', repo: 'orca' }
+      headRepo: { owner: 'origin-owner', repo: 'quirky' }
     })
   })
 

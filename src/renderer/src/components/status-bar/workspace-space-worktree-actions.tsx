@@ -56,7 +56,7 @@ export function WorkspaceSpaceWorktreeMenuItems({
               : !canOpenWorkspace
                 ? translate(
                     'workspaceSpace.delete.unmanaged',
-                    'This workspace is no longer managed by Orca.'
+                    'This workspace is no longer managed by Quirky.'
                   )
                 : translate(
                     'workspaceSpace.delete.unavailable',

@@ -27,7 +27,7 @@ import {
   retireAbsentStructuredAgentLaunchCancellations,
   retireStructuredAgentLaunchCancellation
 } from './launch-cancel-tombstones-compat/structured-agent-session-launch-cancellation'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { cancelStructuredAgentLaunchOnLocalHost } from './structured-agent-session-local-launch-cancel'
 
 export type StructuredLaunchState = StructuredLaunchRecoveryState & {
@@ -236,7 +236,7 @@ function markStructuredAgentSessionLaunchCancelledInternal(
     getPersistedStructuredAgentLaunchRecord(sessionId)?.surfaceAddress
   if (matchesLaunchWorktree(state, worktreeId) && state) {
     // The launch's own owner outranks the caller's: it is the host the create was sent to.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && state.intent.executionHostId === LOCAL_EXECUTION_HOST_ID) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && state.intent.executionHostId === LOCAL_EXECUTION_HOST_ID) {
       cancelStructuredAgentLaunchOnLocalHost(
         worktreeId,
         sessionId,
@@ -257,7 +257,7 @@ function markStructuredAgentSessionLaunchCancelledInternal(
     // retain a dead promise for the lifetime of the renderer.
     deleteStructuredLaunchStateIfCurrent(state)
   } else if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     !alreadyCancelled &&
     executionHostId === LOCAL_EXECUTION_HOST_ID
   ) {

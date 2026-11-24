@@ -81,7 +81,7 @@ describe('workspace layout Loader and Serializer', () => {
     ]) {
       expect(layoutJson).not.toContain(`"${perView}"`)
     }
-    const workspace = loaded.layout.workspaces['repo-1::/Users/dev/orca']!
+    const workspace = loaded.layout.workspaces['repo-1::/Users/dev/quirky']!
     expect(workspace.tabs.map((tab) => [tab.id, tab.kind])).toEqual([
       ['tab-shell', 'terminal'],
       ['tab-agent', 'terminal'],
@@ -100,12 +100,12 @@ describe('workspace layout Loader and Serializer', () => {
       ['tab-shell', 'tab-agent', 'editor:src/app.ts'],
       ['browser-1', 'agent-session-1', 'tab-unbound']
     ])
-    expect(loaded.desktopView.groups['repo-1::/Users/dev/orca']!['group-a']).toEqual({
+    expect(loaded.desktopView.groups['repo-1::/Users/dev/quirky']!['group-a']).toEqual({
       activeTabId: 'tab-agent',
       recentTabIds: ['tab-shell', 'tab-agent']
     })
-    expect(loaded.desktopView.editorDrafts['repo-1::/Users/dev/orca']).toEqual({
-      '/Users/dev/orca/src/app.ts': {
+    expect(loaded.desktopView.editorDrafts['repo-1::/Users/dev/quirky']).toEqual({
+      '/Users/dev/quirky/src/app.ts': {
         dirtyDraftContent: 'export {}\n',
         lastKnownDiskSignature: 'sig-1'
       }

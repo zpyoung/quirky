@@ -1,18 +1,18 @@
 import { randomUUID } from 'node:crypto'
 import { rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getActiveWorktreeContext } from './helpers/markdown-editor-fixture'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { buildOwnedEditorFileId } from '../../src/renderer/src/store/slices/editor/file-ids/editor-file-ids'
 
 test('keeps same-path host models and undo history separate', async ({
-  orcaPage,
+  quirkyPage,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const context = await getActiveWorktreeContext(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const context = await getActiveWorktreeContext(quirkyPage)
   const filePath = path.join(context.rootPath, `host-model-${randomUUID()}.txt`)
   await writeFile(filePath, 'LOCAL_MARKER', 'utf8')
   registerPostElectronShutdownCleanup(() => rm(filePath, { force: true }))
@@ -21,7 +21,7 @@ test('keeps same-path host models and undo history separate', async ({
   // Both tabs open through the user's open path, so a layout-owner build's main holds them too.
   // The second owner is keyed apart by a runtime id, then its record is pointed back at the
   // fixture's SSH route with local transport before it first loads (it opens unselected).
-  const openedIds = await orcaPage.evaluate(
+  const openedIds = await quirkyPage.evaluate(
     ({ filePath, worktreeId }) => {
       const store = window.__store
       if (!store) {
@@ -86,27 +86,27 @@ test('keeps same-path host models and undo history separate', async ({
   )
   expect(openedIds).toEqual({ localId: filePath, remoteId })
 
-  const editor = orcaPage.locator('.monaco-editor').first()
+  const editor = quirkyPage.locator('.monaco-editor').first()
   await expect(editor).toBeVisible({ timeout: 25_000 })
-  const valueTail = () => orcaPage.evaluate(() => window.__monacoEditorE2E?.snapshot().valueTail)
+  const valueTail = () => quirkyPage.evaluate(() => window.__monacoEditorE2E?.snapshot().valueTail)
   await expect.poll(valueTail).toBe('LOCAL_MARKER')
   await editor.click()
-  await orcaPage.keyboard.press('ControlOrMeta+End')
-  await orcaPage.keyboard.type('!')
+  await quirkyPage.keyboard.press('ControlOrMeta+End')
+  await quirkyPage.keyboard.type('!')
   await expect.poll(valueTail).toBe('LOCAL_MARKER!')
-  await orcaPage.evaluate((id) => window.__store?.getState().setActiveFile(id), remoteId)
+  await quirkyPage.evaluate((id) => window.__store?.getState().setActiveFile(id), remoteId)
   await expect.poll(valueTail).toBe('REMOTE_MARKER')
-  await orcaPage.screenshot({ path: testInfo.outputPath('remote-before-undo.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('remote-before-undo.png') })
   await editor.click()
-  await orcaPage.keyboard.press('ControlOrMeta+z')
-  await orcaPage.screenshot({ path: testInfo.outputPath('remote-after-undo.png') })
+  await quirkyPage.keyboard.press('ControlOrMeta+z')
+  await quirkyPage.screenshot({ path: testInfo.outputPath('remote-after-undo.png') })
   await expect.poll(valueTail).toBe('REMOTE_MARKER')
-  await orcaPage.keyboard.press('ControlOrMeta+End')
-  await orcaPage.keyboard.type('?')
+  await quirkyPage.keyboard.press('ControlOrMeta+End')
+  await quirkyPage.keyboard.type('?')
   await expect.poll(valueTail).toBe('REMOTE_MARKER?')
-  await orcaPage.keyboard.press('ControlOrMeta+z')
+  await quirkyPage.keyboard.press('ControlOrMeta+z')
   await expect.poll(valueTail).toBe('REMOTE_MARKER')
-  await orcaPage.evaluate((id) => window.__store?.getState().setActiveFile(id), filePath)
+  await quirkyPage.evaluate((id) => window.__store?.getState().setActiveFile(id), filePath)
   await expect.poll(valueTail).toBe('LOCAL_MARKER!')
-  await orcaPage.screenshot({ path: testInfo.outputPath('local-retained-edit.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('local-retained-edit.png') })
 })

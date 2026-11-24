@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url)
 const { verifyLinuxGlibcFloor } = require('./verify-linux-glibc-floor.cjs')
 const roots = []
 const STATIC_HEADERS = 'Program Header:\n    LOAD off 0x0000000000000000\n'
-const MUSL_TARGET = 'orcad-template/targets/linux-arm64-musl/watcher.node'
+const MUSL_TARGET = 'quirkyd-template/targets/linux-arm64-musl/watcher.node'
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
@@ -18,7 +18,7 @@ async function writeObjdumpFixture(
   headers,
   { filename = 'browser', symbolTableError = false } = {}
 ) {
-  const root = await mkdtemp(join(tmpdir(), 'orca-glibc-payload-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-glibc-payload-'))
   roots.push(root)
   const app = join(root, 'app')
   const binary = join(app, ...filename.split('/'))
@@ -82,7 +82,7 @@ describe.skipIf(process.platform === 'win32')('static ELF and remote musl payloa
 
   it.each([
     ['desktop addon', 'watcher.node', 'libc.so'],
-    ['glibc target', 'orcad-template/targets/linux-arm64-glibc/watcher.node', 'libc.so'],
+    ['glibc target', 'quirkyd-template/targets/linux-arm64-glibc/watcher.node', 'libc.so'],
     ['mislabeled glibc target', MUSL_TARGET, 'libc.so.6'],
     ['mixed libc dependencies', MUSL_TARGET, 'libc.so\n  NEEDED libc.so.6']
   ])('retains Ubuntu floor and provider checks for %s', async (_label, filename, libc) => {

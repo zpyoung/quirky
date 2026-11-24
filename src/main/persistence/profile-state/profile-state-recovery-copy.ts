@@ -1,6 +1,6 @@
 import { constants, copyFileSync, linkSync, lstatSync, mkdtempSync, rmSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 // Keep process startup overhead off small recovery copies.
 const MINIMUM_CLONE_BYTES = 8 * 1024 * 1024
@@ -38,7 +38,7 @@ export function copyProfileStateRecoveryFiles(files: readonly RecoveryCopy[]): v
   if (clones.length === 0) {
     return
   }
-  const directory = mkdtempSync(join(dirname(clones[0].target), '.orca-recovery-clone-'))
+  const directory = mkdtempSync(join(dirname(clones[0].target), '.quirky-recovery-clone-'))
   const temporary = (source: string) =>
     join(directory, clones.length === 1 ? 'copy' : basename(source))
   let cloned = false

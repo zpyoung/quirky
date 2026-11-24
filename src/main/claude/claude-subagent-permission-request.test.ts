@@ -44,7 +44,7 @@ import {
 const SESSION = 'session-1'
 const FENCE = 7
 
-type Captured = { from: 'cli' | 'orca'; frame: Record<string, unknown> }
+type Captured = { from: 'cli' | 'quirky'; frame: Record<string, unknown> }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -62,7 +62,7 @@ function captured(name: string): Captured[] {
     throw new Error(`no captured scenario ${name}`)
   }
   return events.flatMap((event) =>
-    isRecord(event) && (event.from === 'cli' || event.from === 'orca') && isRecord(event.frame)
+    isRecord(event) && (event.from === 'cli' || event.from === 'quirky') && isRecord(event.frame)
       ? [{ from: event.from, frame: event.frame }]
       : []
   )
@@ -110,7 +110,7 @@ let root: string
 const hooks: { onEvent?: (event: ClaudeStructuredSessionEvent) => void } = {}
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-subagent-request-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-subagent-request-'))
 })
 
 afterEach(async () => {
@@ -361,7 +361,7 @@ function dismiss(run: Pipeline) {
   })
 }
 
-/** Replays a whole capture, answering through the app's own path where Orca answered, and returns
+/** Replays a whole capture, answering through the app's own path where Quirky answered, and returns
  *  the asking subagent's row after each event, labelled. */
 async function replay(name: string): Promise<Pipeline & { timeline: string[] }> {
   const run = await pipeline()
@@ -370,7 +370,7 @@ async function replay(name: string): Promise<Pipeline & { timeline: string[] }> 
     const response = isRecord(event.frame.response) ? event.frame.response : null
     const request = isRecord(event.frame.request) ? event.frame.request : null
     let label = text(event.frame.subtype) || text(event.frame.type)
-    if (event.from === 'orca' && event.frame.type === 'control_response' && response) {
+    if (event.from === 'quirky' && event.frame.type === 'control_response' && response) {
       const behavior = isRecord(response.response) ? text(response.response.behavior) : ''
       await answer(run, behavior === 'deny' ? 'deny' : 'allow')
       await run.settle()

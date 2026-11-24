@@ -1,12 +1,12 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcDispatcher } from '../dispatcher'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { MOBILE_PROJECT_SECTIONS_METHOD } from '../../../../shared/mobile-project-sections-contract'
 import { PROJECT_SECTION_PARITY_SERVED } from '../../../../shared/project-section-parity.test-fixture'
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the method reads no runtime member; the dispatcher only stamps the runtime id.
-const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as QuirkyRuntimeService
 
 // Why fresh modules: the snapshot is process state, so each test starts with nothing published.
 beforeEach(() => {

@@ -20,7 +20,7 @@ import {
 } from './mobile-new-tab-agent-options'
 
 const WORKSPACE_ON_OTHER_RUNTIME_MESSAGE =
-  'This workspace runs on another Orca server. Pair that server directly to see its agents.'
+  'This workspace runs on another Quirky server. Pair that server directly to see its agents.'
 
 /** The paired host does not own this workspace, so its agents are unverifiable from here. */
 export class MobileWorkspaceOnOtherRuntimeError extends Error {

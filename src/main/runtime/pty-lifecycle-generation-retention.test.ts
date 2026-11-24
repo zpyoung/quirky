@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 describe('per-PTY lifecycle generation retention (leak regression)', () => {
   type Internals = { ptyLifecycleGenerationById: Map<string, number> }
 
   it('retains no lifecycle generation after a spawn/exit cycle', () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime owns this private generation map; the leak regression inspects its size.
     const internals = runtime as unknown as Internals
     for (let index = 0; index < 50; index += 1) {
@@ -17,7 +17,7 @@ describe('per-PTY lifecycle generation retention (leak regression)', () => {
   })
 
   it('never hands a respawn a generation a pre-exit capture could still match', () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The runtime owns these private generation members; the regression inspects their values across lifecycle events.
     const internals = runtime as unknown as Internals & {
       getPtyLifecycleGeneration: (ptyId: string) => number

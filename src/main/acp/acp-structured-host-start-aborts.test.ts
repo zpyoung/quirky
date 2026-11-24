@@ -75,7 +75,7 @@ describe('a Grok start the host aborts', () => {
     await rig.adapter.closeAll()
   })
 
-  it('closes a chat whose start already returned as a close Orca asked for, not a crash', async () => {
+  it('closes a chat whose start already returned as a close Quirky asked for, not a crash', async () => {
     const { rig, host, store } = await openHostRig()
     const ended: unknown[] = []
     const handle = host.handleAdapterEvent.bind(host)

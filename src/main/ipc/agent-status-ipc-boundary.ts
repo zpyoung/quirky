@@ -5,10 +5,10 @@ import {
   type FleetEvidenceBinding
 } from '../../shared/orchestration-fleet-agent-status-evidence'
 import { isValidTerminalTabId } from '../../shared/terminal-tab-id'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 
 export type AgentStatusRuntimeEnrichment = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   | 'getAgentStatusTerminalHandleForPaneKey'
   | 'getAgentStatusOrchestrationContextForPaneKey'
   | 'getTerminalProcessIncarnation'

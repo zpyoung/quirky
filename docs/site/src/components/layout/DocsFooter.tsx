@@ -11,7 +11,7 @@ export function DocsFooter() {
           <div>
             <Link
               href="/docs"
-              aria-label="Orca docs"
+              aria-label="Quirky docs"
               className="mb-4 inline-flex items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <Image src="/docs/logo.svg" alt="" width={32} height={20} />
@@ -19,7 +19,7 @@ export function DocsFooter() {
                 aria-hidden="true"
                 className="font-sans text-xl font-bold tracking-tight text-foreground"
               >
-                ORCA
+                QUIRKY
               </span>
             </Link>
             <p className="text-muted-foreground max-w-sm text-sm">
@@ -66,7 +66,7 @@ export function DocsFooter() {
               </li>
               <li>
                 <a
-                  href="https://x.com/orca_build"
+                  href="https://x.com/quirky_build"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-md px-1 py-0.5 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"

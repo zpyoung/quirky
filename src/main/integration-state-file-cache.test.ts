@@ -16,7 +16,7 @@ import { createIntegrationStateFileCache } from './integration-state-file-cache'
 let dir = ''
 
 function tempFile(): string {
-  dir = mkdtempSync(join(tmpdir(), 'orca-state-file-cache-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-state-file-cache-'))
   return join(dir, 'state.json')
 }
 

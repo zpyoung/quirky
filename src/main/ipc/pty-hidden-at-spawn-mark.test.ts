@@ -3,7 +3,7 @@ import { existsSyncMock, accessSyncMock, spawnMock } from './pty-ipc-mock-regist
 import { posixOnlyIt, makeDeferred } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { isHiddenRendererPty } from './pty-hidden-delivery-gate'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { join } from 'node:path'
 // Why resolved rather than hardcoded: the wrapper tree is content-addressed.
@@ -31,7 +31,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -194,7 +194,7 @@ describe('registerPtyHandlers', () => {
     it('answers DA1 from the model on the first chunk of a hidden-at-spawn PTY', async () => {
       // End-to-end through a REAL runtime: spawn-marked → first chunk dropped → emulator parses query → replies; main answers, the renderer never saw the bytes.
       const daemon = installObservableDaemonTestProvider()
-      const runtime = new OrcaRuntimeService({
+      const runtime = new QuirkyRuntimeService({
         getRepo: () => undefined,
         getRepos: () => [],
         addRepo: () => {},
@@ -410,9 +410,9 @@ describe('registerPtyHandlers', () => {
         expect.objectContaining({
           cwd: '/tmp',
           env: expect.objectContaining({
-            ORCA_OPENCODE_CONFIG_DIR: '/tmp/orca-opencode-config',
+            QUIRKY_OPENCODE_CONFIG_DIR: '/tmp/quirky-opencode-config',
             // No `ready`: the fallback shell carries an overlay, not a startup command.
-            ORCA_SHELL_FEATURES: 'overlay,history,markers',
+            QUIRKY_SHELL_FEATURES: 'overlay,history,markers',
             ZDOTDIR: join(getShellReadyWrapperRoot(), 'zsh')
           })
         })

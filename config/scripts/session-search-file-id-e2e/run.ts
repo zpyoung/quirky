@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile, copyFile } from 'node:fs/promises'
 import { resolve, join, relative } from 'node:path'
 import { createHash } from 'node:crypto'
 import { build } from 'esbuild'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const root = process.cwd()
 const evidence = resolve('notes/search-ipc')
@@ -12,7 +12,7 @@ const wiring = '9845bef63a6'
 const mode = process.argv[2]
 assert.equal(process.platform, 'win32', 'This harness requires native Windows and NTFS')
 assert.ok(mode === 'red' || mode === 'green', 'Pass red or green')
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 const output = join(evidence, mode, String(Date.now()))
 await mkdir(output, { recursive: true })
 
@@ -53,7 +53,7 @@ export { resetAiVaultScannerServiceForTests, reconcileSessionSearchInService } f
 export { setAppEnvironment } from ${source('shared/app-environment.ts')};
 export { isolatedScanRoots } from ${source('main/ai-vault/session-scanner-test-fixtures.ts')};
 export { claudeLines } from ${source('main/ai-vault-search/session-search-indexer-test-fixture.ts')};
-export { runProcess } from '@orca/process-host';
+export { runProcess } from '@quirky/process-host';
 export { UnixSocketTransport } from ${source('main/runtime/rpc/unix-socket-transport.ts')};
 export { RpcDispatcher } from ${source('main/runtime/rpc/dispatcher.ts')};
 export { AI_VAULT_METHODS } from ${source('main/runtime/rpc/methods/ai-vault.ts')};
@@ -81,7 +81,7 @@ await build({
   format: 'cjs',
   bundle: true,
   packages: 'external',
-  define: { ORCA_FEATURE_WALL_ENABLED: 'true' },
+  define: { QUIRKY_FEATURE_WALL_ENABLED: 'true' },
   plugins: [
     {
       name: 'labelled-local-fixtures',
@@ -97,14 +97,14 @@ await build({
             contents = replaceOnce(
               contents,
               '  const [additionalCodexHomes, wslHomeDirs] = await Promise.all([',
-              '  return JSON.parse(process.env.ORCA_FILE_ID_ROOTS!);\n  const [additionalCodexHomes, wslHomeDirs] = await Promise.all(['
+              '  return JSON.parse(process.env.QUIRKY_FILE_ID_ROOTS!);\n  const [additionalCodexHomes, wslHomeDirs] = await Promise.all(['
             )
           }
           if (path.endsWith('/session-scanner-service-env.ts')) {
             contents = replaceOnce(
               contents,
               "  env.ELECTRON_RUN_AS_NODE = '1'",
-              "  env.ORCA_BACKGROUND_LAUNCH = '1'\n  env.ELECTRON_RUN_AS_NODE = '1'"
+              "  env.QUIRKY_BACKGROUND_LAUNCH = '1'\n  env.ELECTRON_RUN_AS_NODE = '1'"
             )
           }
           if (path.endsWith('/session-scanner-service-spawn.ts')) {
@@ -117,7 +117,7 @@ await build({
           if (path.endsWith('/session-scanner-service-entry.ts')) {
             contents = `import { registerTranscriptConsumer } from './session-transcript-consumers';
 registerTranscriptConsumer({beginRead: start => { console.error('[file-id-read]', JSON.stringify({mode:start.mode,path:start.candidate.file.path})); return null }});
-console.error('[file-id-child]', JSON.stringify({pid:process.pid,execPath:process.execPath,versions:process.versions,background:process.env.ORCA_BACKGROUND_LAUNCH}));\n${contents}`
+console.error('[file-id-child]', JSON.stringify({pid:process.pid,execPath:process.execPath,versions:process.versions,background:process.env.QUIRKY_BACKGROUND_LAUNCH}));\n${contents}`
           }
           if (mode === 'green' && path.endsWith('/session-search-store.ts')) {
             contents = replaceOnce(
@@ -179,9 +179,9 @@ for (const phase of ['lifecycle', 'restart']) {
     cwd: output,
     env: {
       ...process.env,
-      ORCA_BACKGROUND_LAUNCH: '1',
+      QUIRKY_BACKGROUND_LAUNCH: '1',
       ELECTRON_RUN_AS_NODE: undefined,
-      ORCA_FILE_ID_NODE: process.execPath
+      QUIRKY_FILE_ID_NODE: process.execPath
     },
     timeoutMs: 180_000
   })

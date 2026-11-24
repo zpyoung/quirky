@@ -13,13 +13,13 @@ import {
 import { adoptProvisionedRootSshCheckout } from './provisioned-root-ssh-adoption'
 
 const connectionId = 'runtime-ssh-test'
-const projectRoot = '/workspace/orca'
+const projectRoot = '/workspace/quirky'
 
 describe('adoptProvisionedRootSshCheckout', () => {
   let userDataPath: string
 
   beforeEach(() => {
-    userDataPath = mkdtempSync(join(tmpdir(), 'orca-provisioned-root-'))
+    userDataPath = mkdtempSync(join(tmpdir(), 'quirky-provisioned-root-'))
   })
 
   afterEach(() => {
@@ -104,7 +104,7 @@ function seedRuntime(userDataPath: string, root: string): void {
       checkoutMode: 'provisioned-root',
       connection: {
         type: 'ssh',
-        target: { label: 'Sandbox', host: '127.0.0.1', port: 22, username: 'orca' },
+        target: { label: 'Sandbox', host: '127.0.0.1', port: 22, username: 'quirky' },
         projectRoot: root
       }
     }
@@ -115,7 +115,7 @@ function repo(path: string): Repo {
   return {
     id: 'repo-1',
     path,
-    displayName: 'orca',
+    displayName: 'quirky',
     badgeColor: '#000000',
     addedAt: 1,
     connectionId,
@@ -153,7 +153,7 @@ function makeStore(): {
   }))
   return {
     store: {
-      getSettings: () => ({ nestWorkspaces: false, workspaceDir: '.orca/worktrees' }),
+      getSettings: () => ({ nestWorkspaces: false, workspaceDir: '.quirky/worktrees' }),
       setWorktreeMeta
     } as unknown as Store,
     setWorktreeMeta

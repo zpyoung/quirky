@@ -20,8 +20,8 @@ export function taskNotFoundRefusal(
     data: {
       ...detail,
       nextSteps: [
-        'Run orca orchestration task-list --json in the bound Run to find the intended Task id.',
-        'If the Task does not exist yet, create it with orca orchestration task-create --spec <text> --json.'
+        'Run quirky orchestration task-list --json in the bound Run to find the intended Task id.',
+        'If the Task does not exist yet, create it with quirky orchestration task-create --spec <text> --json.'
       ]
     }
   }
@@ -51,22 +51,22 @@ function taskNotStartableNextSteps(detail: TaskNotStartableDetail): string[] {
   if (detail.retryOf && detail.failureCount !== undefined) {
     return [
       `Do not retry this Task or start a replacement for it: it failed ${detail.failureCount} times. Report the failure to the user.`,
-      `Read what the last attempt showed with orca orchestration worker-read --dispatch ${detail.retryOf} --json. If its terminal is still open, it stays for the user until orca orchestration worker-release --dispatch ${detail.retryOf} --json.`
+      `Read what the last attempt showed with quirky orchestration worker-read --dispatch ${detail.retryOf} --json. If its terminal is still open, it stays for the user until quirky orchestration worker-release --dispatch ${detail.retryOf} --json.`
     ]
   }
   if (detail.retryOf) {
     return [
-      `--retry-of must name the latest settled Dispatch of a failed or blocked Task; check orca orchestration dispatch-show --task ${detail.taskId} --json and orca orchestration worker-show --dispatch ${detail.retryOf} --json.`
+      `--retry-of must name the latest settled Dispatch of a failed or blocked Task; check quirky orchestration dispatch-show --task ${detail.taskId} --json and quirky orchestration worker-show --dispatch ${detail.retryOf} --json.`
     ]
   }
   if (detail.unmetDependencies.length > 0) {
     return [
-      `Dependencies ${detail.unmetDependencies.join(', ')} are not completed. Wait for running ones with orca orchestration check --wait --json; retry or unblock failed ones before dispatching again.`
+      `Dependencies ${detail.unmetDependencies.join(', ')} are not completed. Wait for running ones with quirky orchestration check --wait --json; retry or unblock failed ones before dispatching again.`
     ]
   }
   if (detail.status === 'dispatched') {
     return [
-      `The Task already has an active Dispatch; inspect it with orca orchestration dispatch-show --task ${detail.taskId} --json.`
+      `The Task already has an active Dispatch; inspect it with quirky orchestration dispatch-show --task ${detail.taskId} --json.`
     ]
   }
   return [
@@ -75,7 +75,7 @@ function taskNotStartableNextSteps(detail: TaskNotStartableDetail): string[] {
 }
 
 // Why: the old five-name example read as an allowlist (#15125); derive from the field detection keys on so it cannot drift.
-// Not filtered by `disabledTuiAgents` — that gates Orca's launchers, not detection, so a hand-started disabled agent still injects.
+// Not filtered by `disabledTuiAgents` — that gates Quirky's launchers, not detection, so a hand-started disabled agent still injects.
 const RECOGNIZED_AGENT_PROCESS_NAMES = [
   ...new Set(Object.values(TUI_AGENT_CONFIG).map((config) => config.expectedProcess))
 ].sort()
@@ -83,7 +83,7 @@ const RECOGNIZED_AGENT_PROCESS_NAMES = [
 export function buildInjectRejectionMessage(terminal: string): string {
   return (
     `Cannot dispatch --inject to terminal ${terminal}: no recognized agent detected. ` +
-    `Orca detects these agent CLIs (${RECOGNIZED_AGENT_PROCESS_NAMES.join(', ')}). ` +
+    `Quirky detects these agent CLIs (${RECOGNIZED_AGENT_PROCESS_NAMES.join(', ')}). ` +
     'Start one in the terminal and let it finish launching, ' +
     'or dispatch without --inject and send the prompt manually.'
   )
@@ -103,7 +103,7 @@ export function injectRejectedRefusal(
       reason,
       nextSteps: [
         'Start a recognized agent CLI in that terminal and wait for it to finish launching, or pick a terminal that already runs one.',
-        'Alternatively dispatch without --inject and deliver the prompt with orca terminal send --terminal <handle> --text <prompt> --enter --json.'
+        'Alternatively dispatch without --inject and deliver the prompt with quirky terminal send --terminal <handle> --text <prompt> --enter --json.'
       ]
     }
   }

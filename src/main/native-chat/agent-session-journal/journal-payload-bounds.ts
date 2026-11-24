@@ -13,7 +13,7 @@ export const JOURNAL_RUNNING_PREVIEW_LIMITS: JournalPayloadLimits = {
   inlineHeadBytes: 16 * 1024
 }
 
-/** The raw provider frame a row keeps behind its disclosure: a record of traffic Orca cannot
+/** The raw provider frame a row keeps behind its disclosure: a record of traffic Quirky cannot
  *  model, not content the agent said, so it keeps a head. */
 export const PROVIDER_FRAME_PAYLOAD_LIMITS: JournalPayloadLimits = { inlineHeadBytes: 16 * 1024 }
 
@@ -25,7 +25,7 @@ export const JOURNAL_DISPATCH_REASON_LIMITS: JournalPayloadLimits = { inlineHead
  *  truncated body as complete. Kept in the text itself because block-level
  *  payloads (tool-result output) have nowhere else to carry the flag. */
 export function journalTruncationMarker(byteLength: number, digest: string): string {
-  return `\n[Orca: output truncated — ${byteLength} bytes total, digest ${digest.slice(0, 12)}]`
+  return `\n[Quirky: output truncated — ${byteLength} bytes total, digest ${digest.slice(0, 12)}]`
 }
 
 export function digestPayload(payload: string): string {

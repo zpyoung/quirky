@@ -32,7 +32,7 @@ export function buildWindowsHookPowerShellCommand(
       ? ''
       : `Write-Output ${quotePowerShellLiteral(options.fallbackStdout)}; `
   // Why the order: answer first (a gate event reads silence as deny), then the shared
-  // env guard, and only then own stdin — outside an Orca pane the caller may abandon the
+  // env guard, and only then own stdin — outside an Quirky pane the caller may abandon the
   // pipe, and ReadToEnd would strand the launcher there forever (#11549).
   return `${envPrefix}if (Test-Path -LiteralPath ${quoted} -PathType Leaf) { & ${quoted}; exit $LASTEXITCODE }; ${fallback}${WINDOWS_POWERSHELL_HOOK_ENVIRONMENT_GUARD}; [Console]::In.ReadToEnd() | Out-Null; exit 0`
 }

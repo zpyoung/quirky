@@ -8,7 +8,7 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -56,8 +56,8 @@ function session(worktreeId: string): WorkspaceSessionState {
 describe('removing a host’s workspace session partition', () => {
   it('drops only that host, keeps local, and stays dropped after a reload', async () => {
     const dataFile = join(
-      realpathSync(mkdtempSync(join(tmpdir(), 'orca-host-removal-'))),
-      'orca-data.json'
+      realpathSync(mkdtempSync(join(tmpdir(), 'quirky-host-removal-'))),
+      'quirky-data.json'
     )
     const store = createStore(dataFile)
     store.setWorkspaceSession(session('repo-1::/a'), REMOVED)

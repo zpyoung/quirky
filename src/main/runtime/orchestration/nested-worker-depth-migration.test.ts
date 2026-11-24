@@ -27,7 +27,7 @@ describe('nested worker depth migration (v30)', () => {
   })
 
   function createV29Database(): string {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-nested-depth-migration-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-nested-depth-migration-'))
     const dbPath = join(tempDir, 'orchestration.db')
     const fresh = new OrchestrationDb(dbPath)
     fresh.close()

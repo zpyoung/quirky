@@ -1,36 +1,36 @@
 /**
- * A structured agent session as a mail address: `orca_session_id:<id>`, the Orca-minted id every agent is
+ * A structured agent session as a mail address: `quirky_session_id:<id>`, the Quirky-minted id every agent is
  * told is its public address. Recipient routing and pointer delivery both read these rules off the
  * durable session record, so the two can never disagree about which sessions mail can reach.
  *
  * The address names a conversation, not one session of it: any session of a `/clear` lineage names
- * the lineage root's address (`canonicalOrcaSessionId`), and mail reaches the lineage's live session.
+ * the lineage root's address (`canonicalQuirkySessionId`), and mail reaches the lineage's live session.
  *
  * A released lease does not end a session: the host stops an idle chat's agent, and the send that
  * points its mail starts it again. For mail, a conversation has ended only when its chat was closed.
  */
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import { isOrcaSessionId, type OrcaSessionId } from '../../../shared/orca-session-address'
+import { isQuirkySessionId, type QuirkySessionId } from '../../../shared/quirky-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../shared/orchestration-session-caller-codes'
 import type { OrchestrationDb } from './db'
 import { OrchestrationError } from './orchestration-error'
-import { resolveOrcaSessionParty, type OrchestrationSessionParty } from './orchestration-party'
+import { resolveQuirkySessionParty, type OrchestrationSessionParty } from './orchestration-party'
 import {
   resolveLineageRunningSession,
   type AgentSessionRecordReader
 } from './structured-session-lineage'
 
-export type OrcaAgentSessionLookup =
+export type QuirkyAgentSessionLookup =
   | { kind: 'found'; record: AgentSessionRecord }
-  /** The id is a provider's own session id, which rotates on `/clear`; this names the Orca id. */
-  | { kind: 'provider-id'; orcaSessionId: string }
+  /** The id is a provider's own session id, which rotates on `/clear`; this names the Quirky id. */
+  | { kind: 'provider-id'; quirkySessionId: string }
   | { kind: 'unknown' }
 
-export function lookupOrcaAgentSession(
+export function lookupQuirkyAgentSession(
   store: AgentSessionRecordReader,
   id: string
-): OrcaAgentSessionLookup {
+): QuirkyAgentSessionLookup {
   const record = store.getRecord(id)
   if (record) {
     return { kind: 'found', record }
@@ -38,7 +38,7 @@ export function lookupOrcaAgentSession(
   const owner = store
     .listRecords()
     .find((candidate) => candidate.providerHandleChain.some(({ handle }) => handle.nativeId === id))
-  return owner ? { kind: 'provider-id', orcaSessionId: owner.sessionId } : { kind: 'unknown' }
+  return owner ? { kind: 'provider-id', quirkySessionId: owner.sessionId } : { kind: 'unknown' }
 }
 
 export type StructuredSessionMailReach =
@@ -63,7 +63,7 @@ export function structuredSessionMailReach(
     return { kind: 'other-host' }
   }
   const live = running.record
-  if (isOrcaSessionId(live.sessionId) && !addressableSessionParty(live.sessionId, db)) {
+  if (isQuirkySessionId(live.sessionId) && !addressableSessionParty(live.sessionId, db)) {
     // Why: it can no longer act (the caller resolver refuses it), so mail to it could never be read.
     return { kind: 'ended', reason: 'worker-identity-lost' }
   }
@@ -80,11 +80,11 @@ export function structuredSessionMailReach(
  * resolver refuses it in every role, so it can never read mail and none is owed to it.
  */
 export function addressableSessionParty(
-  sessionId: OrcaSessionId,
+  sessionId: QuirkySessionId,
   db: OrchestrationDb | null | undefined
 ): OrchestrationSessionParty | null {
   try {
-    return resolveOrcaSessionParty(sessionId, db)
+    return resolveQuirkySessionParty(sessionId, db)
   } catch (error) {
     if (error instanceof OrchestrationError && error.code === CODES.notLive) {
       return null

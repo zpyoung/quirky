@@ -13,7 +13,10 @@ import { getReviewSteps, type ReviewStepId } from '../../../../shared/review-ste
 import type { FeatureWallOpenSource } from '../../../../shared/add-repo-source'
 import type { FeatureWallTourDepthSummary } from '../../../../shared/feature-wall-tour-depth'
 import { useAppStore } from '@/store'
-import { ORCA_CLI_SKILL_NAME, ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-install-commands'
+import {
+  QUIRKY_CLI_SKILL_NAME,
+  ORCHESTRATION_SKILL_NAME
+} from '@/lib/agent-feature-install-commands'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkill
@@ -52,7 +55,7 @@ export function FeatureWallTourSurface({
   className,
   panelClassName,
   doneLabel = 'Done',
-  footerText = 'Reopen any time from Help > Explore Orca.',
+  footerText = 'Reopen any time from Help > Explore Quirky.',
   enableKeyboardShortcut = true,
   compactRail = false,
   detachedFooter = false,
@@ -112,7 +115,7 @@ export function FeatureWallTourSurface({
     discoveryTarget: activeSkillRuntime.discoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
-  const browserUseSkill = useInstalledAgentSkill(ORCA_CLI_SKILL_NAME, {
+  const browserUseSkill = useInstalledAgentSkill(QUIRKY_CLI_SKILL_NAME, {
     enabled: isOpen,
     discoveryTarget: activeSkillRuntime.discoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS

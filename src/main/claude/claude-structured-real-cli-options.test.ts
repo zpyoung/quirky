@@ -70,7 +70,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI options', () =
     async () => {
       const providerSessionId = randomUUID()
       const { claudeConfigDir, env } = realClaudeLaunchHome()
-      const cwd = await mkdtemp(join(tmpdir(), 'orca-real-options-'))
+      const cwd = await mkdtemp(join(tmpdir(), 'quirky-real-options-'))
       const events: ClaudeStructuredSessionEvent[] = []
       const record = journal()
       const persisted: { leafUuid: string | null } = { leafUuid: null }
@@ -196,7 +196,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI options', () =
           }
         })
 
-        // The turn end asks get_context_usage; an answer Orca cannot read blanks the meter silently.
+        // The turn end asks get_context_usage; an answer Quirky cannot read blanks the meter silently.
         expect(await until(() => contextReport() !== undefined, 10_000)).toBe(true)
         const report = contextReport()
         if (!report) {
@@ -207,7 +207,7 @@ describe.skipIf(!realClaudeAvailable)('Claude structured real CLI options', () =
         expect(report.model).toMatch(/\S/u)
         expect(baseModelId(report.model)).toBe(baseModelId(pick.resolvedModel))
 
-        // Orca never sends set_permission_mode: it retires the child and resumes it under the new
+        // Quirky never sends set_permission_mode: it retires the child and resumes it under the new
         // flag with the saved picks, so the CLI must read its mode at launch.
         await adapter.closeSession(SESSION_ID)
         const resumedTurn = events.length

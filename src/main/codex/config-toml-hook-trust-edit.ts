@@ -14,13 +14,13 @@ import {
   type HookTrustBlockRange
 } from './config-toml-hook-trust-blocks'
 import { CODEX_HOOK_TRUST_KEY, escapeTomlBasicString } from './config-toml-syntax'
-import { repairOrcaDuplicateTrustTables } from './config-toml-project-duplicate-repair'
+import { repairQuirkyDuplicateTrustTables } from './config-toml-project-duplicate-repair'
 
 export function upsertHookTrustContent(
   existingContent: string,
   entries: readonly CodexTrustEntry[]
 ): string {
-  const existing = repairOrcaDuplicateTrustTables(stripLeadingBom(existingContent))
+  const existing = repairQuirkyDuplicateTrustTables(stripLeadingBom(existingContent))
   let updated = entries.some((entry) =>
     usesWindowsCodexPathSeparators(normalizeCodexTrustSourcePath(entry.sourcePath))
   )
@@ -178,7 +178,7 @@ function formatHookStateTableKey(key: string): string {
   return `"${escapeTomlBasicString(key)}"`
 }
 
-/** Every spelling Orca writes `key` under: both separators for a Windows path, else the key itself. */
+/** Every spelling Quirky writes `key` under: both separators for a Windows path, else the key itself. */
 export function getTrustKeyWriteVariants(key: string): string[] {
   const parsed = parseCodexTrustKey(key)
   if (!parsed || !usesWindowsCodexPathSeparators(parsed.sourcePath)) {

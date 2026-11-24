@@ -19,7 +19,7 @@ import { documentFolderAccess } from '@/lib/local-file-access'
 let moveOperationCounter = 0
 
 /**
- * Coordinates an Orca-owned move as one editor transaction: quiesce affected
+ * Coordinates an Quirky-owned move as one editor transaction: quiesce affected
  * saves, register in-flight source suppression, run the on-disk rename, then
  * atomically rekey the open sessions in place (installing the content-verify
  * gate) and re-verify any destination echo that was latched before the rekey.

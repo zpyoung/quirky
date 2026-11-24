@@ -24,7 +24,7 @@ describe('ACP agents in the runtime registrations', () => {
         contextUsage: true,
         imagePrompts: false,
         steering: 'queue',
-        approvalEnforcement: 'orca'
+        approvalEnforcement: 'quirky'
       }
     })
   })
@@ -35,7 +35,7 @@ describe('ACP agents in the runtime registrations', () => {
       agent: 'opencode',
       handleTransport: 'acp',
       accountLocatorKind: 'opencode',
-      capabilities: { imagePrompts: true, steering: 'queue', approvalEnforcement: 'orca' }
+      capabilities: { imagePrompts: true, steering: 'queue', approvalEnforcement: 'quirky' }
     })
     expect(definition?.accountHomeVariable).toBeUndefined()
   })
@@ -53,7 +53,7 @@ describe('ACP agents in the runtime registrations', () => {
       agent: 'omp',
       handleTransport: 'acp',
       accountHomeVariable: 'PI_CODING_AGENT_DIR',
-      capabilities: { imagePrompts: false, steering: 'queue', approvalEnforcement: 'orca' }
+      capabilities: { imagePrompts: false, steering: 'queue', approvalEnforcement: 'quirky' }
     })
     expect(registration?.launchCheck).toBeDefined()
   })
@@ -86,7 +86,7 @@ describe('ACP agents in the runtime registrations', () => {
           prepareCodexLaunchHome: unused,
           readCodexLaunchHome: unused,
           workspaceTrustSettings: unused,
-          stateDirectory: '/orca-data'
+          stateDirectory: '/quirky-data'
         }
       )
     await expect(resolve({ PI_CODING_AGENT_DIR: '/data/omp-agent' })).resolves.toEqual({
@@ -116,7 +116,7 @@ describe('ACP agents in the runtime registrations', () => {
       prepareCodexLaunchHome: unused,
       readCodexLaunchHome: unused,
       workspaceTrustSettings: unused,
-      stateDirectory: '/orca-data'
+      stateDirectory: '/quirky-data'
     }
     const resolve = async (launchEnv: NodeJS.ProcessEnv) =>
       resolveAccountHome(

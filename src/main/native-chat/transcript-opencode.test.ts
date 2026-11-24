@@ -211,7 +211,7 @@ describe('readOpenCodeNativeChatTranscriptTail', () => {
 
 describe('resolveOpenCodeTranscriptDbPath', () => {
   function createDataHome(): string {
-    const dataHome = mkdtempSync(join(tmpdir(), 'orca-opencode-discover-'))
+    const dataHome = mkdtempSync(join(tmpdir(), 'quirky-opencode-discover-'))
     tempDirs.push(dataHome)
     return dataHome
   }

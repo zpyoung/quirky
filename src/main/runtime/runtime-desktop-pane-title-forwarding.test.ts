@@ -1,4 +1,4 @@
-import './orca-runtime-test-lifecycle.spec'
+import './quirky-runtime-test-lifecycle.spec'
 import { describe, expect, it, vi } from 'vitest'
 import {
   HEADLESS_LEAF_ID,
@@ -6,9 +6,9 @@ import {
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} from './orca-runtime-test-fixtures.spec'
-import { electronMocks, OrcaRuntimeService } from './orca-runtime-test-mocks.spec'
-import { createMobileCreateTestNotifier } from './orca-runtime-test-scenario-builders.spec'
+} from './quirky-runtime-test-fixtures.spec'
+import { electronMocks, QuirkyRuntimeService } from './quirky-runtime-test-mocks.spec'
+import { createMobileCreateTestNotifier } from './quirky-runtime-test-scenario-builders.spec'
 import type { TerminalPaneLayoutNode } from '../../shared/terminal-tab-types'
 
 const SPLIT_ROOT: TerminalPaneLayoutNode = {
@@ -27,7 +27,7 @@ function desktopHostRuntime() {
     makeWorkspaceSessionWithHeadlessTerminal()
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements every method these paths call; it is the shared runtime spec fixture.
-  const runtime = new OrcaRuntimeService(runtimeStore as never)
+  const runtime = new QuirkyRuntimeService(runtimeStore as never)
   runtime.attachWindow(1)
   const setPaneTitle = vi.fn(() => true)
   const renameTerminal = vi.fn()

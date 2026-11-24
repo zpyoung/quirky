@@ -9,7 +9,7 @@ describe('Heimdall kernel service reporting', () => {
     const { service, database, budgetClock, orchestration, leaseStore } = await harness()
     leaseStore.describeLocation = () => ({
       executionHostId: 'local',
-      leaseDirectory: '/workspace/review-1/.orca/heimdall/lease',
+      leaseDirectory: '/workspace/review-1/.quirky/heimdall/lease',
       pathSeparator: '/'
     })
     vi.mocked(orchestration.listWorkers).mockResolvedValue([
@@ -30,7 +30,7 @@ describe('Heimdall kernel service reporting', () => {
             {
               role: 'kind-database',
               host: 'kernel',
-              path: '/var/orca/kind.db',
+              path: '/var/quirky/kind.db',
               status: 'resolved'
             }
           ]
@@ -82,7 +82,7 @@ describe('Heimdall kernel service reporting', () => {
         {
           role: 'kind-database',
           host: 'kernel',
-          path: '/var/orca/kind.db',
+          path: '/var/quirky/kind.db',
           status: 'resolved'
         },
         {
@@ -94,7 +94,7 @@ describe('Heimdall kernel service reporting', () => {
         {
           role: 'lease-holder',
           host: 'local',
-          path: '/workspace/review-1/.orca/heimdall/lease/epoch-1/holder.json',
+          path: '/workspace/review-1/.quirky/heimdall/lease/epoch-1/holder.json',
           status: 'resolved',
           detail: 'Last observed lease epoch; current ownership not verified'
         }

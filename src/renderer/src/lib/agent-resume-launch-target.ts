@@ -36,7 +36,7 @@ function isRemoteResumeTarget(args: AgentResumeLaunchTargetArgs): boolean {
 }
 
 /**
- * The OS an SSH execution host reported, else null. Why SSH only: a paired Orca server applies its
+ * The OS an SSH execution host reported, else null. Why SSH only: a paired Quirky server applies its
  * own Windows shell setting, which this client cannot see, so its resumes keep the old quoting.
  */
 export function resolveSshHostReportedPlatform(

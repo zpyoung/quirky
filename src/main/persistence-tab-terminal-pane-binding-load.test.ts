@@ -15,7 +15,7 @@ import type { WorkspaceSessionState } from '../shared/workspace-session-state-ty
 
 const layoutOwner = vi.hoisted(() => ({ isMain: true }))
 vi.mock('../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
@@ -58,7 +58,7 @@ function loadStored(session = tabLevelOnly()): WorkspaceSessionState {
 
 describe("main's Store load binds a tab's own terminal to its unbound pane", () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-tab-terminal-binding-load-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-tab-terminal-binding-load-'))
   })
 
   afterEach(async () => {

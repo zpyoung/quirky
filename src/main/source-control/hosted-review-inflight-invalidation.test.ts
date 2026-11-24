@@ -117,7 +117,7 @@ describe('hosted review in-flight invalidation', () => {
     invalidateHostedReviewBranchCache(identity.repoPath, identity.executionHostId)
     // Nothing replaced it, so only the scope generation stands between this
     // pre-invalidation "no review" and the key it no longer owns. Adopting it
-    // would read as fresh and short-circuit the lookup for the review Orca just
+    // would read as fresh and short-circuit the lookup for the review Quirky just
     // opened.
     oldResponse.resolve(null)
     expect(await admitted).toBeNull()

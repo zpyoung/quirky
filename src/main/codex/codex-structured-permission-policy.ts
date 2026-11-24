@@ -24,7 +24,7 @@ const FULL_ACCESS_POLICY = {
  * Ask: approvals on, writes confined to the workspace.
  *
  * Why state it rather than omit it: app-server resolves an omitted field through the `config.toml`
- * it was started with, which Orca mirrors from the user's own. Measured against codex 0.153.4 —
+ * it was started with, which Quirky mirrors from the user's own. Measured against codex 0.153.4 —
  * with `approval_policy = "never"` in that file, a fresh thread that omits it comes up `never` +
  * `dangerFullAccess` and never prompts, and a resume inherits the policy the thread last ran with.
  *

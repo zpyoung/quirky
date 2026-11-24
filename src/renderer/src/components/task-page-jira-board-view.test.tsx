@@ -212,7 +212,7 @@ describe('Jira board moves', () => {
     ])
     mount()
     await move()
-    await screen.findByText('Jira requires fields Orca cannot collect yet: Release approval.')
+    await screen.findByText('Jira requires fields Quirky cannot collect yet: Release approval.')
     expect(screen.getByRole('button', { name: 'Open in Jira' })).toBeTruthy()
     expect(mocks.apply).not.toHaveBeenCalled()
     expect(mocks.patch).not.toHaveBeenCalled()

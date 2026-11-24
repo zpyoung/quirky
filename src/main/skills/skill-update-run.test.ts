@@ -7,7 +7,7 @@ import {
 } from '../../shared/windows-batch-spawn'
 import { CANCEL_RELEASE_TIMEOUT_MS, SkillUpdateRunner } from './skill-update-run'
 import { SKILLS_CLI_VERSION } from '../../shared/agent-feature-install-commands'
-import { ORCA_SKILLS_REPOSITORY_URL } from '../../shared/fork-skills-repository/skills-repository-url'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from '../../shared/fork-skills-repository/skills-repository-url'
 
 class FakeChild extends EventEmitter {
   stdout = new EventEmitter()
@@ -53,7 +53,7 @@ describe('SkillUpdateRunner', () => {
   it('reinstalls the sorted names pinned to this release, for the detected agents', () => {
     const { runner, spawnCalls } = makeRunner()
 
-    expect(runner.start(['orchestration', 'orca-cli'])).toEqual({ started: true })
+    expect(runner.start(['orchestration', 'quirky-cli'])).toEqual({ started: true })
     expect(spawnCalls[0].command).toBe('/usr/local/bin/npx')
     // `npx --yes` skips the install prompt; `skills -y` takes the CLI's own
     // non-interactive branch. Dropping either can wedge the run.
@@ -61,9 +61,9 @@ describe('SkillUpdateRunner', () => {
       '--yes',
       `skills@${SKILLS_CLI_VERSION}`,
       'add',
-      `${ORCA_SKILLS_REPOSITORY_URL}/tree/0123456789abcdef0123456789abcdef01234567`,
+      `${QUIRKY_SKILLS_REPOSITORY_URL}/tree/0123456789abcdef0123456789abcdef01234567`,
       '--skill',
-      'orca-cli',
+      'quirky-cli',
       '--skill',
       'orchestration',
       '--global',
@@ -77,7 +77,7 @@ describe('SkillUpdateRunner', () => {
 
   it('ignores stdin so the CLI sees a non-TTY', () => {
     const { runner, spawnCalls } = makeRunner()
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
 
     expect(spawnCalls[0].options.stdio).toEqual(['ignore', 'pipe', 'pipe'])
   })
@@ -86,7 +86,7 @@ describe('SkillUpdateRunner', () => {
     vi.stubEnv('LC_ALL', 'ko_KR.UTF-8')
     try {
       const { runner, spawnCalls } = makeRunner()
-      runner.start(['orca-cli'])
+      runner.start(['quirky-cli'])
 
       expect(spawnCalls[0].options.env).toMatchObject({ LC_ALL: 'C' })
     } finally {
@@ -97,7 +97,7 @@ describe('SkillUpdateRunner', () => {
   it('rejects names that could carry shell syntax', () => {
     const { runner, spawnCalls } = makeRunner()
 
-    expect(runner.start(['orca-cli; rm -rf /'])).toEqual({
+    expect(runner.start(['quirky-cli; rm -rf /'])).toEqual({
       started: false,
       reason: 'invalid-names'
     })
@@ -106,27 +106,27 @@ describe('SkillUpdateRunner', () => {
 
   it('refuses a second concurrent run', () => {
     const { runner } = makeRunner()
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
 
     expect(runner.start(['orchestration'])).toEqual({ started: false, reason: 'already-running' })
   })
 
   it('strips ANSI colour and carriage returns from captured output', async () => {
     const { runner, child } = makeRunner({ rescanOutdatedNames: async () => [] })
-    runner.start(['orca-cli'])
-    child.stdout.emit('data', Buffer.from('\x1b[36mChecking\x1b[0m\rUpdating orca-cli…'))
+    runner.start(['quirky-cli'])
+    child.stdout.emit('data', Buffer.from('\x1b[36mChecking\x1b[0m\rUpdating quirky-cli…'))
     child.emit('close', 0)
     await flush()
 
     const run = runner.getState()
     expect(run.state).toBe('success')
-    expect(run.state === 'success' && run.output).toBe('Checking\nUpdating orca-cli…')
+    expect(run.state === 'success' && run.output).toBe('Checking\nUpdating quirky-cli…')
   })
 
   it('treats a clean re-scan as success even though the exit code is non-zero', async () => {
     // A peer skill outside our request can fail the process; what we asked for landed.
     const { runner, child } = makeRunner({ rescanOutdatedNames: async () => [] })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     child.emit('close', 1)
     await flush()
 
@@ -137,7 +137,7 @@ describe('SkillUpdateRunner', () => {
     const { runner, child } = makeRunner({
       rescanOutdatedNames: async () => ['orchestration']
     })
-    runner.start(['orca-cli', 'orchestration'])
+    runner.start(['quirky-cli', 'orchestration'])
     child.emit('close', 1)
     await flush()
 
@@ -152,22 +152,22 @@ describe('SkillUpdateRunner', () => {
         throw new Error('scan blew up')
       }
     })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     child.emit('error', new Error('spawn ENOENT'))
     await flush()
 
     const run = runner.getState()
     expect(run.state).toBe('error')
-    expect(run.state === 'error' && run.failedNames).toEqual(['orca-cli'])
+    expect(run.state === 'error' && run.failedNames).toEqual(['quirky-cli'])
     expect(run.state === 'error' && run.message).toBe('spawn ENOENT')
   })
 
   it('keeps the spawn error when the failed child also emits close', async () => {
     // A spawn failure emits `error` *then* `close`. Without a latch the second
     // settle overwrites `spawn ENOENT` with a useless "exited with code null".
-    const rescan = vi.fn(async () => ['orca-cli'])
+    const rescan = vi.fn(async () => ['quirky-cli'])
     const { runner, child } = makeRunner({ rescanOutdatedNames: rescan })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     child.emit('error', new Error('spawn ENOENT'))
     child.emit('close', null)
     await flush()
@@ -191,7 +191,7 @@ describe('SkillUpdateRunner', () => {
           }
         })
     })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     runner.cancel()
     await flush()
 
@@ -210,7 +210,7 @@ describe('SkillUpdateRunner', () => {
       // Stop is already spent by this point, so a sweep that hangs would leave
       // the run wedged in `running` with no way out.
       const { runner } = makeRunner({ killTree: () => new Promise<void>(() => {}) })
-      runner.start(['orca-cli'])
+      runner.start(['quirky-cli'])
       runner.cancel()
       const stopping = runner.getState()
       expect(stopping.state).toBe('running')
@@ -244,7 +244,7 @@ describe('SkillUpdateRunner', () => {
         return child as never
       }) as never
     })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     runner.cancel()
     await flush()
     runner.start(['orchestration'])
@@ -262,7 +262,7 @@ describe('SkillUpdateRunner', () => {
 
   it('returns to idle on cancel and stops reporting output', async () => {
     const { runner, child, states } = makeRunner({ rescanOutdatedNames: async () => [] })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     runner.cancel()
     child.stdout.emit('data', Buffer.from('late output'))
     await flush()
@@ -280,7 +280,7 @@ describe('SkillUpdateRunner', () => {
           releaseRescan = () => resolve([])
         })
     })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     child.emit('close', 0)
     await flush()
     // The re-scan re-hashes every package, so a cancel lands well inside it.
@@ -297,7 +297,7 @@ describe('SkillUpdateRunner', () => {
     })
     const { runner, child } = makeRunner({ killTree })
     child.pid = 4242
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     runner.cancel()
     await flush()
 
@@ -315,12 +315,12 @@ describe('SkillUpdateRunner', () => {
       }
     })
 
-    const result = runner.start(['orca-cli'])
+    const result = runner.start(['quirky-cli'])
 
     expect(result.started).toBe(false)
     const run = runner.getState()
     expect(run.state).toBe('error')
-    expect(run.state === 'error' && run.failedNames).toEqual(['orca-cli'])
+    expect(run.state === 'error' && run.failedNames).toEqual(['quirky-cli'])
     expect(states.at(-1)?.state).toBe('error')
     // Why: the message used to name a character set the guard no longer matches.
     expect(run.state === 'error' && run.message).toContain(WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL)
@@ -335,7 +335,7 @@ describe('SkillUpdateRunner', () => {
         buildSpawnArgs: getSpawnArgsForWindows
       })
 
-      expect(runner.start(['orca-cli']).started).toBe(true)
+      expect(runner.start(['quirky-cli']).started).toBe(true)
       expect(spawnCalls[0]?.args.slice(0, 3)).toEqual(['/d', '/c', npx])
     } finally {
       platform.mockRestore()
@@ -344,7 +344,7 @@ describe('SkillUpdateRunner', () => {
 
   it('coalesces progress frames into one push instead of one per chunk', async () => {
     const { runner, child, states } = makeRunner({ rescanOutdatedNames: async () => [] })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     const pushesAfterStart = states.length
     for (let frame = 0; frame < 25; frame += 1) {
       child.stdout.emit('data', Buffer.from(`\rfetching ${frame}%`))
@@ -362,7 +362,7 @@ describe('SkillUpdateRunner', () => {
 
   it('acknowledge clears a settled run but leaves a live one alone', async () => {
     const { runner, child } = makeRunner({ rescanOutdatedNames: async () => [] })
-    runner.start(['orca-cli'])
+    runner.start(['quirky-cli'])
     runner.acknowledge()
     expect(runner.getState().state).toBe('running')
 

@@ -104,7 +104,7 @@ export function deliverCodexServerRequest(
     session.connection.respondWithError(
       request.id,
       -32001,
-      `Orca could not durably record ${request.method} prompt (${admission.reason})`
+      `Quirky could not durably record ${request.method} prompt (${admission.reason})`
     )
   }
   return admission

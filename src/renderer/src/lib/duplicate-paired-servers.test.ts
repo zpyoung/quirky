@@ -35,7 +35,7 @@ describe('a server paired twice', () => {
       'Studio relay'
     ])
     expect(ambiguousWorkspaceOwnerMessage(state, WORKSPACE)).toBe(
-      'Studio and Studio relay are the same server paired twice. Remove one in Settings > Remote Orca Servers.'
+      'Studio and Studio relay are the same server paired twice. Remove one in Settings > Remote Quirky Servers.'
     )
   })
 

@@ -217,6 +217,6 @@ export function githubSourceContext(
     hostId,
     projectHostSetupId: 'setup-1',
     repoId,
-    providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+    providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
   }
 }

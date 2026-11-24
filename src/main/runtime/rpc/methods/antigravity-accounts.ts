@@ -1,6 +1,6 @@
 import { defineMethod, defineStreamingMethod, type RpcContext } from '../core'
 import { rpcCallerOperationKey } from '../rpc-caller-identity'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import {
   AntigravityAccountMutationParams,
   AntigravityAccountTargetParams,
@@ -19,7 +19,7 @@ import { bindStructuredAgentSessionStream } from './structured-agent-session-sta
 import { structuredAgentHostLaunchSources } from '../../structured-agent-launch-support'
 import { stopStructuredAgentChats } from '../../structured-agent-chat-stop'
 
-const chatSignInHost = (runtime: OrcaRuntimeService) => ({
+const chatSignInHost = (runtime: QuirkyRuntimeService) => ({
   launchSources: () => structuredAgentHostLaunchSources('antigravity', runtime),
   stopLiveChats: () => stopStructuredAgentChats('antigravity', 'Antigravity')
 })

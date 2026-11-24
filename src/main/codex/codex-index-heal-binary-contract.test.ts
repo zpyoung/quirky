@@ -11,32 +11,32 @@ import { runCodexAppServerSession, type CodexAppServerRpc } from './codex-app-se
 import { findNewestCodexStateDbPath, readCodexStateDbBackfillStatus } from './codex-state-db'
 
 // Why this file exists: every other index-heal test drives a stub app-server and
-// asserts "healed" as "the `thread/read` call did not error". That pins Orca's half
-// of the contract and nothing about Codex's. The behavior Orca actually depends on
+// asserts "healed" as "the `thread/read` call did not error". That pins Quirky's half
+// of the contract and nothing about Codex's. The behavior Quirky actually depends on
 // lives in the Codex binary — a read of an unindexed rollout performs a read-repair
 // that inserts the `threads` row. If Codex ever dropped that repair, the stub-driven
 // tests would all stay green while the subsystem went silently inert. This is the
 // real-binary backstop, built to the same shape as the Git binary compatibility
 // contract in src/shared/git-binary-compatibility.test.ts.
 //
-// Keep it narrow. It pins the arms that ablation established Orca relies on,
+// Keep it narrow. It pins the arms that ablation established Quirky relies on,
 // and deliberately asserts nothing else about the app-server, so an unrelated Codex
 // release does not redden it into being disabled.
 
 const execFileAsync = promisify(execFile)
-const binary = process.env.ORCA_CODEX_CONTRACT_BINARY
-const expectedVersion = process.env.ORCA_CODEX_CONTRACT_VERSION
+const binary = process.env.QUIRKY_CODEX_CONTRACT_BINARY
+const expectedVersion = process.env.QUIRKY_CODEX_CONTRACT_VERSION
 const describeCodexContract = binary ? describe : describe.skip
 
 // Why this guard: skipping is the right local-dev default, but a CI job whose whole
 // purpose is the real binary must not pass by reporting zero assertions. The job sets
-// ORCA_CODEX_CONTRACT_REQUIRED=1, which turns a missing binary into a red test.
-describe.runIf(process.env.ORCA_CODEX_CONTRACT_REQUIRED === '1' && !binary)(
+// QUIRKY_CODEX_CONTRACT_REQUIRED=1, which turns a missing binary into a red test.
+describe.runIf(process.env.QUIRKY_CODEX_CONTRACT_REQUIRED === '1' && !binary)(
   'codex binary index-heal contract prerequisites',
   () => {
     it('was given a Codex binary to run against', () => {
       expect.fail(
-        'ORCA_CODEX_CONTRACT_REQUIRED=1 but ORCA_CODEX_CONTRACT_BINARY is unset, so the contract would have silently skipped'
+        'QUIRKY_CODEX_CONTRACT_REQUIRED=1 but QUIRKY_CODEX_CONTRACT_BINARY is unset, so the contract would have silently skipped'
       )
     })
   }
@@ -74,13 +74,13 @@ describeCodexContract(
     })
 
     /**
-     * Builds a disposable CODEX_HOME in the state Orca actually heals from: Codex's
+     * Builds a disposable CODEX_HOME in the state Quirky actually heals from: Codex's
      * own one-shot sqlite backfill has already run and stamped itself `complete`, so
      * rollouts that appear afterwards are exactly the ones it will never index on its
      * own. Never points at the user's real ~/.codex.
      */
     async function createBackfilledCodexHome(): Promise<string> {
-      const home = mkdtempSync(join(tmpdir(), 'orca-codex-heal-contract-'))
+      const home = mkdtempSync(join(tmpdir(), 'quirky-codex-heal-contract-'))
       disposableHomes.push(home)
       mkdirSync(join(home, 'sessions'), { recursive: true })
       // An app-server session over an empty sessions tree is what stamps the backfill complete.

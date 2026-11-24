@@ -44,7 +44,7 @@ let root: string
 let journal: AgentSessionJournal
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-live-turn-window-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-live-turn-window-'))
   journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
 })
 

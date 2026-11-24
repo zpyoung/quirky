@@ -28,7 +28,7 @@ export function setRealHomeRoutableForTest(enabled: boolean): void {
   if (enabled) {
     delete process.env.CODEX_HOME
   } else {
-    process.env.CODEX_HOME = join(tmpdir(), 'orca-test-custom-codex-home')
+    process.env.CODEX_HOME = join(tmpdir(), 'quirky-test-custom-codex-home')
   }
 }
 
@@ -100,7 +100,7 @@ export function createStore(settings: GlobalSettings) {
 export function createManagedAuth(rootDir: string, accountId: string, auth: string): string {
   const managedHomePath = join(rootDir, 'codex-accounts', accountId, 'home')
   mkdirSync(managedHomePath, { recursive: true })
-  writeFileSync(join(managedHomePath, '.orca-managed-home'), `${accountId}\n`, 'utf-8')
+  writeFileSync(join(managedHomePath, '.quirky-managed-home'), `${accountId}\n`, 'utf-8')
   writeFileSync(join(managedHomePath, 'auth.json'), auth, 'utf-8')
   return managedHomePath
 }
@@ -167,8 +167,8 @@ export function setupRuntimeHomeTest(): void {
   vi.clearAllMocks()
   testState.previousCodexHome = process.env.CODEX_HOME
   setRealHomeRoutableForTest(true)
-  testState.userDataDir = mkdtempSync(join(tmpdir(), 'orca-runtime-home-'))
-  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'orca-codex-home-'))
+  testState.userDataDir = mkdtempSync(join(tmpdir(), 'quirky-runtime-home-'))
+  testState.fakeHomeDir = mkdtempSync(join(tmpdir(), 'quirky-codex-home-'))
   // Why: Windows routing reads PowerShell profiles and Git Bash rc files; keep
   // them, and the registry-named Documents folder, inside the fake home.
   vi.doMock('../windows-native-registry', () => ({
@@ -179,8 +179,8 @@ export function setupRuntimeHomeTest(): void {
   vi.stubEnv('USERPROFILE', testState.fakeHomeDir)
   vi.stubEnv('SystemRoot', join(testState.fakeHomeDir, 'Windows'))
   vi.stubEnv('ProgramFiles', join(testState.fakeHomeDir, 'Program Files'))
-  testState.previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = testState.userDataDir
+  testState.previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = testState.userDataDir
   mkdirSync(getSystemCodexHomePath(), { recursive: true })
   mkdirSync(getRuntimeCodexHomePath(), { recursive: true })
   writePaneRegistry({
@@ -197,9 +197,9 @@ export function teardownRuntimeHomeTest(): void {
   rmSync(testState.userDataDir, { recursive: true, force: true })
   rmSync(testState.fakeHomeDir, { recursive: true, force: true })
   if (testState.previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = testState.previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = testState.previousUserDataPath
   }
   if (testState.previousCodexHome === undefined) {
     delete process.env.CODEX_HOME

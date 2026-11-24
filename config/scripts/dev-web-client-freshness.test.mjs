@@ -28,7 +28,7 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-dev-web-freshness-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-dev-web-freshness-'))
   roots.push(root)
   const files = [
     'vite.web.config.ts',
@@ -165,7 +165,7 @@ it.each(['missing', 'corrupt', 'version', 'output'])(
   (state) => {
     const root = fixture()
     expect(isDevWebClientFresh(root)).toBe(true)
-    const marker = join(root, 'out/web/.orca-dev-web-inputs.json')
+    const marker = join(root, 'out/web/.quirky-dev-web-inputs.json')
     if (state === 'missing') {
       rmSync(marker)
     }

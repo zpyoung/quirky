@@ -7,7 +7,7 @@ const SIBLING = 'repo-a::/repo-a-2'
 const FILE_PATH = '/repo-a/src/a.ts'
 const OWNED = buildOwnedEditorFileId(FILE_PATH, SIBLING, null)
 
-/** A tab Orca moved to the workspace owning its file, saved under the file's owned id. */
+/** A tab Quirky moved to the workspace owning its file, saved under the file's owned id. */
 const session: WorkspaceSessionState = {
   activeRepoId: null,
   activeWorktreeId: null,

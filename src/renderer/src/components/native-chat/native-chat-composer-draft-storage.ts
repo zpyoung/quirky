@@ -8,10 +8,10 @@ import { createIndexedDbNativeChatComposerDraftStorage } from './native-chat-com
 
 export type NativeChatComposerDraftImage = {
   id: string
-  /** Empty for an image Orca could not keep. */
+  /** Empty for an image Quirky could not keep. */
   path: string
   connectionId?: string
-  /** Set on an image Orca could not keep: the file name the user must attach again. */
+  /** Set on an image Quirky could not keep: the file name the user must attach again. */
   unavailableName?: string
 }
 
@@ -165,7 +165,7 @@ export function parseStoredNativeChatComposerDraft(
   }
 }
 
-const LEGACY_LOCAL_STORAGE_PREFIX = 'orca:nativeChatComposerDraft:v1:'
+const LEGACY_LOCAL_STORAGE_PREFIX = 'quirky:nativeChatComposerDraft:v1:'
 
 /** Drafts this change kept in localStorage before it moved them; never released, so they go. */
 export function removeLegacyLocalStorageNativeChatComposerDrafts(): void {

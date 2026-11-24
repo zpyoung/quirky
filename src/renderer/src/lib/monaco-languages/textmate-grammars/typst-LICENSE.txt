@@ -1,7 +1,7 @@
 Typst
 
 Source: https://github.com/typst/typst/blob/9f2b6e8715237cb086899a42873660fe744622e8/tools/support/typst.tmLanguage.json
-Modifications by Orca: JSON formatting; line comments have opaque bodies;
+Modifications by Quirky: JSON formatting; line comments have opaque bodies;
 block comments nest only block comments; math reuses string and comment rules
 and consumes escapes before recognizing its closing dollar delimiter.
 

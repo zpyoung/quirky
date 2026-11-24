@@ -26,7 +26,7 @@ async function isRuntimeReachable(client: RuntimeClient): Promise<boolean> {
  * Blocks on one `ask.wait` chunk, resolving to a resumable pending envelope whenever the
  * ask survives — bare transport retries exhausted against a host that still answers, or a
  * host too busy to park another long poll. An unreachable host keeps its original
- * transport error so the caller still learns Orca is not running.
+ * transport error so the caller still learns Quirky is not running.
  */
 export async function waitAskChunkWithRetry(
   client: RuntimeClient,

@@ -35,11 +35,11 @@ function enrollment(overrides: Partial<WatcherEnrollment> = {}): WatcherEnrollme
   return {
     watcherId: 'watcher-1',
     kind: 'hosted-review',
-    workspaceKey: 'local::/Users/someone/work/orca',
+    workspaceKey: 'local::/Users/someone/work/quirky',
     executionHostId: 'local',
     repoId: 'repo-1',
     worktreeId: 'worktree-1',
-    workspacePath: `${HOME}/work/orca`,
+    workspacePath: `${HOME}/work/quirky`,
     schedulerOwner: 'local_host_service',
     enabled: true,
     paused: false,
@@ -381,12 +381,12 @@ describe('Heimdall debug report', () => {
       lastFullResyncAtMs: null,
       reconcileAgain: false
     })
-    failingTrace.error = { message: `token=${secret} at ${HOME}/work/orca` }
+    failingTrace.error = { message: `token=${secret} at ${HOME}/work/quirky` }
     const report = buildHeimdallDebugReport(
       reportInput({
         ledger: ledger([
           escalation('awaiting-approval', {
-            reason: `token=${secret} at ${HOME}/work/orca`
+            reason: `token=${secret} at ${HOME}/work/quirky`
           })
         ]),
         traces: [failingTrace],
@@ -395,7 +395,7 @@ describe('Heimdall debug report', () => {
           {
             role: 'workspace',
             host: 'local',
-            path: `${HOME}/work/orca`,
+            path: `${HOME}/work/quirky`,
             status: 'resolved'
           }
         ]
@@ -406,7 +406,7 @@ describe('Heimdall debug report', () => {
     expect(report.ledger.entries[0]).not.toMatchObject({ reason: expect.stringContaining(secret) })
     expect(report.traces[0]?.error?.message).not.toContain(secret)
     expect(report.workersError).not.toContain(secret)
-    expect(report.pointers[0]?.path).toBe(`${HOME}/work/orca`)
+    expect(report.pointers[0]?.path).toBe(`${HOME}/work/quirky`)
   })
 
   it('reports preserved terminal budget totals after ledger compaction', () => {
@@ -440,12 +440,12 @@ describe('Heimdall debug report', () => {
     const local = buildHeimdallDebugReport(reportInput())
     const remoteEnrollment = enrollment({
       executionHostId: 'ssh:build-host',
-      workspaceKey: 'ssh:build-host::/Users/someone/work/orca'
+      workspaceKey: 'ssh:build-host::/Users/someone/work/quirky'
     })
     const remote = buildHeimdallDebugReport(reportInput({ enrollment: remoteEnrollment }))
 
-    expect(local.enrollment.workspacePath).toBe('~/work/orca')
-    expect(remote.enrollment.workspacePath).toBe(`${HOME}/work/orca`)
+    expect(local.enrollment.workspacePath).toBe('~/work/quirky')
+    expect(remote.enrollment.workspacePath).toBe(`${HOME}/work/quirky`)
   })
 
   it('retains snapshot envelope diagnostics when a kind description throws', () => {

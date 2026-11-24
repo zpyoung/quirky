@@ -17,7 +17,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   }
 }))
 
-const key = 'orca:terminalDrafts:host:folder-workspace'
+const key = 'quirky:terminalDrafts:host:folder-workspace'
 let current: ReturnType<typeof useBufferedTerminalDrafts> | null = null
 let tree: ReactTestRenderer | null = null
 function Probe({ scope = 'paired', handle = 'terminal-a' }: { scope?: string; handle?: string }) {

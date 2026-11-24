@@ -30,12 +30,12 @@ afterEach(() => {
 const NONCE = 'nonce-123'
 
 function Probe(props: ComponentProps<'div'> & ExtraProps): React.JSX.Element {
-  const nonce = 'data-orca-visual' in props ? props['data-orca-visual'] : undefined
+  const nonce = 'data-quirky-visual' in props ? props['data-quirky-visual'] : undefined
   if (nonce !== NONCE) {
     return <div className={props.className}>{props.children}</div>
   }
-  const title = 'data-orca-visual-title' in props ? props['data-orca-visual-title'] : undefined
-  const file = 'data-orca-visual-file' in props ? props['data-orca-visual-file'] : undefined
+  const title = 'data-quirky-visual-title' in props ? props['data-quirky-visual-title'] : undefined
+  const file = 'data-quirky-visual-file' in props ? props['data-quirky-visual-file'] : undefined
   return (
     <span data-visual={String(file)}>
       {typeof title === 'string' ? `[${title}]` : '[untitled]'}
@@ -59,14 +59,14 @@ function mountedFiles(markup: string): string[] {
   return [...markup.matchAll(/data-visual="([^"]+)"/g)].map((match) => match[1])
 }
 
-const LINE = '::orca-visual{file="usage.html" title="Usage by day"}'
+const LINE = '::quirky-visual{file="usage.html" title="Usage by day"}'
 
 describe('remarkNativeChatVisuals', () => {
   it('mounts a directive on its own line with its title', () => {
     const markup = render(`Here it is:\n\n${LINE}\n\nThat is the trend.`)
     expect(mountedFiles(markup)).toEqual(['usage.html'])
     expect(markup).toContain('[Usage by day]')
-    expect(markup).not.toContain('::orca-visual')
+    expect(markup).not.toContain('::quirky-visual')
     expect(markup).toContain('That is the trend.')
   })
 
@@ -94,18 +94,18 @@ describe('remarkNativeChatVisuals', () => {
     ['a list item', `- ${LINE}`],
     ['an ordered list item', `1. ${LINE}`],
     ['mid-sentence', `See ${LINE} here`],
-    ['a malformed directive', '::orca-visual{file="../usage.html"}'],
-    ['an unclosed directive', '::orca-visual{file="usage.html"'],
+    ['a malformed directive', '::quirky-visual{file="../usage.html"}'],
+    ['an unclosed directive', '::quirky-visual{file="usage.html"'],
     ['trailing prose on the line', `${LINE} done`]
   ])('leaves it as text inside %s', (_name, content) => {
     const markup = render(content)
     expect(mountedFiles(markup)).toEqual([])
-    expect(markup).toContain('::orca-visual')
+    expect(markup).toContain('::quirky-visual')
   })
 
   it('does not mount a raw HTML placeholder forged without the nonce', () => {
     const markup = render(
-      '<div data-orca-visual="guess" data-orca-visual-file="usage.html">x</div>\n\nafter'
+      '<div data-quirky-visual="guess" data-quirky-visual-file="usage.html">x</div>\n\nafter'
     )
     expect(mountedFiles(markup)).toEqual([])
   })
@@ -113,7 +113,7 @@ describe('remarkNativeChatVisuals', () => {
   it('mounts a raw HTML placeholder only if it knew the nonce, which the reply cannot', () => {
     // The nonce is per rendered message and never part of the reply, so this cannot be authored.
     const markup = render(
-      `<div data-orca-visual="${NONCE}" data-orca-visual-file="usage.html">x</div>`
+      `<div data-quirky-visual="${NONCE}" data-quirky-visual-file="usage.html">x</div>`
     )
     expect(mountedFiles(markup)).toEqual(['usage.html'])
   })
@@ -121,7 +121,7 @@ describe('remarkNativeChatVisuals', () => {
   it('caps how many visuals one reply mounts and shows the rest as text', () => {
     const lines = Array.from(
       { length: 10 },
-      (_, index) => `::orca-visual{file="chart-${index}.html"}`
+      (_, index) => `::quirky-visual{file="chart-${index}.html"}`
     )
     const markup = render(lines.join('\n\n'))
     expect(mountedFiles(markup)).toEqual(
@@ -147,6 +147,6 @@ describe('remarkNativeChatVisuals', () => {
 describe('CommentMarkdown without the extension', () => {
   it('shows the directive as text', () => {
     const markup = renderToStaticMarkup(<CommentMarkdown content={LINE} variant="document" />)
-    expect(markup).toContain('::orca-visual')
+    expect(markup).toContain('::quirky-visual')
   })
 })

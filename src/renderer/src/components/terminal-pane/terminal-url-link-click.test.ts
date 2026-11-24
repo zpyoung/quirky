@@ -12,7 +12,7 @@ const COLS = 157
 const ROWS = 59
 const INDENT = ''
 const FULL_URL = [
-  'http://127.0.0.1:8765/orca-double-open-repro-wrapped/',
+  'http://127.0.0.1:8765/quirky-double-open-repro-wrapped/',
   Array.from({ length: 79 }, (_value, index) => `seg${String(index + 1).padStart(4, '0')}`).join(
     '/'
   ),

@@ -22,8 +22,8 @@ describe('project host setup projection', () => {
   it('keeps timestamps stable when addedAt is 0 across different now values', () => {
     const target = repo({
       id: 'repo-1',
-      path: '/Users/alice/orca',
-      displayName: 'orca',
+      path: '/Users/alice/quirky',
+      displayName: 'quirky',
       addedAt: 0
     })
     const first = projectHostSetupProjectionFromRepos([target], 1_000)
@@ -42,18 +42,18 @@ describe('project host setup projection', () => {
   // project's timestamps. The accumulator carries 0 when the *first* sibling is the unknown one.
   const timestampedSibling = repo({
     id: 'local-repo',
-    path: '/Users/alice/orca',
-    displayName: 'Orca',
+    path: '/Users/alice/quirky',
+    displayName: 'Quirky',
     addedAt: 100,
-    upstream: { owner: 'StablyAI', repo: 'Orca' }
+    upstream: { owner: 'StablyAI', repo: 'Quirky' }
   })
   const unknownSibling = repo({
     id: 'remote-repo',
-    path: '/home/alice/orca',
-    displayName: 'orca',
+    path: '/home/alice/quirky',
+    displayName: 'quirky',
     addedAt: 0,
     connectionId: 'gpu-vm',
-    upstream: { owner: 'stablyai', repo: 'orca' }
+    upstream: { owner: 'stablyai', repo: 'quirky' }
   })
 
   it('does not wipe a persisted createdAt when a sibling repo has addedAt 0', () => {
@@ -90,14 +90,14 @@ describe('project host setup projection', () => {
 
   it('projects a legacy local repo into one project and one ready local setup', () => {
     const projection = projectHostSetupProjectionFromRepos(
-      [repo({ id: 'repo-1', path: '/Users/alice/orca', displayName: 'orca' })],
+      [repo({ id: 'repo-1', path: '/Users/alice/quirky', displayName: 'quirky' })],
       500
     )
 
     expect(projection.projects).toEqual([
       {
         id: 'repo:repo-1',
-        displayName: 'orca',
+        displayName: 'quirky',
         badgeColor: '#737373',
         kind: 'git',
         sourceRepoIds: ['repo-1'],
@@ -111,8 +111,8 @@ describe('project host setup projection', () => {
         projectId: 'repo:repo-1',
         hostId: 'local',
         repoId: 'repo-1',
-        path: '/Users/alice/orca',
-        displayName: 'orca',
+        path: '/Users/alice/quirky',
+        displayName: 'quirky',
         kind: 'git',
         setupState: 'ready',
         setupMethod: 'legacy-repo',
@@ -126,8 +126,8 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'remote-repo',
-        path: '/home/alice/orca',
-        displayName: 'orca',
+        path: '/home/alice/quirky',
+        displayName: 'quirky',
         connectionId: 'openclaw 2',
         worktreeBasePath: '../worktrees',
         gitUsername: 'alice'
@@ -147,8 +147,8 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'repo-1',
-        path: '/Users/alice/orca',
-        displayName: 'orca',
+        path: '/Users/alice/quirky',
+        displayName: 'quirky',
         projectHostSetupMethod: 'cloned'
       })
     ])
@@ -160,16 +160,16 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'local-repo',
-        path: '/Users/alice/orca',
-        displayName: 'Orca',
-        upstream: { owner: 'StablyAI', repo: 'Orca' }
+        path: '/Users/alice/quirky',
+        displayName: 'Quirky',
+        upstream: { owner: 'StablyAI', repo: 'Quirky' }
       }),
       repo({
         id: 'remote-repo',
-        path: '/home/alice/orca',
-        displayName: 'orca',
+        path: '/home/alice/quirky',
+        displayName: 'quirky',
         connectionId: 'gpu-vm',
-        upstream: { owner: 'stablyai', repo: 'orca' }
+        upstream: { owner: 'stablyai', repo: 'quirky' }
       })
     ])
 
@@ -177,7 +177,7 @@ describe('project host setup projection', () => {
     expect(projection.projects[0]).toMatchObject({
       id: 'github:stablyai/orca',
       sourceRepoIds: ['local-repo', 'remote-repo'],
-      providerIdentity: { provider: 'github', owner: 'StablyAI', repo: 'Orca' }
+      providerIdentity: { provider: 'github', owner: 'StablyAI', repo: 'Quirky' }
     })
     expect(getProjectHostSetupsForProject(projection.setups, 'github:stablyai/orca')).toHaveLength(
       2
@@ -254,8 +254,8 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'local-repo',
-        path: '/Users/alice/orca',
-        displayName: 'Orca',
+        path: '/Users/alice/quirky',
+        displayName: 'Quirky',
         repoIcon: {
           type: 'image',
           src: 'https://github.com/stablyai.png?size=64',
@@ -265,14 +265,14 @@ describe('project host setup projection', () => {
       }),
       repo({
         id: 'remote-repo',
-        path: '/home/alice/orca',
-        displayName: 'orca',
+        path: '/home/alice/quirky',
+        displayName: 'quirky',
         connectionId: 'gpu-vm',
         repoIcon: {
           type: 'image',
           src: 'https://github.com/stablyai.png?size=64',
           source: 'github',
-          label: 'StablyAI/Orca'
+          label: 'StablyAI/Quirky'
         }
       })
     ])
@@ -281,7 +281,7 @@ describe('project host setup projection', () => {
     expect(projection.projects[0]).toMatchObject({
       id: 'github:stablyai/orca',
       sourceRepoIds: ['local-repo', 'remote-repo'],
-      providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+      providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
     })
     expect(getProjectHostSetupsForProject(projection.setups, 'github:stablyai/orca')).toHaveLength(
       2
@@ -292,8 +292,8 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'canonical-local-repo',
-        path: '/Users/alice/stably/orca',
-        displayName: 'orca',
+        path: '/Users/alice/stably/quirky',
+        displayName: 'quirky',
         gitRemoteIdentity: {
           canonicalKey: 'github.com/stablyai/orca',
           remoteName: 'origin',
@@ -302,7 +302,7 @@ describe('project host setup projection', () => {
       }),
       repo({
         id: 'old-branch-checkout',
-        path: '/Users/alice/orca/workspaces/orca/re-enable-webgl-for-remote-runtime-terminals',
+        path: '/Users/alice/quirky/workspaces/quirky/re-enable-webgl-for-remote-runtime-terminals',
         displayName: 're-enable-webgl-for-remote-runtime-terminals',
         repoIcon: {
           type: 'image',
@@ -316,9 +316,9 @@ describe('project host setup projection', () => {
     expect(projection.projects).toHaveLength(1)
     expect(projection.projects[0]).toMatchObject({
       id: 'github:stablyai/orca',
-      displayName: 'orca',
+      displayName: 'quirky',
       sourceRepoIds: ['canonical-local-repo', 'old-branch-checkout'],
-      providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+      providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
     })
   })
 
@@ -511,8 +511,8 @@ describe('project host setup projection', () => {
     const projection = projectHostSetupProjectionFromRepos([
       repo({
         id: 'repo-1',
-        path: '/Users/alice/orca',
-        displayName: 'orca',
+        path: '/Users/alice/quirky',
+        displayName: 'quirky',
         upstream: { owner: 'stablyai', repo: 42 } as never
       })
     ])
@@ -524,10 +524,10 @@ describe('project host setup projection', () => {
   it('derives workspace ownership metadata from the repo setup', () => {
     const targetRepo = repo({
       id: 'remote-repo',
-      path: '/home/alice/orca',
-      displayName: 'orca',
+      path: '/home/alice/quirky',
+      displayName: 'quirky',
       connectionId: 'openclaw 2',
-      upstream: { owner: 'stablyai', repo: 'orca' }
+      upstream: { owner: 'stablyai', repo: 'quirky' }
     })
     const projection = projectHostSetupProjectionFromRepos([targetRepo])
 
@@ -545,7 +545,7 @@ describe('isGitHubBackedRepo', () => {
       id: 'r',
       path: '/r',
       displayName: 'r',
-      upstream: { owner: 'stablyai', repo: 'orca' }
+      upstream: { owner: 'stablyai', repo: 'quirky' }
     })
     expect(isGitHubBackedRepo(target)).toBe(true)
   })
@@ -589,10 +589,10 @@ describe('getProjectIdForProviderIdentity', () => {
       getProjectIdForProviderIdentity({
         provider: 'github',
         owner: 'Acme',
-        repo: 'Orca',
+        repo: 'Quirky',
         host: 'GITHUB.ACME.TEST:8443'
       })
-    ).toBe('github:github.acme.test:8443/acme/orca')
+    ).toBe('github:github.acme.test:8443/acme/quirky')
   })
 })
 
@@ -614,16 +614,16 @@ describe('isProjectRemoteIdentityPending', () => {
         repo({
           ...base,
           gitRemoteIdentity: {
-            canonicalKey: 'gitlab.example.com/team/orca',
+            canonicalKey: 'gitlab.example.com/team/quirky',
             remoteName: 'origin',
-            remoteUrl: 'git@gitlab.example.com:team/orca.git'
+            remoteUrl: 'git@gitlab.example.com:team/quirky.git'
           }
         })
       )
     ).toBe(false)
     expect(
       isProjectRemoteIdentityPending(
-        repo({ ...base, upstream: { owner: 'stablyai', repo: 'orca' } })
+        repo({ ...base, upstream: { owner: 'stablyai', repo: 'quirky' } })
       )
     ).toBe(false)
   })
@@ -669,14 +669,14 @@ describe('getProjectHostSetupWorktreeMeta host selection', () => {
   it("picks the setup for the repo's own execution host when a repoId spans two hosts", () => {
     const sshRepo = repo({
       id: 'repo-shared',
-      path: '/remote/orca',
-      displayName: 'orca',
+      path: '/remote/quirky',
+      displayName: 'quirky',
       connectionId: 'build-box'
     })
     // Local first in the array: a repoId-only match would stamp the wrong host durably.
     const setups = [
       ...projectHostSetupProjectionFromRepos([
-        repo({ id: 'repo-shared', path: '/local/orca', displayName: 'orca' })
+        repo({ id: 'repo-shared', path: '/local/quirky', displayName: 'quirky' })
       ]).setups,
       ...projectHostSetupProjectionFromRepos([sshRepo]).setups
     ]

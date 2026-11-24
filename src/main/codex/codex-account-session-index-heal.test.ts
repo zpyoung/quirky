@@ -17,10 +17,10 @@ const HOME = '/codex-accounts/account-1/home'
 // Why: fails closed if a regression bypasses the fake session — never the real codex or ~/.codex.
 function buildInvocation(): CodexAppServerInvocation {
   return {
-    command: '/nonexistent/orca-test-codex',
+    command: '/nonexistent/quirky-test-codex',
     args: ['app-server'],
     cliPath: null,
-    env: { CODEX_HOME: join(tmpdir(), 'orca-test-nonexistent-codex-home') },
+    env: { CODEX_HOME: join(tmpdir(), 'quirky-test-nonexistent-codex-home') },
     timeoutMs: 1_000
   }
 }
@@ -132,7 +132,7 @@ describe('healCodexAccountSessionIndex', () => {
     expect(runSession).not.toHaveBeenCalled()
   })
 
-  it('stops retrying a thread Codex refuses to index until Orca restarts', async () => {
+  it('stops retrying a thread Codex refuses to index until Quirky restarts', async () => {
     const { runSession, readThreadIds } = fakeAppServer((threadId) => {
       if (threadId === 'broken') {
         throw new Error('codex app-server thread/read failed: invalid rollout')

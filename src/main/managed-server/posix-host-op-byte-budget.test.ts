@@ -3,12 +3,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildPosixStdoutFence } from '../../shared/posix-stdout-fence'
 import type { NodeRuntimeTarget } from '../../shared/node-runtime-pin'
-import { initialOrcadActivationAdmissionCommand } from '../ssh/orcad-initial-activation-admission'
+import { initialQuirkydActivationAdmissionCommand } from '../ssh/quirkyd-initial-activation-admission'
 import {
-  captureOrcadLaunchSshSessionCommand,
-  orcadLaunchSshSessionProbeCommand,
-  writeOrcadLaunchSshSessionCommand
-} from '../ssh/orcad-launch-ssh-session'
+  captureQuirkydLaunchSshSessionCommand,
+  quirkydLaunchSshSessionProbeCommand,
+  writeQuirkydLaunchSshSessionCommand
+} from '../ssh/quirkyd-launch-ssh-session'
 import { makeExecStdinWriteFileCommand } from '../ssh/ssh-exec-stdin-file-transfer'
 import { wrapRemoteCommandForPosixShell } from '../ssh/ssh-posix-command-wrapper'
 import {
@@ -25,35 +25,35 @@ import {
 import { getRemoteHostPlatform, type RemoteHostPlatform } from '../ssh/ssh-remote-platform'
 import { makePosixWriteFileCommand } from '../ssh/system-transport/system-ssh-file-binary-transfer'
 import {
-  posixOrcadFenceGuard,
-  runWithOrcadFence,
-  type OrcadFence
-} from './activation/orcad-activation-fence-scope'
-import { posixReleaseFenceCommand } from './activation/orcad-activation-lock'
+  posixQuirkydFenceGuard,
+  runWithQuirkydFence,
+  type QuirkydFence
+} from './activation/quirkyd-activation-fence-scope'
+import { posixReleaseFenceCommand } from './activation/quirkyd-activation-lock'
 import {
-  captureOrcadStateSnapshotCommand,
-  clearOrcadStateSnapshotMembersCommand,
-  compareOrcadStateSnapshotCommand,
-  probeOrcadStateSnapshotCommand,
-  restoreOrcadStateSnapshotCommand,
+  captureQuirkydStateSnapshotCommand,
+  clearQuirkydStateSnapshotMembersCommand,
+  compareQuirkydStateSnapshotCommand,
+  probeQuirkydStateSnapshotCommand,
+  restoreQuirkydStateSnapshotCommand,
   serializedStateMutationCommand
-} from './host-state/orcad-state-snapshot'
-import { newestStateMtimeCommand } from './host-state/orcad-state-newest-mtime'
-import { orcadSnapshotSpaceCommand } from './host-state/orcad-state-snapshot-space'
-import { posixProcessGroupCommand } from './host-state/orcad-state-mutation-owner-record'
-import { orcadMachineClaimCommand } from './host-state/orcad-machine-claim-command'
-import { orcadMachineHomeProbeCommand } from './host-state/orcad-machine-home'
-import { executablePermissionsCommand } from './install/orcad-remote-install'
+} from './host-state/quirkyd-state-snapshot'
+import { newestStateMtimeCommand } from './host-state/quirkyd-state-newest-mtime'
+import { quirkydSnapshotSpaceCommand } from './host-state/quirkyd-state-snapshot-space'
+import { posixProcessGroupCommand } from './host-state/quirkyd-state-mutation-owner-record'
+import { quirkydMachineClaimCommand } from './host-state/quirkyd-machine-claim-command'
+import { quirkydMachineHomeProbeCommand } from './host-state/quirkyd-machine-home'
+import { executablePermissionsCommand } from './install/quirkyd-remote-install'
 import {
-  orcadNodeSlotRuntimeCommand,
-  selectOrcadSlotEntryCommand,
-  selectOrcadSlotRuntimeCommand
-} from './install/orcad-remote-runtime'
+  quirkydNodeSlotRuntimeCommand,
+  selectQuirkydSlotEntryCommand,
+  selectQuirkydSlotRuntimeCommand
+} from './install/quirkyd-remote-runtime'
 import {
-  orcadLaunchCommand,
-  orcadLivenessProbeCommand,
-  readOrcadReadinessCommand
-} from './install/orcad-remote-launch'
+  quirkydLaunchCommand,
+  quirkydLivenessProbeCommand,
+  readQuirkydReadinessCommand
+} from './install/quirkyd-remote-launch'
 import {
   createExecProbedStageCommand,
   installNodeRuntimeFromHostArchiveCommand,
@@ -61,21 +61,21 @@ import {
   promoteRemoteNodeRuntimeCommand,
   recheckAndPromoteRemoteNodeRuntimeCommand,
   remoteNodeRuntimePresentCommand
-} from './install/orcad-remote-node-runtime'
+} from './install/quirkyd-remote-node-runtime'
 import { remoteSha256Command } from './install/remote-sha256-command'
 import { hostDownloadNodeRuntimeCommand } from './install/remote-node-runtime-host-download'
-import { remoteOrcadBuildHashCommand } from './install/orcad-remote-build-hash'
+import { remoteQuirkydBuildHashCommand } from './install/quirkyd-remote-build-hash'
 import { remoteFreeSpaceProbeCommand } from './install/remote-install-out-of-space'
 import { sweepStaleRuntimeStagesCommand } from './install/remote-node-runtime-store-gc'
-import { orcadProfilePreflightCommand } from './install/orcad-remote-preflight'
+import { quirkydProfilePreflightCommand } from './install/quirkyd-remote-preflight'
 import {
   recordedNodeRuntimeProbeCommand,
   recordedRemoteNodeRuntimeProbeCommand
-} from './install/orcad-remote-node-runtime-recorded-probe'
+} from './install/quirkyd-remote-node-runtime-recorded-probe'
 import { runtimeStoreInventoryCommand } from './install/remote-node-runtime-store-inventory'
 import { posixReleaseOwnedLockCommand } from './install/remote-node-runtime-store-lock'
-import { ORCAD_INSTALL_MODEL } from './install/remote-install-model'
-import { stopOrcadCommand } from './install/orcad-remote-process-control'
+import { QUIRKYD_INSTALL_MODEL } from './install/remote-install-model'
+import { stopQuirkydCommand } from './install/quirkyd-remote-process-control'
 import {
   acquireInstallLockParentCommand,
   lockAgeSecondsCommand,
@@ -84,12 +84,12 @@ import {
   tryCreateInstallLockCommand,
   tryStealInstallLockCommand
 } from './install/remote-install-lock-commands'
-import { orcadLogTailCommand } from './install/orcad-remote-log-tail'
+import { quirkydLogTailCommand } from './install/quirkyd-remote-log-tail'
 import {
-  orcadReadinessWaitCommand,
-  readOrcadReadinessNowCommand
-} from './install/orcad-remote-readiness-wait'
-import { orcadPosixStdioBridgeCommand } from './lifecycle/orcad-stdio-bridge-script'
+  quirkydReadinessWaitCommand,
+  readQuirkydReadinessNowCommand
+} from './install/quirkyd-remote-readiness-wait'
+import { quirkydPosixStdioBridgeCommand } from './lifecycle/quirkyd-stdio-bridge-script'
 
 // Why 6 KB: gateways cut exec requests near 10 KB (#30491). This bounds the wire string: the
 // fence-guarded command, wrapped uncompressed as a host without gzip/base64 receives it.
@@ -98,20 +98,20 @@ const POSIX_HOST_OP_BYTE_BUDGET = 6 * 1024
 // Ops already past the budget, at their measured size. Ceilings may only shrink.
 const OVER_BUDGET_CEILINGS: Readonly<Record<string, number>> = {
   tryStealInstallLockCommand: 9_022,
-  orcadLaunchCommand: 7_130
+  quirkydLaunchCommand: 7_130
 }
 
 type HostCase = { host: RemoteHostPlatform; target: NodeRuntimeTarget; nodePath: string }
 
 // Realistic worst case: a long NFS home, a long account name and a held activation fence.
 const home = `/net/nfs-home-cluster-03/users/engineering/${'a'.repeat(48)}.longname`
-const baseDir = `${home}/.orca-remote`
-const slotDir = `${baseDir}/orcad-1.4.299-rc.12+${'f'.repeat(40)}`
-const userDataDir = `${baseDir}/orcad-data`
-const snapshotDir = `${baseDir}/orcad-snapshots/pre-1.4.299-rc.12-1760000000000`
+const baseDir = `${home}/.quirky-remote`
+const slotDir = `${baseDir}/quirkyd-1.4.299-rc.12+${'f'.repeat(40)}`
+const userDataDir = `${baseDir}/quirkyd-data`
+const snapshotDir = `${baseDir}/quirkyd-snapshots/pre-1.4.299-rc.12-1760000000000`
 const installLock = `${slotDir}.install-lock`
 const token = 'f'.repeat(64)
-const fence: OrcadFence = { lockDir: `${baseDir}/orcad-activation.lock`, token }
+const fence: QuirkydFence = { lockDir: `${baseDir}/quirkyd-activation.lock`, token }
 const owner = { fileName: 'owner', token }
 
 function hostCase(platform: 'linux-x64' | 'darwin-arm64', target: NodeRuntimeTarget): HostCase {
@@ -124,7 +124,7 @@ const HOST_CASES: readonly HostCase[] = [
   hostCase('darwin-arm64', 'darwin-arm64')
 ]
 
-function launchSpec(nodePath: string): Parameters<typeof orcadLaunchCommand>[1] {
+function launchSpec(nodePath: string): Parameters<typeof quirkydLaunchCommand>[1] {
   return {
     remoteInstallDir: slotDir,
     nodePath,
@@ -132,7 +132,7 @@ function launchSpec(nodePath: string): Parameters<typeof orcadLaunchCommand>[1] 
     userDataDir,
     bindHost: '127.0.0.1',
     port: 65535,
-    activationRoot: `${baseDir}/orcad-activation`
+    activationRoot: `${baseDir}/quirkyd-activation`
   }
 }
 
@@ -152,38 +152,39 @@ function promoteArgs({
 const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
   serializedStateMutationCommand: () => serializedStateMutationCommand(baseDir, ':', 20, fence),
   // As activation runs it: pruning every other capture but the recorded one.
-  captureOrcadStateSnapshotCommand: ({ host }) =>
-    captureOrcadStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir, {
-      snapshotsRoot: `${baseDir}/orcad-snapshots`,
+  captureQuirkydStateSnapshotCommand: ({ host }) =>
+    captureQuirkydStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir, {
+      snapshotsRoot: `${baseDir}/quirkyd-snapshots`,
       keep: [snapshotDir.slice(snapshotDir.lastIndexOf('/') + 1), 'pre-1.4.298-rc.3-1750000000000']
     }),
-  probeOrcadStateSnapshotCommand: ({ host }) =>
-    probeOrcadStateSnapshotCommand(host, snapshotDir, baseDir),
-  restoreOrcadStateSnapshotCommand: ({ host }) =>
-    restoreOrcadStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
-  clearOrcadStateSnapshotMembersCommand: ({ host }) =>
-    clearOrcadStateSnapshotMembersCommand(host, userDataDir, baseDir),
-  compareOrcadStateSnapshotCommand: ({ host }) =>
-    compareOrcadStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
+  probeQuirkydStateSnapshotCommand: ({ host }) =>
+    probeQuirkydStateSnapshotCommand(host, snapshotDir, baseDir),
+  restoreQuirkydStateSnapshotCommand: ({ host }) =>
+    restoreQuirkydStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
+  clearQuirkydStateSnapshotMembersCommand: ({ host }) =>
+    clearQuirkydStateSnapshotMembersCommand(host, userDataDir, baseDir),
+  compareQuirkydStateSnapshotCommand: ({ host }) =>
+    compareQuirkydStateSnapshotCommand(host, userDataDir, snapshotDir, baseDir),
   newestStateMtimeCommand: ({ host }) => newestStateMtimeCommand(host, userDataDir, baseDir),
-  orcadSnapshotSpaceCommand: ({ host }) =>
-    orcadSnapshotSpaceCommand(host, userDataDir, snapshotDir, baseDir, ['keep-a', 'keep-b']) ?? '',
+  quirkydSnapshotSpaceCommand: ({ host }) =>
+    quirkydSnapshotSpaceCommand(host, userDataDir, snapshotDir, baseDir, ['keep-a', 'keep-b']) ??
+    '',
   posixProcessGroupCommand: () => posixProcessGroupCommand('"$pid"'),
-  orcadMachineClaimCommand: ({ host }) => orcadMachineClaimCommand(host, home, 'k'.repeat(64)),
-  orcadMachineHomeProbeCommand: ({ host }) => orcadMachineHomeProbeCommand(host),
-  selectOrcadSlotEntryCommand: ({ host }) => selectOrcadSlotEntryCommand(host, slotDir),
-  orcadNodeSlotRuntimeCommand: ({ host }) => orcadNodeSlotRuntimeCommand(host, slotDir),
-  selectOrcadSlotRuntimeCommand: ({ host, nodePath }) =>
-    selectOrcadSlotRuntimeCommand(host, slotDir, nodePath),
+  quirkydMachineClaimCommand: ({ host }) => quirkydMachineClaimCommand(host, home, 'k'.repeat(64)),
+  quirkydMachineHomeProbeCommand: ({ host }) => quirkydMachineHomeProbeCommand(host),
+  selectQuirkydSlotEntryCommand: ({ host }) => selectQuirkydSlotEntryCommand(host, slotDir),
+  quirkydNodeSlotRuntimeCommand: ({ host }) => quirkydNodeSlotRuntimeCommand(host, slotDir),
+  selectQuirkydSlotRuntimeCommand: ({ host, nodePath }) =>
+    selectQuirkydSlotRuntimeCommand(host, slotDir, nodePath),
   // As SSH launches it; on macOS it embeds the launch-session capture and record.
-  orcadLaunchCommand: ({ host, nodePath }) =>
-    orcadLaunchCommand(host, launchSpec(nodePath), 'nohup', []),
-  'orcadLaunchCommand (WSL setsid)': ({ host, nodePath }) =>
-    orcadLaunchCommand(host, launchSpec(nodePath), 'setsid', [
-      ['ORCA_EXAMPLE_HOST_ENV', 'x'.repeat(200)]
+  quirkydLaunchCommand: ({ host, nodePath }) =>
+    quirkydLaunchCommand(host, launchSpec(nodePath), 'nohup', []),
+  'quirkydLaunchCommand (WSL setsid)': ({ host, nodePath }) =>
+    quirkydLaunchCommand(host, launchSpec(nodePath), 'setsid', [
+      ['QUIRKY_EXAMPLE_HOST_ENV', 'x'.repeat(200)]
     ]),
-  readOrcadReadinessCommand: ({ host }) => readOrcadReadinessCommand(host, slotDir),
-  orcadLivenessProbeCommand: ({ host }) => orcadLivenessProbeCommand(host, slotDir),
+  readQuirkydReadinessCommand: ({ host }) => readQuirkydReadinessCommand(host, slotDir),
+  quirkydLivenessProbeCommand: ({ host }) => quirkydLivenessProbeCommand(host, slotDir),
   remoteSha256Command: ({ nodePath }) => remoteSha256Command(`'${nodePath}'`),
   remoteFreeSpaceProbeCommand: ({ nodePath }) => remoteFreeSpaceProbeCommand(nodePath),
   hostDownloadNodeRuntimeCommand: ({ host, nodePath, target }) =>
@@ -204,17 +205,18 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
       target,
       token
     }),
-  remoteOrcadBuildHashCommand: ({ host }) => remoteOrcadBuildHashCommand(host, slotDir),
+  remoteQuirkydBuildHashCommand: ({ host }) => remoteQuirkydBuildHashCommand(host, slotDir),
   sweepStaleRuntimeStagesCommand: ({ host }) =>
     sweepStaleRuntimeStagesCommand(`${baseDir}/node-runtimes`, host),
-  orcadProfilePreflightCommand: ({ host }) => orcadProfilePreflightCommand(host, slotDir, token),
+  quirkydProfilePreflightCommand: ({ host }) =>
+    quirkydProfilePreflightCommand(host, slotDir, token),
   recordedNodeRuntimeProbeCommand: ({ host, nodePath }) =>
     recordedNodeRuntimeProbeCommand(host, nodePath, token),
   recordedRemoteNodeRuntimeProbeCommand: ({ host, nodePath, target }) =>
     recordedRemoteNodeRuntimeProbeCommand(host, nodePath, target),
   runtimeStoreInventoryCommand: ({ host }) => runtimeStoreInventoryCommand(host, home),
-  stopOrcadCommand: ({ host, nodePath }) =>
-    stopOrcadCommand(host, slotDir, { waitSeconds: 30, nodePath }),
+  stopQuirkydCommand: ({ host, nodePath }) =>
+    stopQuirkydCommand(host, slotDir, { waitSeconds: 30, nodePath }),
   acquireInstallLockParentCommand: ({ host }) => acquireInstallLockParentCommand(host, baseDir),
   tryCreateInstallLockCommand: ({ host }) => tryCreateInstallLockCommand(host, installLock, owner),
   probeInstallLockExistsCommand: ({ host }) => probeInstallLockExistsCommand(host, installLock),
@@ -224,24 +226,24 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
     tryStealInstallLockCommand(host, installLock, 120, owner, {
       ...owner,
       quietSeconds: 60,
-      mutationLock: `${baseDir}/orcad-state-mutation.lock`
+      mutationLock: `${baseDir}/quirkyd-state-mutation.lock`
     }),
-  orcadLogTailCommand: ({ host }) => orcadLogTailCommand(host, slotDir),
-  orcadReadinessWaitCommand: ({ host }) => orcadReadinessWaitCommand(host, slotDir, 120),
-  readOrcadReadinessNowCommand: ({ host }) => readOrcadReadinessNowCommand(host, slotDir),
-  orcadPosixStdioBridgeCommand: () => orcadPosixStdioBridgeCommand(65535),
+  quirkydLogTailCommand: ({ host }) => quirkydLogTailCommand(host, slotDir),
+  quirkydReadinessWaitCommand: ({ host }) => quirkydReadinessWaitCommand(host, slotDir, 120),
+  readQuirkydReadinessNowCommand: ({ host }) => readQuirkydReadinessNowCommand(host, slotDir),
+  quirkydPosixStdioBridgeCommand: () => quirkydPosixStdioBridgeCommand(65535),
   posixReleaseFenceCommand: () =>
     posixReleaseFenceCommand(
       fence,
-      `${baseDir}/orcad-activation/journal.json`,
-      `${baseDir}/orcad-activation`
+      `${baseDir}/quirkyd-activation/journal.json`,
+      `${baseDir}/quirkyd-activation`
     ),
   posixReleaseOwnedLockCommand: ({ host }) =>
     `${posixReleaseOwnedLockCommand(host, `${baseDir}/node-runtimes/.store-lock`, owner)} || true`,
   executablePermissionsCommand: ({ host, target }) =>
     executablePermissionsCommand(host, slotDir, target),
   readRemoteHomeCommand: ({ host }) => readRemoteHomeCommand(host),
-  removeRemoteFileCommand: ({ host }) => removeRemoteFileCommand(host, `${slotDir}/.orcad-pid`),
+  removeRemoteFileCommand: ({ host }) => removeRemoteFileCommand(host, `${slotDir}/.quirkyd-pid`),
   removeRemoteTreeCommand: ({ host }) => removeRemoteTreeCommand(host, slotDir),
   moveRemoteTreeCommand: ({ host }) =>
     moveRemoteTreeCommand(host, slotDir, `${slotDir}.trash-${token}`),
@@ -251,26 +253,26 @@ const BUILDERS: Readonly<Record<string, (c: HostCase) => string>> = {
     writeRemoteEmptyFileCommand(host, `${slotDir}/.complete`),
   probeRemoteInstallCompleteCommand: ({ host }) =>
     probeRemoteInstallCompleteCommand(host, slotDir, [
-      ...ORCAD_INSTALL_MODEL.requiredArtifacts(host),
-      ORCAD_INSTALL_MODEL.installCompleteFilename
+      ...QUIRKYD_INSTALL_MODEL.requiredArtifacts(host),
+      QUIRKYD_INSTALL_MODEL.installCompleteFilename
     ]),
   listRemoteInstallBaseDirsCommand: ({ host }) =>
-    listRemoteInstallBaseDirsCommand(host, baseDir, ORCAD_INSTALL_MODEL),
+    listRemoteInstallBaseDirsCommand(host, baseDir, QUIRKYD_INSTALL_MODEL),
   probeFileExistsCommand: ({ host }) => probeFileExistsCommand(host, `${slotDir}/.complete`),
-  captureOrcadLaunchSshSessionCommand: () => captureOrcadLaunchSshSessionCommand(),
-  writeOrcadLaunchSshSessionCommand: ({ host }) =>
-    writeOrcadLaunchSshSessionCommand(host, userDataDir),
-  orcadLaunchSshSessionProbeCommand: ({ host }) =>
-    orcadLaunchSshSessionProbeCommand(host, slotDir, userDataDir),
-  initialOrcadActivationAdmissionCommand: ({ host, nodePath }) =>
-    initialOrcadActivationAdmissionCommand(host, userDataDir, slotDir, nodePath),
+  captureQuirkydLaunchSshSessionCommand: () => captureQuirkydLaunchSshSessionCommand(),
+  writeQuirkydLaunchSshSessionCommand: ({ host }) =>
+    writeQuirkydLaunchSshSessionCommand(host, userDataDir),
+  quirkydLaunchSshSessionProbeCommand: ({ host }) =>
+    quirkydLaunchSshSessionProbeCommand(host, slotDir, userDataDir),
+  initialQuirkydActivationAdmissionCommand: ({ host, nodePath }) =>
+    initialQuirkydActivationAdmissionCommand(host, userDataDir, slotDir, nodePath),
   makeExecStdinWriteFileCommand: () =>
-    makeExecStdinWriteFileCommand(`${slotDir}/orcad.js`, Number.MAX_SAFE_INTEGER, {
+    makeExecStdinWriteFileCommand(`${slotDir}/quirkyd.js`, Number.MAX_SAFE_INTEGER, {
       token,
       executable: true
     }),
   makePosixWriteFileCommand: () =>
-    makePosixWriteFileCommand(`${slotDir}/orcad.js`, { exclusive: true })
+    makePosixWriteFileCommand(`${slotDir}/quirkyd.js`, { exclusive: true })
 }
 
 // Exported builders that never produce a POSIX host op, and why.
@@ -320,10 +322,10 @@ function exportedCommandBuilders(): string[] {
 async function sentBytes(build: (c: HostCase) => string): Promise<number> {
   let max = 0
   for (const c of HOST_CASES) {
-    const command = await runWithOrcadFence(fence, async () => build(c))
+    const command = await runWithQuirkydFence(fence, async () => build(c))
     // execCommand frames stdout before the transport wraps; 16 chars is the longest real nonce.
     const framed = buildPosixStdoutFence(
-      `${posixOrcadFenceGuard(fence)} ${command}`,
+      `${posixQuirkydFenceGuard(fence)} ${command}`,
       'SSH',
       'z'.repeat(16)
     ).command

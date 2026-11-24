@@ -6,7 +6,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OrchestrationDb } from '../../../../orchestration/db'
-import { OrcaRuntimeService } from '../../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { createOrchestrationWorkerReleaseHarness } from './worker-release.test-support'
 import { releaseRetriedWorkerTerminal } from './retried-worker-terminal-release'
 import type { RuntimeTerminalWait } from '../../../../../../shared/runtime-terminal-contracts'
@@ -184,7 +184,7 @@ describe('retrying a failed worker-start', () => {
       failure_count: 3
     })
     await expect(retry({ taskId: first.taskId, dispatchId: third })).rejects.toThrow(
-      /failed 3 times, so Orca will not retry it again/
+      /failed 3 times, so Quirky will not retry it again/
     )
     expect(h.runtime.createTerminal).toHaveBeenCalledTimes(3)
     // The refused retry replaced nothing, so the last attempt's pane stays for the user.
@@ -216,7 +216,7 @@ describe('releaseRetriedWorkerTerminal', () => {
     d.failWorkerStart(dispatch.id, 'agent_readiness', 'never ready')
     const request = vi.spyOn(d, 'requestWorkerTerminalRelease')
 
-    releaseRetriedWorkerTerminal(new OrcaRuntimeService(), d, { retryOf: dispatch.id })
+    releaseRetriedWorkerTerminal(new QuirkyRuntimeService(), d, { retryOf: dispatch.id })
 
     expect(request).not.toHaveBeenCalled()
     expect(d.getWorkerTerminalResourceByOwner(dispatch.id)?.release_state).toBe('not_requested')

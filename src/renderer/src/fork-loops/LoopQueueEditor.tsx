@@ -16,13 +16,7 @@ const ITEM_TONE: Record<QueueItem['state'], string> = {
   done: 'text-muted-foreground'
 }
 
-function QueueItemBody({
-  item,
-  tone
-}: {
-  item: QueueItem
-  tone: string
-}): React.JSX.Element {
+function QueueItemBody({ item, tone }: { item: QueueItem; tone: string }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-0.5">
       <p className={cn('text-xs break-words whitespace-pre-wrap', tone)}>{item.body}</p>

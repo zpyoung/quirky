@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConnection } from 'node:net'
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { OrchestrationDb } from './orchestration/db'
 import { readRuntimeMetadata } from './runtime-metadata'
 import { classifyRuntimeLongPoll } from './runtime-rpc/runtime-rpc-long-poll'
@@ -34,7 +34,7 @@ vi.mock('../git/worktree', () => {
   }
 })
 
-describe('OrcaRuntimeRpcServer', () => {
+describe('QuirkyRuntimeRpcServer', () => {
   it('classifies worker-start as a keepalive-backed long poll', () => {
     expect(
       classifyRuntimeLongPoll({
@@ -109,8 +109,8 @@ describe('OrcaRuntimeRpcServer', () => {
   })
 
   it('rejects oversized RPC frames instead of buffering them indefinitely', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-    const runtime = new OrcaRuntimeService()
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+    const runtime = new QuirkyRuntimeService()
     const server = createServer({ runtime, userDataPath })
 
     await server.start()
@@ -152,8 +152,8 @@ describe('OrcaRuntimeRpcServer', () => {
     it.each(['agent.launch', 'agent.launchReplay'])(
       'emits keepalives over the socket while unprompted %s setup blocks',
       async (method) => {
-        const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-        const runtime = new OrcaRuntimeService()
+        const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+        const runtime = new QuirkyRuntimeService()
         const server = createServer({ runtime, userDataPath, keepaliveIntervalMs: 30 })
         vi.spyOn(server['dispatcher'], 'dispatch').mockImplementation(async (request) => {
           await sleep(120)
@@ -187,8 +187,8 @@ describe('OrcaRuntimeRpcServer', () => {
     )
 
     it('emits keepalives while orchestration.workerStart blocks', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({
         runtime,
         userDataPath,
@@ -226,8 +226,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('emits keepalive frames while a check --wait handler blocks', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -269,8 +269,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('emits keepalive frames while orchestration.ask blocks for a reply', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -327,8 +327,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('emits keepalive frames while terminal.wait blocks and returns its structured timeout', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({
         runtime,
         userDataPath,
@@ -398,8 +398,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('emits keepalive frames while agent-prompt verification blocks', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({
         runtime,
         userDataPath,
@@ -437,8 +437,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('releases terminal.wait long-poll slot when the client closes mid-wait', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({
         runtime,
         userDataPath,
@@ -512,8 +512,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('releases long-poll slot when client closes mid-wait', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -574,8 +574,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('destroys active Unix socket connections when the runtime stops', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -616,8 +616,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('responds runtime_busy once the long-poll cap is saturated', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -675,8 +675,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('reserves long-poll headroom for terminal.wait when orchestration.ask floods', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -789,8 +789,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('keeps the full cap available to terminal.wait and check --wait', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const db = new OrchestrationDb(':memory:')
       runtime.setOrchestrationDb(db)
       // A consuming check now requires a live pane; these transport tests only need it to block.
@@ -840,8 +840,8 @@ describe('OrcaRuntimeRpcServer', () => {
     })
 
     it('does not emit keepalive frames for short RPCs', async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({ runtime, userDataPath, keepaliveIntervalMs: 10 })
       const originalDispatch = server['dispatcher'].dispatch.bind(server['dispatcher'])
       vi.spyOn(server['dispatcher'], 'dispatch').mockImplementation(async (request, context) => {
@@ -876,8 +876,8 @@ describe('OrcaRuntimeRpcServer', () => {
       // Without the `.catch` on handleMessage's promise, a throw would leave
       // the client hanging until the 30s idle timer and leak the dispatch's
       // AbortController in the transport's in-flight set.
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-rpc-'))
-      const runtime = new OrcaRuntimeService()
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-rpc-'))
+      const runtime = new QuirkyRuntimeService()
       const server = createServer({ runtime, userDataPath })
       await server.start()
 

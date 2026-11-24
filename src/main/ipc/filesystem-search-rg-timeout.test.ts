@@ -24,7 +24,7 @@ const {
 const handlers = new Map<string, (event: unknown, args: unknown) => unknown>()
 
 vi.mock('electron', () => ({
-  app: { getPath: () => '/orca-test-user-data' },
+  app: { getPath: () => '/quirky-test-user-data' },
   ipcMain: {
     handle: handleMock
   },
@@ -92,7 +92,7 @@ function createMockProcess(): ChildProcess {
   return p
 }
 
-const BUNDLED_ERROR = "Orca's bundled search tool (ripgrep) could not start"
+const BUNDLED_ERROR = "Quirky's bundled search tool (ripgrep) could not start"
 
 async function flushMicrotasks(): Promise<void> {
   for (let index = 0; index < 8; index++) {

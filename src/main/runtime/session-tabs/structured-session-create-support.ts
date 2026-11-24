@@ -2,9 +2,9 @@ import {
   captureStructuredAgentCliSource,
   structuredAgentCliSourcePathFromEvidence
 } from '../../native-chat/structured-agent-cli-source'
-import type { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce as RestoreStructuredAgentSessionTabsOnceMethods } from './structured-session-tab-restoration'
+import type { QuirkyRuntimeWithRestoreStructuredAgentSessionTabsOnce as RestoreStructuredAgentSessionTabsOnceMethods } from './structured-session-tab-restoration'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
-import { OrcaRuntimeWithStructuredSessionAccountHome } from './structured-session-account-home'
+import { QuirkyRuntimeWithStructuredSessionAccountHome } from './structured-session-account-home'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import {
   resolveCommittedStructuredAgentSessionAdoptionIntent,
@@ -24,7 +24,7 @@ import { structuredAgentRuntimeMetadata } from '../structured-agent-runtime-meta
 import { structuredLaunchSeedOptions } from '../../../shared/native-chat-session-option-defaults'
 import { hasPersistedStructuredAgentSessionStore as hasPersistedStructuredAgentSessionStoreOnDisk } from '../structured-agent-session-runtime'
 import { ensureStructuredAgentSessionHostUnlessRefused } from '../structured-agent-session-host-refusal'
-import { getProfileUserDataPath } from '../../orca-profiles/profile-storage-paths'
+import { getProfileUserDataPath } from '../../quirky-profiles/profile-storage-paths'
 import { parseWslUncPath } from '../../../shared/wsl-paths'
 import {
   isFloatingWorkspaceId,
@@ -34,7 +34,7 @@ import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
-export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithStructuredSessionAccountHome {
+export abstract class QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport extends QuirkyRuntimeWithStructuredSessionAccountHome {
   protected abstract restoreStructuredAgentSessionTabsOnce(
     ...args: Parameters<
       RestoreStructuredAgentSessionTabsOnceMethods['restoreStructuredAgentSessionTabsOnce']
@@ -80,7 +80,7 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
     const repo = this.store?.getRepo(target.worktree.repoId)
     const folderScope = parseWorkspaceKey(target.worktree.id)
     // The floating workspace is a plain directory with no repo git options, which is exactly what
-    // `folder` denotes here — it describes how Orca manages the place, not whether git is in it.
+    // `folder` denotes here — it describes how Quirky manages the place, not whether git is in it.
     const folderWorkspace =
       folderScope?.type === 'folder' || isFloatingWorkspaceId(target.worktree.id)
     // WSL routing describes *this* machine; no remote or runtime host may inherit

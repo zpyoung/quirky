@@ -111,13 +111,13 @@ const STOP_NOTE_PREFIX = 'stop:'
 
 /** A Stop's note, keyed by the turn it stopped (or, with no turn, by its operation). */
 export function structuredAgentSessionStopNoteIdentity(stopKey: string): AgentJournalItemIdentity {
-  return { provider: 'orca', clientMessageId: `${STOP_NOTE_PREFIX}${stopKey}` }
+  return { provider: 'quirky', clientMessageId: `${STOP_NOTE_PREFIX}${stopKey}` }
 }
 
 /** Whether a journal row is a Stop's note. */
 export function isStructuredAgentSessionStopNote(itemId: string): boolean {
   const identity = parseAgentJournalItemKey(itemId)
-  return identity?.provider === 'orca' && identity.clientMessageId.startsWith(STOP_NOTE_PREFIX)
+  return identity?.provider === 'quirky' && identity.clientMessageId.startsWith(STOP_NOTE_PREFIX)
 }
 
 /** Whether an earlier Stop already asked the running command `turnId` names to end. Read from the

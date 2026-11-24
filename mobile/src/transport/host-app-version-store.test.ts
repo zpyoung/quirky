@@ -27,7 +27,7 @@ describe('host app version store', () => {
 
     expect(asyncStorageMock.setItem).toHaveBeenCalledOnce()
     expect(asyncStorageMock.setItem).toHaveBeenCalledWith(
-      'orca:host-app-version:v1:host-1',
+      'quirky:host-app-version:v1:host-1',
       '1.4.191'
     )
   })

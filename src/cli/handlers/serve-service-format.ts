@@ -17,14 +17,14 @@ export function formatServeServiceInstall(result: Record<string, unknown>): stri
     )
   }
   lines.push(
-    'Pairing is off in the service; pair clients with `orca serve` in a terminal or from the desktop app.'
+    'Pairing is off in the service; pair clients with `quirky serve` in a terminal or from the desktop app.'
   )
   return lines.join('\n')
 }
 
 export function formatServeServiceStatus(status: ServeServiceStatus): string {
   if (!status.installed && status.verdict !== 'live') {
-    return `${status.name} is not installed. Run \`orca serve service install\`.`
+    return `${status.name} is not installed. Run \`quirky serve service install\`.`
   }
   const lines = [
     `${status.name} (${status.manager}): ${status.verdict}${status.pid ? `, pid ${status.pid}` : ''} — ${status.detail}`,

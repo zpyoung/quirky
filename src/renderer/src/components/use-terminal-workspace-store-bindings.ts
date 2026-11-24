@@ -29,7 +29,7 @@ export function useTerminalWorkspaceStoreBindings(controller: TerminalWorkspaceF
   const activeTabType = useAppStore((state) => state.activeTabType)
   const keybindings = useAppStore((state) => state.keybindings)
   const terminalShortcutPolicy = useAppStore(
-    (state) => state.settings?.terminalShortcutPolicy ?? 'orca-first'
+    (state) => state.settings?.terminalShortcutPolicy ?? 'quirky-first'
   )
   const mobileEmulatorEnabled = useAppStore(
     (state) => state.settings?.mobileEmulatorEnabled !== false

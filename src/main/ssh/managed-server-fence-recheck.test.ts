@@ -5,7 +5,7 @@ import {
   recheckFencedManagedServer,
   scheduleManagedServerFenceRecheck
 } from './managed-server-fence-recheck'
-import { MANAGED_ORCAD_FENCED_DETAIL } from '../managed-server/lifecycle/orcad-managed-serving'
+import { MANAGED_QUIRKYD_FENCED_DETAIL } from '../managed-server/lifecycle/quirkyd-managed-serving'
 
 const TARGET: SshTarget = { id: 'box', label: 'Box', host: 'box', port: 22, username: 'me' }
 
@@ -13,14 +13,14 @@ function hostDeps(states: ('fenced' | 'serving')[], update: 'fence-busy' | 'curr
   return {
     ensureServing: vi.fn(async () =>
       states.shift() === 'fenced'
-        ? { state: 'unverifiable' as const, detail: MANAGED_ORCAD_FENCED_DETAIL }
+        ? { state: 'unverifiable' as const, detail: MANAGED_QUIRKYD_FENCED_DETAIL }
         : { state: 'serving' as const }
     ),
     autoUpdate: vi.fn(async () =>
       update === 'fence-busy'
         ? {
             outcome: 'deferred' as const,
-            code: 'orcad_activation_fence_busy',
+            code: 'quirkyd_activation_fence_busy',
             reason: 'Another update holds this host.'
           }
         : { outcome: 'skipped' as const, reason: 'current' as const }

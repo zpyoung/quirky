@@ -3,7 +3,7 @@
  * than a screen must be able to scroll back through that history (#20158).
  *
  * The host used to serialize desktop subscribe snapshots screen-only, so the client pane held the
- * last screenful and nothing above it. Orcad-backed SSH panes use the same subscribe path.
+ * last screenful and nothing above it. Quirkyd-backed SSH panes use the same subscribe path.
  *
  * Run:
  *   pnpm exec playwright test \
@@ -13,7 +13,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient
@@ -28,7 +28,7 @@ import {
 import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 
 const LINE_COUNT = 300
-const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-initial-scrollback-'))
+const scratch = mkdtempSync(path.join(os.tmpdir(), 'quirky-initial-scrollback-'))
 const fixturePath = path.join(scratch, 'history-terminal.mjs')
 writeFileSync(
   fixturePath,
@@ -53,17 +53,17 @@ function fixtureCommand(): string {
 }
 
 test('a desktop client opening a remote terminal receives its scrollback, not just the screen', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(300_000)
-  const worktreeId = await orcaPage.evaluate(() => {
+  const worktreeId = await quirkyPage.evaluate(() => {
     const id = window.__store?.getState().activeWorktreeId
     if (!id) {
       throw new Error('host has no active worktree')
     }
     return id
   })
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
   const client = await launchPairedElectronClient(offer, testInfo, 'initial-scrollback')
   let terminal: string | null = null
   try {

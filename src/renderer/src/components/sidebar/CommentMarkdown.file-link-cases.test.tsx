@@ -28,7 +28,7 @@ describe('CommentMarkdown host-confirmed file cases', () => {
     {
       name: 'slash commands and app routes',
       content:
-        'Type /orca-native-chat:orca-chat-visuals, run `/code-review`, strip `/api/v1`, use /clear and /compact, then open /tmp/report.html.',
+        'Type /quirky-native-chat:quirky-chat-visuals, run `/code-review`, strip `/api/v1`, use /clear and /compact, then open /tmp/report.html.',
       files: ['/tmp/report.html'],
       linked: ['/tmp/report.html']
     },
@@ -56,10 +56,10 @@ describe('CommentMarkdown host-confirmed file cases', () => {
     {
       name: 'spaced paths anchored at a root',
       content:
-        'Open `~/Library/Application Support/orca/log.json` and "C:\\My Folder\\notes.txt:12:3".',
-      files: ['~/Library/Application Support/orca/log.json', String.raw`C:\My Folder\notes.txt`],
+        'Open `~/Library/Application Support/quirky/log.json` and "C:\\My Folder\\notes.txt:12:3".',
+      files: ['~/Library/Application Support/quirky/log.json', String.raw`C:\My Folder\notes.txt`],
       linked: [
-        '~/Library/Application Support/orca/log.json',
+        '~/Library/Application Support/quirky/log.json',
         String.raw`C:\My Folder\notes.txt:12:3`
       ]
     },

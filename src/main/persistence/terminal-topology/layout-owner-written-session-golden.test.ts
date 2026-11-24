@@ -18,7 +18,7 @@ import {
   openTopologyStore
 } from './terminal-topology-profile-fixture'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []
@@ -36,7 +36,7 @@ vi.mock('node:crypto', async (importOriginal) => {
   }
 })
 
-const UPDATE_ENV = 'ORCA_UPDATE_LAYOUT_OWNER_GOLDEN'
+const UPDATE_ENV = 'QUIRKY_UPDATE_LAYOUT_OWNER_GOLDEN'
 const leaf = (n: number): string => `${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`
 const on = { workspace: WORKTREE }
 const directories: string[] = []
@@ -132,7 +132,7 @@ function writtenSession(directory: string): string {
 describe('the session a layout-owner build writes (downgrade probe, ledger L8)', () => {
   it('is the checked-in golden, byte for byte', async () => {
     expect(WORKTREE).toBe(FIXTURE_GIT_WORKTREE_ID)
-    const directory = mkdtempSync(join(tmpdir(), 'orca-layout-owner-golden-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-layout-owner-golden-'))
     directories.push(directory)
     const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
     vi.useFakeTimers({ toFake: ['Date'], now: 1_700_000_000_000 })

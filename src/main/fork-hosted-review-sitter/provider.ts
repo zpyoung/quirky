@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { Store } from '../persistence'
 import type {
   HostedReviewSnapshot,
@@ -85,7 +85,7 @@ function assertConditionalExpectedState(
 }
 
 export function createHostedReviewSitterProvider(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store
 ): HostedReviewSitterProviderAdapter {
   return {

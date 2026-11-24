@@ -130,7 +130,7 @@ const namesOf = (menu: AgentSessionSlashCommand[] | null, kind: 'skill' | 'comma
 beforeEach(async () => {
   resetHostTestOperationIds()
   clock = HOST_TEST_NOW
-  directory = await mkdtemp(join(tmpdir(), 'orca-at-rest-commands-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-at-rest-commands-'))
   workspace = join(directory, 'workspace')
   account = join(directory, 'claude-account')
   await writeSkill(join(workspace, '.claude', 'skills'), 'review-pr')
@@ -162,7 +162,7 @@ describe("a Claude chat whose Claude isn't running lists Claude's own `/` comman
       type: 'control_response',
       response: {
         subtype: 'success',
-        request_id: 'orca-command-discovery',
+        request_id: 'quirky-command-discovery',
         response: {
           commands: [
             { name: 'goal', description: 'Set a goal', argumentHint: '', builtin: true },
@@ -242,7 +242,7 @@ describe("a Claude chat whose Claude isn't running lists Claude's own `/` comman
         type: 'control_response',
         response: {
           subtype: 'success',
-          request_id: 'orca-command-discovery',
+          request_id: 'quirky-command-discovery',
           response: { commands: [{ name, description: name, argumentHint: '', builtin: true }] }
         }
       })}\n`

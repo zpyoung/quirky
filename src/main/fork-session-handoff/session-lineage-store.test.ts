@@ -42,7 +42,7 @@ describe('ForkSessionHandoffLineageStore', () => {
   let userDataPath: string
 
   beforeEach(async () => {
-    userDataPath = await mkdtemp(path.join(os.tmpdir(), 'orca-lineage-'))
+    userDataPath = await mkdtemp(path.join(os.tmpdir(), 'quirky-lineage-'))
   })
 
   afterEach(async () => {

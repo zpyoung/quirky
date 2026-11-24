@@ -14,8 +14,8 @@ vi.mock('./sync-runtime-graph/terminal-group-grid-sizes', () => ({
 
 const repo: Repo = {
   id: 'repo-1',
-  path: '/Users/me/orca',
-  displayName: 'orca',
+  path: '/Users/me/quirky',
+  displayName: 'quirky',
   badgeColor: '#737373',
   addedAt: 1,
   hookSettings: { mode: 'auto', scripts: { setup: 'secret-setup', archive: '' } },
@@ -76,21 +76,21 @@ describe("the sidebar's Project catalog in the window graph", () => {
       repos: [
         {
           id: 'repo-1',
-          displayName: 'orca',
-          path: '/Users/me/orca',
+          displayName: 'quirky',
+          path: '/Users/me/quirky',
           badgeColor: '#737373',
           addedAt: 1
         }
       ],
-      projects: [{ id: 'repo:repo-1', displayName: 'orca' }],
+      projects: [{ id: 'repo:repo-1', displayName: 'quirky' }],
       setups: [
         {
           id: 'repo-1',
           projectId: 'repo:repo-1',
           hostId: 'local',
           repoId: 'repo-1',
-          path: '/Users/me/orca',
-          displayName: 'orca',
+          path: '/Users/me/quirky',
+          displayName: 'quirky',
           setupMethod: 'legacy-repo'
         }
       ],

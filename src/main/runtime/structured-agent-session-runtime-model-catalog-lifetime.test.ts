@@ -23,7 +23,7 @@ vi.mock('./structured-agent-model-catalog-wiring', async (importOriginal) => ({
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-structured-catalog-lifetime-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-structured-catalog-lifetime-'))
 })
 
 afterEach(async () => {

@@ -16,37 +16,37 @@ import {
   wt
 } from './sidebar-list-golden-factories.test-fixture'
 
-// Hosts: local, an SSH box, and a paired Orca server (runtime environment).
-const orca = repo('orca', 'orca', { projectGroupId: 'pg-work' })
-const orcaSsh = repo('orca-ssh', 'orca', { connectionId: 'gpu-vm' })
+// Hosts: local, an SSH box, and a paired Quirky server (runtime environment).
+const quirky = repo('quirky', 'quirky', { projectGroupId: 'pg-work' })
+const quirkySsh = repo('quirky-ssh', 'quirky', { connectionId: 'gpu-vm' })
 const api = repo('api', 'api', { executionHostId: 'runtime:env-1' })
 const lab = repo('lab', 'lab', { projectGroupId: 'pg-nested' })
 const shared = repo('shared', 'shared')
 const empty = repo('empty', 'empty')
 const ext = repo('ext', 'ext', { externalWorktreeVisibility: 'hide', addedAt: GOLDEN_NOW })
 
-const oMain = mainWt(orca, { sortOrder: 10, lastActivityAt: GOLDEN_NOW - 9_000_000 })
-const oA = wt(orca, 'feat-a', {
+const oMain = mainWt(quirky, { sortOrder: 10, lastActivityAt: GOLDEN_NOW - 9_000_000 })
+const oA = wt(quirky, 'feat-a', {
   isPinned: true,
   sortOrder: 50,
   lastActivityAt: GOLDEN_NOW - 1_000,
   linkedPR: 11
 })
-const oB = wt(orca, 'feat-b', {
+const oB = wt(quirky, 'feat-b', {
   sortOrder: 40,
   workspaceStatus: 'in-review',
   lastActivityAt: GOLDEN_NOW - 5_000
 })
-const oC = wt(orca, 'feat-c', { sortOrder: 30, isPinned: true, manualOrder: 3 })
-const oD = wt(orca, 'Zeta', {
+const oC = wt(quirky, 'feat-c', { sortOrder: 30, isPinned: true, manualOrder: 3 })
+const oD = wt(quirky, 'Zeta', {
   sortOrder: 20,
   manualOrder: 9,
   createdAt: GOLDEN_NOW - 1_000,
   workspaceStatus: 'completed'
 })
-const oArchived = wt(orca, 'archived', { isArchived: true, sortOrder: 99 })
-const osMain = mainWt(orcaSsh, { sortOrder: 5 })
-const osX = wt(orcaSsh, 'remote-x', { isPinned: true, sortOrder: 45, hostId: 'ssh:gpu-vm' })
+const oArchived = wt(quirky, 'archived', { isArchived: true, sortOrder: 99 })
+const osMain = mainWt(quirkySsh, { sortOrder: 5 })
+const osX = wt(quirkySsh, 'remote-x', { isPinned: true, sortOrder: 45, hostId: 'ssh:gpu-vm' })
 const aMain = mainWt(api, { sortOrder: 4, hostId: 'runtime:env-1' })
 const aY = wt(api, 'api-y', {
   sortOrder: 35,
@@ -62,8 +62,8 @@ const sSsh: Worktree = { ...sLocal, hostId: 'ssh:gpu-vm', isPinned: true, sortOr
 const eMain = mainWt(ext, { sortOrder: 2 })
 
 export const GOLDEN_WORKTREE_IDS = {
-  orcaFeatA: oA.id,
-  orcaFeatD: oD.id
+  quirkyFeatA: oA.id,
+  quirkyFeatD: oD.id
 }
 
 const detectedHidden: DetectedWorktree = {
@@ -95,10 +95,10 @@ const pendingCreation: PendingWorktreeCreation = {
 
 const projects: Project[] = [
   {
-    id: 'p-orca',
-    displayName: 'orca',
+    id: 'p-quirky',
+    displayName: 'quirky',
     badgeColor: '#737373',
-    sourceRepoIds: [orca.id, orcaSsh.id],
+    sourceRepoIds: [quirky.id, quirkySsh.id],
     createdAt: 1,
     updatedAt: 1
   }
@@ -107,7 +107,7 @@ const projects: Project[] = [
 function setup(repoValue: Repo, hostId: ProjectHostSetup['hostId']): ProjectHostSetup {
   return {
     id: repoValue.id,
-    projectId: 'p-orca',
+    projectId: 'p-quirky',
     hostId,
     repoId: repoValue.id,
     path: repoValue.path,
@@ -132,8 +132,8 @@ export function buildGoldenStoreState(
   overrides: Partial<AppState> = {}
 ): Partial<AppState> {
   const worktreesByRepo: AppState['worktreesByRepo'] = {
-    [orca.id]: [oMain, oA, oB, oC, oD, oArchived],
-    [orcaSsh.id]: [osMain, osX],
+    [quirky.id]: [oMain, oA, oB, oC, oD, oArchived],
+    [quirkySsh.id]: [osMain, osX],
     [api.id]: [aMain, aY],
     [lab.id]: [lMain, lMr],
     [shared.id]: [sLocal, sSsh],
@@ -145,16 +145,16 @@ export function buildGoldenStoreState(
     showPinnedWorktreesInGroups: view.pinnedInGroups
   }
   return {
-    repos: [orca, orcaSsh, api, lab, shared, empty, ext],
+    repos: [quirky, quirkySsh, api, lab, shared, empty, ext],
     worktreesByRepo,
     worktreeLineageById: {
       [oB.id]: lineage(oB, oA),
       [oC.id]: lineage(oC, oB),
-      // Cross-project lineage: a lab workspace spawned from orca's feat-a.
+      // Cross-project lineage: a lab workspace spawned from quirky's feat-a.
       [lMr.id]: lineage(lMr, oA)
     },
     projects,
-    projectHostSetups: [setup(orca, 'local'), setup(orcaSsh, 'ssh:gpu-vm')],
+    projectHostSetups: [setup(quirky, 'local'), setup(quirkySsh, 'ssh:gpu-vm')],
     projectGroups: [
       group('pg-work', 'Work', { tabOrder: 0 }),
       group('pg-nested', 'Nested', { parentGroupId: 'pg-work', tabOrder: 0 }),
@@ -176,10 +176,10 @@ export function buildGoldenStoreState(
       folder('fw-remote', 'pg-remote-folders', { connectionId: 'gpu-vm', sortOrder: 1 })
     ],
     prCache: {
-      [`${orca.id}::feat-a`]: prEntry(11, 'open'),
-      [`${orca.id}::feat-b`]: prEntry(12, 'merged'),
-      [`${orca.id}::Zeta`]: prEntry(13, 'closed'),
-      [`ssh:gpu-vm::${orcaSsh.id}::remote-x`]: prEntry(21, 'draft'),
+      [`${quirky.id}::feat-a`]: prEntry(11, 'open'),
+      [`${quirky.id}::feat-b`]: prEntry(12, 'merged'),
+      [`${quirky.id}::Zeta`]: prEntry(13, 'closed'),
+      [`ssh:gpu-vm::${quirkySsh.id}::remote-x`]: prEntry(21, 'draft'),
       [`runtime:env-1::${api.id}::api-y`]: prEntry(31, 'open')
     },
     detectedWorktreesByRepo: {
@@ -231,8 +231,8 @@ export function goldenLiveTerminalState(): Partial<AppState> {
 export function goldenInboxState(): Partial<AppState> {
   return {
     repos: [
-      orca,
-      orcaSsh,
+      quirky,
+      quirkySsh,
       api,
       lab,
       shared,

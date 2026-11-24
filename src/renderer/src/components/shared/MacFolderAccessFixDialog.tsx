@@ -67,7 +67,7 @@ function allowStepHelper(mismatch: PtyManagementFolderAccessMismatch): string | 
   if (canResetPermission(mismatch)) {
     return translate(
       'auto.components.shared.MacFolderAccessFixDialog.stepAllowDenied',
-      'Orca is already allowed, but macOS isn’t applying it to the terminal service. Reset asks macOS for the permission again. Click Allow when it prompts.'
+      'Quirky is already allowed, but macOS isn’t applying it to the terminal service. Reset asks macOS for the permission again. Click Allow when it prompts.'
     )
   }
   return undefined
@@ -93,12 +93,12 @@ function FixSteps({
             canResetPermission(mismatch)
               ? translate(
                   'auto.components.shared.MacFolderAccessFixDialog.stepReallow',
-                  'Re-allow Orca for your {{folder}}',
+                  'Re-allow Quirky for your {{folder}}',
                   { folder }
                 )
               : translate(
                   'auto.components.shared.MacFolderAccessFixDialog.stepAllow',
-                  'Allow Orca under Files and Folders'
+                  'Allow Quirky under Files and Folders'
                 )
           }
           helper={restartState === 'done' ? undefined : allowStepHelper(mismatch)}
@@ -107,7 +107,7 @@ function FixSteps({
           done={restartState === 'done'}
           label={translate(
             'auto.components.shared.MacFolderAccessFixDialog.stepRestart',
-            'Restart Orca’s terminal service'
+            'Restart Quirky’s terminal service'
           )}
           helper={
             restartState === 'done'
@@ -242,7 +242,7 @@ function FixFooter({
 
 /**
  * The remedy for a daemon macOS refuses a folder to (STA-7948), raised from the folder-access
- * toast. Two steps, because a restart alone only works once Orca itself is allowed again — which
+ * toast. Two steps, because a restart alone only works once Quirky itself is allowed again — which
  * step 1 does, and the focus-time poll behind `freshDaemonAccess` is what notices it landed.
  */
 function FolderAccessFix({
@@ -340,7 +340,7 @@ function FolderAccessFix({
           <DialogDescription>
             {translate(
               'auto.components.shared.MacFolderAccessFixDialog.lead',
-              'macOS is blocking Orca’s terminal service from this folder.'
+              'macOS is blocking Quirky’s terminal service from this folder.'
             )}
           </DialogDescription>
         </DialogHeader>

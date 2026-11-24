@@ -2,7 +2,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
 import type { IFilesystemProvider } from '../providers/filesystem-provider-contract'
 
-const LOOPS_EXCLUDE_LINE = '/.orca/loops/'
+const LOOPS_EXCLUDE_LINE = '/.quirky/loops/'
 const SAFE_SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 export type LoopHostFilesystem = Pick<
@@ -86,7 +86,7 @@ function assertSafeSlug(slug: string): void {
 
 function loopDirectory(target: LoopWorkspaceTarget, slug: string): string {
   assertSafeSlug(slug)
-  return pathFor(target).join(target.workspacePath, '.orca', 'loops', slug)
+  return pathFor(target).join(target.workspacePath, '.quirky', 'loops', slug)
 }
 
 export function loopNotesPath(target: LoopWorkspaceTarget, slug: string): string {
@@ -128,7 +128,7 @@ async function excludeLoopsDirectory(
 }
 
 /**
- * Creates `.orca/loops/<slug>/notes.md` if absent and, for git workspaces, keeps `.orca/loops/`
+ * Creates `.quirky/loops/<slug>/notes.md` if absent and, for git workspaces, keeps `.quirky/loops/`
  * out of status via the repository's private exclude file; it throws when that entry cannot be
  * installed. `.gitignore` is never touched, and existing notes content is never rewritten.
  */
@@ -141,13 +141,13 @@ export async function ensureLoopNotesFile(
   if ((await readIfPresent(target.fs, notesPath)) === null) {
     await target.fs.writeFile(
       notesPath,
-      `# ${slug}\n\nNotes for this loop. Edit freely; Orca does not rewrite this file.\n`
+      `# ${slug}\n\nNotes for this loop. Edit freely; Quirky does not rewrite this file.\n`
     )
   }
   if (target.kind === 'git') {
     if (!target.runGit) {
       throw new Error(
-        'git is unavailable on the workspace host, so .orca/loops/ cannot be excluded'
+        'git is unavailable on the workspace host, so .quirky/loops/ cannot be excluded'
       )
     }
     await excludeLoopsDirectory(target, target.runGit)

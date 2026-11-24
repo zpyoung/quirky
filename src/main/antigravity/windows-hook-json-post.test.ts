@@ -3,10 +3,10 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, expect, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { WINDOWS_ANTIGRAVITY_JSON_POST_SCRIPT } from './windows-hook-json-post'
 
-const directory = mkdtempSync(join(tmpdir(), 'orca-agy-json-post-'))
+const directory = mkdtempSync(join(tmpdir(), 'quirky-agy-json-post-'))
 const script = join(directory, 'hook.cjs')
 writeFileSync(script, WINDOWS_ANTIGRAVITY_JSON_POST_SCRIPT)
 afterAll(() => rmSync(directory, { recursive: true, force: true }))
@@ -31,10 +31,10 @@ it('delivers exact split UTF-8 JSON without EOF and bounds empty or partial inpu
   }
   const env = {
     ...process.env,
-    ORCA_AGENT_HOOK_PORT: String(address.port),
-    ORCA_AGENT_HOOK_TOKEN: 'disposable-proof-token',
-    ORCA_PANE_KEY: 'proof!pane',
-    ORCA_ANTIGRAVITY_EVENT: 'PreInvocation'
+    QUIRKY_AGENT_HOOK_PORT: String(address.port),
+    QUIRKY_AGENT_HOOK_TOKEN: 'disposable-proof-token',
+    QUIRKY_PANE_KEY: 'proof!pane',
+    QUIRKY_ANTIGRAVITY_EVENT: 'PreInvocation'
   }
   const payload = JSON.stringify({
     message: '日本語 😀 café {"quoted"} \\ tail',
@@ -47,7 +47,7 @@ it('delivers exact split UTF-8 JSON without EOF and bounds empty or partial inpu
         const child = spawnProcess({
           program: process.execPath,
           args: [script],
-          env: { ...env, ORCA_AGENT_HOOK_VERSION: version }
+          env: { ...env, QUIRKY_AGENT_HOOK_VERSION: version }
         })
         child.stdin.on('error', () => {})
         let stdout = ''
@@ -114,9 +114,9 @@ it('bounds oversized payloads, encoded bodies, absent endpoints and stalled HTTP
   }
   const env = {
     ...process.env,
-    ORCA_AGENT_HOOK_PORT: String(address.port),
-    ORCA_AGENT_HOOK_TOKEN: 'disposable-proof-token',
-    ORCA_PANE_KEY: 'proof-pane'
+    QUIRKY_AGENT_HOOK_PORT: String(address.port),
+    QUIRKY_AGENT_HOOK_TOKEN: 'disposable-proof-token',
+    QUIRKY_PANE_KEY: 'proof-pane'
   }
   try {
     for (const payloadCase of ['oversized', 'encoded-oversized', 'no-endpoint', 'hung-http']) {
@@ -124,7 +124,7 @@ it('bounds oversized payloads, encoded bodies, absent endpoints and stalled HTTP
       const child = spawnProcess({
         program: process.execPath,
         args: [script],
-        env: payloadCase === 'no-endpoint' ? { ...env, ORCA_AGENT_HOOK_PORT: '' } : env
+        env: payloadCase === 'no-endpoint' ? { ...env, QUIRKY_AGENT_HOOK_PORT: '' } : env
       })
       child.stdin.on('error', () => {})
       let output = ''

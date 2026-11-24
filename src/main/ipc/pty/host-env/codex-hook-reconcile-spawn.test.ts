@@ -9,7 +9,7 @@ vi.mock('../../../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getPath: () => fixture.userData, onWillQuit: vi.fn() })
 }))
 vi.mock('../../../agent-hooks/server', () => ({
-  agentHookServer: { buildPtyEnv: () => ({ ORCA_AGENT_HOOK_PORT: '12345' }) }
+  agentHookServer: { buildPtyEnv: () => ({ QUIRKY_AGENT_HOOK_PORT: '12345' }) }
 }))
 vi.mock('../../../agent-hooks/wsl-hook-relay-manager', () => ({
   wslHookRelayManager: {
@@ -22,10 +22,10 @@ vi.mock('../../../agent-hooks/wsl-hook-relay-manager', () => ({
 vi.mock('../../../pi/titlebar-extension-service', () => ({
   piTitlebarExtensionService: { buildPtyEnv: () => ({}), buildFreshOmpEnv: () => ({}) }
 }))
-vi.mock('../../../cli/orca-cli-child-path', () => ({ prependOrcaCliDirToChildPath: () => {} }))
+vi.mock('../../../cli/quirky-cli-child-path', () => ({ prependQuirkyCliDirToChildPath: () => {} }))
 vi.mock('../../../cli/wsl-managed-cli', () => ({
   getManagedWslCliDir: () => undefined,
-  getWslCliCommandName: () => 'orca-ide'
+  getWslCliCommandName: () => 'quirky-ide'
 }))
 vi.mock('../../../codex/codex-hook-reconcile', () => ({
   scheduleCodexHookReconcile: fixture.scheduleCodexHookReconcile
@@ -34,13 +34,13 @@ vi.mock('../../../codex/codex-hook-reconcile', () => ({
 import { buildPtyHostEnv } from './assembly'
 
 // Why this file: a codex typed in a native pane reads ~/.codex, so each native
-// spawn rechecks Orca's entry there; a WSL pane's Codex never reads it.
+// spawn rechecks Quirky's entry there; a WSL pane's Codex never reads it.
 
 let root: string
 let options: BuildPtyHostEnvOptions
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-codex-reconcile-spawn-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-codex-reconcile-spawn-'))
   fixture.userData = join(root, 'user-data')
   vi.stubEnv('HOME', join(root, 'home'))
   vi.stubEnv('USERPROFILE', join(root, 'home'))
@@ -58,7 +58,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-describe("a pane spawn rechecks Orca's entry in ~/.codex", () => {
+describe("a pane spawn rechecks Quirky's entry in ~/.codex", () => {
   it('on a native spawn', () => {
     buildPtyHostEnv('native-pane', {}, options)
 

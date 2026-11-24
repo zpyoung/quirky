@@ -1,5 +1,5 @@
 /**
- * What a method lets its caller do to this Orca, declared on every method definition.
+ * What a method lets its caller do to this Quirky, declared on every method definition.
  *
  * The dispatcher grants each caller kind a set of these (rpc-caller-scope.ts), so a new method
  * cannot ship without someone deciding which callers may reach it.
@@ -16,11 +16,11 @@ export type RpcMethodPermission =
   /** Projects, worktrees, terminals, files, git, browser, orchestration and integrations; equals
    *  running commands as this host's user. */
   | 'workspace'
-  /** Drives this machine's own desktop: clicks, keys and app state outside Orca. */
+  /** Drives this machine's own desktop: clicks, keys and app state outside Quirky. */
   | 'desktop-control'
   /** Adds, removes or switches agent and integration accounts and their credentials. */
   | 'accounts-admin'
-  /** Changes Orca settings. */
+  /** Changes Quirky settings. */
   | 'settings-write'
   /** Installs, publishes or removes agent skills. */
   | 'skills-admin'

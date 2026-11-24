@@ -33,7 +33,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -97,7 +97,7 @@ describe('a pane whose process belongs to an agent launch', () => {
         worktreeId,
         tabId,
         leafId,
-        env: { ORCA_PANE_KEY: paneKey, ORCA_WORKTREE_ID: worktreeId }
+        env: { QUIRKY_PANE_KEY: paneKey, QUIRKY_WORKTREE_ID: worktreeId }
       })
     )
   }
@@ -288,7 +288,7 @@ describe('a restored pane after a restart', () => {
         worktreeId,
         tabId,
         leafId,
-        env: { ORCA_PANE_KEY: paneKey, ORCA_TAB_ID: tabId, ORCA_WORKTREE_ID: worktreeId },
+        env: { QUIRKY_PANE_KEY: paneKey, QUIRKY_TAB_ID: tabId, QUIRKY_WORKTREE_ID: worktreeId },
         // A pane that still carries its launch attaches to the agent it started, never plans again.
         ...(daemon === 'live'
           ? {

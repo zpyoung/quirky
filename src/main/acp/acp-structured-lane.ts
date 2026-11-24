@@ -43,7 +43,7 @@ export type AcpStructuredLaneDeps = {
   providerSessionId: string
   dialect: AcpDialect
   logger: StructuredAgentSessionLogger
-  /** A send of Orca's reached the agent: the turn it opened has its first provider event. */
+  /** A send of Quirky's reached the agent: the turn it opened has its first provider event. */
   onInputAccepted: (clientMessageId: string) => void
   /** The sink refused for good; nothing more this child says can be journaled. */
   onFailed: (reason: string) => void

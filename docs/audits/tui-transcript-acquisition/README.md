@@ -13,7 +13,7 @@ These are internal lifecycle changes. They add no wire type and infer no remote 
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/tui-transcript-acquisition/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/tui-transcript-acquisition/reproduce.mjs
 ```
 
 The script runs seven tests through the actual host, handoff coordinator, durable record store, journal, and transcript watcher. Real file resolution, watcher installation, and initial read are paused at explicit asynchronous boundaries; provider processes use the existing fake adapter/transport. No real shell or app window launches.

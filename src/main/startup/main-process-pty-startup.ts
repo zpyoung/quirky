@@ -27,7 +27,7 @@ import {
 } from '../agent-hooks/restored-status-dead-terminal-sweep'
 import { startFirstWindowStartupServices } from './first-window-startup-services'
 import { logStartupMilestone } from './startup-diagnostics'
-import type { RuntimeWorktreeLifecycleEvent } from '../runtime/orca-runtime'
+import type { RuntimeWorktreeLifecycleEvent } from '../runtime/quirky-runtime'
 import { mainProcessState as state } from './main-process-state'
 
 export type TerminalRuntimeStartupServices = {
@@ -130,7 +130,7 @@ export function startTerminalRuntimeStartupServices(): TerminalRuntimeStartupSer
       // serve daemon must survive its spawning session ending (SSH disconnect).
       await initDaemonPtyProvider(signal, {
         macosLoginSessionWatch: process.platform === 'darwin' && !state.isServeMode,
-        // Why both: desktop and `orca serve` share one restore budget per machine (D1 Q1).
+        // Why both: desktop and `quirky serve` share one restore budget per machine (D1 Q1).
         spawnAdmission: resolveTerminalSpawnAdmissionMode()
       })
       // Why: a retained shell keeps its launch-time Codex home even when the current routing lane changes.
@@ -161,14 +161,14 @@ export function startTerminalRuntimeStartupServices(): TerminalRuntimeStartupSer
       state.codexRuntimeHome?.reconcileLegacySharedHomeForRetainedPanes()
       logStartupMilestone('startup-service-done', { service: 'daemon-pty-provider' })
     },
-    // Why: PTY spawn env reads ORCA_AGENT_HOOK_* from live server state, so the renderer awaits this before restored terminals reconnect.
+    // Why: PTY spawn env reads QUIRKY_AGENT_HOOK_* from live server state, so the renderer awaits this before restored terminals reconnect.
     startAgentHookServer: async () => {
       const settings = state.store?.getSettings()
       logStartupMilestone('startup-service-start', { service: 'agent-hook-server' })
       await agentHookServer.start({
         statusHooksEnabled: isAgentStatusHooksEnabled(settings),
         env: app.isPackaged ? 'production' : 'development',
-        // Why: hooks source this endpoint file at invocation time so old PTY env reaches the current process after restart; dev namespaces it (worktrees share `orca-dev`).
+        // Why: hooks source this endpoint file at invocation time so old PTY env reaches the current process after restart; dev namespaces it (worktrees share `quirky-dev`).
         userDataPath: app.getPath('userData'),
         endpointNamespace: state.devAgentHookEndpointNamespace
       })
@@ -182,7 +182,7 @@ export function startTerminalRuntimeStartupServices(): TerminalRuntimeStartupSer
       )
     },
     onAgentHookServerError: (error) => {
-      // Why: hook callbacks are sidebar enrichment only; Orca must still boot if the loopback receiver fails.
+      // Why: hook callbacks are sidebar enrichment only; Quirky must still boot if the loopback receiver fails.
       console.error('[agent-hooks] Failed to start local hook server:', error)
     }
   })

@@ -1,7 +1,7 @@
 // How a child's ending may change once recorded. Settled history only gains precision: an
 // `unknown` ending may become a definite one (a roster omission can land a tick before the frame
 // naming the outcome), and a definite ending never changes to another, except that the child's own
-// ending replaces one an acknowledged Stop gave it: the provider can hand Orca the acknowledgement
+// ending replaces one an acknowledged Stop gave it: the provider can hand Quirky the acknowledgement
 // ahead of the child's earlier frame. An omitted outcome counts as `unknown`.
 
 import type {

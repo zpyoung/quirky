@@ -13,7 +13,7 @@ const ids = {
     leafA: 'f79c6b84-37eb-491c-bb55-d238166cb478',
     leafB: '0faa8a32-15dc-432c-a682-10fe5f8cb29d',
     pty: '@@9bb36b1f',
-    path: '/private/var/folders/x/T/orca-e2e-repo-AAAA',
+    path: '/private/var/folders/x/T/quirky-e2e-repo-AAAA',
     now: 1791231171039
   },
   b: {
@@ -22,7 +22,7 @@ const ids = {
     leafA: 'e5bd116c-8cfb-4165-946a-bfab35aba500',
     leafB: '3ca564d4-1d13-4a96-91a2-6d523c0dbb4c',
     pty: '@@484c9b33',
-    path: '/private/var/folders/x/T/orca-e2e-repo-BBBB',
+    path: '/private/var/folders/x/T/quirky-e2e-repo-BBBB',
     now: 1791231209172
   }
 }

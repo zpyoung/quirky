@@ -109,7 +109,7 @@ it('keeps the captured skip visible when the actual 200-item history tail omits 
   expect(result.ok).toBe(true)
   const page = result.page
   expect(page.items).toHaveLength(200)
-  expect(page.items[0].itemId).toBe('orca:command-turn%3Acompact-1')
+  expect(page.items[0].itemId).toBe('quirky:command-turn%3Acompact-1')
   expect(page.items[1].body.text).toBe('Nothing to compact (session too small)')
   expect(page.submissions).toEqual([])
   const slot = slotsFor(page).find(
@@ -134,7 +134,7 @@ it('restores the captured skip after the real older-page read loads its opener',
     { sessionId: 'session-1', direction: 'before', cursor: tail.window.nextCursor, limit: 200 },
     snapshot
   ).page
-  expect(older.items.map((item) => item.itemId)).toEqual(['orca:compact-1'])
+  expect(older.items.map((item) => item.itemId)).toEqual(['quirky:compact-1'])
   const slots = slotsFor({
     ...tail,
     items: [...older.items, ...tail.items],
@@ -153,7 +153,7 @@ it('restores the captured skip after the real older-page read loads its opener',
 it('continues folding an ordinary warning at the same real history boundary', async () => {
   const snapshot = await snapshotWithLaterHistory()
   snapshot.items = snapshot.items.map((item) =>
-    item.body.kind === 'status' ? { ...item, itemId: 'orca:ordinary-warning' } : item
+    item.body.kind === 'status' ? { ...item, itemId: 'quirky:ordinary-warning' } : item
   )
   const result = readAgentSessionHistory(
     { snapshot: () => snapshot },

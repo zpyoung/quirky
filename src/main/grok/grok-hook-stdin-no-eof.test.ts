@@ -22,7 +22,7 @@ describe.skipIf(process.platform === 'win32')('Grok POSIX hook stdin without EOF
   async function runHookWithoutEof(
     chunks: readonly Buffer[]
   ): Promise<{ exitCode: number | null; durationMs: number; stderr: string }> {
-    dir = mkdtempSync(join(tmpdir(), 'orca-grok-hook-no-eof-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-grok-hook-no-eof-'))
     const scriptPath = join(dir, 'grok-hook.sh')
     writeFileSync(scriptPath, getGrokManagedScript('posix'), { mode: 0o755 })
 
@@ -31,10 +31,10 @@ describe.skipIf(process.platform === 'win32')('Grok POSIX hook stdin without EOF
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        ORCA_PANE_KEY: 'pane-1',
-        ORCA_AGENT_HOOK_PORT: '',
-        ORCA_AGENT_HOOK_TOKEN: '',
-        ORCA_AGENT_HOOK_ENDPOINT: ''
+        QUIRKY_PANE_KEY: 'pane-1',
+        QUIRKY_AGENT_HOOK_PORT: '',
+        QUIRKY_AGENT_HOOK_TOKEN: '',
+        QUIRKY_AGENT_HOOK_ENDPOINT: ''
       }
     })
     let stderr = ''

@@ -370,7 +370,7 @@ describe('registerWorktreeHandlers', () => {
   it.each(['unproven', 'removal-fails'] as const)(
     'keeps desktop orphan cleanup retryable when the directory is %s',
     async (mode) => {
-      const parentDir = await mkdtemp(join(tmpdir(), 'orca-ipc-orphan-retention-'))
+      const parentDir = await mkdtemp(join(tmpdir(), 'quirky-ipc-orphan-retention-'))
       const repoPath = join(parentDir, 'repo')
       const orphanPath = join(parentDir, 'orphan')
       const worktreeId = `repo-1::${orphanPath}`
@@ -425,7 +425,7 @@ describe('registerWorktreeHandlers', () => {
 
   it('recovers forced Windows long-path worktree removal through local deletion and prune', async () => {
     setPlatform('win32')
-    const parentDir = await mkdtemp(join(tmpdir(), 'orca-ipc-long-path-'))
+    const parentDir = await mkdtemp(join(tmpdir(), 'quirky-ipc-long-path-'))
     const repoPath = join(parentDir, 'repo')
     const worktreePath = join(parentDir, 'feature-wt')
     await mkdir(worktreePath, { recursive: true })
@@ -587,7 +587,7 @@ describe('registerWorktreeHandlers', () => {
   )
 
   it('cleans a prunable Git-file row before archive or checkout teardown', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-prunable-ipc-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-prunable-ipc-'))
     const markerPath = join(root, '.git')
     await writeFile(markerPath, 'gitdir: /preserved/admin\n')
     const worktreeId = `repo-1::${markerPath}`

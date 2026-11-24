@@ -15,7 +15,7 @@ import {
 import type { StructuredAgentSessionLaunchIntent } from './launch-structured-agent-session'
 
 const SERVER = 'runtime:server-1'
-const TOMBSTONES_KEY = 'orca:structuredAgentLaunchCancelledSessions:v1'
+const TOMBSTONES_KEY = 'quirky:structuredAgentLaunchCancelledSessions:v1'
 
 function reload(): void {
   resetStructuredAgentLaunchPersistenceForTests()
@@ -29,7 +29,7 @@ describe('structured agent launch persistence', () => {
 
   it('normalizes pending launches after a renderer reload', () => {
     localStorage.setItem(
-      'orca:structuredAgentLaunches:v1',
+      'quirky:structuredAgentLaunches:v1',
       JSON.stringify([
         {
           sessionId: 'codex_session',
@@ -62,7 +62,7 @@ describe('structured agent launch persistence', () => {
 
   it("keeps a registered agent's launch across a reload and drops a record naming no agent", () => {
     localStorage.setItem(
-      'orca:structuredAgentLaunches:v1',
+      'quirky:structuredAgentLaunches:v1',
       JSON.stringify(
         [
           ['grok_session', 'grok'],
@@ -142,7 +142,7 @@ describe('structured agent launch persistence', () => {
 
   it('drops a stored seed value that does not decode', () => {
     localStorage.setItem(
-      'orca:structuredAgentLaunches:v1',
+      'quirky:structuredAgentLaunches:v1',
       JSON.stringify([
         {
           sessionId: 'claude_paired',
@@ -174,7 +174,7 @@ describe('structured agent launch persistence', () => {
       resumeFrom: { providerSessionId: 'provider-thread' }
     })
 
-    const raw = localStorage.getItem('orca:structuredAgentLaunches:v1') ?? ''
+    const raw = localStorage.getItem('quirky:structuredAgentLaunches:v1') ?? ''
     expect(raw).toContain('claude_session')
     expect(raw).toContain('operation-2')
     expect(raw).not.toContain('prompt')
@@ -194,9 +194,9 @@ describe('structured agent launch persistence', () => {
       expectedRuntimeFence: null,
       failedAt: 42_000
     })
-    const stored = JSON.parse(localStorage.getItem('orca:structuredAgentLaunches:v1') ?? '[]')
+    const stored = JSON.parse(localStorage.getItem('quirky:structuredAgentLaunches:v1') ?? '[]')
     localStorage.setItem(
-      'orca:structuredAgentLaunches:v1',
+      'quirky:structuredAgentLaunches:v1',
       JSON.stringify([
         ...stored,
         // Written by a build that did not save the failure time.

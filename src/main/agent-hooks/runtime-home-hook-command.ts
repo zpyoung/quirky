@@ -23,7 +23,7 @@ function buildPosixBranch(
   missingScriptFallback: string,
   options: { requireHome?: boolean } = {}
 ): string {
-  const posixScript = `"\${HOME-}/.orca/agent-hooks/${scriptBaseName}.sh"`
+  const posixScript = `"\${HOME-}/.quirky/agent-hooks/${scriptBaseName}.sh"`
   const homeGuard = options.requireHome ? '[ -n "${HOME-}" ] && ' : ''
   const parentCapture =
     scriptBaseName === 'claude-hook' || scriptBaseName === 'openclaude-hook'
@@ -45,13 +45,13 @@ export function wrapRuntimeHomeHookCommand(
   assertManagedScriptBaseName(scriptBaseName)
   // Why: default-form every var — a static hook precheck (Grok) rejects the whole command on a bare
   // reference it cannot resolve, even in a branch that platform never takes.
-  const windowsScript = `"\${HOME-}/.orca/agent-hooks/${scriptBaseName}.cmd"`
+  const windowsScript = `"\${HOME-}/.quirky/agent-hooks/${scriptBaseName}.cmd"`
   const drain = POSIX_HOOK_STDIN_DRAIN_COMMAND
   const neutralJson = options.neutralJsonWhenMissing ? `printf '{}\\n'` : ''
   // Why two forms: the missing-script fallback owns stdin, so it follows the rule of the host
   // it lands on. POSIX callers close the pipe, so capture-first is safe there and a mid-write
   // exit stays visible as EPIPE (#8110). A Windows caller may abandon the pipe, so there the
-  // answer comes first and the drain only runs with an Orca env behind it (#11549).
+  // answer comes first and the drain only runs with an Quirky env behind it (#11549).
   const posixMissingScriptFallback = neutralJson ? `${drain}; ${neutralJson}` : drain
   const windowsMissingScriptFallback = [
     ...(neutralJson ? [neutralJson] : []),
@@ -64,7 +64,7 @@ export function wrapRuntimeHomeHookCommand(
   const powershell = '"${SYSTEMROOT-}/System32/WindowsPowerShell/v1.0/powershell.exe"'
   const powershellFallback = options.neutralJsonWhenMissing ? "; Write-Output '{}'" : ''
   // Why the order: answer first, then the shared env guard, then own stdin — see wrapWindowsHookCommand.
-  const powershellCommand = `$homePath = $env:HOME -replace '^/([A-Za-z])/', '$1:/'; $scriptPath = Join-Path $homePath '.orca\\agent-hooks\\${scriptBaseName}.cmd'; if (Test-Path -LiteralPath $scriptPath -PathType Leaf) { & $scriptPath; exit $LASTEXITCODE }${powershellFallback}; ${WINDOWS_POWERSHELL_HOOK_ENVIRONMENT_GUARD}; [Console]::In.ReadToEnd() | Out-Null; exit 0`
+  const powershellCommand = `$homePath = $env:HOME -replace '^/([A-Za-z])/', '$1:/'; $scriptPath = Join-Path $homePath '.quirky\\agent-hooks\\${scriptBaseName}.cmd'; if (Test-Path -LiteralPath $scriptPath -PathType Leaf) { & $scriptPath; exit $LASTEXITCODE }${powershellFallback}; ${WINDOWS_POWERSHELL_HOOK_ENVIRONMENT_GUARD}; [Console]::In.ReadToEnd() | Out-Null; exit 0`
   const encodedCommand = encodeWindowsPowerShellHookCommand(powershellCommand)
   // Why: the Git Bash and native Windows launchers must spell the same switches — window suppression (#14815) and an AV verdict on the shape (#16003) both hit either path.
   const powershellInvocation = `${powershell} ${WINDOWS_POWERSHELL_HOOK_SWITCHES} -EncodedCommand ${encodedCommand}`

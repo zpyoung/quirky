@@ -6,7 +6,7 @@ import { translate } from '@/i18n/i18n'
 export function CopyTabIdMenuItem({ unifiedTabId }: { unifiedTabId: string }): React.JSX.Element {
   const copyTabId = async (): Promise<void> => {
     try {
-      await window.api.ui.writeClipboardText(`orcaTabId: ${unifiedTabId}`)
+      await window.api.ui.writeClipboardText(`quirkyTabId: ${unifiedTabId}`)
       toast.success(translate('components.tab.bar.CopyTabIdMenuItem.copied', 'Tab ID copied'))
     } catch {
       toast.error(translate('components.tab.bar.CopyTabIdMenuItem.failed', 'Could not copy tab ID'))

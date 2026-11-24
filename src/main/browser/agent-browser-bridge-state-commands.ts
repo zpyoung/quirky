@@ -101,7 +101,7 @@ export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridge
         throw new BrowserError('browser_error', 'Debugger not attached')
       }
 
-      // Why: agent-browser's `set viewport` has no `mobile` flag, so apply the emulation directly via CDP to honor Orca's --mobile.
+      // Why: agent-browser's `set viewport` has no `mobile` flag, so apply the emulation directly via CDP to honor Quirky's --mobile.
       await sendGuestCdpCommand(wc, 'Emulation.setDeviceMetricsOverride', {
         width,
         height,
@@ -257,7 +257,7 @@ export abstract class AgentBrowserBridgeStateCommands extends AgentBrowserBridge
 
   async exec(command: string, worktreeId?: string, browserPageId?: string): Promise<unknown> {
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
-      // Why: strip target/session flags from passthrough so a caller can't override Orca's selected page or CDP proxy.
+      // Why: strip target/session flags from passthrough so a caller can't override Quirky's selected page or CDP proxy.
       const args = stripAgentBrowserTargetArgs(parseShellArgs(command.trim()))
       return await this.execAgentBrowser(sessionName, args)
     })

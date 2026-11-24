@@ -130,7 +130,7 @@ export const hostSshTargetSummariesSchema = z
  * Salvaged to absent, which reads as null — main's own answer for a non-string or an empty one
  * (`typeof platform === 'string' && platform`), and the value that keeps the phone's platform from
  * naming the desktop. The arm set is closed over Node's platform domain rather than over anything
- * Orca versions: the handler returns `process.platform` and nothing else, and a string outside that
+ * Quirky versions: the handler returns `process.platform` and nothing else, and a string outside that
  * set names no path convention this client could apply.
  *
  * Total for the same reason as the SSH targets above: `readHostPlatform` answered `null` for any

@@ -8,7 +8,7 @@ import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import { useAppStore } from '../../store'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { resolveRootlessTerminalLayoutLeafId } from '../../../../shared/workspace-layout/terminal-pane-tree'
 
 function showRuntimePaneTitle(tabId: string, leafId: string, title: string | null): void {
@@ -53,7 +53,7 @@ export function applyRuntimePaneTitle({ tabId, leafId, title }: SetTerminalPaneT
   const worktreeId = findTerminalTabWorktreeId(store.tabsByWorktree, tabId)
   // Switch point: a main-owned layout takes the rename, and main's frame draws it.
   if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     worktreeId &&
     sendLayoutCommandToOwner(
       worktreeId,

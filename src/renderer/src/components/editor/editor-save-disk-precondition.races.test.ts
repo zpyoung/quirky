@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ORCA_EDITOR_FILE_CACHE_STALE_EVENT,
-  ORCA_EDITOR_FILE_SAVED_EVENT,
-  ORCA_EDITOR_SAVE_AND_CLOSE_EVENT,
+  QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT,
+  QUIRKY_EDITOR_FILE_SAVED_EVENT,
+  QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT,
   requestEditorFileSave,
   requestEditorSaveQuiesce,
   type EditorSaveAndCloseDetail
@@ -171,8 +171,8 @@ describe('guarded editor saves under races', () => {
         cache.delete(event.detail.fileId)
       }
     }
-    window.addEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, track)
-    window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, drop)
+    window.addEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, track)
+    window.addEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, drop)
     store.getState().setEditorDraft(saver.id, 'B')
     store.getState().markFileDirty(saver.id, true)
 
@@ -190,8 +190,8 @@ describe('guarded editor saves under races', () => {
       expect(disk.files.get(GUARDED_PATH)).toBe('B edited')
     } finally {
       cleanup()
-      window.removeEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, track)
-      window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, drop)
+      window.removeEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, track)
+      window.removeEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, drop)
     }
   })
 
@@ -240,7 +240,7 @@ describe('guarded editor saves under races', () => {
         shown.set(event.detail.fileId, event.detail.content)
       }
     }
-    window.addEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, onSaved)
+    window.addEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, onSaved)
 
     const cleanup = attachEditorAutosaveController(store)
     try {
@@ -262,7 +262,7 @@ describe('guarded editor saves under races', () => {
       }
     } finally {
       cleanup()
-      window.removeEventListener(ORCA_EDITOR_FILE_SAVED_EVENT, onSaved)
+      window.removeEventListener(QUIRKY_EDITOR_FILE_SAVED_EVENT, onSaved)
     }
   })
 
@@ -302,7 +302,7 @@ describe('guarded editor saves under races', () => {
         dropped.push(event.detail.fileId)
       }
     }
-    window.addEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+    window.addEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
 
     const cleanup = attachEditorAutosaveController(store)
     try {
@@ -316,7 +316,7 @@ describe('guarded editor saves under races', () => {
       expect(disk.files.get(GUARDED_PATH)).toBe('kept edits')
     } finally {
       cleanup()
-      window.removeEventListener(ORCA_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
+      window.removeEventListener(QUIRKY_EDITOR_FILE_CACHE_STALE_EVENT, onStale)
     }
   })
 
@@ -343,7 +343,7 @@ describe('guarded editor saves under races', () => {
     try {
       const reason = await new Promise((resolve) => {
         const detail: EditorSaveAndCloseDetail = { fileId: GUARDED_PATH, onNotClosed: resolve }
-        window.dispatchEvent(new CustomEvent(ORCA_EDITOR_SAVE_AND_CLOSE_EVENT, { detail }))
+        window.dispatchEvent(new CustomEvent(QUIRKY_EDITOR_SAVE_AND_CLOSE_EVENT, { detail }))
       })
       expect(reason).toBe('blocked-stale')
       expect(store.getState().openFiles).toHaveLength(1)

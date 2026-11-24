@@ -58,7 +58,7 @@
       "statusLine": "Línea de estado",
       "statusLineAvailable": "Se detectó una línea de estado personalizada",
       "statusLineChained": "Encadenada",
-      "statusLineConsent": "Orca conservará y ejecutará tu comando de línea de estado actual.",
+      "statusLineConsent": "Quirky conservará y ejecutará tu comando de línea de estado actual.",
       "statusLineDisabled": "No activada",
       "statusLineDrifted": "La línea de estado personalizada cambió",
       "statusLineError": "Requiere atención",

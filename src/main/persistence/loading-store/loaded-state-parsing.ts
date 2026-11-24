@@ -79,7 +79,7 @@ export class LoadedStateParsingOperations {
   }
 
   private loadInternal(serialized?: string, parsedInput?: Record<string, unknown>): PersistedState {
-    // Capture "has run Orca before?" for cohort migrations that cannot infer it from saved fields.
+    // Capture "has run Quirky before?" for cohort migrations that cannot infer it from saved fields.
     const fileExistedOnLoad = serialized !== undefined || parsedInput !== undefined
     logStartupMilestone('persistence-load-start', {
       fileExists: fileExistedOnLoad

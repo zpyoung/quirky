@@ -2,14 +2,14 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test as base, expect } from './helpers/orca-app'
+import { test as base, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { getTerminalContent } from './helpers/terminal'
 
 const ISSUE_NUMBER = 6613
 const ISSUE_TITLE = 'Start a newly created issue without losing its context'
 const ISSUE_URL = `https://github.com/acme/repo/issues/${ISSUE_NUMBER}`
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-created-issue-prefill-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-created-issue-prefill-'))
 
 const fakeGhSource = `
 const args = process.argv.slice(2)
@@ -128,11 +128,11 @@ test.beforeAll(({ testRepoPath }) => {
 })
 
 test('starting a just-created GitHub issue launches Claude with its URL prefilled', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
   // Why: the gh preflight merges the login-shell PATH ahead of launchEnv, so the fake gh can lose to a real one.
   await electronApp.evaluate(
     ({ ipcMain }, created) => {
@@ -142,7 +142,7 @@ test('starting a just-created GitHub issue launches Claude with its URL prefille
     { number: ISSUE_NUMBER, url: ISSUE_URL }
   )
 
-  await orcaPage.evaluate(async () => {
+  await quirkyPage.evaluate(async () => {
     const store = window.__store
     if (!store) {
       throw new Error('window.__store is not available')
@@ -166,25 +166,25 @@ test('starting a just-created GitHub issue launches Claude with its URL prefille
     store.getState().openTaskPage({ taskSource: 'github' })
   })
 
-  const newIssueButton = orcaPage.getByRole('button', { name: 'New GitHub issue' })
+  const newIssueButton = quirkyPage.getByRole('button', { name: 'New GitHub issue' })
   await expect(newIssueButton).toBeEnabled({ timeout: 15_000 })
   await newIssueButton.click()
 
-  const createDialog = orcaPage.getByRole('dialog', { name: 'New GitHub issue' })
+  const createDialog = quirkyPage.getByRole('dialog', { name: 'New GitHub issue' })
   await expect(createDialog).toBeVisible()
   await createDialog.getByPlaceholder('Short summary').fill(ISSUE_TITLE)
   await createDialog.getByRole('button', { name: 'Create issue' }).click()
 
   await expect(createDialog).toBeHidden({ timeout: 10_000 })
-  await expect(orcaPage.getByRole('heading', { name: ISSUE_TITLE })).toBeVisible({
+  await expect(quirkyPage.getByRole('heading', { name: ISSUE_TITLE })).toBeVisible({
     timeout: 10_000
   })
 
-  await orcaPage.getByRole('button', { name: 'Start workspace from issue' }).click()
+  await quirkyPage.getByRole('button', { name: 'Start workspace from issue' }).click()
 
   // Why: starting a GitHub issue now routes through the quick-create composer,
   // which carries the linked issue URL into the agent launch command on submit.
-  const composer = orcaPage.getByRole('dialog', { name: /Create (workspace|worktree)/i })
+  const composer = quirkyPage.getByRole('dialog', { name: /Create (workspace|worktree)/i })
   await expect(composer).toBeVisible({ timeout: 15_000 })
   const createWorkspaceButton = composer.getByRole('button', {
     name: /Create (workspace|worktree)/i
@@ -197,7 +197,7 @@ test('starting a just-created GitHub issue launches Claude with its URL prefille
   await expect
     .poll(
       async () => {
-        terminalText = await getTerminalContent(orcaPage, 12_000)
+        terminalText = await getTerminalContent(quirkyPage, 12_000)
         return terminalText
       },
       {

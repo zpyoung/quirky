@@ -32,7 +32,7 @@ async function renderHeader(delayDuration = 0) {
       <TooltipProvider delayDuration={delayDuration}>
         <ProjectHeaderHostTooltip
           label="app"
-          context={{ hostId: 'runtime:home', label: 'Home', detail: 'Orca server' }}
+          context={{ hostId: 'runtime:home', label: 'Home', detail: 'Quirky server' }}
         >
           <div role="button" tabIndex={0}>
             <span>app</span>

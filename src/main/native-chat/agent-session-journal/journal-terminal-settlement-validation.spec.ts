@@ -22,7 +22,7 @@ export function registerJournalTerminalSettlementValidationTests(): void {
   const journals = createTrackedJournalOpener()
   let root: string
   let journal: AgentSessionJournal
-  const identity = { provider: 'orca' as const, clientMessageId: 'old-turn' }
+  const identity = { provider: 'quirky' as const, clientMessageId: 'old-turn' }
 
   async function open() {
     return journals.open({
@@ -39,7 +39,7 @@ export function registerJournalTerminalSettlementValidationTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-settlement-validation-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-settlement-validation-'))
     journal = await open()
   })
 
@@ -170,8 +170,8 @@ export function registerJournalTerminalSettlementValidationTests(): void {
   }) {
     await saveOldItems([
       saved,
-      { itemId: 'orca:advanceable', body: { kind: 'turn', turnId: 'other', state: 'running' } },
-      { itemId: 'orca:approval', body: pendingApproval() }
+      { itemId: 'quirky:advanceable', body: { kind: 'turn', turnId: 'other', state: 'running' } },
+      { itemId: 'quirky:approval', body: pendingApproval() }
     ])
     const before = journal.snapshot().items.find((item) => item.itemId === saved.itemId)
     const { db } = openTestJournalHostDatabase(root)
@@ -181,8 +181,10 @@ export function registerJournalTerminalSettlementValidationTests(): void {
     await expect(settle()).resolves.toBeGreaterThan(0)
     expect(commits).toHaveBeenCalledTimes(1)
     expect(journal.snapshot().items.find((item) => item.itemId === saved.itemId)).toEqual(before)
-    expect(journal.itemBody('orca:advanceable')).toMatchObject({ state: 'interrupted' })
-    expect(journal.itemBody('orca:approval')).toMatchObject({ resolution: { state: 'cancelled' } })
+    expect(journal.itemBody('quirky:advanceable')).toMatchObject({ state: 'interrupted' })
+    expect(journal.itemBody('quirky:approval')).toMatchObject({
+      resolution: { state: 'cancelled' }
+    })
     expect(liveTestJournalRows(db, 'validation').slice(0, history.length)).toEqual(history)
     const settled = journal.snapshot()
     await settle()
@@ -194,7 +196,7 @@ export function registerJournalTerminalSettlementValidationTests(): void {
   }
 
   it('revises the original legacy long prompt key and still permits a fresh send', async () => {
-    const oldKey = `orca:${'x'.repeat(1025)}`
+    const oldKey = `quirky:${'x'.repeat(1025)}`
     await saveOldItems([{ itemId: oldKey, body: pendingApproval() }])
     await settle()
     expect(journal.snapshot().items).toHaveLength(1)
@@ -257,20 +259,20 @@ export function registerJournalTerminalSettlementValidationTests(): void {
       ]
       const inputs = [
         ...extensionBodies.map((turnLifecycle, index) => ({
-          itemId: `orca:extension-${index}`,
+          itemId: `quirky:extension-${index}`,
           body: { kind: 'status', text: 'working', turnLifecycle }
         })),
-        { itemId: 'orca:untimed', body: { kind: 'turn', ...running } },
+        { itemId: 'quirky:untimed', body: { kind: 'turn', ...running } },
         {
-          itemId: 'orca:timed',
+          itemId: 'quirky:timed',
           body: { kind: 'turn', ...running, requestedAt: 800, startedAt: 900, completedAt: 950 }
         },
         {
-          itemId: 'orca:last-advanceable',
+          itemId: 'quirky:last-advanceable',
           revision: Number.MAX_SAFE_INTEGER - 1,
           body: { kind: 'turn', ...running }
         },
-        { itemId: `orca:${long}`, body: pendingApproval() },
+        { itemId: `quirky:${long}`, body: pendingApproval() },
         { itemId: `claude:${long}:uuid`, body: { kind: 'turn', ...running } },
         {
           itemId: `codex:thread:${long}:0`,
@@ -281,10 +283,10 @@ export function registerJournalTerminalSettlementValidationTests(): void {
           body: { kind: 'tool-call', name: 'shell', state: 'running' }
         },
         { itemId: 'future-provider:opaque%ZZ', body: pendingApproval() },
-        { itemId: 'orca:%78', body: pendingApproval() },
+        { itemId: 'quirky:%78', body: pendingApproval() },
         { itemId: '', body: pendingApproval() },
         {
-          itemId: `orca:${long}oversized`,
+          itemId: `quirky:${long}oversized`,
           body: { kind: 'tool-call', name: 'shell', input: 'x'.repeat(1_500_001), state: 'running' }
         }
       ]
@@ -313,7 +315,7 @@ export function registerJournalTerminalSettlementValidationTests(): void {
       await settle(observedAt, lastProvenAliveAt)
       expect(rows.some((row) => row.kind === 'lifecycle-batch')).toBe(true)
       expect(
-        rows.some((row) => row.kind === 'item' && row.itemId === `orca:${long}oversized`)
+        rows.some((row) => row.kind === 'item' && row.itemId === `quirky:${long}oversized`)
       ).toBe(true)
       expect(liveTestJournalRows(db, 'validation').slice(0, history.length)).toEqual(history)
       for (const input of inputs) {
@@ -330,10 +332,13 @@ export function registerJournalTerminalSettlementValidationTests(): void {
           expect(body.state).toBe('failed')
         }
       }
-      expect(journal.itemBody('orca:extension-7')).toHaveProperty('laterField', {
+      expect(journal.itemBody('quirky:extension-7')).toHaveProperty('laterField', {
         kind: 'tool-call'
       })
-      expect(journal.itemBody('orca:extension-6')).toHaveProperty('contextUsage', laterContextUsage)
+      expect(journal.itemBody('quirky:extension-6')).toHaveProperty(
+        'contextUsage',
+        laterContextUsage
+      )
       expect(journal.runningTurn()?.turnId ?? null).toBeNull()
       expect(journal.snapshot().items).toHaveLength(inputs.length + 1)
       const ended = journal.snapshot()

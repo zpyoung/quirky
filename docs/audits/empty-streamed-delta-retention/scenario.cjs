@@ -3,7 +3,7 @@ const { load } = require('./sources.cjs')
 
 async function scenario(phase) {
   const readers = []
-  globalThis.__orcaEmptyDeltaReaders = readers
+  globalThis.__quirkyEmptyDeltaReaders = readers
   const {
     createCodexStructuredItemStreams,
     createAgentSessionDeltaCoalescer,
@@ -130,7 +130,7 @@ async function scenario(phase) {
   direct.dispose()
   assert.equal(pending.size, 0)
   assert.deepEqual(readers[1](), { streams: 0, slots: 0, retainedBytes: 0, observedBytes: 0 })
-  delete globalThis.__orcaEmptyDeltaReaders
+  delete globalThis.__quirkyEmptyDeltaReaders
   return {
     sourceSha256,
     bundleSha256,

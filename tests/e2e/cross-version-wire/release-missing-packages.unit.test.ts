@@ -19,7 +19,7 @@ afterEach(() => {
 
 function syntheticRelease(files: Record<string, string>): ReleaseCheckout {
   // Why realpath: vite reports module urls through macOS's /var -> /private/var symlink.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'orca-cross-version-missing-')))
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-cross-version-missing-')))
   temporaryRoots.push(root)
   for (const [path, source] of Object.entries(files)) {
     mkdirSync(join(root, path, '..'), { recursive: true })

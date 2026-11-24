@@ -16,19 +16,19 @@ import {
 } from './runtime-browser-page-registry'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 
 function makeRuntime() {
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal()
   )
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   runtime.setPtyController({
     spawn: vi.fn().mockResolvedValue({ id: 'pty-1' }),
     write: () => true,

@@ -17,31 +17,31 @@ describe('Windows remote command line limit', () => {
   it.each([
     [
       'steal stale install lock',
-      tryStealInstallLockCommand(windows, 'C:\\Users\\orca\\.orca-remote\\relay', 1_200)
+      tryStealInstallLockCommand(windows, 'C:\\Users\\quirky\\.quirky-remote\\relay', 1_200)
     ],
     [
       'steal an exited holder\u2019s install lock',
       tryStealInstallLockCommand(
         windows,
-        'C:\\Users\\orca\\.orca-remote\\orcad-1.4.214+0123456789abcdef\\.install-lock',
+        'C:\\Users\\quirky\\.quirky-remote\\quirkyd-1.4.214+0123456789abcdef\\.install-lock',
         1_200,
-        { fileName: '.orca-fence-owner', token: '123e4567-e89b-12d3-a456-426614174000' },
+        { fileName: '.quirky-fence-owner', token: '123e4567-e89b-12d3-a456-426614174000' },
         {
-          fileName: '.orca-fence-owner',
+          fileName: '.quirky-fence-owner',
           token: '123e4567-e89b-12d3-a456-426614174001',
           quietSeconds: 180,
-          mutationLock: 'C:\\Users\\orca\\.orca-remote\\orcad-state-mutation.lock'
+          mutationLock: 'C:\\Users\\quirky\\.quirky-remote\\quirkyd-state-mutation.lock'
         }
       )
     ],
     // F11 flagged these two as uncovered. They carry one path literal each, so they are the file
     // commands whose length a caller can actually move.
-    ['write file', makeWindowsWriteFileCommand('C:\\Users\\orca\\.orca-remote\\relay.js')],
+    ['write file', makeWindowsWriteFileCommand('C:\\Users\\quirky\\.quirky-remote\\relay.js')],
     [
       'publish staged file',
       makeWindowsPublishStagedFileCommand(
-        'C:\\Users\\orca\\.orca-remote\\relay.js.orca-partial-0123456789ab',
-        'C:\\Users\\orca\\.orca-remote\\relay.js',
+        'C:\\Users\\quirky\\.quirky-remote\\relay.js.quirky-partial-0123456789ab',
+        'C:\\Users\\quirky\\.quirky-remote\\relay.js',
         'create'
       )
     ]
@@ -57,7 +57,7 @@ describe('Windows remote command line limit', () => {
   it('carries an oversized script through gzip without altering it', () => {
     const script = Array.from(
       { length: 200 },
-      (_unused, index) => `Write-Output ${index}; $slot = 'C:\\Users\\orca\\stage-${index}'`
+      (_unused, index) => `Write-Output ${index}; $slot = 'C:\\Users\\quirky\\stage-${index}'`
     ).join('\n')
     const command = powerShellCommand(script)
     expect(command.length).toBeLessThanOrEqual(CMD_EXE_COMMAND_LINE_MAX_CHARS)
@@ -68,7 +68,7 @@ describe('Windows remote command line limit', () => {
     ).toString('utf16le')
     const payload = bootstrap.match(/FromBase64String\('([A-Za-z0-9+/=]+)'\)/u)?.[1] ?? ''
     expect(gunzipSync(Buffer.from(payload, 'base64')).toString('utf-8')).toBe(script)
-    expect(bootstrap).toContain('Invoke-Expression $OrcaScriptText')
+    expect(bootstrap).toContain('Invoke-Expression $QuirkyScriptText')
   })
 
   it('refuses a script no encoding can fit instead of letting cmd.exe reject it', () => {
@@ -78,7 +78,7 @@ describe('Windows remote command line limit', () => {
       return String.fromCharCode(97 + (seed % 26))
     }).join('')
     expect(() => powerShellCommand(`Write-Output '${incompressible}'`)).toThrow(
-      /Orca budgets 8000 for a line sshd hands to cmd\.exe/u
+      /Quirky budgets 8000 for a line sshd hands to cmd\.exe/u
     )
   })
 })
@@ -91,7 +91,7 @@ describe('Windows remote command line limit', () => {
  */
 describe('Windows file command budget headroom', () => {
   it('absorbs a path far longer than Windows will accept', () => {
-    const deep = `C:\\Users\\orca\\${'segment\\'.repeat(30)}relay.js`
+    const deep = `C:\\Users\\quirky\\${'segment\\'.repeat(30)}relay.js`
 
     expect(deep.length).toBeGreaterThan(260)
     expect(makeWindowsWriteFileCommand(deep).length).toBeLessThanOrEqual(
@@ -107,7 +107,7 @@ describe('Windows file command budget headroom', () => {
     ).join('\\')
 
     expect(() => makeWindowsWriteFileCommand(`C:\\${incompressible}\\f.bin`)).toThrow(
-      /Orca budgets 8000/
+      /Quirky budgets 8000/
     )
   })
 })

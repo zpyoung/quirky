@@ -26,25 +26,25 @@ function userText(id: string, text: string): NativeChatMessage {
 describe('normalizeImageTranscriptMessages', () => {
   it('merges the paired [Image: source]/[Image #1] turns into one image-ref turn', () => {
     const out = normalizeImageTranscriptMessages([
-      userText('a', '[Image: source: /tmp/orca-paste-1-2.png]'),
+      userText('a', '[Image: source: /tmp/quirky-paste-1-2.png]'),
       userText('b', '[Image #1] describe this')
     ])
     expect(out).toHaveLength(1)
     expect(out[0]!.blocks).toEqual([
-      { type: 'image-ref', path: '/tmp/orca-paste-1-2.png' },
+      { type: 'image-ref', path: '/tmp/quirky-paste-1-2.png' },
       { type: 'text', text: 'describe this' }
     ])
   })
 
   it('merges a source turn into a prompt with a trailing image marker', () => {
     const out = normalizeImageTranscriptMessages([
-      userText('a', '[Image: source: /tmp/orca-paste-1-2.png]'),
+      userText('a', '[Image: source: /tmp/quirky-paste-1-2.png]'),
       userText('b', 'describe this[Image #1]')
     ])
 
     expect(out).toHaveLength(1)
     expect(out[0]!.blocks).toEqual([
-      { type: 'image-ref', path: '/tmp/orca-paste-1-2.png' },
+      { type: 'image-ref', path: '/tmp/quirky-paste-1-2.png' },
       { type: 'text', text: 'describe this' }
     ])
   })
@@ -273,8 +273,8 @@ describe('normalizeNativeChatUserText control bytes', () => {
 
   // Remove a bracketed-paste wrapper as one sequence so its printable tail cannot survive.
   it('drops a bracketed-paste wrapper, not just its ESC introducer', () => {
-    expect(normalizeNativeChatUserText('\u001b[200~/tmp/orca-paste-1.png\u001b[201~')).toBe(
-      '/tmp/orca-paste-1.png'
+    expect(normalizeNativeChatUserText('\u001b[200~/tmp/quirky-paste-1.png\u001b[201~')).toBe(
+      '/tmp/quirky-paste-1.png'
     )
   })
 
@@ -306,7 +306,7 @@ describe('composer image chips at send and back', () => {
   })
 
   it('leaves typed text alone, even a typed marker or a path holding one', () => {
-    const text = 'compare [Image #2] with @/tmp/[Image #2].md and [Image](orca-image:bad id)'
+    const text = 'compare [Image #2] with @/tmp/[Image #2].md and [Image](quirky-image:bad id)'
     expect(imageReferencesToPromptMarkers(text, ['a', 'b'])).toBe(text)
   })
 

@@ -144,13 +144,13 @@ export function removeZCodeManagedHooks(
 
   for (const [eventName, value] of Object.entries(nextEvents)) {
     // Why: leave a non-array value exactly as the user wrote it — emptying it below would
-    // delete a key Orca never owned.
+    // delete a key Quirky never owned.
     if (!Array.isArray(value)) {
       continue
     }
     const definitions = readEventDefinitions(nextEvents, eventName)
     const cleaned = removeManagedCommands(definitions, isManagedCommand)
-    // Why: only touch an event Orca actually owned something in. Without this, an unrelated
+    // Why: only touch an event Quirky actually owned something in. Without this, an unrelated
     // empty entry the user wrote (`"Notification": []`) was deleted as collateral whenever a
     // managed hook elsewhere made the write happen.
     if (JSON.stringify(cleaned) === JSON.stringify(definitions)) {

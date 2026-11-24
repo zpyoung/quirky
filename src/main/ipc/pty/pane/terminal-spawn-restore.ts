@@ -1,9 +1,9 @@
 import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { pendingByPaneKey, rendererSerializerReadiness } from './serializer-state'
 
 export function seedHeadlessTerminalFromSpawnResult(
-  runtime: OrcaRuntimeService | undefined,
+  runtime: QuirkyRuntimeService | undefined,
   result: PtySpawnResult,
   paneKey: string | null
 ): void {

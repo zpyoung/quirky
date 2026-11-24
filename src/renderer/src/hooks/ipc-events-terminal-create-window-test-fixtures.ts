@@ -155,7 +155,7 @@ export function buildTerminalCreateWindow(args: {
       },
       browser: {
         onGuestLoadFailed: () => () => {},
-        onOpenLinkInOrcaTab: () => () => {},
+        onOpenLinkInQuirkyTab: () => () => {},
         onNavigationUpdate: () => () => {},
         onActivateView: () => () => {},
         onPaneFocus: () => () => {}

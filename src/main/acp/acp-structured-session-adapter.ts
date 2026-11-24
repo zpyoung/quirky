@@ -49,7 +49,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     this.copies = new AcpConversationCopies(deps)
   }
 
-  /** Restart recovery's evidence; null for an agent whose own store Orca cannot read. */
+  /** Restart recovery's evidence; null for an agent whose own store Quirky cannot read. */
   providerHistoryWindow: NonNullable<StructuredAgentSessionAdapter['providerHistoryWindow']> = (
     input
   ) => readAcpRecoveryHistory(this.deps, input.identity)
@@ -118,7 +118,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
         // failure carries the agent's last words, as a running session's end does.
         await waitForAcpExit(connection, this.stopGraceMs(), attempt.signal)
       }
-      // Checked before the close below, which would make any exit look like one Orca asked for.
+      // Checked before the close below, which would make any exit look like one Quirky asked for.
       const exitedOnItsOwn = connection?.exited === true && !attempt.signal.aborted
       if (connection && !(await connection.close().catch(() => false))) {
         // Kept, so the next start or quit closes this same process again; no second one spawns.
@@ -174,7 +174,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   ): Promise<AgentSessionDispatchOutcome> {
     const lost = this.children.sessions.get(input.sessionId)
     if (lost && lost.journalClosed !== null) {
-      // The connection broke and the exit is not yet proven: the message never left Orca.
+      // The connection broke and the exit is not yet proven: the message never left Quirky.
       return rejectedAcpDispatch(lost)
     }
     const session = this.live(input.sessionId)
@@ -183,7 +183,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
       return { state: 'rejected', ...prompt }
     }
     if (this.children.sessions.get(input.sessionId) !== session || session.journalClosed !== null) {
-      // The child ended while its attachments were read: nothing left Orca.
+      // The child ended while its attachments were read: nothing left Quirky.
       return rejectedAcpDispatch(session)
     }
     const { sessionId, fence, signal } = input

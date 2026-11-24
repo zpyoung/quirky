@@ -1,6 +1,6 @@
-import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
+import type { QuirkyRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
 import { defaultAgentChatLabel } from '../../../shared/agent-session-chat-label'
-import { OrcaRuntimeWithGetStructuredAgentSessionCreateSupport } from './structured-session-create-support'
+import { QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport } from './structured-session-create-support'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { collectSavedStructuredAgentSessionIds } from '../saved-structured-agent-session-restoration'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
@@ -12,7 +12,7 @@ import type {
   RuntimeRepoSearchRefs
 } from '../../../shared/runtime-types'
 import { getHeadlessMobileSessionGroupId } from '../mobile-session-layout-projection'
-import { DEFAULT_REPO_SEARCH_REFS_LIMIT } from '../orca-runtime-postlude'
+import { DEFAULT_REPO_SEARCH_REFS_LIMIT } from '../quirky-runtime-postlude'
 import type { Repo } from '../../../shared/repo-types'
 import type { GitAdmissionTier } from '../../git/command-runner/git-exec-options'
 import {
@@ -33,10 +33,10 @@ import type { PtyProcessInspection } from '../../providers/pty-process-inspectio
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
 export type AgentLaunchScope = Parameters<
-  OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce['getAgentLaunchPlatformForWorkspace']
+  QuirkyRuntimeWithRestoreStructuredAgentSessionTabsOnce['getAgentLaunchPlatformForWorkspace']
 >[0]
 
-export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce extends OrcaRuntimeWithGetStructuredAgentSessionCreateSupport {
+export abstract class QuirkyRuntimeWithRestoreStructuredAgentSessionTabsOnce extends QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport {
   protected abstract notifyMobileSessionTabSnapshots(
     ...args: Parameters<ScheduleMobileSessionTabsChangedMethods['notifyMobileSessionTabSnapshots']>
   ): ReturnType<ScheduleMobileSessionTabsChangedMethods['notifyMobileSessionTabSnapshots']>
@@ -105,7 +105,7 @@ export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce exten
   }): Promise<void> {
     const host = getStructuredAgentSessionHost()
     if (typeof host?.setSessionTabVisibility === 'function') {
-      // The restore index is bookkeeping: one that cannot be written (a newer Orca's records, a
+      // The restore index is bookkeeping: one that cannot be written (a newer Quirky's records, a
       // failing disk) is reported, and the tab still opens.
       await host
         .setSessionTabVisibility(input.sessionId, true, ...(input.tabId ? [input.tabId] : []))

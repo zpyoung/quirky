@@ -54,7 +54,7 @@ function row(input: number): string {
 }
 
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-claude-reader-lifetime-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-claude-reader-lifetime-'))
   transcript = join(directory, 'session.jsonl')
   observations.handles.length = 0
   observations.afterValidationStat = undefined

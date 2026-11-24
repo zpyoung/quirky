@@ -22,7 +22,7 @@ export const CLAUDE_EVENTS = [
     definition: { hooks: [{ type: 'command', command: '' }] }
   },
   // Why: OpenClaude skips normal Stop hooks after API/model errors and emits
-  // StopFailure instead; without this hook Orca leaves the turn spinning.
+  // StopFailure instead; without this hook Quirky leaves the turn spinning.
   {
     eventName: 'StopFailure',
     definition: { hooks: [{ type: 'command', command: '' }] }
@@ -87,9 +87,9 @@ export type ManagedHookEvent = {
 
 export type ClaudeManagedHookPlan = {
   install: readonly ManagedHookEvent[]
-  /** Events whose Orca entry must go; user entries under them always stay. */
+  /** Events whose Quirky entry must go; user entries under them always stay. */
   retire: readonly ManagedHookEvent[]
-  /** Orca's statusLine usage feed; `retire` removes only Orca's own, `leave` never touches the slot. */
+  /** Quirky's statusLine usage feed; `retire` removes only Quirky's own, `leave` never touches the slot. */
   statusLine: 'install' | 'retire' | 'leave'
 }
 
@@ -115,7 +115,7 @@ export function getClaudeManagedHookPlan(
   }
 }
 
-// Why: OpenClaude reads its own settings file and accepts every event Orca writes. The statusline
+// Why: OpenClaude reads its own settings file and accepts every event Quirky writes. The statusline
 // usage feed is Claude-only — OpenClaude data would be misattributed to the Claude provider.
 export const OPENCLAUDE_MANAGED_HOOK_PLAN: ClaudeManagedHookPlan = {
   install: CLAUDE_EVENTS,

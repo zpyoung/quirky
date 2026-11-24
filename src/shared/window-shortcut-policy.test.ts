@@ -137,7 +137,7 @@ describe('resolveWindowShortcutAction', () => {
     expect(
       resolveWindowShortcutAction(input, 'linux', overrides, {
         context: 'terminal',
-        terminalShortcutPolicy: 'orca-first'
+        terminalShortcutPolicy: 'quirky-first'
       })
     ).toEqual({ type: 'toggleQuickCommandsMenu' })
   })
@@ -220,7 +220,7 @@ describe('resolveWindowShortcutAction', () => {
     ).toBeNull()
   })
 
-  it('keeps Orca-first active in terminal context but lets Terminal-first pass risky app chords', () => {
+  it('keeps Quirky-first active in terminal context but lets Terminal-first pass risky app chords', () => {
     const macWorktreePalette = {
       code: 'KeyJ',
       key: 'j',
@@ -232,7 +232,7 @@ describe('resolveWindowShortcutAction', () => {
     expect(
       resolveWindowShortcutAction(macWorktreePalette, 'darwin', undefined, {
         context: 'terminal',
-        terminalShortcutPolicy: 'orca-first'
+        terminalShortcutPolicy: 'quirky-first'
       })
     ).toEqual({ type: 'toggleWorktreePalette' })
     expect(
@@ -271,7 +271,7 @@ describe('resolveWindowShortcutAction', () => {
         { code: 'Digit3', key: '3', meta: false, control: true, alt: false, shift: false },
         'darwin',
         undefined,
-        { context: 'terminal', terminalShortcutPolicy: 'orca-first' }
+        { context: 'terminal', terminalShortcutPolicy: 'quirky-first' }
       )
     ).toEqual({ type: 'jumpToTabIndex', index: 2 })
   })

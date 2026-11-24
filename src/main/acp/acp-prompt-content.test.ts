@@ -62,7 +62,7 @@ describe('ACP prompt content', () => {
     })
   })
 
-  it('refuses what it cannot read or send before anything leaves Orca', async () => {
+  it('refuses what it cannot read or send before anything leaves Quirky', async () => {
     expect(await refusal(message({ type: 'image-ref', path: 'relative.png' }))).toMatchObject({
       attachment: { reason: 'noSource' }
     })

@@ -160,7 +160,7 @@ export function registerQueuedMessagePauseTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-queue-pause-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-queue-pause-'))
     clock = 1_000
   })
 
@@ -181,7 +181,7 @@ export function registerQueuedMessagePauseTests(): void {
       expect(pauseTables()).toBe(0)
     })
 
-    it("any turn sent after the Stop and accepted lifts it, Orca's own mail included", async () => {
+    it("any turn sent after the Stop and accepted lifts it, Quirky's own mail included", async () => {
       const journal = await open()
       await turn(journal, 'before-stop', false)
       await userStop(journal)
@@ -222,7 +222,7 @@ export function registerQueuedMessagePauseTests(): void {
       expect(pauseTables()).toBe(0)
     })
 
-    it('any accepted turn after /clear lifts its pause, a launch prompt Orca sent included', async () => {
+    it('any accepted turn after /clear lifts its pause, a launch prompt Quirky sent included', async () => {
       const journal = await open()
       await queueDraft(journal, 'carried')
       await clearContext(journal)
@@ -723,7 +723,7 @@ export function registerQueuedMessagePauseTests(): void {
       expect(resumableQueuePause(pausesOver(cards, 5, 6), cards)?.reason).toBe('stopped')
     })
 
-    // R13-1: a message Orca kept after a quit is an ordinary card, in order, under the reopen's pause.
+    // R13-1: a message Quirky kept after a quit is an ordinary card, in order, under the reopen's pause.
     it('a card from before the open waits in order, and so do the cards behind it', () => {
       const cards = [card('kept', 1), card('behind', 2)]
       expect(holding(cards, 0, 4)).toEqual([

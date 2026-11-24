@@ -47,10 +47,10 @@ async function startRuntime(args: {
   runtimeId: string
   installationId?: string
 }): Promise<FakeRuntime> {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-source-fence-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-source-fence-'))
   const isWindows = process.platform === 'win32'
   const endpoint = isWindows
-    ? `\\\\.\\pipe\\orca-source-fence-${randomUUID()}`
+    ? `\\\\.\\pipe\\quirky-source-fence-${randomUUID()}`
     : join(userDataPath, 'runtime.sock')
   const methods: string[] = []
   const expectations: unknown[] = []
@@ -85,7 +85,7 @@ async function startRuntime(args: {
   servers.add(server)
   await new Promise<void>((resolve) => server.listen(endpoint, resolve))
   writeFileSync(
-    join(userDataPath, 'orca-runtime.json'),
+    join(userDataPath, 'quirky-runtime.json'),
     JSON.stringify({
       runtimeId: args.runtimeId,
       pid: 1,
@@ -116,7 +116,7 @@ describe('RuntimeClient runtime-source fence', () => {
   it('refuses another live runtime before the request reaches it', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-b', installationId: SOURCE_B })
     launchedBy(SOURCE_A, 'runtime-a')
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await expectRefusal(
       client.call('terminal.send', { terminal: 't1', text: 'hi' }),
@@ -129,7 +129,7 @@ describe('RuntimeClient runtime-source fence', () => {
   it('accepts a restarted runtime of the same source and probes it only once', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-a2', installationId: SOURCE_A })
     launchedBy(SOURCE_A, 'runtime-a1')
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await client.call('terminal.send', { terminal: 't1', text: 'hi' })
     await client.call('worktree.list')
@@ -142,7 +142,7 @@ describe('RuntimeClient runtime-source fence', () => {
   it('sends without a probe when the launching runtime is still the live one', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-a', installationId: SOURCE_A })
     launchedBy(SOURCE_A, 'runtime-a')
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await client.call('worktree.list')
     expect(runtime.methods).toEqual(['worktree.list'])
@@ -152,27 +152,27 @@ describe('RuntimeClient runtime-source fence', () => {
   it('refuses when the live runtime cannot say which profile it serves', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-old' })
     launchedBy(SOURCE_A, 'runtime-a')
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await expectRefusal(client.call('worktree.list'), 'runtime_source_unverifiable')
     expect(runtime.methods).toEqual(['status.get'])
   })
 
-  it('keeps the unfenced path for a CLI started outside an Orca terminal', async () => {
+  it('keeps the unfenced path for a CLI started outside an Quirky terminal', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-b', installationId: SOURCE_B })
     delete process.env[RUNTIME_SOURCE_ID_ENV]
     delete process.env[RUNTIME_SOURCE_INCARNATION_ENV]
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await client.call('worktree.list')
     expect(runtime.methods).toEqual(['worktree.list'])
     expect(runtime.expectations).toEqual([undefined])
   })
 
-  it('lets an explicit switch to another profile through, e.g. orca-dev from a packaged terminal', async () => {
+  it('lets an explicit switch to another profile through, e.g. quirky-dev from a packaged terminal', async () => {
     const runtime = await startRuntime({ runtimeId: 'runtime-dev', installationId: SOURCE_B })
-    launchedBy(SOURCE_A, 'runtime-a', join(tmpdir(), 'orca-packaged-profile'))
-    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'orca')
+    launchedBy(SOURCE_A, 'runtime-a', join(tmpdir(), 'quirky-packaged-profile'))
+    const client = new RuntimeClient(runtime.userDataPath, 2_000, null, null, 'quirky')
 
     await client.call('worktree.list')
     expect(runtime.methods).toEqual(['worktree.list'])

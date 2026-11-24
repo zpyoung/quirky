@@ -124,7 +124,7 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
           state: 'working',
           prompt: 'Fix the status',
           agentType: 'command-code',
-          // Why: Orca launched this agent, so the seed predates any provider signal (STA-4293).
+          // Why: Quirky launched this agent, so the seed predates any provider signal (STA-4293).
           observation: expect.objectContaining({ origin: 'launch', kind: 'transition' })
         },
         undefined,

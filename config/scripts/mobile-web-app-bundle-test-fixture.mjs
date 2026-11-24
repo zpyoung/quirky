@@ -5,7 +5,7 @@ import { deserialize, serialize } from 'node:v8'
 import { bundleMobileWebApp, buildMobileWebAppBundle } from './build-mobile-web-app-bundle.mjs'
 
 export async function withScratch(run) {
-  const scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-test-'))
+  const scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-test-'))
   try {
     return await run(scratch)
   } finally {

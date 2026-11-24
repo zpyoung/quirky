@@ -8,7 +8,7 @@ const projectDir = fileURLToPath(new URL('../..', import.meta.url))
  * Set by the one CI job that installs mobile dependencies, so a broken install there fails the
  * job instead of quietly skipping every test that would have caught it.
  */
-export const MOBILE_WEB_APP_DEPENDENCIES_REQUIRED_ENV = 'ORCA_MOBILE_WEB_APP_DEPS_REQUIRED'
+export const MOBILE_WEB_APP_DEPENDENCIES_REQUIRED_ENV = 'QUIRKY_MOBILE_WEB_APP_DEPS_REQUIRED'
 
 const SKIP_NOTICE =
   '[mobile-web-app] skipping the bundling tests: mobile/node_modules/react-native-web is absent. ' +

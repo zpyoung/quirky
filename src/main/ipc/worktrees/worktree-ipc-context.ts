@@ -1,13 +1,16 @@
 import type { BrowserWindow } from 'electron'
 import type { Store } from '../../persistence/loading-store/store'
-import type { OrcaRuntimeService, RuntimeWorktreeLifecycleEvent } from '../../runtime/orca-runtime'
+import type {
+  QuirkyRuntimeService,
+  RuntimeWorktreeLifecycleEvent
+} from '../../runtime/quirky-runtime'
 import type { SenderScopedRequestCancellations } from '../sender-scoped-request-cancellation'
 import type { WorktreeRemovalInFlight } from './removal/worktree-removal-coordinator'
 
 export type WorktreeIpcContext = {
   mainWindow: BrowserWindow
   store: Store
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   options?: {
     onWorktreeLifecycle?: (event: RuntimeWorktreeLifecycleEvent) => void
   }

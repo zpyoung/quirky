@@ -37,32 +37,32 @@ export function skippedReason(locations: readonly SkillLocationRow[]): string {
     case 'read-only':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonReadOnly',
-        'This copy is in a read-only location, so Orca left it out of the update. Change its permissions to let Orca update it.'
+        'This copy is in a read-only location, so Quirky left it out of the update. Change its permissions to let Quirky update it.'
       )
     case 'inaccessible':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonInaccessible',
-        'Orca couldn’t read this copy, so it left the skill out of the update.'
+        'Quirky couldn’t read this copy, so it left the skill out of the update.'
       )
     case 'in-a-repo':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonInRepo',
-        'This is a project skill, not a global one — Orca only updates your global skills, so it left this out of the update.'
+        'This is a project skill, not a global one — Quirky only updates your global skills, so it left this out of the update.'
       )
     case 'plugin-cache':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonPluginCache',
-        'A plugin manages this skill, so Orca left it out of the update — update the plugin instead.'
+        'A plugin manages this skill, so Quirky left it out of the update — update the plugin instead.'
       )
     case 'external-link':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonExternalLink',
-        'This copy is a shortcut pointing outside Orca’s skill folders, so Orca left it out of the update.'
+        'This copy is a shortcut pointing outside Quirky’s skill folders, so Quirky left it out of the update.'
       )
     case 'broken-link':
       return translate(
         'auto.components.skills.SkillFreshnessRow.skippedReasonBrokenLink',
-        'This copy is a shortcut to something that no longer exists, so Orca left it out — you can safely delete it.'
+        'This copy is a shortcut to something that no longer exists, so Quirky left it out — you can safely delete it.'
       )
     case 'duplicate':
       return translate(
@@ -73,7 +73,7 @@ export function skippedReason(locations: readonly SkillLocationRow[]): string {
     case undefined:
       return translate(
         'auto.components.skills.SkillFreshnessRow.cantUpdateReason',
-        'Orca left this skill out of the update command.'
+        'Quirky left this skill out of the update command.'
       )
   }
 }

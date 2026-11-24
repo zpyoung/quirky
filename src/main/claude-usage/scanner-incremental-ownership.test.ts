@@ -103,7 +103,7 @@ let projectDir: string
 let worktrees: ClaudeUsageWorktreeRef[]
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-append-ownership-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-append-ownership-'))
   homedirMock.mockReturnValue(root)
   projectDir = join(root, '.claude', 'projects', 'project-a')
   worktrees = ['a', 'b'].map((id) => ({

@@ -11,7 +11,7 @@ import { isOpenableAccountSignInLink, openAccountSignInLink } from './account-si
 const CLAUDE_LINK =
   'https://claude.com/cai/oauth/authorize?code=true&redirect_uri=http%3A%2F%2Flocalhost%3A5000%2Fcallback&state=s'
 const CODEX_LINK =
-  'https://auth.openai.com/oauth/authorize?client_id=orca&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=abc'
+  'https://auth.openai.com/oauth/authorize?client_id=quirky&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=abc'
 
 const UNOPENABLE: [string, 'claude' | 'codex', string][] = [
   ['plain http', 'codex', CODEX_LINK.replace('https:', 'http:')],

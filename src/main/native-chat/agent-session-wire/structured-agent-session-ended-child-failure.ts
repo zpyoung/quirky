@@ -22,7 +22,7 @@ const ENDED_CHILD_FAILURE = {
   // The user closing this chat closes what was queued before it; see `closeWhatTheUserClosed`.
   'user-close': () => null,
   'context-clear': () => null,
-  // The host stopping the child is Orca's cause, never the provider's: a start that never finished.
+  // The host stopping the child is Quirky's cause, never the provider's: a start that never finished.
   'host-stop': (ended) => ({ failure: ended.failure ?? agentSessionFailureFact('hostStopped') }),
   exit: providerEndFailure,
   // The attach records its own fault as the end's failure.

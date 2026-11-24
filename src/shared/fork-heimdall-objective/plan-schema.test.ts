@@ -253,7 +253,7 @@ describe('objective write territory matching', () => {
     expect(objectivePathMatchesTerritory('README.md', ['**'])).toBe(true)
     expect(objectivePathMatchesTerritory('src/nested/file.ts', ['**'])).toBe(true)
     expect(objectivePathMatchesTerritory('.git/config', ['**'])).toBe(false)
-    expect(objectivePathMatchesTerritory('.orca/runtime/state.json', ['**'])).toBe(false)
+    expect(objectivePathMatchesTerritory('.quirky/runtime/state.json', ['**'])).toBe(false)
   })
 })
 

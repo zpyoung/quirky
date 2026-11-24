@@ -11,10 +11,10 @@ import {
 } from './LinearAgentSkillSetupPrompt'
 import type { LinearAgentSkillPromptSettings } from './linear-agent-skill-runtime'
 import { SKILLS_CLI_VERSION } from '../../../../shared/agent-feature-install-commands'
-import { ORCA_SKILLS_REPOSITORY_URL } from '../../../../shared/fork-skills-repository/skills-repository-url'
+import { QUIRKY_SKILLS_REPOSITORY_URL } from '../../../../shared/fork-skills-repository/skills-repository-url'
 
-const HOST_DISMISS_STORAGE_KEY = 'orca.linearTicketsSkill.setupDismissed.host'
-const FEDORA_DISMISS_STORAGE_KEY = 'orca.linearTicketsSkill.setupDismissed.wsl.Fedora'
+const HOST_DISMISS_STORAGE_KEY = 'quirky.linearTicketsSkill.setupDismissed.host'
+const FEDORA_DISMISS_STORAGE_KEY = 'quirky.linearTicketsSkill.setupDismissed.wsl.Fedora'
 
 const projectHostRuntime: ProjectExecutionRuntimeResolution = {
   status: 'resolved',
@@ -235,7 +235,7 @@ describe('LinearAgentSkillSetupPrompt', () => {
 
     expect(rendered.textContent).toContain('Set up Linear agent skill')
     expect(rendered.textContent).toContain('Linear agent skill is missing.')
-    expect(rendered.textContent).not.toContain('Orca CLI')
+    expect(rendered.textContent).not.toContain('Quirky CLI')
     expect(rendered.textContent).toContain('Install it for host agent handoffs')
     expectNoCliStatusQuery()
     expect(mocks.useInstalledAgentSkillNames).toHaveBeenCalledWith(
@@ -354,7 +354,7 @@ describe('LinearAgentSkillSetupPrompt', () => {
     expect(document.body.textContent).toContain(`npx skills@${SKILLS_CLI_VERSION} add`)
     expect(mocks.panelProps.at(-1)).toEqual(
       expect.objectContaining({
-        installedCommand: `npx skills@${SKILLS_CLI_VERSION} add ${ORCA_SKILLS_REPOSITORY_URL}/tree/${ORCA_BUILD_COMMIT} --skill orca-linear --global`,
+        installedCommand: `npx skills@${SKILLS_CLI_VERSION} add ${QUIRKY_SKILLS_REPOSITORY_URL}/tree/${QUIRKY_BUILD_COMMIT} --skill quirky-linear --global`,
         terminalShellOverride: 'powershell.exe',
         terminalRuntime: expect.objectContaining({ runtime: 'wsl', wslDistro: 'Fedora' })
       })
@@ -433,7 +433,7 @@ describe('LinearAgentSkillSetupPrompt', () => {
     await settleRender()
 
     expect(document.body.querySelector('[data-testid="linear-skill-inline-panel"]')).not.toBeNull()
-    expect(document.body.textContent).toContain('orca-linear')
+    expect(document.body.textContent).toContain('quirky-linear')
 
     const installButton = Array.from(document.body.querySelectorAll('button')).find(
       (button) => button.textContent === 'Mock install'

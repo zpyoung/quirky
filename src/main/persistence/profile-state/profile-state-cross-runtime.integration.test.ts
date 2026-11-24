@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import {
   buildProfileStateCutoverFixture,
   canonicalProfileStateJson
@@ -17,11 +17,11 @@ import {
   locateBunForTests,
   locatePinnedNodeForTests,
   skipForMissingInputs
-} from '../../orcad/orcad-node-slot-fixture'
+} from '../../quirkyd/quirkyd-node-slot-fixture'
 
 const bun = locateBunForTests()
 const node = locatePinnedNodeForTests()
-const directory = mkdtempSync(join(tmpdir(), 'orca-profile-cross-runtime-'))
+const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-cross-runtime-'))
 const entry = join(directory, 'cross-runtime.cjs')
 const PROFILE_ID = 'cross-runtime'
 
@@ -80,7 +80,7 @@ async function run(
   const result = await runProcess({
     program,
     args: [entry, ...args],
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' },
     timeoutMs: 60_000
   })
   if (exit === 'killed' && process.platform !== 'win32') {
@@ -97,7 +97,7 @@ async function run(
 
 const skip = skipForMissingInputs('cross-runtime', [
   ...(bun ? [] : ['the pinned Bun (BUN_EXECUTABLE or bun on PATH)']),
-  ...(node ? [] : ['the pinned Node (ORCA_PINNED_NODE or out/runtimes)'])
+  ...(node ? [] : ['the pinned Node (QUIRKY_PINNED_NODE or out/runtimes)'])
 ])
 
 describe.skipIf(skip)('profile database across the pinned Bun and the pinned Node', () => {

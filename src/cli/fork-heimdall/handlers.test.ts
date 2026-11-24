@@ -17,7 +17,7 @@ import { HEIMDALL_HANDLERS } from './handlers'
 
 const callMock = vi.fn()
 const temporaryDirectories: string[] = []
-const originalWorkspaceId = process.env.ORCA_WORKSPACE_ID
+const originalWorkspaceId = process.env.QUIRKY_WORKSPACE_ID
 const WATCHER_ID = 'watcher-1'
 const TARGET = { watcherId: WATCHER_ID, connectionId: 'ssh:builder', pairingRevision: 7 }
 const LOCAL_TARGET = { watcherId: 'local-watcher', connectionId: null, pairingRevision: null }
@@ -165,15 +165,15 @@ function primeCommand(row = fleetRow(), capabilities: string[] = COMMAND_CAPABIL
 beforeEach(() => {
   callMock.mockReset()
   process.exitCode = undefined
-  delete process.env.ORCA_WORKSPACE_ID
+  delete process.env.QUIRKY_WORKSPACE_ID
 })
 
 afterEach(async () => {
   vi.restoreAllMocks()
   if (originalWorkspaceId === undefined) {
-    delete process.env.ORCA_WORKSPACE_ID
+    delete process.env.QUIRKY_WORKSPACE_ID
   } else {
-    process.env.ORCA_WORKSPACE_ID = originalWorkspaceId
+    process.env.QUIRKY_WORKSPACE_ID = originalWorkspaceId
   }
 
   process.exitCode = undefined
@@ -184,7 +184,7 @@ afterEach(async () => {
   )
 })
 
-describe('orca heimdall read handlers', () => {
+describe('quirky heimdall read handlers', () => {
   it('lists fleet rows and distinguishes unverifiable owner contact from worker exit', async () => {
     const row = fleetRow({ contact: 'unverifiable' })
     callMock.mockResolvedValueOnce(fleetResponse(row))
@@ -268,7 +268,7 @@ describe('orca heimdall read handlers', () => {
   })
 
   it('resolves the current folder workspace selector before filtering', async () => {
-    process.env.ORCA_WORKSPACE_ID = 'folder:folder-1'
+    process.env.QUIRKY_WORKSPACE_ID = 'folder:folder-1'
     const folder = workspaceFleetRow(
       'folder-watcher',
       { ...LOCAL_TARGET, watcherId: 'folder-watcher' },
@@ -490,7 +490,7 @@ describe('orca heimdall read handlers', () => {
   })
 
   it('writes a remote debug report to a cwd-relative path without printing it', async () => {
-    const cwd = await mkdtemp(join(tmpdir(), 'orca-heimdall-debug-'))
+    const cwd = await mkdtemp(join(tmpdir(), 'quirky-heimdall-debug-'))
     temporaryDirectories.push(cwd)
     const report = { schemaVersion: 3, watcherId: WATCHER_ID }
     callMock
@@ -537,7 +537,7 @@ describe('orca heimdall read handlers', () => {
   })
 })
 
-describe('orca heimdall mutation handlers', () => {
+describe('quirky heimdall mutation handlers', () => {
   it.each([
     ['pause', { kind: 'pause' }],
     ['resume', { kind: 'resume' }],

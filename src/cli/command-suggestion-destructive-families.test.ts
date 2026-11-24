@@ -51,7 +51,7 @@ describe('live destructive command recovery', () => {
     const path = input.split(' ')
     const data = unknownCommandData(COMMAND_SPECS, path)
     expect(data.suggestions).not.toContain(destructive)
-    expect(data.nextSteps.join(' ')).not.toContain(`orca ${destructive}`)
+    expect(data.nextSteps.join(' ')).not.toContain(`quirky ${destructive}`)
     const parsed = normalizeCommandPositionals(COMMAND_SPECS, parseArgs(path))
     expect(() => validateCommandAndFlags(COMMAND_SPECS, parsed)).toThrow('Unknown command')
   })
@@ -59,7 +59,7 @@ describe('live destructive command recovery', () => {
   it.each(recovery)('still recovers %s as %s', (input, expected) => {
     const data = unknownCommandData(COMMAND_SPECS, input.split(' '))
     expect(data.suggestions).toContain(expected)
-    expect(data.nextSteps.join(' ')).toContain(`orca ${expected}`)
+    expect(data.nextSteps.join(' ')).toContain(`quirky ${expected}`)
   })
 
   it('retains the complete legitimate environment removal ranking', () => {

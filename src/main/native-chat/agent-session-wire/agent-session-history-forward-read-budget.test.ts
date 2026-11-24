@@ -43,7 +43,7 @@ afterEach(async () => {
 })
 
 async function seedJournal(count: number) {
-  root = await mkdtemp(join(tmpdir(), 'orca-history-read-budget-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-history-read-budget-'))
   const { db } = openTestJournalHostDatabase(root)
   const base = {
     v: AGENT_SESSION_JOURNAL_SCHEMA_VERSION,

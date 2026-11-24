@@ -48,7 +48,7 @@ let persistHandle: ReturnType<typeof vi.fn<() => Promise<void>>>
 let childWork: string[]
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-claude-stop-exit-ends-record-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-claude-stop-exit-ends-record-'))
   resetHostTestOperationIds()
   events = []
   unconfirmedNote = undefined

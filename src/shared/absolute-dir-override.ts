@@ -5,7 +5,7 @@ import { posix, win32 } from 'node:path'
  *
  * A relative value resolves against the *reading* process's cwd — `/` for a Finder-launched app,
  * the user data dir for the terminal daemon — never against the cwd the agent CLI used to write
- * it, so it names a different directory in every Orca process. Syntactic only: `/..` passes and
+ * it, so it names a different directory in every Quirky process. Syntactic only: `/..` passes and
  * collapses to `/`, so this is not a containment check.
  */
 export function resolveAbsoluteDirOverride(

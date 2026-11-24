@@ -1,4 +1,4 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
 import { launchWithUnreachableSshWorkspaces } from './helpers/seeded-ssh-workspaces'
 

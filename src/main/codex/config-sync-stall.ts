@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { observeAgentStateFile } from './codex-path-observation'
 import { isOnlyCodexDaemonOverride } from './codex-daemon-socket-path-guard'
-import { getOrcaManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath, getSystemCodexHomePath } from './codex-home-paths'
 import {
   getCodexSettingsBaselinePath,
   observeCodexSettingsBaseline
@@ -18,13 +18,13 @@ import type {
  *
  * The mirror preserves the managed runtime config when the source is missing or
  * blank, which is silent by design — but the stall can persist for every launch
- * (a downed WSL distro, an unhydrated cloud-synced home), leaving "Orca ignores
+ * (a downed WSL distro, an unhydrated cloud-synced home), leaving "Quirky ignores
  * my config edits" with nothing to diagnose. Derived on demand from the same
  * predicates the mirror uses, so the two can never disagree.
  */
 export function getCodexConfigSyncStatus(
   homes: CodexSettingsPromotionHomes = {
-    runtimeHomePath: getOrcaManagedCodexHomePath(),
+    runtimeHomePath: getQuirkyManagedCodexHomePath(),
     systemHomePath: getSystemCodexHomePath()
   }
 ): CodexConfigSyncStatus {
@@ -36,7 +36,7 @@ export function getCodexConfigSyncStatus(
   // report `synced` while the mirror refused its content read — telling the
   // user their edits had been applied when nothing had run.
   const runtimeConfigObservation = observeAgentStateFile(runtimeConfigPath)
-  // Why: a config holding only Orca's daemon override withholds no user settings.
+  // Why: a config holding only Quirky's daemon override withholds no user settings.
   if (
     runtimeConfigObservation.kind === 'absent' ||
     (runtimeConfigObservation.kind === 'present' &&

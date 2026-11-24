@@ -63,7 +63,7 @@ afterEach(async () => {
 
 /** A worker whose replies and post-close exit can be held behind shared-memory gates. */
 function createClient({ holdReplies = false, holdExit = false } = {}) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-writer-sleep-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-writer-sleep-'))
   roots.push(root)
   const workerPath = join(root, 'writer.cjs')
   writeFileSync(

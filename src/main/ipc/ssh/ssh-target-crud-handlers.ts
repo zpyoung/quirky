@@ -11,8 +11,8 @@ import {
   listUserSshConfigHostSummaries,
   resolveUserSshConfigHost
 } from '../../ssh/config/ssh-config-host-picker'
-import { getManagedOrcadFenceEnvironmentId } from '../../../shared/managed-orcad-ssh-owner'
-import { closeOrcadManagedTunnel } from '../../managed-server/lifecycle/orcad-managed-tunnel'
+import { getManagedQuirkydFenceEnvironmentId } from '../../../shared/managed-quirkyd-ssh-owner'
+import { closeQuirkydManagedTunnel } from '../../managed-server/lifecycle/quirkyd-managed-tunnel'
 import { rotateSshProviderAuthority } from '../../ssh/ssh-provider-authority'
 import {
   getSshTargetRegistryStore,
@@ -20,7 +20,7 @@ import {
 } from '../../ssh/targets/ssh-target-registry'
 import {
   allowsDirectSshRelay,
-  isManagedOrcadSshTarget,
+  isManagedQuirkydSshTarget,
   isRuntimeOwnedSshTarget
 } from '../../ssh/connection/ssh-connection-store'
 import { connectionManager, getCurrentMainWindow } from './ssh-ipc-context'
@@ -53,8 +53,8 @@ function takeRepoReadoptions(): SshRepoReadoption[] {
 function omitRendererSshTargetGeneration<
   T extends {
     generation?: unknown
-    orcadProvisioning?: unknown
-    orcadFence?: unknown
+    quirkydProvisioning?: unknown
+    quirkydFence?: unknown
     managedServerUnavailable?: unknown
     managedServerMoveOffered?: unknown
     managedServerLeaveBehind?: unknown
@@ -66,8 +66,8 @@ function omitRendererSshTargetGeneration<
 ): Omit<
   T,
   | 'generation'
-  | 'orcadProvisioning'
-  | 'orcadFence'
+  | 'quirkydProvisioning'
+  | 'quirkydFence'
   | 'managedServerUnavailable'
   | 'managedServerMoveOffered'
   | 'managedServerLeaveBehind'
@@ -76,8 +76,8 @@ function omitRendererSshTargetGeneration<
 > {
   const {
     generation: _generation,
-    orcadProvisioning: _orcadProvisioning,
-    orcadFence: _orcadFence,
+    quirkydProvisioning: _quirkydProvisioning,
+    quirkydFence: _quirkydFence,
     managedServerUnavailable: _managedServerUnavailable,
     managedServerMoveOffered: _managedServerMoveOffered,
     managedServerLeaveBehind: _managedServerLeaveBehind,
@@ -98,9 +98,9 @@ function assertNotRuntimeOwned(targetId: string, action: string): void {
 /** Removing a managed host would strand its server; Stop proves the exit, Forget skips a dead host. */
 export function assertNotManagedServerHost(targetId: string): void {
   const target = getSshTargetRegistryStore()!.getTarget(targetId)
-  if (target && isManagedOrcadSshTarget(target)) {
+  if (target && isManagedQuirkydSshTarget(target)) {
     throw new Error(
-      'Orca runs on this host. Use Stop… under Settings › Orca on your SSH hosts to stop it and remove it from the host first, or Forget… there if the host is gone.'
+      'Quirky runs on this host. Use Stop… under Settings › Quirky on your SSH hosts to stop it and remove it from the host first, or Forget… there if the host is gone.'
     )
   }
 }
@@ -120,9 +120,9 @@ function updateSshTarget(id: string, updates: SshTargetUpdateInput): SshTarget |
     id,
     omitRendererSshTargetGeneration(updates)
   )
-  // Why first: turning "Allow this host's orca CLI to control Orca" off must revoke the bridge at once.
+  // Why first: turning "Allow this host's quirky CLI to control Quirky" off must revoke the bridge at once.
   requestDesktopBrowserBridgeReconcile()
-  const environmentId = getManagedOrcadFenceEnvironmentId(updated ?? undefined)
+  const environmentId = getManagedQuirkydFenceEnvironmentId(updated ?? undefined)
   if (environmentId && updated) {
     // Why: the tunnel and the SSH transport under it were built from the old fields, so both go
     // and the next use dials the edited target. Only a host reached through its managed server:
@@ -131,7 +131,7 @@ function updateSshTarget(id: string, updates: SshTargetUpdateInput): SshTarget |
       !allowsDirectSshRelay(updated) &&
       (!before || fingerprintRuntimeSshTarget(before) !== fingerprintRuntimeSshTarget(updated))
     void runTargetLifecycle(id, async () => {
-      await closeOrcadManagedTunnel(environmentId)
+      await closeQuirkydManagedTunnel(environmentId)
       if (redial) {
         await connectionManager?.disconnect(id)
       }

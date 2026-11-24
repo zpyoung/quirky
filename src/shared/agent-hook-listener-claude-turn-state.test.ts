@@ -492,7 +492,7 @@ describe('the main agent verdict from an inferred interrupt', () => {
   }
 
   // Current Claude sends no hook on a cancel and no `is_interrupt` on Stop, so the cancellation
-  // enters the main agent record from Orca's inferred interrupt and rides into the next real Stop.
+  // enters the main agent record from Quirky's inferred interrupt and rides into the next real Stop.
   it('carries the inferred cancellation into the next plain Stop', () => {
     claude({ hook_event_name: 'UserPromptSubmit', prompt: 'go' })
     markClaudeLeadTurnInterrupted(state, PANE_KEY)

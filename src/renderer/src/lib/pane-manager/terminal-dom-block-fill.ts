@@ -1,7 +1,7 @@
-const BLOCK_FG_VAR = '--orca-block-fg'
-const FILL_ATTR = 'data-orca-block-fill'
+const BLOCK_FG_VAR = '--quirky-block-fg'
+const FILL_ATTR = 'data-quirky-block-fill'
 // The span's inline color before the fill ('' when it had none), restored on clear.
-const INLINE_FG_ATTR = 'data-orca-block-inline-fg'
+const INLINE_FG_ATTR = 'data-quirky-block-inline-fg'
 
 function gradient(axis: 'bottom' | 'right', solidPercent: number, fromStart: boolean): string {
   const dir = axis === 'bottom' ? 'to bottom' : 'to right'

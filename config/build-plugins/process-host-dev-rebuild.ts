@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import type ts from 'typescript-api'
 import type { Plugin } from 'rolldown'
 import { createWorkspaceSourceResolver } from '../scripts/workspace-source-exports.mjs'
@@ -19,7 +19,7 @@ function processHostInputs(
   files: string[]
   directories: ts.MapLike<ts.WatchDirectoryFlags>
 } {
-  const source = createWorkspaceSourceResolver(root).resolve('@orca/process-host')
+  const source = createWorkspaceSourceResolver(root).resolve('@quirky/process-host')
   if (!source) {
     throw new Error('The process-host workspace source export is missing')
   }
@@ -63,7 +63,7 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
   let packageFiles = new Set<string>()
   let cachedInputs: ReturnType<typeof processHostInputs> | undefined
   return {
-    name: 'orca-process-host-dev-rebuild',
+    name: 'quirky-process-host-dev-rebuild',
     watchChange(id) {
       const file = resolve(id)
       if (packageFiles.has(file) || file === signalFile) {
@@ -84,7 +84,7 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
       }
       // The installed bundler invalidates exact files; source creation needs a private watch signal.
       if (!signalDirectory) {
-        signalDirectory = mkdtempSync(join(tmpdir(), 'orca-process-host-watch-'))
+        signalDirectory = mkdtempSync(join(tmpdir(), 'quirky-process-host-watch-'))
         signalFile = join(signalDirectory, 'source-directory-change')
         writeFileSync(signalFile, String(signalVersion))
       }
@@ -148,7 +148,7 @@ export function createProcessHostDevRebuildPlugin(root = process.cwd()): Plugin 
         program: process.execPath,
         args: [
           createRequire(join(inputs.directory, 'package.json')).resolve('tsx/cli'),
-          '--conditions=orca-source',
+          '--conditions=quirky-source',
           join(inputs.directory, 'scripts', 'build-dist.mjs')
         ],
         cwd: inputs.directory,

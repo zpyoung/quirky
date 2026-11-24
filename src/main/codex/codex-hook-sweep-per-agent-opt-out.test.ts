@@ -28,7 +28,7 @@ import { CodexHookService } from './hook-service'
 
 const homes = setupCodexHookHomes(homedirMock, getPathMock)
 
-function orcaEntryCommand(): string {
+function quirkyEntryCommand(): string {
   const scriptPath = join(
     homes.userDataDir,
     'agent-hooks',
@@ -47,7 +47,7 @@ function seedRealHomeHooks(): string {
       hooks: {
         Stop: [
           { hooks: [{ type: 'command', command: 'user-hook' }] },
-          { hooks: [{ type: 'command', command: orcaEntryCommand() }] }
+          { hooks: [{ type: 'command', command: quirkyEntryCommand() }] }
         ]
       }
     })}\n`,
@@ -63,7 +63,7 @@ function realHomeStopHooks(systemHooksPath: string): unknown {
 // Why: Codex turned off per agent reaches remove(), the explicit opt-out that alone
 // strips the shared real-home entry.
 describe('Codex turned off per agent', () => {
-  it('removes the Orca entry from the real ~/.codex and keeps user hooks', async () => {
+  it('removes the Quirky entry from the real ~/.codex and keeps user hooks', async () => {
     const systemHooksPath = seedRealHomeHooks()
 
     await new CodexHookService().remove()

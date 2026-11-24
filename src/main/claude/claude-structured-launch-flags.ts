@@ -20,7 +20,7 @@ const THINKING_DISPLAY_ARGS: Readonly<Record<string, string>> = { 'thinking-disp
 const THINKING_RECHECK_BUDGET_MS = 250
 
 export type ClaudeLaunchFlags = {
-  /** Readable thinking: the CLI otherwise streams thinking blocks with no text under Orca's
+  /** Readable thinking: the CLI otherwise streams thinking blocks with no text under Quirky's
    *  launch. Only the display is set, never `--thinking`, so a user who turned thinking off keeps
    *  it off. */
   thinkingDisplayArgs: Readonly<Record<string, string>>

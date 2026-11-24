@@ -79,17 +79,17 @@ function createProfile(): {
   databaseFile: string
   exportPath: string
 } {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-profile-state-cli-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-profile-state-cli-'))
   temporaryDirectories.push(userDataPath)
   const profileId = 'profile-cli-recovery'
   const profileDirectory = join(userDataPath, 'profiles', profileId)
   mkdirSync(profileDirectory, { recursive: true })
   writeFileSync(
-    join(userDataPath, 'orca-profile-index.json'),
+    join(userDataPath, 'quirky-profile-index.json'),
     JSON.stringify({ activeProfileId: profileId, profiles: [{ id: profileId }] }),
     'utf8'
   )
-  const dataFile = join(profileDirectory, 'orca-data.json')
+  const dataFile = join(profileDirectory, 'quirky-data.json')
   const databaseFile = profileStateDatabaseFile(profileDirectory)
   const exportPath = profileStateJsonExportPath(dataFile, 1)
   writeFileSync(dataFile, JSON.stringify({ settings: { theme: 'old' } }), 'utf8')
@@ -234,8 +234,8 @@ describe('profile-state CLI recovery', () => {
   it('keeps profile-state recovery local when remote selection is configured', async () => {
     const profile = createProfile()
     getDefaultUserDataPathMock.mockReturnValue(profile.userDataPath)
-    vi.stubEnv('ORCA_PAIRING_CODE', 'remote-pairing-code')
-    vi.stubEnv('ORCA_ENVIRONMENT', 'stale-environment')
+    vi.stubEnv('QUIRKY_PAIRING_CODE', 'remote-pairing-code')
+    vi.stubEnv('QUIRKY_ENVIRONMENT', 'stale-environment')
 
     await main(['profile', 'state', 'rollback', '--revision', '1', '--json'], profile.userDataPath)
 
@@ -399,7 +399,7 @@ describe('profile-state CLI recovery', () => {
       expect(readFileSync(profile.dataFile, 'utf8')).toBe(
         JSON.stringify({ settings: { theme: 'old' } })
       )
-      expect(vi.mocked(console.error).mock.calls.at(-1)?.[0]).toContain('Stop Orca')
+      expect(vi.mocked(console.error).mock.calls.at(-1)?.[0]).toContain('Stop Quirky')
     }
   )
 
@@ -521,6 +521,6 @@ describe('profile-state CLI recovery', () => {
 
     expect(process.exitCode).toBe(1)
     expect(readFileSync(profile.databaseFile, 'utf8')).toBe('damaged sqlite primary')
-    expect(String(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toContain('Stop Orca')
+    expect(String(vi.mocked(console.log).mock.calls.at(-1)?.[0])).toContain('Stop Quirky')
   })
 })

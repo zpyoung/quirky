@@ -87,7 +87,7 @@ describe('createRemoteRuntimePtyTransport', () => {
     let activateAttempts = 0
     runtimeCall.mockImplementation(async (request: { method: string; params?: unknown }) => {
       if (request.method === 'session.tabs.activate' && activateAttempts++ === 0) {
-        throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+        throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
           code: 'remote_runtime_unavailable'
         })
       }
@@ -129,7 +129,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       let activateAttempts = 0
       runtimeCall.mockImplementation(async (request: { method: string; params?: unknown }) => {
         if (request.method === 'session.tabs.activate' && activateAttempts++ === 0) {
-          throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+          throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
             code: 'remote_runtime_unavailable'
           })
         }
@@ -142,7 +142,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         return healthyRuntimeCall?.(request)
       })
       runtimeSubscribe.mockRejectedValue(
-        Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+        Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
           code: 'remote_runtime_unavailable'
         })
       )
@@ -182,7 +182,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         }
         activateAttempts += 1
         if (activateAttempts === 1) {
-          throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+          throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
             code: 'remote_runtime_unavailable'
           })
         }
@@ -230,7 +230,7 @@ describe('createRemoteRuntimePtyTransport', () => {
         activateAttempts += 1
         if (activateAttempts === 1) {
           return Promise.reject(
-            Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+            Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
               code: 'remote_runtime_unavailable'
             })
           )
@@ -257,7 +257,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       expect(transport.getRecoveryState?.().phase).toBe('disconnected')
 
       rejectInFlight(
-        Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+        Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
           code: 'remote_runtime_unavailable'
         })
       )
@@ -283,7 +283,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       let activateAttempts = 0
       runtimeCall.mockImplementation(async (request: { method: string; params?: unknown }) => {
         if (request.method === 'session.tabs.activate' && activateAttempts++ === 0) {
-          throw Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+          throw Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
             code: 'remote_runtime_unavailable'
           })
         }
@@ -314,7 +314,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       expect(transport.getRecoveryState?.().phase).toBe('disconnected')
 
       rejectSubscription(
-        Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+        Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
           code: 'remote_runtime_unavailable'
         })
       )
@@ -339,7 +339,7 @@ describe('createRemoteRuntimePtyTransport', () => {
       runtimeCall.mockImplementation((request: { method: string; params?: unknown }) => {
         if (request.method === 'session.tabs.activate' && activateAttempts++ === 0) {
           return Promise.reject(
-            Object.assign(new Error('Remote Orca runtime closed the connection.'), {
+            Object.assign(new Error('Remote Quirky runtime closed the connection.'), {
               code: 'remote_runtime_unavailable'
             })
           )

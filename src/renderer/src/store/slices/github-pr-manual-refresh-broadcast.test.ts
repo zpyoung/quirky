@@ -47,7 +47,7 @@ describe('manual PR refresh whose outcome main also broadcasts', () => {
     vi.useRealTimers()
   })
 
-  it('keeps a PR opened outside Orca in the PR cache after Refresh finds it', async () => {
+  it('keeps a PR opened outside Quirky in the PR cache after Refresh finds it', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(1_000)
     const { store, repoPath, repoId, branch, worktreeId, cacheKey, alias } = createRefreshContext()

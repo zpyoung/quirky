@@ -61,7 +61,7 @@ export function handleTerminalFileLink(
   })
 }
 
-/** The file-link popover's rows (open in Orca, default app, reveal), shared by terminal and chat. */
+/** The file-link popover's rows (open in Quirky, default app, reveal), shared by terminal and chat. */
 export function buildFileLinkActions(
   filePath: string,
   line: number | null,

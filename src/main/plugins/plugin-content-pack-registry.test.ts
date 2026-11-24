@@ -17,7 +17,7 @@ afterEach(async () => {
 
 describe('PluginContentPackRegistry', () => {
   it('activates all contributions from a plugin atomically', async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), 'orca-plugin-content-pack-registry-'))
+    const rootDir = await mkdtemp(join(tmpdir(), 'quirky-plugin-content-pack-registry-'))
     roots.push(rootDir)
     await mkdir(join(rootDir, 'locales'))
     await Promise.all([
@@ -30,10 +30,10 @@ describe('PluginContentPackRegistry', () => {
     const manifest = pluginManifestSchema.parse({
       manifestVersion: 1,
       id: 'mixed-content',
-      publisher: 'orca-samples',
+      publisher: 'quirky-samples',
       name: 'Mixed Content',
       version: '1.0.0',
-      engines: { orca: '>=1.0.0' },
+      engines: { quirky: '>=1.0.0' },
       pluginApi: 1,
       contributes: {
         languagePacks: [
@@ -44,7 +44,7 @@ describe('PluginContentPackRegistry', () => {
       capabilities: []
     })
     const plugin: ValidDiscoveredPlugin = {
-      pluginKey: 'orca-samples.mixed-content',
+      pluginKey: 'quirky-samples.mixed-content',
       rootDir,
       manifest,
       consentFingerprint: fingerprintPluginConsent(manifest),
@@ -60,7 +60,7 @@ describe('PluginContentPackRegistry', () => {
   })
 
   it('rolls back valid packs when a VM recipe from the same plugin is invalid', async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), 'orca-plugin-content-pack-vm-'))
+    const rootDir = await mkdtemp(join(tmpdir(), 'quirky-plugin-content-pack-vm-'))
     roots.push(rootDir)
     await Promise.all([mkdir(join(rootDir, 'locales')), mkdir(join(rootDir, 'recipes'))])
     await Promise.all([
@@ -73,10 +73,10 @@ describe('PluginContentPackRegistry', () => {
     const manifest = pluginManifestSchema.parse({
       manifestVersion: 1,
       id: 'mixed-recipes',
-      publisher: 'orca-samples',
+      publisher: 'quirky-samples',
       name: 'Mixed Recipes',
       version: '1.0.0',
-      engines: { orca: '>=1.0.0' },
+      engines: { quirky: '>=1.0.0' },
       pluginApi: 1,
       contributes: {
         languagePacks: [{ locale: 'es', path: 'locales/valid.json' }],
@@ -89,7 +89,7 @@ describe('PluginContentPackRegistry', () => {
       throw new Error(content.error)
     }
     const plugin: ValidDiscoveredPlugin = {
-      pluginKey: 'orca-samples.mixed-recipes',
+      pluginKey: 'quirky-samples.mixed-recipes',
       rootDir,
       manifest,
       consentFingerprint: fingerprintPluginConsent(manifest, content.hash),

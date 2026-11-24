@@ -80,7 +80,7 @@ describe('workspace status drag data', () => {
     expect(hasWorkspaceDragData(dataTransfer)).toBe(false)
   })
 
-  it('ignores plain text without an Orca workspace drag type', () => {
+  it('ignores plain text without an Quirky workspace drag type', () => {
     const dataTransfer = new TestDataTransfer() as unknown as DataTransfer
     dataTransfer.setData('text/plain', 'wt-1')
 

@@ -56,7 +56,7 @@ describe('approvalBlockedPathToShow', () => {
     ).toBe('/outside/x')
   })
 
-  it("checks the detail a newer Orca's subject falls back to", () => {
+  it("checks the detail a newer Quirky's subject falls back to", () => {
     const subject: ApprovalCardText['subject'] = JSON.parse('{"kind":"diff"}')
     expect(
       approvalBlockedPathToShow({ blockedPath: '/outside/x', subject, detail: 'edit /outside/x' })

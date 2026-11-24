@@ -116,7 +116,7 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
     if (screen && result.result.terminal.source === undefined) {
       throw new RuntimeClientError(
         'incompatible_runtime',
-        'This Orca host does not support --screen reads, so it answered with accumulated output instead of the rendered screen. Update Orca on the host, or drop --screen to read accumulated output deliberately.'
+        'This Quirky host does not support --screen reads, so it answered with accumulated output instead of the rendered screen. Update Quirky on the host, or drop --screen to read accumulated output deliberately.'
       )
     }
     printResult(result, json, formatTerminalRead)
@@ -190,7 +190,7 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       if (!status.result.runtime.reachable) {
         throw new RuntimeClientError(
           'runtime_unavailable',
-          'Orca could not verify --shell support on the execution host, so no terminal was created. Wait for the execution host to become reachable and retry.'
+          'Quirky could not verify --shell support on the execution host, so no terminal was created. Wait for the execution host to become reachable and retry.'
         )
       }
       if (
@@ -200,7 +200,7 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
       ) {
         throw new RuntimeClientError(
           'incompatible_runtime',
-          'This Orca host does not support --shell, and would silently create a terminal running its default shell instead. No terminal was created; update Orca on the execution host.'
+          'This Quirky host does not support --shell, and would silently create a terminal running its default shell instead. No terminal was created; update Quirky on the execution host.'
         )
       }
     }

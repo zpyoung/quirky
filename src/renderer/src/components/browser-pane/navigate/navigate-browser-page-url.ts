@@ -8,7 +8,7 @@ import {
   redactKagiSessionToken
 } from '../../../../../shared/browser-url'
 import type { BrowserLoadError } from '../../../../../shared/browser-workspace-types'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import { BROWSER_GUEST_RECOVERY_ERROR_CODE } from '../host-guest/browser-page-guest-recovery'
 import {
   getBrowserDisplayTitle,
@@ -76,13 +76,13 @@ export function navigateBrowserPageToUrl({
     if (!webview) {
       return
     }
-    trackNextLoadingEventRef.current = targetUrl !== ORCA_BROWSER_BLANK_URL
+    trackNextLoadingEventRef.current = targetUrl !== QUIRKY_BROWSER_BLANK_URL
     lastKnownWebviewUrlRef.current = normalizedBrowserModelUrl
     recoveryNavigationValidationRef.current = recoveryLoadError
       ? { committed: false, started: false, targetUrl: normalizedBrowserModelUrl }
       : null
     webview.src = targetUrl
-    if (targetUrl !== ORCA_BROWSER_BLANK_URL) {
+    if (targetUrl !== QUIRKY_BROWSER_BLANK_URL) {
       focusWebviewNow()
     }
   }

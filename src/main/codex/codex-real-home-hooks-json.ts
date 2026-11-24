@@ -19,7 +19,7 @@ export function getRealHomeHooksJsonPath(): string {
 /**
  * Every key Codex may give an entry in ~/.codex/hooks.json: as spelled when it
  * runs on its default home, resolved when a pane's CODEX_HOME names it. They
- * differ when ~/.codex or HOME is a symlink, and Orca approves under both.
+ * differ when ~/.codex or HOME is a symlink, and Quirky approves under both.
  */
 export function getRealHomeHookKeySourcePaths(
   hooksJsonPath: string = getRealHomeHooksJsonPath()
@@ -29,20 +29,20 @@ export function getRealHomeHookKeySourcePaths(
   return resolved === spelled ? [spelled] : [spelled, resolved]
 }
 
-/** Orca-side home of the pristine copy; the rolling hooks.json.bak beside the file is writeHooksJson's. */
+/** Quirky-side home of the pristine copy; the rolling hooks.json.bak beside the file is writeHooksJson's. */
 function getRealHomeHookStateDir(userDataPath: string): string {
   return join(userDataPath, 'codex-real-home-hooks')
 }
 
-/** Another process saved hooks.json between Orca's read and its write. */
+/** Another process saved hooks.json between Quirky's read and its write. */
 export class HooksJsonChangedError extends Error {
   constructor() {
-    super('Codex hooks.json changed since Orca read it')
+    super('Codex hooks.json changed since Quirky read it')
     this.name = 'HooksJsonChangedError'
   }
 }
 
-/** Why ~/.codex/hooks.json cannot take Orca's entry, read from the file now; null when it can. */
+/** Why ~/.codex/hooks.json cannot take Quirky's entry, read from the file now; null when it can. */
 export function readRealHomeHooksFileProblem(): string | null {
   const hooksJsonPath = getRealHomeHooksJsonPath()
   const { raw, config } = readHooksJsonWithRaw(hooksJsonPath)
@@ -51,11 +51,11 @@ export function readRealHomeHooksFileProblem(): string | null {
   }
   return isAddableHooksFile(config)
     ? null
-    : `Orca cannot add its hook to ${hooksJsonPath}, so Orca shows no status for ~/.codex`
+    : `Quirky cannot add its hook to ${hooksJsonPath}, so Quirky shows no status for ~/.codex`
 }
 
 // Why: an unparseable user file is never clobbered, and Codex skips a file with other root keys
-// or an event that is not a list, whose value Orca would otherwise replace.
+// or an event that is not a list, whose value Quirky would otherwise replace.
 export function isAddableHooksFile(config: HooksConfig | null): config is HooksConfig {
   return (
     config !== null &&
@@ -78,7 +78,7 @@ export function assertHooksJsonGeneration(
   }
 }
 
-/** One-time pristine copy of the user's file, kept under Orca's userData. */
+/** One-time pristine copy of the user's file, kept under Quirky's userData. */
 export function backupRealHomeHooksJsonOnce(
   userDataPath: string,
   previousRaw: string | null
@@ -87,7 +87,7 @@ export function backupRealHomeHooksJsonOnce(
     return
   }
   const backupDir = getRealHomeHookStateDir(userDataPath)
-  const backupPath = join(backupDir, 'hooks.json.pre-orca')
+  const backupPath = join(backupDir, 'hooks.json.pre-quirky')
   if (existsSync(backupPath)) {
     return
   }

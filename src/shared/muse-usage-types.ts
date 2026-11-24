@@ -1,4 +1,4 @@
-export type MuseUsageScope = 'orca' | 'all'
+export type MuseUsageScope = 'quirky' | 'all'
 export type MuseUsageRange = '7d' | '30d' | '90d' | 'all'
 export type MuseUsageBreakdownKind = 'model' | 'project'
 

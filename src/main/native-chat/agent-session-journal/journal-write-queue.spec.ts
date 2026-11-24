@@ -49,7 +49,7 @@ export function registerJournalWriteQueueTests(): void {
   const opened: AgentSessionJournal[] = []
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-write-queue-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-write-queue-'))
   })
 
   afterEach(async () => {

@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { OrchestrationDb, RunRow } from '../../runtime/orchestration/db'
 import { inspectWorkerTerminal } from '../../runtime/rpc/methods/orchestration/worker/worker-observation'
 import { isStructuredWorkerHandle } from '../../../shared/structured-worker-handle'
@@ -8,7 +8,7 @@ import { WorkerPromptUndeliverableError } from './orchestration-contract'
 export const HEIMDALL_OWNER_REPLY_PREFIX = '[Heimdall owner reply]'
 
 export async function sendEnrolledWorkerPrompt(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   enrollment: WatcherEnrollment,
   dispatchId: string,
   text: string,
@@ -27,7 +27,7 @@ export async function sendEnrolledWorkerPrompt(
  * exact live process on a local PTY; anything else refuses rather than typing into another lane.
  */
 export async function sendWorkerPrompt(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   db: OrchestrationDb,
   run: RunRow,
   dispatchId: string,

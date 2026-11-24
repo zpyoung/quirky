@@ -13,7 +13,7 @@ describe('issue command ignore rules', () => {
   const git = (args: string[]) => gitExecFileAsync(args, { cwd: repo })
 
   beforeEach(async () => {
-    root = mkdtempSync(join(tmpdir(), 'orca-issue-ignore-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-issue-ignore-'))
     repo = join(root, 'repo with spaces')
     mkdirSync(repo)
     globalConfig = join(root, 'gitconfig')
@@ -31,7 +31,7 @@ describe('issue command ignore rules', () => {
     rmSync(root, { recursive: true, force: true })
   })
 
-  it.each(['.orca', '.orca/', '/.orca/', '.orca/*', '.orca/issue-command'])(
+  it.each(['.quirky', '.quirky/', '/.quirky/', '.quirky/*', '.quirky/issue-command'])(
     'respects global ignore pattern %s',
     async (pattern) => {
       writeFileSync(join(root, 'ignore'), `${pattern}\n`)
@@ -40,12 +40,12 @@ describe('issue command ignore rules', () => {
       await writeIssueCommand(repo, 'local command')
 
       expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('node_modules/\n')
-      expect(readFileSync(join(repo, '.orca', 'issue-command'), 'utf8')).toBe('local command\n')
+      expect(readFileSync(join(repo, '.quirky', 'issue-command'), 'utf8')).toBe('local command\n')
     }
   )
 
-  it('does not create .gitignore when the repository exclude already ignores .orca', async () => {
-    writeFileSync(join(repo, '.git', 'info', 'exclude'), '.orca/\n')
+  it('does not create .gitignore when the repository exclude already ignores .quirky', async () => {
+    writeFileSync(join(repo, '.git', 'info', 'exclude'), '.quirky/\n')
 
     await writeIssueCommand(repo, 'local command')
 
@@ -54,17 +54,17 @@ describe('issue command ignore rules', () => {
   })
 
   it('respects anchored repository rules', async () => {
-    writeFileSync(join(repo, '.gitignore'), '/.orca/\n')
+    writeFileSync(join(repo, '.gitignore'), '/.quirky/\n')
 
     await writeIssueCommand(repo, 'local command')
 
-    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('/.orca/\n')
+    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('/.quirky/\n')
   })
 
   it('creates .gitignore when no ignore rules exist', async () => {
     await writeIssueCommand(repo, 'local command')
 
-    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('.orca\n')
+    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('.quirky\n')
   })
 
   it('respects shared repository excludes from a linked worktree', async () => {
@@ -80,7 +80,7 @@ describe('issue command ignore rules', () => {
     ])
     const worktree = join(root, 'linked worktree')
     await git(['worktree', 'add', '-q', '-b', 'issue-command-test', worktree])
-    writeFileSync(join(repo, '.git', 'info', 'exclude'), '.orca/\n')
+    writeFileSync(join(repo, '.git', 'info', 'exclude'), '.quirky/\n')
 
     await writeIssueCommand(worktree, 'local command')
 
@@ -88,22 +88,22 @@ describe('issue command ignore rules', () => {
     expect((await gitExecFileAsync(['status', '--porcelain'], { cwd: worktree })).stdout).toBe('')
   })
 
-  it('adds the rule once when .orca is not ignored', async () => {
+  it('adds the rule once when .quirky is not ignored', async () => {
     writeFileSync(join(repo, '.gitignore'), 'node_modules/')
 
     await writeIssueCommand(repo, 'first command')
     await writeIssueCommand(repo, 'second command')
 
-    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('node_modules/\n.orca\n')
-    expect(readFileSync(join(repo, '.orca', 'issue-command'), 'utf8')).toBe('second command\n')
+    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('node_modules/\n.quirky\n')
+    expect(readFileSync(join(repo, '.quirky', 'issue-command'), 'utf8')).toBe('second command\n')
   })
 
   it('honors a repository rule that negates a global ignore', async () => {
-    writeFileSync(join(root, 'ignore'), '.orca/\n')
-    writeFileSync(join(repo, '.gitignore'), '!.orca/\n')
+    writeFileSync(join(root, 'ignore'), '.quirky/\n')
+    writeFileSync(join(repo, '.gitignore'), '!.quirky/\n')
 
     await writeIssueCommand(repo, 'local command')
 
-    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('!.orca/\n.orca\n')
+    expect(readFileSync(join(repo, '.gitignore'), 'utf8')).toBe('!.quirky/\n.quirky\n')
   })
 })

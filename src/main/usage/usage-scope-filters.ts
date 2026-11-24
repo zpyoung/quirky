@@ -2,7 +2,7 @@ import { getLocalUsageDay, getUsageRangeCutoff } from './usage-calendar-range'
 
 export function filterUsageDaily<T extends { day: string; worktreeId: string | null }>(
   daily: readonly T[],
-  scope: 'orca' | 'all',
+  scope: 'quirky' | 'all',
   range: '7d' | '30d' | '90d' | 'all'
 ): T[] {
   const cutoff = getUsageRangeCutoff(range)
@@ -19,7 +19,7 @@ export function filterUsageSessions<
     lastTimestamp: string
     locationBreakdown: readonly { worktreeId: string | null }[]
   }
->(sessions: readonly T[], scope: 'orca' | 'all', range: '7d' | '30d' | '90d' | 'all'): T[] {
+>(sessions: readonly T[], scope: 'quirky' | 'all', range: '7d' | '30d' | '90d' | 'all'): T[] {
   const cutoff = getUsageRangeCutoff(range)
   return sessions.filter((session) => {
     const day = getLocalUsageDay(session.lastTimestamp)

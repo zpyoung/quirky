@@ -56,7 +56,7 @@ function fingerprintOf(sessionId: string, message: AcpStoredUserMessage): string
 }
 
 /**
- * The agent's store keeps no id of Orca's, so a stored message can only match a send by content.
+ * The agent's store keeps no id of Quirky's, so a stored message can only match a send by content.
  * Each send the journal already accepted first claims the earliest stored copy of its text written
  * no earlier than it was sent, so an identical message that did reach the agent is never offered as
  * the one in doubt; what is left, from the first send in doubt on, is the window. Claiming more than
@@ -94,7 +94,7 @@ function recoveryWindow(
   )
 }
 
-/** The window for one chat; null for an agent whose store Orca does not read. */
+/** The window for one chat; null for an agent whose store Quirky does not read. */
 export async function readAcpRecoveryHistory(
   input: Pick<AcpStructuredSessionAdapterDeps, 'readLaunch' | 'readJournal' | 'logger'> & {
     spec: Pick<AcpLaunchSpec, 'readStoredUserMessages'>

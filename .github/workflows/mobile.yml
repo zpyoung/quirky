@@ -23,7 +23,7 @@ on:
       - 'src/main/runtime/runtime-rpc/**'
       - 'src/main/runtime/runtime-rpc.ts'
       - 'src/main/runtime/device-registry.ts'
-      - 'src/main/runtime/orca-runtime.ts'
+      - 'src/main/runtime/quirky-runtime.ts'
       - 'src/main/runtime/agent-session-*.ts'
       - 'src/main/native-chat/agent-session-wire/**'
       - 'src/main/runtime/structured-attention-original-delivery.test-fixture.ts'
@@ -68,7 +68,7 @@ on:
       - 'src/main/runtime/runtime-rpc/**'
       - 'src/main/runtime/runtime-rpc.ts'
       - 'src/main/runtime/device-registry.ts'
-      - 'src/main/runtime/orca-runtime.ts'
+      - 'src/main/runtime/quirky-runtime.ts'
       - 'src/main/runtime/agent-session-*.ts'
       - 'src/main/native-chat/agent-session-wire/**'
       - 'src/main/runtime/structured-attention-original-delivery.test-fixture.ts'
@@ -108,7 +108,7 @@ jobs:
       # from the Gemfile, which is how the release jobs could land on different
       # fastlane versions in the first place. Fail here instead.
       BUNDLE_FROZEN: 'true'
-      ORCA_MOBILE_TYPECHECK_COMPILER: 'native'
+      QUIRKY_MOBILE_TYPECHECK_COMPILER: 'native'
 
     defaults:
       run:
@@ -206,7 +206,7 @@ jobs:
       - name: Test
         if: steps.test-scope.outputs.should_run != 'false'
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
         run: node ../config/scripts/run-mobile-ci-tests.mjs
 
       # All checks read the completed install; compilers need not hold up test workers.
@@ -253,7 +253,7 @@ jobs:
   main-tests:
     name: Mobile tests on main
     env:
-      ORCA_MOBILE_TYPECHECK_COMPILER: 'native'
+      QUIRKY_MOBILE_TYPECHECK_COMPILER: 'native'
     if: github.event_name == 'push'
     # Why ARM: the same pure-Node Vitest run `verify` makes on a pull request.
     runs-on: ubuntu-24.04-arm
@@ -301,7 +301,7 @@ jobs:
 
       - name: Test
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
         run: node ../config/scripts/run-mobile-ci-tests.mjs
 
       - wait: [production-types, test-types]

@@ -62,7 +62,7 @@ const deps = (): ReturnType<typeof nativeMediaDeviceDeps> =>
 
 describe('which uris this shell owns', () => {
   it('takes the cache copy both pickers produce and refuses an Android provider uri', () => {
-    expect(ownsStagedMediaUri('file:///cache/orca-media-1.png')).toBe(true)
+    expect(ownsStagedMediaUri('file:///cache/quirky-media-1.png')).toBe(true)
     for (const uri of [
       'content://media/external/images/media/42',
       'ph://ABC-123',
@@ -150,7 +150,7 @@ describe('copying a provider uri into the cache', () => {
     expo.sources.set(source, Uint8Array.from([1, 2, 3, 4]))
     const uri = copyPickedMediaIntoCache(source)
     expect(ownsStagedMediaUri(uri)).toBe(true)
-    expect(uri.startsWith('file:///cache/orca-media-')).toBe(true)
+    expect(uri.startsWith('file:///cache/quirky-media-')).toBe(true)
     expect(expo.copiedBytes.at(-1)).toEqual({ uri, bytes: [1, 2, 3, 4] })
   })
 
@@ -159,20 +159,20 @@ describe('copying a provider uri into the cache', () => {
     const before = expo.deleted.length
     expect(() => copyPickedMediaIntoCache('content://media/gone')).toThrow(/nothing readable/)
     expect(expo.deleted.length).toBe(before + 1)
-    expect(expo.deleted.at(-1)?.startsWith('file:///cache/orca-media-')).toBe(true)
+    expect(expo.deleted.at(-1)?.startsWith('file:///cache/quirky-media-')).toBe(true)
   })
 })
 
 describe('staging and discarding', () => {
   it('writes pasteboard base64 into a cache file of this shell s own, and answers its uri', () => {
     const uri = deps().stageBase64('AAAA')
-    expect(uri.startsWith('file:///cache/orca-media-')).toBe(true)
+    expect(uri.startsWith('file:///cache/quirky-media-')).toBe(true)
     expect(ownsStagedMediaUri(uri)).toBe(true)
     expect(expo.written.at(-1)).toEqual({ uri, base64: 'AAAA' })
   })
 
   it('deletes one staged file by uri', () => {
-    discardStagedMedia('file:///cache/orca-media-9.png')
-    expect(expo.deleted).toContain('file:///cache/orca-media-9.png')
+    discardStagedMedia('file:///cache/quirky-media-9.png')
+    expect(expo.deleted).toContain('file:///cache/quirky-media-9.png')
   })
 })

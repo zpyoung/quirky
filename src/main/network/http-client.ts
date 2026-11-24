@@ -13,7 +13,7 @@ import type { Session } from 'electron'
  * a Node host reads proxy configuration from the environment instead of from Chromium,
  * and sends Node's user agent.
  *
- * Body safety (orca#8695): the global uses undici, where an unread response body can
+ * Body safety (quirky#8695): the global uses undici, where an unread response body can
  * crash the process. This port hands the Response straight to its caller and never
  * inspects it, so the consume/cancel obligation stays exactly where it already was —
  * with the caller, unchanged from when they called Electron's net directly.
@@ -42,12 +42,12 @@ export function getMainHttpClient(): MainHttpClient {
   return current
 }
 
-/** A provider's isolated cookie jar; throws where no Chromium session exists (orcad). */
+/** A provider's isolated cookie jar; throws where no Chromium session exists (quirkyd). */
 export function requirePartitionSession(partition: string, providerLabel: string): Session {
   const client = getMainHttpClient()
   if (!client.partitionSession) {
     throw new Error(
-      `${providerLabel} usage from a session cookie needs the Orca desktop app and is not available on this server`
+      `${providerLabel} usage from a session cookie needs the Quirky desktop app and is not available on this server`
     )
   }
   return client.partitionSession(partition)

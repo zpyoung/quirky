@@ -8,17 +8,17 @@ import { MUSE_HOOK_EVENTS, buildMuseManagedHooksFile, getMuseManagedCommand } fr
 import { wrapWindowsHookCommand } from '../agent-hooks/windows-hook-command'
 import { createAgentHookMemorySftp } from '../agent-hooks/agent-hook-memory-sftp.test-fixture'
 
-// Why: getSharedManagedScriptPath() writes under homedir()/.orca and the
+// Why: getSharedManagedScriptPath() writes under homedir()/.quirky and the
 // Muse config resolves via XDG_CONFIG_HOME ?? ~/.config/muse. Point HOME
 // at a temp dir and clear XDG_CONFIG_HOME so install/remove never touches the
-// real ~/.orca or ~/.config/muse. os.homedir() resolves $HOME on POSIX.
+// real ~/.quirky or ~/.config/muse. os.homedir() resolves $HOME on POSIX.
 let home: string
 let originalHome: string | undefined
 let originalXdg: string | undefined
 let originalProfile: string | undefined
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'orca-muse-hook-'))
+  home = mkdtempSync(join(tmpdir(), 'quirky-muse-hook-'))
   originalProfile = process.env.USERPROFILE
   process.env.USERPROFILE = home
   originalHome = process.env.HOME
@@ -48,11 +48,11 @@ afterEach(() => {
 })
 
 const configPath = (): string => join(home, '.config', 'muse', 'settings.json')
-const managedHooksPath = (): string => join(home, '.orca', 'agent-hooks', 'muse-hooks.json')
+const managedHooksPath = (): string => join(home, '.quirky', 'agent-hooks', 'muse-hooks.json')
 const scriptPath = (): string =>
   join(
     home,
-    '.orca',
+    '.quirky',
     'agent-hooks',
     process.platform === 'win32' ? 'muse-hook.cmd' : 'muse-hook.sh'
   )
@@ -67,12 +67,12 @@ describe('MuseHookService', () => {
     expect(status.state).toBe('installed')
     expect(status.managedHooksPresent).toBe(true)
 
-    // The settings pointer aims at the Orca-owned managed file, and a fresh
+    // The settings pointer aims at the Quirky-owned managed file, and a fresh
     // settings.json carries the schema_version muse requires.
     const settings = parseMuseSettingsText(readFileSync(configPath(), 'utf-8'), 'test')
     expect(settings?.managed_hooks_path).toBe(managedHooksPath())
     expect(settings?.schema_version).toBe(1)
-    expect(settings?.managed_hooks_env_vars).toContain('ORCA_PANE_KEY')
+    expect(settings?.managed_hooks_env_vars).toContain('QUIRKY_PANE_KEY')
 
     const managedText = readFileSync(managedHooksPath(), 'utf-8')
     expect(managedText).toContain(process.platform === 'win32' ? 'muse-hook.cmd' : 'muse-hook.sh')
@@ -136,8 +136,8 @@ describe('MuseHookService', () => {
 
   it('treats malformed managed hook entries as absent instead of throwing', () => {
     mkdirSync(join(home, '.config', 'muse'), { recursive: true })
-    mkdirSync(join(home, '.orca', 'agent-hooks'), { recursive: true })
-    const managedPath = join(home, '.orca', 'agent-hooks', 'muse-hooks.json')
+    mkdirSync(join(home, '.quirky', 'agent-hooks'), { recursive: true })
+    const managedPath = join(home, '.quirky', 'agent-hooks', 'muse-hooks.json')
     writeFileSync(configPath(), JSON.stringify({ schema_version: 1 }))
     const service = new MuseHookService()
     expect(service.install().state).toBe('installed')
@@ -199,11 +199,11 @@ describe('MuseHookService', () => {
     const remote = createAgentHookMemorySftp()
     const service = new MuseHookService()
     expect((await service.installRemote(remote.sftp, '/home/alice smith')).state).toBe('installed')
-    const remoteHooksPath = '/home/alice smith/.orca/agent-hooks/muse-hooks.json'
+    const remoteHooksPath = '/home/alice smith/.quirky/agent-hooks/muse-hooks.json'
     const installed = remote.fs.files.get(remoteHooksPath)
-    expect(installed).toContain('/home/alice smith/.orca/agent-hooks/muse-hook.sh')
+    expect(installed).toContain('/home/alice smith/.quirky/agent-hooks/muse-hook.sh')
     expect(installed).not.toMatch(/powershell|EncodedCommand|muse-hook.cmd/)
-    expect(remote.fs.files.get('/home/alice smith/.orca/agent-hooks/muse-hook.sh')).toContain(
+    expect(remote.fs.files.get('/home/alice smith/.quirky/agent-hooks/muse-hook.sh')).toContain(
       '#!/bin/sh'
     )
     await service.installRemote(remote.sftp, '/home/alice smith')

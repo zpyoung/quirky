@@ -12,7 +12,7 @@ import {
   type ResolvedRuntimeFileTarget
 } from '../runtime/files/file-target'
 import type { RuntimeGitTarget } from '../runtime/runtime-git-command-target'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { runtimePathsEqual } from '../runtime/runtime-worktree-path-identity'
 import { LeaseWorkspaceRemovedError } from './lease-workspace-absence'
 import {
@@ -65,7 +65,7 @@ export class HeimdallKernelHost {
   private powerMonitor: PowerMonitorLike | null = null
 
   constructor(
-    private readonly runtime: OrcaRuntimeService,
+    private readonly runtime: QuirkyRuntimeService,
     private readonly findEnrollment: (key: WorkspaceKey) => WatcherEnrollment | null,
     private readonly onSuspend: () => void,
     private readonly onResume: () => void

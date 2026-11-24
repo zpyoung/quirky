@@ -5,7 +5,7 @@ import { statSyncMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { SessionNotFoundError, TerminalSessionOwnerUnverifiedError } from '../daemon/daemon-errors'
 import { makePaneKey } from '../../shared/stable-pane-id'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { clearProviderPtyState } from './pty/provider/state-cleanup'
 import { setLocalPtyProvider } from './pty/provider/registry'
@@ -32,7 +32,7 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
+vi.mock('../cli/linux-terminal-quirky-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
 vi.mock('../memory/pty-registry', () =>
@@ -128,9 +128,9 @@ describe('registerPtyHandlers', () => {
       tabId,
       leafId,
       env: {
-        ORCA_PANE_KEY: paneKey,
-        ORCA_TAB_ID: tabId,
-        ORCA_WORKTREE_ID: worktreeId
+        QUIRKY_PANE_KEY: paneKey,
+        QUIRKY_TAB_ID: tabId,
+        QUIRKY_WORKTREE_ID: worktreeId
       }
     }
 
@@ -335,9 +335,9 @@ describe('registerPtyHandlers', () => {
         tabId,
         leafId,
         env: {
-          ORCA_PANE_KEY: paneKey,
-          ORCA_TAB_ID: tabId,
-          ORCA_WORKTREE_ID: worktreeId
+          QUIRKY_PANE_KEY: paneKey,
+          QUIRKY_TAB_ID: tabId,
+          QUIRKY_WORKTREE_ID: worktreeId
         }
       })
 
@@ -373,7 +373,7 @@ describe('registerPtyHandlers', () => {
       expect(providerSpawn.mock.calls[1]?.[0]).toMatchObject({
         command: 'codex resume exact-dead-provider-session'
       })
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
         // The dead binding stays until the fresh spawn's one bind swaps it.
         expect(store.setWorkspaceSession).not.toHaveBeenCalled()
         const [swap] = vi.mocked(store.persistPtyBinding).mock.calls[0] ?? []
@@ -493,9 +493,9 @@ describe('registerPtyHandlers', () => {
         tabId,
         leafId,
         env: {
-          ORCA_PANE_KEY: paneKey,
-          ORCA_TAB_ID: tabId,
-          ORCA_WORKTREE_ID: worktreeId
+          QUIRKY_PANE_KEY: paneKey,
+          QUIRKY_TAB_ID: tabId,
+          QUIRKY_WORKTREE_ID: worktreeId
         }
       })
     ).rejects.toThrow('terminal_pane_owner_unverified')

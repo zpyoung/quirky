@@ -7,7 +7,7 @@ import { expect, it } from 'vitest'
 const projectDir = resolve(import.meta.dirname, '../..')
 
 it('keeps byte-compared artifacts and source LF in an autocrlf checkout', () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-line-ending-checkout-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-line-ending-checkout-'))
   const lf = 'first\nsecond\n'
   const crlf = 'first\r\nsecond\r\n'
   const paths = new Map([

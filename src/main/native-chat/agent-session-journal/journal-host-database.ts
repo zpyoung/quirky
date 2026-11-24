@@ -1,5 +1,5 @@
 // The host's one chat journal database: every structured chat on this state directory, in one
-// file, on one connection. The app and orcad instance locks keep a second process off a profile.
+// file, on one connection. The app and quirkyd instance locks keep a second process off a profile.
 //
 // A chat's store owns no connection. It goes through this object, so there is nothing per chat to
 // open, close, retry or leak, and the connection closes exactly once, last, at host teardown.
@@ -23,7 +23,7 @@ export function journalDatabasePath(stateDirectory: string): string {
 
 export class JournalHostDatabase {
   private connection: Database.Database | null
-  /** A newer Orca wrote the database: every chat's history reads, and no chat writes. */
+  /** A newer Quirky wrote the database: every chat's history reads, and no chat writes. */
   readonly readOnly: boolean
   /** A failed transaction's ROLLBACK failed too, so the transaction may still be open. */
   private stranded = false

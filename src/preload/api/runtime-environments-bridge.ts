@@ -14,7 +14,7 @@ import {
   type RuntimeEnvironmentSubscriptionHandle
 } from '../runtime-environment-subscriptions'
 import type { PreloadApi } from '../api-types'
-import { managedOrcadApi } from './managed-orcad-api'
+import { managedQuirkydApi } from './managed-quirkyd-api'
 
 export const runtimeEnvironmentsApi = {
   getStatusSnapshots: (): Promise<RuntimeHostStatusSnapshot[]> =>
@@ -116,5 +116,5 @@ export const runtimeEnvironmentsApi = {
     }
   ): Promise<RuntimeEnvironmentSubscriptionHandle> =>
     subscribeRuntimeEnvironmentFromPreload(ipcRenderer, args, callbacks),
-  managedOrcad: managedOrcadApi
+  managedQuirkyd: managedQuirkydApi
 } satisfies PreloadApi['runtimeEnvironments']

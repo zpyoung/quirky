@@ -51,7 +51,7 @@ const { importCookiesIntoClientRoutePartition } =
   await import('./browser-client-route-cookie-import')
 
 const routeIdentity = {
-  orcaProfileId: 'orca-profile-a',
+  quirkyProfileId: 'quirky-profile-a',
   authorityConnectionIdentity: 'paired-runtime:authority-a',
   executionHostIdentity: 'execution-host-a',
   pairingAuthorityConnectionIdentity: 'paired-runtime:pairing-authority-a',
@@ -96,7 +96,7 @@ describe('importCookiesIntoClientRoutePartition', () => {
     expect(requireRouteBrowserProfileMock).toHaveBeenCalledWith('default')
     const [source, partition] = importCookiesFromBrowserMock.mock.calls[0] ?? []
     expect(source).toBe(chrome)
-    expect(partition).toMatch(/^persist:orca-browser-v1-[a-f0-9]{64}$/)
+    expect(partition).toMatch(/^persist:quirky-browser-v1-[a-f0-9]{64}$/)
     expect(bindingStore.set).toHaveBeenCalledWith(
       partition,
       expect.stringMatching(/^[a-f0-9]{64}$/),

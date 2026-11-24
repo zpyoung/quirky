@@ -1,4 +1,4 @@
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -127,7 +127,7 @@ async function killAfterUncommittedWrite(dbPath: string): Promise<void> {
 
 describe('profile state crash recovery', () => {
   it('rolls back an uncommitted SQLite write and accepts the next import', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-crash-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-crash-'))
     temporaryDirectories.push(directory)
     const dbPath = profileStateDatabaseFile(directory)
     const fixture = buildProfileStateCutoverFixture()
@@ -162,7 +162,7 @@ describe('profile state crash recovery', () => {
   })
 
   it('preserves a committed SQLite write after process termination', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-crash-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-crash-'))
     temporaryDirectories.push(directory)
     const dbPath = profileStateDatabaseFile(directory)
     const initial = openProfileStateDatabase(dbPath, 'profile-a')
@@ -186,7 +186,7 @@ describe('profile state crash recovery', () => {
   })
 
   it('recovers a committed database when checkpointing is interrupted', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-profile-state-checkpoint-crash-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-profile-state-checkpoint-crash-'))
     temporaryDirectories.push(directory)
     const dbPath = profileStateDatabaseFile(directory)
     const fixture = buildProfileStateCutoverFixture()

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { Client, Server as Ssh2Server, utils, type Connection } from 'ssh2'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SshTarget } from '../../../shared/ssh-types'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { SshConnection } from '../../ssh/connection/ssh-connection'
 import { uploadRelayDirectory, writeRelayFile } from './remote-install-transfers'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
@@ -102,8 +102,8 @@ describe.skipIf(process.platform === 'win32')(
     let remoteRoot: string
     beforeEach(async () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {})
-      localDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-noisy-sftp-local-')))
-      remoteRoot = await realpath(await mkdtemp(join(tmpdir(), 'orca-noisy-sftp-remote-')))
+      localDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-noisy-sftp-local-')))
+      remoteRoot = await realpath(await mkdtemp(join(tmpdir(), 'quirky-noisy-sftp-remote-')))
       await mkdir(join(localDir, 'nested'))
       await writeFile(join(localDir, 'nested', 'payload.bin'), Buffer.from([0, 1, 2, 255]))
     })

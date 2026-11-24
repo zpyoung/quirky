@@ -334,7 +334,7 @@ export function useAiVaultSessionRefresh(
   // every time some other host connects.
   useAiVaultSessionHostRefreshEvents(error, refresh)
 
-  // Sessions started inside Orca never blur the window, so refocus alone
+  // Sessions started inside Quirky never blur the window, so refocus alone
   // can't surface them. Agent hooks already report provider sessions; re-scan
   // only when a session id we haven't seen appears — state transitions are
   // deliberately ignored, they fire constantly while agents work.

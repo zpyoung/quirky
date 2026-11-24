@@ -15,8 +15,8 @@ import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { lock } from 'proper-lockfile'
 import { afterEach, describe, expect, it } from 'vitest'
-import { forceTerminateProcessTree } from '@orca/process-host/process-tree-termination'
-import { spawnProcess } from '@orca/process-host'
+import { forceTerminateProcessTree } from '@quirky/process-host/process-tree-termination'
+import { spawnProcess } from '@quirky/process-host'
 import {
   importReleaseCheckoutModule,
   materializeReleaseCheckout,
@@ -36,7 +36,7 @@ const COMPRESSED_LOCK_OPTIONS: CheckoutLockOptions = {
 }
 
 function temporaryCacheRoot(): string {
-  const root = mkdtempSync(join(tmpdir(), 'orca-cross-version-checkout-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cross-version-checkout-'))
   temporaryRoots.push(root)
   return root
 }
@@ -345,7 +345,7 @@ describe('release checkout materialization', () => {
 
   it('keeps an import live while another colliding release label materializes', async () => {
     // Squash-merged history has no merge parents; create two distinct refs with colliding labels.
-    const scope = `refs/orca-checkout-test/${randomUUID()}`
+    const scope = `refs/quirky-checkout-test/${randomUUID()}`
     const firstRef = `${scope}/release`
     const secondRef = `${scope}_release`
     for (const [ref, revision] of [

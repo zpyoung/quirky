@@ -1,6 +1,6 @@
 import { expect, vi } from 'vitest'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { waitForStructuredAgentSessionRecovery } from './structured-agent-session-runtime'
 
 export function createCoordinatorMailObservationClock(
@@ -24,7 +24,7 @@ export function createCoordinatorMailObservationClock(
       await new Promise<void>((resolve) => setImmediate(resolve))
     },
     async edgesAnswered(
-      runtime: Pick<OrcaRuntimeService, 'onStructuredSessionStatusForMail'>,
+      runtime: Pick<QuirkyRuntimeService, 'onStructuredSessionStatusForMail'>,
       wait: { timeout: number }
     ): Promise<void> {
       const reads = vi.spyOn(getHost(), 'journalSnapshot')

@@ -111,7 +111,7 @@ export function editorBufferIdentityOf(
       ) ?? null)
     : null
   // `wsl$` and `wsl.localhost` name one distro only on the local Windows client; a paired web
-  // client (including `orca serve` on Windows) keeps them apart, as today.
+  // client (including `quirky serve` on Windows) keeps them apart, as today.
   const localWindows = host.kind === 'local' && !environmentId && isLocalWindowsDesktopClient()
   const flavor = localWindows
     ? 'windows'

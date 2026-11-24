@@ -40,10 +40,10 @@ vi.mock('@/components/sidebar/CreateProjectLocationField', () => ({
 const localRepo: Repo = {
   id: 'same-id',
   path: '/local',
-  displayName: 'Orca',
+  displayName: 'Quirky',
   badgeColor: '',
   addedAt: 0,
-  upstream: { owner: 'stablyai', repo: 'orca' }
+  upstream: { owner: 'stablyai', repo: 'quirky' }
 }
 const runtimeRepo: Repo = {
   ...localRepo,
@@ -152,7 +152,7 @@ describe('set-location host identity', () => {
       render(
         <SetProjectLocationDialog
           option={option}
-          projectName="Orca"
+          projectName="Quirky"
           projectKind="git"
           defaultCloneUrl="https://github.com/stablyai/orca.git"
           onClose={vi.fn()}

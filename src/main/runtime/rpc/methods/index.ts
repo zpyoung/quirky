@@ -1,7 +1,7 @@
 import { STATUS_METHODS } from './status'
 import { SIDEBAR_INPUT_METHODS } from './sidebar-inputs'
-import { ORCAD_TERMINAL_CENSUS_METHODS } from './orcad-terminal-census'
-import { ORCAD_MIGRATION_METHODS } from './orcad-migration'
+import { QUIRKYD_TERMINAL_CENSUS_METHODS } from './quirkyd-terminal-census'
+import { QUIRKYD_MIGRATION_METHODS } from './quirkyd-migration'
 import { AI_VAULT_METHODS } from './ai-vault'
 import { AUTOMATION_METHODS } from './automations'
 import { REPO_METHODS } from './repo'
@@ -70,16 +70,16 @@ import {
   LAYOUT_VIEW_REPORT_METHODS,
   WORKSPACE_LAYOUT_METHODS
 } from './workspace-layout'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 // Why: a flat manifest keeps registration order explicit and provides one
 // grep-point for "what methods does the RPC server expose?" — useful when
 // auditing the security boundary or wiring new CLI commands.
 export const ALL_RPC_METHODS = [
   ...STATUS_METHODS,
-  ...ORCAD_TERMINAL_CENSUS_METHODS,
-  ...ORCAD_MIGRATION_METHODS,
+  ...QUIRKYD_TERMINAL_CENSUS_METHODS,
+  ...QUIRKYD_MIGRATION_METHODS,
   ...AI_VAULT_METHODS,
   ...LEDGER_METHODS,
   ...ASK_METHODS,
@@ -119,7 +119,7 @@ export const ALL_RPC_METHODS = [
   ...SESSION_TAB_METHODS,
   ...WORKSPACE_LAYOUT_METHODS,
   // Switch point: a window-owned build registers no layout command.
-  ...(ORCA_LAYOUT_OWNER_IS_MAIN ? [...LAYOUT_APPLY_METHODS, ...LAYOUT_VIEW_REPORT_METHODS] : []),
+  ...(QUIRKY_LAYOUT_OWNER_IS_MAIN ? [...LAYOUT_APPLY_METHODS, ...LAYOUT_VIEW_REPORT_METHODS] : []),
   ...NATIVE_CHAT_METHODS,
   ...FILE_METHODS,
   ...GIT_METHODS,
@@ -145,7 +145,7 @@ export const ALL_RPC_METHODS = [
   ...PAIRING_METHODS,
   ...MOBILE_PROJECT_SECTIONS_METHODS,
   // Switch point: a window-fed build publishes no sidebar input.
-  ...(ORCA_SIDEBAR_INPUTS_IS_MAIN ? SIDEBAR_INPUT_METHODS : []),
+  ...(QUIRKY_SIDEBAR_INPUTS_IS_MAIN ? SIDEBAR_INPUT_METHODS : []),
   ...UPDATER_METHODS,
   ...AUTOMATIC_WORK_METHODS
 ]

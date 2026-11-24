@@ -54,7 +54,7 @@ function isRuntimeMethodNotFoundError(error: unknown): boolean {
 
 export class RuntimeAgentDetectionNeedsServerUpdateError extends Error {
   constructor() {
-    super("Update Orca on this server to list this workspace's agents.")
+    super("Update Quirky on this server to list this workspace's agents.")
     this.name = 'RuntimeAgentDetectionNeedsServerUpdateError'
   }
 }

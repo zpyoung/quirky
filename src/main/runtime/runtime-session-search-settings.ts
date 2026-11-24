@@ -4,7 +4,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 
 /**
  * How this host reaches the index it owns after the store write lands: the scanner
- * child on the desktop, the in-process instance on orcad. Null on a host that owns
+ * child on the desktop, the in-process instance on quirkyd. Null on a host that owns
  * none, where the write is still recorded and nothing is reconstructed.
  */
 export type SessionSearchSettingsApply = (

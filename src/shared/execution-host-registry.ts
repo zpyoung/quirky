@@ -21,9 +21,9 @@ import type { RuntimeEnvironmentSource } from './runtime-environments'
 import type { GlobalSettings } from './global-settings-types'
 import type { Repo } from './repo-types'
 import {
-  annotateManagedOrcadExecutionHosts,
-  type ManagedOrcadDeploymentSummary
-} from './managed-orcad-execution-host'
+  annotateManagedQuirkydExecutionHosts,
+  type ManagedQuirkydDeploymentSummary
+} from './managed-quirkyd-execution-host'
 import { getSshConnectionHealth, type ExecutionHostHealth } from './execution-host-health'
 
 export type { ExecutionHostHealth } from './execution-host-health'
@@ -45,7 +45,7 @@ export type ExecutionHostRegistryEntry = {
   platform?: NodeJS.Platform | null
   remoteControlState?: RuntimeStatus['remoteControl']
   source?: RuntimeEnvironmentSource
-  /** See managed-orcad-execution-host: pairs an SSH host with its managed server. */
+  /** See managed-quirkyd-execution-host: pairs an SSH host with its managed server. */
   aliasHostIds?: readonly ExecutionHostId[]
   mergedIntoHostId?: ExecutionHostId
 }
@@ -54,7 +54,7 @@ type RuntimeEnvironmentSummary = {
   id: string
   name?: string | null
   source?: RuntimeEnvironmentSource
-  orcadDeployment?: ManagedOrcadDeploymentSummary | null
+  quirkydDeployment?: ManagedQuirkydDeploymentSummary | null
 }
 
 type RuntimeStatusByEnvironmentId = ReadonlyMap<string, RuntimeEnvironmentStatus>
@@ -81,7 +81,7 @@ function runtimeHealth(
   compatibility: RuntimeCompatVerdict | null,
   remoteControl: RuntimeStatus['remoteControl'] | null | undefined
 ): ExecutionHostHealth {
-  // Why: with no live status we have no evidence the Orca server is reachable,
+  // Why: with no live status we have no evidence the Quirky server is reachable,
   // unless a ready shared-control socket already proved the transport is up.
   if (!status) {
     return remoteControl?.state === 'ready' ? 'available' : 'disconnected'
@@ -171,7 +171,7 @@ function addRuntimeHost(
     id: hostId,
     kind: 'runtime',
     label,
-    detail: 'Orca server',
+    detail: 'Quirky server',
     health,
     ...(blockedReason ? { blockedReason } : {}),
     compatibility: compatibility ?? undefined,
@@ -293,7 +293,7 @@ export function buildExecutionHostRegistry(args: {
     })
   }
 
-  annotateManagedOrcadExecutionHosts({
+  annotateManagedQuirkydExecutionHosts({
     hosts,
     runtimeEnvironments: args.runtimeEnvironments ?? [],
     sshConnectionStates: args.sshConnectionStates

@@ -3,7 +3,7 @@ import { createBrowserClientPageRendererRequests } from './browser-client-page-r
 import { createBrowserFindSubscriptions } from './browser-find-subscriptions'
 import { registerRendererRestartIpcRelays } from './renderer-restart-wiring'
 import { createUpdaterQuitAbortRelay } from '../shared/renderer-restart-preparation'
-import { ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT } from '../shared/updater-renderer-events'
+import { QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT } from '../shared/updater-renderer-events'
 /** Joins the synchronous unload checkpoint with its durable renderer write. */
 export async function awaitBeforeUnloadCheckpoint(): Promise<void> {
   const result = (await ipcRenderer.invoke('app:await-before-unload-checkpoint')) as {
@@ -14,7 +14,7 @@ export async function awaitBeforeUnloadCheckpoint(): Promise<void> {
   }
 }
 
-export const startupDiagnosticsEnabled = process.env.ORCA_STARTUP_DIAGNOSTICS === '1'
+export const startupDiagnosticsEnabled = process.env.QUIRKY_STARTUP_DIAGNOSTICS === '1'
 
 export function getLinuxDisplayServer(): 'wayland' | 'x11' | null {
   if (process.platform !== 'linux') {
@@ -50,7 +50,7 @@ export function installBrowserFindListener(): void {
 
 export const updaterQuitAbortRelay = createUpdaterQuitAbortRelay(
   window,
-  ORCA_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
+  QUIRKY_UPDATER_QUIT_AND_INSTALL_ABORTED_EVENT
 )
 
 registerRendererRestartIpcRelays(ipcRenderer, window, updaterQuitAbortRelay)

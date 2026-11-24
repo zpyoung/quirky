@@ -193,7 +193,7 @@ describe('the bundled Codex text anchors', () => {
 })
 
 describe('the bundled title anchors', () => {
-  it.each(['✳ Claude Code', '* Claude Code', '◇  Ready (repo)', 'π - orca', 'OC | orca'])(
+  it.each(['✳ Claude Code', '* Claude Code', '◇  Ready (repo)', 'π - quirky', 'OC | quirky'])(
     'reads %s as an explicit idle title',
     (title) => {
       expect(detectExplicitIdleStatusFromTitle(title)).toBe('idle')

@@ -48,9 +48,9 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
       '@echo off',
       'setlocal',
       // Why: same scrub as POSIX — restore the canonical names from their aliases first.
-      'if not defined ORCA_PANE_KEY if defined ORCA_AGENT_PANE set "ORCA_PANE_KEY=%ORCA_AGENT_PANE%"',
-      'if not defined ORCA_AGENT_LAUNCH_TOKEN if defined ORCA_AGENT_LAUNCH set "ORCA_AGENT_LAUNCH_TOKEN=%ORCA_AGENT_LAUNCH%"',
-      'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
+      'if not defined QUIRKY_PANE_KEY if defined QUIRKY_AGENT_PANE set "QUIRKY_PANE_KEY=%QUIRKY_AGENT_PANE%"',
+      'if not defined QUIRKY_AGENT_LAUNCH_TOKEN if defined QUIRKY_AGENT_LAUNCH set "QUIRKY_AGENT_LAUNCH_TOKEN=%QUIRKY_AGENT_LAUNCH%"',
+      'if defined QUIRKY_AGENT_HOOK_ENDPOINT if exist "%QUIRKY_AGENT_HOOK_ENDPOINT%" call "%QUIRKY_AGENT_HOOK_ENDPOINT%" 2>nul',
       ...buildWindowsHookEnvironmentGuardLines(),
       buildWindowsAgentHookCurlPostCommand('dsh'),
       'exit /b 0',
@@ -62,21 +62,21 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
   return [
     '#!/bin/sh',
     // Why first: DSH's shell executor drops every env var whose NAME contains KEY, TOKEN,
-    // SECRET or PASSWORD before the hook starts, which takes ORCA_PANE_KEY and
-    // ORCA_AGENT_LAUNCH_TOKEN with it. Orca mirrors both onto scrub-safe aliases at spawn
+    // SECRET or PASSWORD before the hook starts, which takes QUIRKY_PANE_KEY and
+    // QUIRKY_AGENT_LAUNCH_TOKEN with it. Quirky mirrors both onto scrub-safe aliases at spawn
     // (see agent-hook-scrub-safe-env.ts); restore the canonical names from them so every
     // line below — including the shared spool and post builders — is unchanged.
-    ': "${ORCA_PANE_KEY:=${ORCA_AGENT_PANE:-}}"',
-    ': "${ORCA_AGENT_LAUNCH_TOKEN:=${ORCA_AGENT_LAUNCH:-}}"',
-    'export ORCA_PANE_KEY ORCA_AGENT_LAUNCH_TOKEN',
+    ': "${QUIRKY_PANE_KEY:=${QUIRKY_AGENT_PANE:-}}"',
+    ': "${QUIRKY_AGENT_LAUNCH_TOKEN:=${QUIRKY_AGENT_LAUNCH:-}}"',
+    'export QUIRKY_PANE_KEY QUIRKY_AGENT_LAUNCH_TOKEN',
     ...buildPosixHookPayloadCapture(),
     ...buildPosixHookSpoolLines('dsh'),
-    // Why: the endpoint file holds the live port/token; a PTY that outlived an Orca
+    // Why: the endpoint file holds the live port/token; a PTY that outlived an Quirky
     // restart carries stale env, so source it to reach the new server.
-    'if [ -n "$ORCA_AGENT_HOOK_ENDPOINT" ] && [ -r "$ORCA_AGENT_HOOK_ENDPOINT" ]; then',
-    '  . "$ORCA_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
+    'if [ -n "$QUIRKY_AGENT_HOOK_ENDPOINT" ] && [ -r "$QUIRKY_AGENT_HOOK_ENDPOINT" ]; then',
+    '  . "$QUIRKY_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
     'fi',
-    'if [ -z "$ORCA_AGENT_HOOK_PORT" ] || [ -z "$ORCA_AGENT_HOOK_TOKEN" ] || [ -z "$ORCA_PANE_KEY" ]; then',
+    'if [ -z "$QUIRKY_AGENT_HOOK_PORT" ] || [ -z "$QUIRKY_AGENT_HOOK_TOKEN" ] || [ -z "$QUIRKY_PANE_KEY" ]; then',
     '  spool_hook_event',
     '  exit 0',
     'fi',
@@ -115,7 +115,7 @@ function writePatchText(configPath: string, text: string): void {
 
 /** Why one constant: status has to say exactly what install said, on every later read. */
 const FLOW_STYLE_DETAIL =
-  'The DSH home patch is a flow-style sequence ([…]); rewrite it as a block sequence (one `- ` entry per line) so Orca can add its hooks without breaking it'
+  'The DSH home patch is a flow-style sequence ([…]); rewrite it as a block sequence (one `- ` entry per line) so Quirky can add its hooks without breaking it'
 
 function status(
   configPath: string,
@@ -133,7 +133,7 @@ function buildStatus(
   configPath: string
 ): AgentHookInstallStatus {
   if (managedText === null) {
-    return status(configPath, 'error', 'Could not read Orca managed hooks file')
+    return status(configPath, 'error', 'Could not read Quirky managed hooks file')
   }
   // Why before the pointer check: a refused file carries no managed region, so the pointer
   // path would report a bare `not_installed` and drop the one detail that says why.
@@ -147,7 +147,7 @@ function buildStatus(
       'not_installed',
       pointer === undefined
         ? null
-        : `The Orca patch block points at ${pointer}, not the Orca managed hooks file`
+        : `The Quirky patch block points at ${pointer}, not the Quirky managed hooks file`
     )
   }
   const present = readManagedDshHookEvents(
@@ -165,7 +165,7 @@ function buildStatus(
     : status(configPath, 'partial', `Managed hook missing for events: ${missing.join(', ')}`, true)
 }
 
-/** Installs Orca's status hooks into DSH. See `docs/reference/dsh-harness-integration.md`
+/** Installs Quirky's status hooks into DSH. See `docs/reference/dsh-harness-integration.md`
  *  for the profile/patch-layer model and the env-scrub finding the aliases work around. */
 export class DshHookService {
   async refreshManagedScripts(): Promise<void> {
@@ -213,7 +213,7 @@ export class DshHookService {
   /** Install on an SSH execution host, where DSH's shell contract is always POSIX. */
   async installRemote(sftp: SFTPWrapper, remoteHome: string): Promise<AgentHookInstallStatus> {
     const remoteConfigPath = getDshRemoteConfigPath(remoteHome)
-    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.orca/agent-hooks/dsh-hook.sh`
+    const remoteScriptPath = `${remoteHome.replace(/\/$/, '')}/.quirky/agent-hooks/dsh-hook.sh`
     const remoteManagedHooksPath = getDshRemoteManagedHooksPath(remoteHome)
     try {
       const body = (await readTextFileRemote(sftp, remoteConfigPath)) ?? ''
@@ -244,7 +244,7 @@ export class DshHookService {
     if (changed) {
       writePatchText(configPath, nextText)
     }
-    // Why force: the file is Orca's own and may already be gone; its absence is the goal.
+    // Why force: the file is Quirky's own and may already be gone; its absence is the goal.
     rmSync(getDshManagedHooksPath(), { force: true })
     return this.getStatus()
   }

@@ -15,7 +15,7 @@ import type {
   WatcherListEntry,
   WatcherParkReason
 } from '../../../../../shared/fork-heimdall/watcher-types'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { eraseRpcMethods, isStreamingMethod, type RpcContext, type RpcMethod } from '../../core'
 import { HEIMDALL_METHODS } from './heimdall'
 import { bindHeimdallKernel, bindHeimdallTransport } from './kernel-binding'
@@ -95,7 +95,7 @@ function method(name: string): RpcMethod {
 }
 
 async function call<TResult>(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   name: string,
   params: unknown,
   context: Pick<RpcContext, 'clientKind' | 'clientCapabilities'> = {}
@@ -116,7 +116,7 @@ function isReadySnapshotEvent(
 }
 
 function harness() {
-  const runtime = new OrcaRuntimeService(null)
+  const runtime = new QuirkyRuntimeService(null)
   const kernel = {
     enroll: vi.fn(async (): Promise<EnrollResult> => ({
       status: 'enrolled' as const,

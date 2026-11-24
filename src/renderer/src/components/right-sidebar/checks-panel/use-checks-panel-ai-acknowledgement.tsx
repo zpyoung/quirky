@@ -297,7 +297,7 @@ export function useChecksPanelAiAcknowledgement(model: ChecksPanelAiAcknowledgem
     commentResolutionLaunchAcceptedRef
   ])
 
-  /** Prompt reached the agent: only now may Orca write to the host. */
+  /** Prompt reached the agent: only now may Quirky write to the host. */
   const consumeClaimedCommentResolutionAfterDelivery = useCallback((): void => {
     const resolution =
       claimedCommentResolutionRef.current ??

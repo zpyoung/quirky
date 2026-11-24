@@ -9,11 +9,11 @@
  * also refuses to delete a running image, which backs both.
  */
 import {
-  ORCAD_NODE_RUNTIME_DIR_PREFIX,
-  ORCAD_NODE_RUNTIME_MARKER_FILENAME,
-  ORCAD_RUNTIMES_DIRNAME
-} from '../../../shared/orcad-artifacts'
-import { RUNTIME_STORE_STAGE_PREFIX } from './orcad-remote-node-runtime'
+  QUIRKYD_NODE_RUNTIME_DIR_PREFIX,
+  QUIRKYD_NODE_RUNTIME_MARKER_FILENAME,
+  QUIRKYD_RUNTIMES_DIRNAME
+} from '../../../shared/quirkyd-artifacts'
+import { RUNTIME_STORE_STAGE_PREFIX } from './quirkyd-remote-node-runtime'
 import {
   INVENTORY_OK,
   MAX_DIRS,
@@ -43,39 +43,39 @@ export function hostRuntimeStoreInventoryCommand(
     : runtimeStoreInventoryCommand(host, remoteHome)
 }
 
-/** Same tags as `runtimeStoreInventoryCommand`; `root` is `~/.orca-remote`. */
+/** Same tags as `runtimeStoreInventoryCommand`; `root` is `~/.quirky-remote`. */
 export function windowsRuntimeStoreInventoryCommand(root: string): string {
   const fail = `Write-Output ${powerShellLiteral(REFS_ERR)}; exit 0`
   return powerShellCommand(
     [
       "$ProgressPreference = 'SilentlyContinue'",
       `$root = ${powerShellLiteral(root)}`,
-      `$rt = Join-Path $root ${powerShellLiteral(ORCAD_RUNTIMES_DIRNAME)}`,
+      `$rt = Join-Path $root ${powerShellLiteral(QUIRKYD_RUNTIMES_DIRNAME)}`,
       `if (-not (Test-Path -LiteralPath $rt -PathType Container)) { Write-Output ${powerShellLiteral(INVENTORY_OK)}; exit 0 }`,
-      // Why every sibling and not a prefix: a newer Orca's install may name a runtime too.
-      `try { $dirs = @(Get-ChildItem -LiteralPath $root -Force -Directory -ErrorAction Stop | Where-Object { $_.Name -ne ${powerShellLiteral(ORCAD_RUNTIMES_DIRNAME)} }) } catch { ${fail} }`,
+      // Why every sibling and not a prefix: a newer Quirky's install may name a runtime too.
+      `try { $dirs = @(Get-ChildItem -LiteralPath $root -Force -Directory -ErrorAction Stop | Where-Object { $_.Name -ne ${powerShellLiteral(QUIRKYD_RUNTIMES_DIRNAME)} }) } catch { ${fail} }`,
       `if ($dirs.Count -gt ${MAX_DIRS}) { ${fail} }`,
       'foreach ($d in $dirs) {',
       "Write-Output ('DIR ' + $d.Name)",
-      `$marker = Join-Path $d.FullName ${powerShellLiteral(ORCAD_NODE_RUNTIME_MARKER_FILENAME)}`,
+      `$marker = Join-Path $d.FullName ${powerShellLiteral(QUIRKYD_NODE_RUNTIME_MARKER_FILENAME)}`,
       `if (Test-Path -LiteralPath $marker) { try { Write-Output ('REF ' + [IO.File]::ReadAllText($marker).Trim()) } catch { ${fail} } }`,
       // Why StartsWith and not -Filter: -Filter also matches 8.3 short names.
       `try { $refs = @(Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction Stop | Where-Object { (-not $_.PSIsContainer) -and $_.Name.StartsWith(${powerShellLiteral(RUNTIME_REF_NODE_PREFIX)}) }) } catch { ${fail} }`,
       `foreach ($f in $refs) { Write-Output ('REF ' + $f.Name.Substring(${RUNTIME_REF_NODE_PREFIX.length})) }`,
       '}',
-      `try { $entries = @(Get-ChildItem -LiteralPath $rt -Force -Directory -ErrorAction Stop | Where-Object { $_.Name.StartsWith(${powerShellLiteral(ORCAD_NODE_RUNTIME_DIR_PREFIX)}) -or $_.Name.StartsWith(${powerShellLiteral(`${RUNTIME_STORE_TOMBSTONE_PREFIX}${ORCAD_NODE_RUNTIME_DIR_PREFIX}`)}) }) } catch { ${fail} }`,
+      `try { $entries = @(Get-ChildItem -LiteralPath $rt -Force -Directory -ErrorAction Stop | Where-Object { $_.Name.StartsWith(${powerShellLiteral(QUIRKYD_NODE_RUNTIME_DIR_PREFIX)}) -or $_.Name.StartsWith(${powerShellLiteral(`${RUNTIME_STORE_TOMBSTONE_PREFIX}${QUIRKYD_NODE_RUNTIME_DIR_PREFIX}`)}) }) } catch { ${fail} }`,
       "foreach ($e in $entries) { Write-Output ('ENTRY ' + $e.Name) }",
-      `$verified = @($entries | Where-Object { $_.Name.StartsWith(${powerShellLiteral(ORCAD_NODE_RUNTIME_DIR_PREFIX)}) } | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '.verified') -Force -ErrorAction SilentlyContinue } | Where-Object { $null -ne $_ })`,
+      `$verified = @($entries | Where-Object { $_.Name.StartsWith(${powerShellLiteral(QUIRKYD_NODE_RUNTIME_DIR_PREFIX)}) } | ForEach-Object { Get-Item -LiteralPath (Join-Path $_.FullName '.verified') -Force -ErrorAction SilentlyContinue } | Where-Object { $null -ne $_ })`,
       "foreach ($v in @($verified | Sort-Object LastWriteTimeUtc -Descending)) { Write-Output ('VERIFIED ' + $v.Directory.Name) }",
       // Process checks only add holds, so a failed query keeps everything (no PROCESS_CHECK).
       'try {',
-      `$held = @(Get-CimInstance -ClassName Win32_Process -Filter "ExecutablePath LIKE '%\\\\${ORCAD_RUNTIMES_DIRNAME}\\\\%'" -Property ExecutablePath -ErrorAction Stop)`,
+      `$held = @(Get-CimInstance -ClassName Win32_Process -Filter "ExecutablePath LIKE '%\\\\${QUIRKYD_RUNTIMES_DIRNAME}\\\\%'" -Property ExecutablePath -ErrorAction Stop)`,
       "Write-Output 'PROCESS_CHECK cim'",
       "foreach ($p in $held) { if ($p.ExecutablePath) { Write-Output ('HOLD ' + $p.ExecutablePath) } }",
       '} catch {',
       // WMI refuses a standard user's SSH logon; this account's own relays still report their image.
       'try {',
-      `$held = @(Get-Process -ErrorAction Stop | Where-Object { $_.Path -and $_.Path.IndexOf(${powerShellLiteral(`\\${ORCAD_RUNTIMES_DIRNAME}\\`)}, [StringComparison]::OrdinalIgnoreCase) -ge 0 })`,
+      `$held = @(Get-Process -ErrorAction Stop | Where-Object { $_.Path -and $_.Path.IndexOf(${powerShellLiteral(`\\${QUIRKYD_RUNTIMES_DIRNAME}\\`)}, [StringComparison]::OrdinalIgnoreCase) -ge 0 })`,
       "Write-Output 'PROCESS_CHECK process'",
       "foreach ($p in $held) { Write-Output ('HOLD ' + $p.Path) }",
       '} catch { }',

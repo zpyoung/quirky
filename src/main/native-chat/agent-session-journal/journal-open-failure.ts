@@ -1,5 +1,5 @@
 // What a failed journal open means for the chat: its history is damaged, which no retry reads
-// past; a newer Orca wrote it, which only an update gets past; or the open failed in a way that can
+// past; a newer Quirky wrote it, which only an update gets past; or the open failed in a way that can
 // clear (a lock, permissions, too many open files).
 
 import type { AgentSessionRefusalReason } from '../../../shared/agent-session-refusal-details'
@@ -17,8 +17,8 @@ import type { StructuredAgentSessionLogger } from '../agent-session-wire/structu
 
 type JournalRefusalReason = AgentSessionRefusalReason<'agent_session_journal_unreadable'>
 
-/** Why an open failed, as the storage shows it; a newer Orca's journal is told apart first. */
-export type JournalOpenFailure = Exclude<JournalRefusalReason, 'journalWrittenByNewerOrca'>
+/** Why an open failed, as the storage shows it; a newer Quirky's journal is told apart first. */
+export type JournalOpenFailure = Exclude<JournalRefusalReason, 'journalWrittenByNewerQuirky'>
 
 /** A history whose rows are not what they promise: a row no build wrote, a gap, no epoch row. */
 export class JournalDamageError extends Error {
@@ -26,14 +26,14 @@ export class JournalDamageError extends Error {
 }
 
 /** The one way a chat's load fails on its rows, wherever they are read, and every row is left where
- *  it is. A newer Orca's row is refused as one only an update opens, and wins over damage beside
+ *  it is. A newer Quirky's row is refused as one only an update opens, and wins over damage beside
  *  it; damage is refused as history that cannot be loaded. */
 export function failLoadOnUnloadableJournal(sessionId: string, load: JournalLoad): void {
   if (load.newer) {
     throw journalOpenRefusalError(
       new AgentSessionJournalError(
         'journal_read_only',
-        `journal of ${sessionId} holds a newer Orca's row at sequence ${load.newer.sequence}`
+        `journal of ${sessionId} holds a newer Quirky's row at sequence ${load.newer.sequence}`
       )
     )
   }
@@ -75,24 +75,24 @@ export function classifyJournalOpenFailure(error: unknown): JournalOpenFailure {
 const JOURNAL_OPEN_MESSAGE: Record<JournalRefusalReason, string> = {
   journalCorrupt: agentSessionWriteNoticeEnglish(['historyUnusable']),
   journalUnavailable: agentSessionWriteNoticeEnglish(['historyUnavailable', 'tryAgain']),
-  journalWrittenByNewerOrca: agentSessionWriteNoticeEnglish([
-    'savedByNewerOrca',
-    'updateOrcaToKeepUsing'
+  journalWrittenByNewerQuirky: agentSessionWriteNoticeEnglish([
+    'savedByNewerQuirky',
+    'updateQuirkyToKeepUsing'
   ])
 }
 
-export const JOURNAL_NEWER_SCHEMA_MESSAGE = JOURNAL_OPEN_MESSAGE.journalWrittenByNewerOrca
+export const JOURNAL_NEWER_SCHEMA_MESSAGE = JOURNAL_OPEN_MESSAGE.journalWrittenByNewerQuirky
 
-/** A newer Orca wrote the database, or one of this chat's rows: an update is what gets past it. */
-export function isJournalWrittenByNewerOrca(error: unknown): boolean {
+/** A newer Quirky wrote the database, or one of this chat's rows: an update is what gets past it. */
+export function isJournalWrittenByNewerQuirky(error: unknown): boolean {
   return error instanceof AgentSessionJournalError && error.code === 'journal_read_only'
 }
 
-/** Why a journal open failed. A newer Orca's journal clears when this Orca is updated, so it is
+/** Why a journal open failed. A newer Quirky's journal clears when this Quirky is updated, so it is
  *  not damage. */
 function journalRefusalReason(error: unknown): JournalRefusalReason {
-  return isJournalWrittenByNewerOrca(error)
-    ? 'journalWrittenByNewerOrca'
+  return isJournalWrittenByNewerQuirky(error)
+    ? 'journalWrittenByNewerQuirky'
     : classifyJournalOpenFailure(error)
 }
 
@@ -115,14 +115,14 @@ export function journalOpenRefusal(error: unknown): AgentSessionWireRefusal {
   return refuse('agent_session_journal_unreadable', { reason }, message)
 }
 
-/** A newer Orca's journal refuses a write with the words a send gets there. */
-export async function refusingNewerOrcaJournal<TOutcome>(
+/** A newer Quirky's journal refuses a write with the words a send gets there. */
+export async function refusingNewerQuirkyJournal<TOutcome>(
   run: Promise<TOutcome>
 ): Promise<TOutcome | { ok: false; refusal: AgentSessionWireRefusal }> {
   try {
     return await run
   } catch (error) {
-    if (isJournalWrittenByNewerOrca(error)) {
+    if (isJournalWrittenByNewerQuirky(error)) {
       return { ok: false, refusal: journalOpenRefusal(error) }
     }
     throw error
@@ -178,7 +178,7 @@ export function createJournalOpenReadRefusals(logger: StructuredAgentSessionLogg
   return {
     refusal: (sessionId: string, error: unknown): AgentSessionRefusalError => {
       if (isAgentSessionRefusalError(error)) {
-        // A load refused on its rows (damage, a newer Orca's chat) arrives classified.
+        // A load refused on its rows (damage, a newer Quirky's chat) arrives classified.
         const { refusal } = error
         const cause = error.cause instanceof Error ? error.cause.message : String(error.cause)
         if (

@@ -59,7 +59,7 @@ const POSIX_SCRIPT_FILE_NAME = 'kimi-hook.sh'
 const WINDOWS_SCRIPT_FILE_NAME = 'kimi-hook.cmd'
 
 // Ownership test for every managed-block path: status, install, remove and the
-// bounded orphan recovery all agree on what counts as an Orca-written hook. It
+// bounded orphan recovery all agree on what counts as an Quirky-written hook. It
 // matches every extension of the stem, so a pre-fix Windows `.sh` entry is replaced.
 const isManagedKimiCommand = createManagedCommandMatcher(POSIX_SCRIPT_FILE_NAME)
 
@@ -83,7 +83,7 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
       '@echo off',
       'setlocal',
       // Why: the endpoint file holds this install's live port/token; sourcing it lets a surviving PTY reach the current server (see claude/hook-service.ts).
-      'if defined ORCA_AGENT_HOOK_ENDPOINT if exist "%ORCA_AGENT_HOOK_ENDPOINT%" call "%ORCA_AGENT_HOOK_ENDPOINT%" 2>nul',
+      'if defined QUIRKY_AGENT_HOOK_ENDPOINT if exist "%QUIRKY_AGENT_HOOK_ENDPOINT%" call "%QUIRKY_AGENT_HOOK_ENDPOINT%" 2>nul',
       ...buildWindowsHookEnvironmentGuardLines(),
       buildWindowsAgentHookCurlPostCommand('kimi'),
       'exit /b 0',
@@ -95,13 +95,13 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     '#!/bin/sh',
     ...buildPosixHookPayloadCapture(),
     ...buildPosixHookSpoolLines('kimi'),
-    // Why: refresh PORT/TOKEN/ENV/VERSION from the current Orca install so a PTY
-    // that survived an Orca restart still reaches the live listener. See
+    // Why: refresh PORT/TOKEN/ENV/VERSION from the current Quirky install so a PTY
+    // that survived an Quirky restart still reaches the live listener. See
     // claude/hook-service.ts for the full rationale.
-    'if [ -n "$ORCA_AGENT_HOOK_ENDPOINT" ] && [ -r "$ORCA_AGENT_HOOK_ENDPOINT" ]; then',
-    '  . "$ORCA_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
+    'if [ -n "$QUIRKY_AGENT_HOOK_ENDPOINT" ] && [ -r "$QUIRKY_AGENT_HOOK_ENDPOINT" ]; then',
+    '  . "$QUIRKY_AGENT_HOOK_ENDPOINT" 2>/dev/null || :',
     'fi',
-    'if [ -z "$ORCA_AGENT_HOOK_PORT" ] || [ -z "$ORCA_AGENT_HOOK_TOKEN" ] || [ -z "$ORCA_PANE_KEY" ]; then',
+    'if [ -z "$QUIRKY_AGENT_HOOK_PORT" ] || [ -z "$QUIRKY_AGENT_HOOK_TOKEN" ] || [ -z "$QUIRKY_PANE_KEY" ]; then',
     '  spool_hook_event',
     '  exit 0',
     'fi',
@@ -111,16 +111,16 @@ function getManagedScript(target: 'local' | 'posix' = 'local'): string {
     // Why: pipe payload to curl's stdin (`payload@-`) instead of an inline
     // `payload=$VALUE` arg, so tens-of-KB tool output stays off the curl
     // command line (EDR command-line false positives). Wire body is identical.
-    'printf \'%s\' "$payload" | curl -sS -X POST "http://127.0.0.1:${ORCA_AGENT_HOOK_PORT}/hook/kimi" \\',
+    'printf \'%s\' "$payload" | curl -sS -X POST "http://127.0.0.1:${QUIRKY_AGENT_HOOK_PORT}/hook/kimi" \\',
     '  --connect-timeout 0.5 --max-time 1.5 \\',
     '  -H "Content-Type: application/x-www-form-urlencoded" \\',
-    '  -H "X-Orca-Agent-Hook-Token: ${ORCA_AGENT_HOOK_TOKEN}" \\',
-    '  --data-urlencode "paneKey=${ORCA_PANE_KEY}" \\',
-    '  --data-urlencode "tabId=${ORCA_TAB_ID}" \\',
-    '  --data-urlencode "launchToken=${ORCA_AGENT_LAUNCH_TOKEN}" \\',
-    '  --data-urlencode "worktreeId=${ORCA_WORKTREE_ID}" \\',
-    '  --data-urlencode "env=${ORCA_AGENT_HOOK_ENV}" \\',
-    '  --data-urlencode "version=${ORCA_AGENT_HOOK_VERSION}" \\',
+    '  -H "X-Quirky-Agent-Hook-Token: ${QUIRKY_AGENT_HOOK_TOKEN}" \\',
+    '  --data-urlencode "paneKey=${QUIRKY_PANE_KEY}" \\',
+    '  --data-urlencode "tabId=${QUIRKY_TAB_ID}" \\',
+    '  --data-urlencode "launchToken=${QUIRKY_AGENT_LAUNCH_TOKEN}" \\',
+    '  --data-urlencode "worktreeId=${QUIRKY_WORKTREE_ID}" \\',
+    '  --data-urlencode "env=${QUIRKY_AGENT_HOOK_ENV}" \\',
+    '  --data-urlencode "version=${QUIRKY_AGENT_HOOK_VERSION}" \\',
     '  --data-urlencode "payload@-" >/dev/null 2>&1 || spool_hook_event',
     'exit 0',
     ''
@@ -240,13 +240,13 @@ export class KimiHookService {
     return this.getStatus()
   }
 
-  // Why: install Orca's managed Kimi hooks on a remote box over SFTP, mirroring
+  // Why: install Quirky's managed Kimi hooks on a remote box over SFTP, mirroring
   // the local install. POSIX-only by design: remote hosts run hooks through sh.
   async installRemote(sftp: SFTPWrapper, remoteHome: string): Promise<AgentHookInstallStatus> {
     const remoteConfigPath = pathPosix.join(remoteHome, '.kimi-code', 'config.toml')
     const remoteScriptPath = pathPosix.join(
       remoteHome,
-      '.orca',
+      '.quirky',
       'agent-hooks',
       POSIX_SCRIPT_FILE_NAME
     )

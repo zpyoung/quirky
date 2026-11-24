@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { i18n } from '../../i18n/i18n'
 import { CodexLoginLinkNotice } from './CodexLoginLinkNotice'
 
-const AUTH_URL = 'https://auth.openai.com/oauth/authorize?client_id=orca&state=abc123'
+const AUTH_URL = 'https://auth.openai.com/oauth/authorize?client_id=quirky&state=abc123'
 
 type LinkListener = (url: string | null) => void
 

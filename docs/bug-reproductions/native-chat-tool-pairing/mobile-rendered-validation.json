@@ -1,10 +1,10 @@
 {
   "recordedAt": "2026-10-10T00:42:45.888Z",
   "sourceCommit": "bcfbb8cb6d543aca516fca346c32c47ec880019f",
-  "primaryWorktree": "/Users/nwparker/orca/workspaces/orca/perf-2",
-  "command": "ORCA_BACKGROUND_LAUNCH=1 node /tmp/orca-perf-2-pr-proof/mobile-tool-availability-proof.mjs",
+  "primaryWorktree": "/Users/nwparker/quirky/workspaces/quirky/perf-2",
+  "command": "QUIRKY_BACKGROUND_LAUNCH=1 node /tmp/quirky-perf-2-pr-proof/mobile-tool-availability-proof.mjs",
   "harness": {
-    "file": "/tmp/orca-perf-2-pr-proof/mobile-tool-availability-proof.mjs",
+    "file": "/tmp/quirky-perf-2-pr-proof/mobile-tool-availability-proof.mjs",
     "sha256": "fe66e12c27a628aaf01b5b0074b8986f440f0b05c08ce10b23e16789717688d4",
     "entrySha256": "89e8740ec312d4ad8158f382eda0a39887923c41573f07ea75331adb0b74f174",
     "reuse": [
@@ -14,7 +14,7 @@
     "sourceSha256": {
       "config/scripts/build-mobile-web-app-bundle.mjs": "d5538dc0f33a2270e96515a2b9f155a02ae32e83711b15dfa3882c280c7ea699",
       "config/scripts/mobile-web-app-render-harness.mjs": "795218671c3d01a6c982197fa950fbb4b8b7ae079ccc68fc83d4394f1c36f58c",
-      "mobile/modules/orca-mobile-web-shell/android/src/main/java/expo/modules/orcamobilewebshell/MobileWebShellCsp.kt": "9936abe45e1eb2717154fa7bc2c6daf99ac0bb928ed46208916e90e1209bf479"
+      "mobile/modules/quirky-mobile-web-shell/android/src/main/java/expo/modules/quirkymobilewebshell/MobileWebShellCsp.kt": "9936abe45e1eb2717154fa7bc2c6daf99ac0bb928ed46208916e90e1209bf479"
     },
     "productionComponents": [
       "mobile/src/session/MobileNativeChatMessage.tsx",
@@ -94,9 +94,9 @@
       "src/shared/agent-session-message-source.ts": "3d4461d5f2c3227d8a52433db2a2d0643a5003e347b5d243c9f07142d825f38d",
       "src/shared/native-chat-image-transcript-markers.ts": "4c387c3273798706a4b9326e9e17368382012eac3de43e11e70e649fe019fd5b",
       "src/shared/zod-salvage.ts": "0c752ffb1d80f98cd1e6d7687adb619d1354ad9b454c40f71144f3a6ec3c640c",
-      "src/shared/orca-session-address.ts": "cf821ba18a36194293efac045bd826a250c6d000e8442c7c66b92a12ec7d9d0d",
+      "src/shared/quirky-session-address.ts": "cf821ba18a36194293efac045bd826a250c6d000e8442c7c66b92a12ec7d9d0d",
       "src/shared/agent-session-conversation-name.ts": "f732ba58dbb855a4df0cc243c9112c06667611f7e790cb3ef610d71c39f439b9",
-      "src/shared/orca-session-address-prefix.ts": "d44a4bf817c56f7e83c2e4d48991bacb088e6114eefce43c34e6baa949b7c6ee",
+      "src/shared/quirky-session-address-prefix.ts": "d44a4bf817c56f7e83c2e4d48991bacb088e6114eefce43c34e6baa949b7c6ee",
       "src/shared/structured-worker-handle.ts": "c05edb3002a912b602808c3a6911a789548a3993e5a8d8defd5817a00882a20f",
       "src/shared/agent-session-record.ts": "391bd83b0b47c8bde56ab6412337c90cb6fc7f958ba0ae9e5e26bcbef4e8a2b6",
       "src/shared/harness-injected-user-turns.ts": "c4ddb96ca6fc15fb9ff8012ef883ca8fdd152ab0bff18dac70e12beec89e0c5b",

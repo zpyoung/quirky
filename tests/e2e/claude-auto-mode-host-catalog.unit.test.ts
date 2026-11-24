@@ -57,7 +57,7 @@ const LISTING = `${JSON.stringify({
   type: 'control_response',
   response: {
     subtype: 'success',
-    request_id: 'orca-model-discovery',
+    request_id: 'quirky-model-discovery',
     response: {
       models: [
         { value: 'default', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
@@ -88,7 +88,7 @@ let dir: string
 let release: () => void
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-host-auto-mode-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-host-auto-mode-'))
   mocks.rpc.mockReset()
   resetHostModelCatalogSnapshotsForTests()
 })

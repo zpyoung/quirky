@@ -197,7 +197,7 @@ function verdictOf(submissions: readonly AgentJournalSubmission[], clientMessage
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-codex-turn-end-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-codex-turn-end-'))
   openWaits.turnIds.length = 0
   openWaits.ended.length = 0
   openWaits.began = null

@@ -160,7 +160,7 @@ export function journalDispatchRowBuilder(
   })
 }
 
-/** `reason` is the only unbounded field written by Orca's own code: a provider error is
+/** `reason` is the only unbounded field written by Quirky's own code: a provider error is
  *  arbitrary text, and a multi-megabyte one reached the row verbatim. Bounded head-first,
  *  because `isWriteFailureSubmission` prefix-matches the value. Rows
  *  written before this keep their full text, so readers still meet unbounded ones. */

@@ -1,4 +1,4 @@
-// Verbatim replay of FULL captures recorded through Orca's own adapter against
+// Verbatim replay of FULL captures recorded through Quirky's own adapter against
 // the real CLI (`__fixtures__/claude-adapter-capture-*.jsonl`): every frame the
 // adapter saw — hook proof, per-cycle init, command_lifecycle, session-state,
 // stream events — in the recorded order, with the recorded dispatch points.

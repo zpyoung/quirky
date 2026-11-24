@@ -61,7 +61,7 @@ import { resetMobileRelayHostOverlayStoreForTests } from './mobile-relay-host-ov
 import { createMobileRelayDirectUpgradeJournal } from './mobile-relay-direct-upgrade-journal'
 import { upgradeDirectMobileRelay } from './mobile-relay-direct-upgrade'
 
-const OVERLAY_KEY = 'orca:mobile-relay:host-overlays:v2'
+const OVERLAY_KEY = 'quirky:mobile-relay:host-overlays:v2'
 const EDITED_ENDPOINT = 'ws://192.168.1.20:6768'
 const resolved = { ...relay, cellUrl: 'https://relay-c2.onorca.dev', assignmentEpoch: 8 }
 
@@ -108,7 +108,10 @@ describe('mobile endpoint lifecycle host edits', () => {
     resetHostStoreForTests()
     resetMobileRelayHostOverlayStoreForTests()
     const { id, name, endpoint, publicKeyB64, lastConnected } = host
-    storage.set('orca:hosts', JSON.stringify([{ id, name, endpoint, publicKeyB64, lastConnected }]))
+    storage.set(
+      'quirky:hosts',
+      JSON.stringify([{ id, name, endpoint, publicKeyB64, lastConnected }])
+    )
     storage.set(
       OVERLAY_KEY,
       JSON.stringify([

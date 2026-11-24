@@ -405,7 +405,7 @@ describe('one account, one catalog key', () => {
   // The read and launch resolvers agreeing on the home is runtime-home-catalog-account-key.test.ts.
   it('a session’s saves through the host and through its adapter’s handle land under its record’s key', async () => {
     const store = new AgentModelCatalogStore()
-    const managedHome = '/orca/codex-accounts/acct-1/home'
+    const managedHome = '/quirky/codex-accounts/acct-1/home'
     const launched = record(managedHome)
     const service = createAgentModelCatalogService({
       store,

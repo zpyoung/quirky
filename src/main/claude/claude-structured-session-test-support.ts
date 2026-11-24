@@ -2,7 +2,7 @@ import type {
   AgentJournalMessageItem,
   AgentSessionJournalIdentity
 } from '../../shared/agent-session-journal-types'
-import { ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
+import { QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV } from '../../shared/agent-session-caller-env'
 import type {
   ClaudeStreamJsonConnection,
   ClaudeStreamJsonConnectionHandlers,
@@ -132,7 +132,7 @@ export function fakeClaude(
           // sessions prove startup with a SessionStart hook frame instead.
           emitCycleInit()
         } else if (options.initProof !== 'none') {
-          // The live order with a SessionStart hook installed (Orca's status hooks):
+          // The live order with a SessionStart hook installed (Quirky's status hooks):
           // its frames arrive first; system/init only when a cycle starts. Without
           // one, nothing arrives before the first turn ('none').
           handlers.onMessage?.({
@@ -279,7 +279,7 @@ export function adapterAtPublishFor(
       continuesChain: false,
       ...launch,
       // As the composed launch seals it: the reservation's token is the child's, whatever came before.
-      env: { ...launch.env, [ORCA_AGENT_SESSION_SPAWN_TOKEN_ENV]: spawnToken }
+      env: { ...launch.env, [QUIRKY_AGENT_SESSION_SPAWN_TOKEN_ENV]: spawnToken }
     }),
     onEvent: (event) => events.push(event),
     openConnection: claude.openConnection,

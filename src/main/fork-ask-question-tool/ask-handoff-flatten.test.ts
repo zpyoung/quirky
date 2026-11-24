@@ -35,7 +35,9 @@ describe('flattenAskSpecToQuestion', () => {
 
   it('omits option lines for a question type with no options', () => {
     const spec = specOf({ id: 'name', type: 'text', question: 'Name?' })
-    expect(flattenAskSpecToQuestion(spec)).toBe('1. [name] Name?\n\nanswer with one line per question: <id>: <answer>')
+    expect(flattenAskSpecToQuestion(spec)).toBe(
+      '1. [name] Name?\n\nanswer with one line per question: <id>: <answer>'
+    )
   })
 })
 
@@ -87,7 +89,12 @@ describe('mapCoordinatorReply', () => {
       ]
     })
     const result = mapCoordinatorReply(spec, 'tags: B, a, extra')
-    expect(result.answers.tags).toEqual({ values: ['a', 'b'], labels: ['A', 'B'], other: 'extra', source: 'options' })
+    expect(result.answers.tags).toEqual({
+      values: ['a', 'b'],
+      labels: ['A', 'B'],
+      other: 'extra',
+      source: 'options'
+    })
   })
 
   it('skips a question with no matching line', () => {
@@ -136,17 +143,25 @@ describe('mapCoordinatorReply', () => {
         options: [{ value: 'a', label: 'A' }]
       })
       const result = mapCoordinatorReply(spec, 'no thanks')
-      expect(result.answers.tags).toEqual({ values: [], labels: [], other: 'no thanks', source: 'options' })
+      expect(result.answers.tags).toEqual({
+        values: [],
+        labels: [],
+        other: 'no thanks',
+        source: 'options'
+      })
     })
 
     it('applies the fallback to text verbatim', () => {
       const spec = specOf({ id: 'name', type: 'text', question: 'Name?' })
-      const result = mapCoordinatorReply(spec, 'call it orca')
-      expect(result.answers.name).toEqual({ value: 'call it orca', source: 'input' })
+      const result = mapCoordinatorReply(spec, 'call it quirky')
+      expect(result.answers.name).toEqual({ value: 'call it quirky', source: 'input' })
     })
 
     it('skips a typed-scalar first question when the whole reply fails to parse', () => {
-      const spec = specOf({ id: 'pool', type: 'number', question: 'Pool size?' }, { id: 'ready', type: 'confirm', question: 'Ready?' })
+      const spec = specOf(
+        { id: 'pool', type: 'number', question: 'Pool size?' },
+        { id: 'ready', type: 'confirm', question: 'Ready?' }
+      )
       const result = mapCoordinatorReply(spec, 'sure, whenever works')
       expect(result.answers).toEqual({})
       expect(result.skipped).toEqual(['pool', 'ready'])

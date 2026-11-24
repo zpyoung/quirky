@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 function delivery(isEnabled: () => boolean) {
-  const stateDirectory = mkdtempSync(join(tmpdir(), 'orca-visuals-setting-'))
+  const stateDirectory = mkdtempSync(join(tmpdir(), 'quirky-visuals-setting-'))
   scratch.push(stateDirectory)
   const prepareVisuals = createNativeChatVisualsDelivery({
     stateDirectory,

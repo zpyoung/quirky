@@ -1,7 +1,7 @@
 import type { RunRow } from '../../types'
 import { generateId } from '../generated-id'
 import type { OrchestrationDb } from '../orchestration-db'
-import type { OrcaSessionId } from '../../../../../shared/orca-session-address'
+import type { QuirkySessionId } from '../../../../../shared/quirky-session-address'
 import { mailboxAddressOf } from '../../orchestration-caller-identity'
 
 // ── Runs ──
@@ -12,14 +12,14 @@ export function createRun(
     objective: string
     coordinatorHandle: string | null
     coordinatorPaneKey: string | null
-    /** The coordinator's bare Orca session id when it is a structured session; see orca-session-address. */
-    coordinatorOrcaSessionId?: OrcaSessionId | null
+    /** The coordinator's bare Quirky session id when it is a structured session; see quirky-session-address. */
+    coordinatorQuirkySessionId?: QuirkySessionId | null
   }
 ): RunRow {
   const coordinator = {
     terminalHandle: params.coordinatorHandle,
     paneKey: params.coordinatorPaneKey,
-    orcaSessionId: params.coordinatorOrcaSessionId ?? null
+    quirkySessionId: params.coordinatorQuirkySessionId ?? null
   }
   const id = generateId('run')
   this.db.exec('BEGIN IMMEDIATE')
@@ -28,8 +28,8 @@ export function createRun(
     this.db
       .prepare(
         `INSERT INTO runs (
-           id, objective, coordinator_handle, coordinator_pane_key, coordinator_orca_session_id,
-           coordinator_orca_session_id_generation, consumer_generation, legacy
+           id, objective, coordinator_handle, coordinator_pane_key, coordinator_quirky_session_id,
+           coordinator_quirky_session_id_generation, consumer_generation, legacy
          ) VALUES (?, ?, ?, ?, ?, 1, 1, 0)`
       )
       .run(
@@ -37,7 +37,7 @@ export function createRun(
         params.objective,
         coordinator.terminalHandle,
         coordinator.paneKey,
-        coordinator.orcaSessionId
+        coordinator.quirkySessionId
       )
     const address = mailboxAddressOf(coordinator)
     if (address !== null) {

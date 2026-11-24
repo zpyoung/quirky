@@ -75,7 +75,7 @@ function expectHostRequestArguments(profile: AgentLaunchCallerProfile): void {
 
 const CODEX_BYPASS = '--dangerously-bypass-approvals-and-sandbox'
 
-/** One agent per prompt-injection mode, with the bypass flag Orca ships as that agent's default. */
+/** One agent per prompt-injection mode, with the bypass flag Quirky ships as that agent's default. */
 const BYPASS_BY_AGENT: readonly [TuiAgent, string, string][] = [
   ['codex', 'argv', CODEX_BYPASS],
   ['claude', 'argv', '--dangerously-skip-permissions'],
@@ -244,7 +244,7 @@ describe('agent launch caller arguments and permission bypass', () => {
   })
 
   // Why: chat composer picks seed only structured creates (launch-structured-agent-session.test.ts,
-  // orca-runtime-structured-agent-session-create-intent.test.ts); a terminal fallback never gets them.
+  // quirky-runtime-structured-agent-session-create-intent.test.ts); a terminal fallback never gets them.
   it.each([
     [true, undefined, CODEX_BYPASS],
     [false, undefined, CODEX_BYPASS],

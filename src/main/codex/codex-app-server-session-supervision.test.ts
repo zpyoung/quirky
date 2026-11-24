@@ -26,7 +26,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
 const OWNER = String.raw`
 import { runCodexAppServerSession } from './codex-app-server-session'
 void runCodexAppServerSession(
-  { command: process.env.ORCA_TEST_STAND_IN!, cliPath: null, args: ['app-server'], timeoutMs: 120_000 },
+  { command: process.env.QUIRKY_TEST_STAND_IN!, cliPath: null, args: ['app-server'], timeoutMs: 120_000 },
   () => new Promise<never>(() => {})
 ).catch(() => {})
 setInterval(() => {}, 60_000)
@@ -49,8 +49,8 @@ function captureSpawn(): { spawnImpl: CodexAppServerSpawn; calls: CapturedSpawn[
 
 function decodedSupervisorSpec(env: unknown): unknown {
   const encoded =
-    typeof env === 'object' && env !== null && 'ORCA_PROVIDER_SUPERVISOR_SPEC' in env
-      ? String(env.ORCA_PROVIDER_SUPERVISOR_SPEC)
+    typeof env === 'object' && env !== null && 'QUIRKY_PROVIDER_SUPERVISOR_SPEC' in env
+      ? String(env.QUIRKY_PROVIDER_SUPERVISOR_SPEC)
       : ''
   return JSON.parse(Buffer.from(encoded, 'base64').toString() || 'null')
 }
@@ -190,7 +190,7 @@ describe.runIf(process.platform !== 'win32')('supervised Codex app-server sessio
     onTestFinished(() => rig.cleanup())
     const standIn = rig.writeStandIn('codex', WEDGED_APP_SERVER)
     const bundle = await rig.bundleOwner(OWNER, __dirname)
-    const owner = rig.launchOwner(bundle, { ORCA_TEST_STAND_IN: standIn })
+    const owner = rig.launchOwner(bundle, { QUIRKY_TEST_STAND_IN: standIn })
     const pids = await rig.readPids()
 
     owner.kill('SIGKILL')

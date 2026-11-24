@@ -8,14 +8,14 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 
 // Fragments stay side-effect ordered: mocks, then lifecycle, then fixtures.
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+const { QuirkyRuntimeService } = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const {
   HEADLESS_LEAF_ID,
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
-} = await import('./orca-runtime-test-fixtures.spec')
+} = await import('./quirky-runtime-test-fixtures.spec')
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const SESSION = { key: 'session_id' as const, id: 'codex-session-1' }
@@ -38,7 +38,7 @@ function makeRuntime() {
       return { ok: true, result: {} }
     }
   )
-  const runtime = new OrcaRuntimeService(
+  const runtime = new QuirkyRuntimeService(
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
     Object.assign(runtimeStore, { applyLayoutCommand }) as never
   )
@@ -62,7 +62,7 @@ function codexRow(overrides: Partial<AgentStatusIpcPayload> = {}): AgentStatusIp
   }
 }
 
-async function settled(runtime: InstanceType<typeof OrcaRuntimeService>): Promise<void> {
+async function settled(runtime: InstanceType<typeof QuirkyRuntimeService>): Promise<void> {
   await runtime['hookStatusResumeWrites']
 }
 
@@ -146,7 +146,7 @@ describe('main records a held pane’s resume record from its hook status', () =
       makeWorkspaceSessionWithHeadlessTerminal()
     )
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store implements the runtime store methods these tests reach.
-    const runtime = new OrcaRuntimeService(runtimeStore as never, undefined, {
+    const runtime = new QuirkyRuntimeService(runtimeStore as never, undefined, {
       getAgentProviderSessionSnapshot: () => rows
     })
 

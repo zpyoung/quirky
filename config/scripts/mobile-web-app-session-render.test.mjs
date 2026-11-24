@@ -102,14 +102,14 @@ beforeAll(async () => {
   cspHeader = await readShellCsp()
   bridgeVersion = await readBridgeProtocolVersion()
   faultGrant = await readBridgeFaultGrant()
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-web-app-session-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-web-app-session-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   routeChunks = built.routeChunks
   const served = await createBundleServer({ outDir: built.outDir, cspHeader })
   server = served.server
   origin = served.origin
   servedPaths = served.requestedPaths
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 240_000)
 
@@ -181,10 +181,13 @@ async function waitForRoute({ page, errors }, route, awaitText) {
   const named = (what) =>
     new Error(`${route} ${what}: ${errors.join(' | ') || 'no page or console error'}`)
   try {
-    await page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
-      timeout: 60_000,
-      polling: 250
-    })
+    await page.waitForFunction(
+      () => document.documentElement.dataset.quirkyWebEntry === 'mounted',
+      {
+        timeout: 60_000,
+        polling: 250
+      }
+    )
   } catch {
     throw named('never mounted')
   }
@@ -198,7 +201,7 @@ async function waitForRoute({ page, errors }, route, awaitText) {
   }
   // A route that threw under the page's own error boundary names itself here rather than timing
   // out as a page that never mounted.
-  for (const fault of await page.evaluate(() => globalThis.__orcaRenderCheckFaults ?? [])) {
+  for (const fault of await page.evaluate(() => globalThis.__quirkyRenderCheckFaults ?? [])) {
     errors.push(`page fault: ${fault}`)
   }
 }
@@ -288,7 +291,7 @@ describeRender(
       //
       // Only a full Chrome asks; the bundled headless shell never does, so against the default
       // browser this case is a precondition rather than a measurement.
-      // `ORCA_MOBILE_WEB_RENDER_BROWSER` is what CI resolves, and that is where this bites.
+      // `QUIRKY_MOBILE_WEB_RENDER_BROWSER` is what CI resolves, and that is where this bites.
       // Read off the server's own log, not the page's: a favicon fetch is made by the browser
       // process rather than the page, and Playwright's `page.on('request')` never reports one.
       // The whole file's log, because no case here may produce this request.
@@ -319,7 +322,7 @@ describeRender(
     it('writes no storage key it was never handed, on a mount that read the host status', async () => {
       // `status.get` is what arms it: `host-status-gates.ts` runs on every mount above the route,
       // and on a readable status the native `host-app-version-store.ts` writes
-      // `orca:host-app-version:v1:<hostId>` — a key no page route reads and `page-storage-keys.ts`
+      // `quirky:host-app-version:v1:<hostId>` — a key no page route reads and `page-storage-keys.ts`
       // does not admit, so the bridge refused it and logged one `storage-write-dropped` per mount
       // on the device. Answered here because the other cases' double answers no RPC at all, which
       // is exactly why this went unseen: the write needs a reply, not a control.

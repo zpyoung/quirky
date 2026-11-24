@@ -76,8 +76,8 @@ vi.mock('sonner', () => ({
 function makeRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     id: 'repo-cloned',
-    path: '/srv/orca',
-    displayName: 'orca',
+    path: '/srv/quirky',
+    displayName: 'quirky',
     badgeColor: '#999999',
     addedAt: 1,
     kind: 'git',
@@ -109,7 +109,7 @@ describe('useAddRepoCloneFlow', () => {
 
   it('strips Electron IPC wrappers from clone errors', async () => {
     const cloneError =
-      'Clone failed: Destination already exists and is not empty: /srv/orca. Choose a different parent folder, delete the existing folder, or add the existing repository instead.'
+      'Clone failed: Destination already exists and is not empty: /srv/quirky. Choose a different parent folder, delete the existing folder, or add the existing repository instead.'
     mocks.cloneLocal.mockRejectedValue(
       new Error(`Error invoking remote method 'repos:clone': Error: ${cloneError}`)
     )

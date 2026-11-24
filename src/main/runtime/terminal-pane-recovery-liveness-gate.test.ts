@@ -5,9 +5,9 @@ import {
   createRuntimeWithSshLease,
   deferred,
   store
-} from './orca-runtime-test-fixtures.spec'
-import { makePaneKey } from './orca-runtime-test-mocks.spec'
-import { OrcaRuntimeService } from './orca-runtime'
+} from './quirky-runtime-test-fixtures.spec'
+import { makePaneKey } from './quirky-runtime-test-mocks.spec'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import type {
   RuntimeTerminalCreate,
   RuntimeTerminalResolvePane
@@ -15,7 +15,7 @@ import type {
 
 // What `terminal.recoverPane` may and may not treat as authority to spawn a replacement shell over
 // a remote pane. Lives in a `.test.ts` rather than beside the other recoverPane cases in
-// orca-runtime-tests/*.spec.ts because config/vitest.config.ts — the config CI runs — includes only
+// quirky-runtime-tests/*.spec.ts because config/vitest.config.ts — the config CI runs — includes only
 // `*.test.ts`, so a ratchet placed there would never execute.
 
 describe('terminal.recoverPane liveness gate', () => {
@@ -134,7 +134,7 @@ describe('terminal.recoverPane liveness gate', () => {
   })
 })
 
-class PaneRecoveryRuntime extends OrcaRuntimeService {
+class PaneRecoveryRuntime extends QuirkyRuntimeService {
   usePendingRecoveries(pending: Map<string, Promise<RuntimeTerminalResolvePane>>): void {
     this.terminalPaneRecoveryByIdentity = pending
   }

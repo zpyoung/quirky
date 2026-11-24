@@ -22,7 +22,7 @@ const engine = vi.hoisted(() => ({
   screenTags: new Set<string>()
 }))
 
-vi.mock('@orca/expo-two-way-audio', () => ({
+vi.mock('@quirky/expo-two-way-audio', () => ({
   addExpoTwoWayAudioEventListener: (name: string, handler: (event: { data: unknown }) => void) => {
     engine.listeners.set(name, handler)
     return {

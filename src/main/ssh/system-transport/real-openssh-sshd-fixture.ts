@@ -1,5 +1,5 @@
 /**
- * An isolated real sshd for opt-in OpenSSH tests (ORCA_REAL_OPENSSH_TEST=1): its own host and
+ * An isolated real sshd for opt-in OpenSSH tests (QUIRKY_REAL_OPENSSH_TEST=1): its own host and
  * client keys, ssh_config and ControlPath under one temp dir, so nothing reads or writes `~/.ssh`.
  * The client config multiplexes through a ControlMaster, as a user's own ssh_config would.
  */
@@ -21,7 +21,7 @@ import type { SystemSshBuildArgsOptions } from './system-ssh-args'
 
 const SSHD = '/usr/sbin/sshd'
 export const REAL_OPENSSH_TEST_ENABLED =
-  process.env.ORCA_REAL_OPENSSH_TEST === '1' && process.platform !== 'win32' && existsSync(SSHD)
+  process.env.QUIRKY_REAL_OPENSSH_TEST === '1' && process.platform !== 'win32' && existsSync(SSHD)
 
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -74,7 +74,7 @@ export async function startRealOpenSshFixture(
   extra: { sshd?: readonly string[]; client?: readonly string[] } = {}
 ): Promise<RealOpenSshFixture> {
   // Why /tmp: a ControlPath under macOS's long TMPDIR overflows the unix socket path limit.
-  const dir = mkdtempSync(join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'orca-ros-'))
+  const dir = mkdtempSync(join(process.platform === 'darwin' ? '/tmp' : tmpdir(), 'quirky-ros-'))
   execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', join(dir, 'hostkey')])
   execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-f', join(dir, 'clientkey')])
   const authorizedKeys = join(dir, 'authorized_keys')
@@ -106,13 +106,13 @@ export async function startRealOpenSshFixture(
   const target: SshTarget = {
     id: 'real-openssh',
     label: 'real-openssh',
-    configHost: 'orca-real-openssh',
-    host: 'orca-real-openssh',
+    configHost: 'quirky-real-openssh',
+    host: 'quirky-real-openssh',
     port: 22,
     username: '',
     source: 'ssh-config'
   }
-  const alias = 'orca-real-openssh'
+  const alias = 'quirky-real-openssh'
   writeFileSync(
     configFile,
     [

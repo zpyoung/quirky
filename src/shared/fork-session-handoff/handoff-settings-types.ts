@@ -27,7 +27,7 @@ export type ForkSessionHandoffTemplateMutation =
     }
   | { type: 'reset' }
 
-/** Controls which optional workspace context Orca adds to a handoff brief. */
+/** Controls which optional workspace context Quirky adds to a handoff brief. */
 export type ForkSessionHandoffIncludeToggles = {
   repoState: boolean
   diffBodies: boolean

@@ -6,7 +6,7 @@ import { buildSkillDiscoverySources, discoverSkills } from './discovery'
 
 describe('Antigravity global skill discovery', () => {
   it('attributes a skill in the CLI configuration directory to Antigravity', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'orca-agy-skills-'))
+    const home = await mkdtemp(join(tmpdir(), 'quirky-agy-skills-'))
     try {
       const root = join(home, '.gemini', 'config', 'skills')
       const directory = join(root, 'review')

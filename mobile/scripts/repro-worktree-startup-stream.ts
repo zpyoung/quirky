@@ -14,9 +14,9 @@ import {
   type StartupTerminalCapture
 } from './repro-worktree-startup-output'
 
-const WS_URL = process.env.ORCA_MOBILE_WS_URL ?? 'ws://127.0.0.1:6768'
+const WS_URL = process.env.QUIRKY_MOBILE_WS_URL ?? 'ws://127.0.0.1:6768'
 const USER_DATA =
-  process.env.ORCA_USER_DATA ?? `${process.env.HOME}/Library/Application Support/orca-dev`
+  process.env.QUIRKY_USER_DATA ?? `${process.env.HOME}/Library/Application Support/quirky-dev`
 const repoSelector = process.argv[2]
 const worktreeName = process.argv[3]
 const startupCommand = process.argv[4] || 'claude'
@@ -54,9 +54,9 @@ function readJson<T>(path: string): T {
   return JSON.parse(readFileSync(path, 'utf8')) as T
 }
 
-const devices = readJson<Array<{ token: string }>>(join(USER_DATA, 'orca-devices.json'))
+const devices = readJson<Array<{ token: string }>>(join(USER_DATA, 'quirky-devices.json'))
 const token = devices[0]?.token
-const keypair = readJson<{ publicKeyB64: string }>(join(USER_DATA, 'orca-e2ee-keypair.json'))
+const keypair = readJson<{ publicKeyB64: string }>(join(USER_DATA, 'quirky-e2ee-keypair.json'))
 
 if (!token || !keypair.publicKeyB64) {
   throw new Error(`Missing mobile token or E2EE public key in ${USER_DATA}`)

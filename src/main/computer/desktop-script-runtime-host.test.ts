@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessSpec } from '@quirky/process-host/process-spec'
 import type { RuntimeChildProcess } from './desktop-script-serve-channel'
 import { DesktopScriptRuntimeHost, isRuntimeHostUnavailable } from './desktop-script-runtime-host'
 
@@ -95,7 +95,7 @@ function createHost(
   const children: FakeRuntimeChild[] = []
   const specs: ProcessSpec[] = []
   const warnings: string[] = []
-  const host = new DesktopScriptRuntimeHost('C:\\orca\\runtime.ps1', {
+  const host = new DesktopScriptRuntimeHost('C:\\quirky\\runtime.ps1', {
     ...options,
     powerShellPath: () => 'C:\\Windows\\System32\\powershell.exe',
     warn: (message) => warnings.push(message),
@@ -164,7 +164,7 @@ describe('DesktopScriptRuntimeHost', () => {
       '-ExecutionPolicy',
       'RemoteSigned',
       '-File',
-      'C:\\orca\\runtime.ps1',
+      'C:\\quirky\\runtime.ps1',
       '-Serve'
     ])
     host.dispose()
@@ -655,7 +655,7 @@ describe('DesktopScriptRuntimeHost', () => {
   })
 
   it('reports itself unavailable when the helper cannot be spawned at all', async () => {
-    const host = new DesktopScriptRuntimeHost('C:\\orca\\runtime.ps1', {
+    const host = new DesktopScriptRuntimeHost('C:\\quirky\\runtime.ps1', {
       powerShellPath: () => 'C:\\Windows\\System32\\powershell.exe',
       warn: () => {},
       spawn: () => {

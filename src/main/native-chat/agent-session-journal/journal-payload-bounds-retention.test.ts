@@ -36,7 +36,7 @@ function expectPreviousBounds(payload: string, inlineHeadBytes: number): void {
   expect(boundInlineText(payload, limits)).toEqual({
     bounded: previous,
     text: previous.truncated
-      ? `${previous.head}\n[Orca: output truncated — ${previous.byteLength} bytes total, digest ${previous.digest.slice(0, 12)}]`
+      ? `${previous.head}\n[Quirky: output truncated — ${previous.byteLength} bytes total, digest ${previous.digest.slice(0, 12)}]`
       : payload
   })
 }

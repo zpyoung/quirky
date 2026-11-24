@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
-import type { OrcaVmRecipe } from '../../../shared/orca-yaml-hook-types'
+import type { QuirkyVmRecipe } from '../../../shared/quirky-yaml-hook-types'
 
 type EphemeralVmRecipeOptionsArgs = {
   enabled: boolean
@@ -13,12 +13,12 @@ type EphemeralVmRecipeOptionsArgs = {
 }
 
 export function useEphemeralVmRecipeOptions(args: EphemeralVmRecipeOptionsArgs): {
-  recipes: OrcaVmRecipe[]
+  recipes: QuirkyVmRecipe[]
   selectedRecipeId: string | null
   setSelectedRecipeId: (recipeId: string | null) => void
   error: string | null
 } {
-  const [recipes, setRecipes] = useState<OrcaVmRecipe[]>([])
+  const [recipes, setRecipes] = useState<QuirkyVmRecipe[]>([])
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const requestGeneration = useRef(0)

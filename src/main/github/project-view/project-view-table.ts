@@ -138,7 +138,7 @@ export async function getProjectViewTable(
         type: 'unsupported_layout',
         // Why: the branch is type-unreachable (closed union) but runtime-real —
         // raw.layout is cast unchecked, so an unknown value lands here.
-        message: `Orca renders table, board, and roadmap views. This is a ${String(selectedView.layout).replace('_LAYOUT', '').toLowerCase()} view.`
+        message: `Quirky renders table, board, and roadmap views. This is a ${String(selectedView.layout).replace('_LAYOUT', '').toLowerCase()} view.`
       },
       ...(typeof count === 'number' ? { totalCount: count } : {})
     }

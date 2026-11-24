@@ -13,8 +13,8 @@ import { createRequire } from 'node:module'
 import { isAbsolute, join, parse } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
-import { DEFAULT_MAX_OUTPUT_BYTES } from '@orca/process-host/process-spec'
+import { runProcessSync } from '@quirky/process-host'
+import { DEFAULT_MAX_OUTPUT_BYTES } from '@quirky/process-host/process-spec'
 import { resolveCliCommand } from '../../src/shared/node-cli-command-resolution.ts'
 import { removeTreeSync } from '../../src/shared/windows-transient-lock-removal.ts'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
@@ -50,9 +50,9 @@ describe('ensure-native-runtime', () => {
         encoding: 'utf8',
         maxBuffer: DEFAULT_MAX_OUTPUT_BYTES * 4,
         env: envForNativeFixture(projectDir, {
-          ORCA_NATIVE_TEST_LOG: logPath,
-          ORCA_NATIVE_TEST_MARKER: markerPath,
-          ORCA_NATIVE_TEST_VERBOSE_OUTPUT_BYTES: String(verboseOutputBytes)
+          QUIRKY_NATIVE_TEST_LOG: logPath,
+          QUIRKY_NATIVE_TEST_MARKER: markerPath,
+          QUIRKY_NATIVE_TEST_VERBOSE_OUTPUT_BYTES: String(verboseOutputBytes)
         })
       })
 
@@ -100,8 +100,8 @@ describe('ensure-native-runtime', () => {
           encoding: 'utf8',
           env: envForNativeFixture(projectDir, {
             ...trackingEnv,
-            ORCA_NATIVE_TEST_LOG: logPath,
-            ORCA_NATIVE_TEST_MARKER: markerPath
+            QUIRKY_NATIVE_TEST_LOG: logPath,
+            QUIRKY_NATIVE_TEST_MARKER: markerPath
           })
         })
 
@@ -114,7 +114,7 @@ describe('ensure-native-runtime', () => {
           log.split('\n').filter((line) => line === `trackFileAccess=${tracking}`)
         ).toHaveLength(2)
         expect(log).toContain(join('node_modules', 'node-pty'))
-        expect(log).toContain(join('node_modules', '@orca', 'windows-registry'))
+        expect(log).toContain(join('node_modules', '@quirky', 'windows-registry'))
       } finally {
         rmSync(projectDir, { recursive: true, force: true })
       }
@@ -138,8 +138,8 @@ describe('ensure-native-runtime', () => {
           cwd: projectDir,
           encoding: 'utf8',
           env: envForNativeFixture(projectDir, {
-            ORCA_NATIVE_TEST_LOG: logPath,
-            ORCA_NATIVE_TEST_MARKER: markerPath
+            QUIRKY_NATIVE_TEST_LOG: logPath,
+            QUIRKY_NATIVE_TEST_MARKER: markerPath
           })
         })
 
@@ -172,13 +172,15 @@ describe('ensure-native-runtime', () => {
           cwd: projectDir,
           encoding: 'utf8',
           env: envForNativeFixture(projectDir, {
-            ORCA_NATIVE_TEST_LOG: logPath,
-            ORCA_NATIVE_TEST_MARKER: markerPath
+            QUIRKY_NATIVE_TEST_LOG: logPath,
+            QUIRKY_NATIVE_TEST_MARKER: markerPath
           })
         })
 
         expect(result.status, result.stderr).toBe(0)
-        expect(result.stderr).toContain("expected build/Release so Orca's node-pty patch is active")
+        expect(result.stderr).toContain(
+          "expected build/Release so Quirky's node-pty patch is active"
+        )
         expect(readFileSync(logPath, 'utf8')).toContain(`node-gyp rebuild --arch=${process.arch}\n`)
       } finally {
         rmSync(projectDir, { recursive: true, force: true })
@@ -204,8 +206,8 @@ describe('ensure-native-runtime', () => {
           cwd: projectDir,
           encoding: 'utf8',
           env: envForNativeFixture(projectDir, {
-            ORCA_NATIVE_TEST_LOG: logPath,
-            ORCA_NATIVE_TEST_MARKER: markerPath
+            QUIRKY_NATIVE_TEST_LOG: logPath,
+            QUIRKY_NATIVE_TEST_MARKER: markerPath
           })
         })
 
@@ -225,7 +227,7 @@ describe('ensure-native-runtime', () => {
     try {
       writeFakeNativeModules(projectDir)
       const addonDir = join(projectDir, 'node_modules', 'node-pty')
-      const env = { ...process.env, ORCA_BACKGROUND_LAUNCH: '1' }
+      const env = { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1' }
       for (const key of Object.keys(env)) {
         if (key.toLowerCase() === 'path') {
           env[key] = ''
@@ -272,22 +274,22 @@ describe('ensure-native-runtime', () => {
 })
 
 function mkTempProject() {
-  const projectDir = mkdtempSync(join(tmpdir(), 'orca-native-runtime-'))
+  const projectDir = mkdtempSync(join(tmpdir(), 'quirky-native-runtime-'))
   // Walked, not listed: the script imports windows-process-tree-gyp-rebuild.mjs, and a fixture
   // missing it fails every case with a module-resolution error instead of the defect under test.
   copyScriptWithLocalModules(sourceScriptPath, join(projectDir, 'config', 'scripts'))
-  const processPackage = join(projectDir, 'node_modules', '@orca', 'process-host')
+  const processPackage = join(projectDir, 'node_modules', '@quirky', 'process-host')
   mkdirSync(processPackage, { recursive: true })
   writeFileSync(
     join(processPackage, 'package.json'),
-    JSON.stringify({ name: '@orca/process-host', type: 'module', exports: './index.mjs' })
+    JSON.stringify({ name: '@quirky/process-host', type: 'module', exports: './index.mjs' })
   )
   writeFileSync(
     join(processPackage, 'index.mjs'),
     `import { appendFileSync } from 'node:fs'
-import { runProcessSync as run } from ${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve('@orca/process-host')).href)}
+import { runProcessSync as run } from ${JSON.stringify(pathToFileURL(createRequire(import.meta.url).resolve('@quirky/process-host')).href)}
 export function runProcessSync(options) {
-  appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`node-gyp timeout=\${options.timeoutMs}\\n\`)
+  appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`node-gyp timeout=\${options.timeoutMs}\\n\`)
   return run(options)
 }
 `
@@ -330,9 +332,9 @@ function writeFakeNativeModules(projectDir, { windowsRegistryRequiresMarker = fa
 const { appendFileSync, existsSync } = require('node:fs')
 
 exports.loadNativeModule = function loadNativeModule(nativeName) {
-  const markerExists = existsSync(process.env.ORCA_NATIVE_TEST_MARKER)
+  const markerExists = existsSync(process.env.QUIRKY_NATIVE_TEST_MARKER)
   appendFileSync(
-    process.env.ORCA_NATIVE_TEST_LOG,
+    process.env.QUIRKY_NATIVE_TEST_LOG,
     \`node-pty \${process.argv.includes('--check-only') ? 'child' : 'parent'} \${nativeName} marker=\${markerExists}\\n\`
   )
   if (!markerExists) {
@@ -374,10 +376,10 @@ function writeLoadableNativeModules(projectDir, { nativeDir = null } = {}) {
 const { appendFileSync, existsSync } = require('node:fs')
 
 exports.loadNativeModule = function loadNativeModule(nativeName) {
-  const rebuilt = existsSync(process.env.ORCA_NATIVE_TEST_MARKER)
+  const rebuilt = existsSync(process.env.QUIRKY_NATIVE_TEST_MARKER)
   const dir = ${JSON.stringify(nativeDir)} ??
     (rebuilt ? '../build/Release/' : '../prebuilds/' + process.platform + '-' + process.arch + '/')
-  appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`node-pty load \${nativeName} dir=\${dir}\\n\`)
+  appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`node-pty load \${nativeName} dir=\${dir}\\n\`)
   return {
     dir,
     module: {
@@ -396,14 +398,14 @@ function writeFakeWindowsRegistry(projectDir, { requiresMarker = false } = {}) {
   if (process.platform !== 'win32') {
     return
   }
-  const registryDir = join(projectDir, 'node_modules', '@orca', 'windows-registry')
+  const registryDir = join(projectDir, 'node_modules', '@quirky', 'windows-registry')
   mkdirSync(registryDir, { recursive: true })
   writeFileSync(
     join(registryDir, 'package.json'),
-    '{"name":"@orca/windows-registry","version":"1.0.0","main":"index.js"}\n'
+    '{"name":"@quirky/windows-registry","version":"1.0.0","main":"index.js"}\n'
   )
   const markerGate = requiresMarker
-    ? `if (!require('node:fs').existsSync(process.env.ORCA_NATIVE_TEST_MARKER)) { throw new Error('registry ABI mismatch sentinel') }`
+    ? `if (!require('node:fs').existsSync(process.env.QUIRKY_NATIVE_TEST_MARKER)) { throw new Error('registry ABI mismatch sentinel') }`
     : ''
   writeFileSync(
     join(registryDir, 'index.js'),
@@ -415,7 +417,7 @@ function writeFakeWindowsRegistry(projectDir, { requiresMarker = false } = {}) {
     join(processTreeDir, 'index.js'),
     'exports.supportedProcessDataFlags = 4; exports.getProcessCreationTime = () => 1\n'
   )
-  const securityDir = join(projectDir, 'node_modules', '@orca', 'windows-security')
+  const securityDir = join(projectDir, 'node_modules', '@quirky', 'windows-security')
   mkdirSync(securityDir, { recursive: true })
   writeFileSync(join(securityDir, 'index.js'), "exports.currentUserSid = () => 'S-1-5-18'\n")
 }
@@ -448,19 +450,19 @@ function writeFakeNodeGyp(projectDir) {
     join(toolDir, 'node-gyp.js'),
     `
 const { appendFileSync, writeFileSync, writeSync } = require('node:fs')
-appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`node-gyp \${process.argv.slice(2).join(' ')}\\n\`)
-appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`cwd=\${process.cwd()}\\n\`)
-appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`cxxflags=\${process.env.CXXFLAGS || ''}\\n\`)
-appendFileSync(process.env.ORCA_NATIVE_TEST_LOG, \`trackFileAccess=\${process.env.TrackFileAccess ?? ''}\\n\`)
-if (process.env.ORCA_NATIVE_TEST_VERBOSE_OUTPUT_BYTES) {
-  const output = Buffer.alloc(Number(process.env.ORCA_NATIVE_TEST_VERBOSE_OUTPUT_BYTES), 'x')
+appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`node-gyp \${process.argv.slice(2).join(' ')}\\n\`)
+appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`cwd=\${process.cwd()}\\n\`)
+appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`cxxflags=\${process.env.CXXFLAGS || ''}\\n\`)
+appendFileSync(process.env.QUIRKY_NATIVE_TEST_LOG, \`trackFileAccess=\${process.env.TrackFileAccess ?? ''}\\n\`)
+if (process.env.QUIRKY_NATIVE_TEST_VERBOSE_OUTPUT_BYTES) {
+  const output = Buffer.alloc(Number(process.env.QUIRKY_NATIVE_TEST_VERBOSE_OUTPUT_BYTES), 'x')
   for (let offset = 0; offset < output.length;) {
     offset += writeSync(1, output.subarray(offset))
   }
   writeSync(1, 'node-gyp stdout complete\\n')
   writeSync(2, 'node-gyp stderr complete\\n')
 }
-writeFileSync(process.env.ORCA_NATIVE_TEST_MARKER, 'rebuilt')
+writeFileSync(process.env.QUIRKY_NATIVE_TEST_MARKER, 'rebuilt')
 `
   )
 }

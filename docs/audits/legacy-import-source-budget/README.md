@@ -10,7 +10,7 @@ the journal. It does not import a truncated prefix.
 From the repository root, with dependencies installed:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --max-old-space-size=256 docs/audits/legacy-import-source-budget/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --max-old-space-size=256 docs/audits/legacy-import-source-budget/reproduce.mjs
 ```
 
 The script bundles the actual production importer and decoder twice. The baseline
@@ -53,7 +53,7 @@ resumable JSONL record limit.
   not the full documents.
 - The production default, including v1.4.198, places those scans in the forked
   AI Vault service with a 384 MiB V8 old-space limit. That is not a total RSS
-  limit. `ORCA_AI_VAULT_SERVICE_PROCESS=0` instead puts scans in a worker thread
+  limit. `QUIRKY_AI_VAULT_SERVICE_PROCESS=0` instead puts scans in a worker thread
   sharing main's PID; its first-prompt fallback runs directly in main.
 - Existing remote whole-document streaming parsers offer a reuse path, but
   local conversion must preserve message-sink delivery for search indexing.

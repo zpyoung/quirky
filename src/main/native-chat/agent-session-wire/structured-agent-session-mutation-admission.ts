@@ -157,7 +157,7 @@ export async function admitAndRunAgentSessionMutation<TValue>(
       isAgentSessionRefusalError(error) ||
       classifyJournalOpenFailure(error) === 'journalCorrupt'
     ) {
-      // A store refusing the row (a newer Orca's records) or damage SQLite proves: as an open says.
+      // A store refusing the row (a newer Quirky's records) or damage SQLite proves: as an open says.
       return refuseAgentSessionMutation(journalOpenRefusal(error))
     }
     throw error

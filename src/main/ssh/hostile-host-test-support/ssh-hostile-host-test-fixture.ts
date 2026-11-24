@@ -1,9 +1,9 @@
-/** Starts one hostile-host cell as an SSH target for the orcad deploy: a Docker sshd or a loopback one. */
+/** Starts one hostile-host cell as an SSH target for the quirkyd deploy: a Docker sshd or a loopback one. */
 import { randomUUID } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import type { SshTarget } from '../../../shared/ssh-types'
 import {
   FORBIDDEN_TOOL_LOG,
@@ -62,20 +62,20 @@ const ENTRYPOINT = [
 ].join('\n')
 
 export function hostileHostDockerfile(cell: DockerHostileHostCell): string {
-  const shims = FORBIDDEN_TOOLS.map((tool) => `ln -sf orca-forbidden-tool /usr/local/bin/${tool}`)
+  const shims = FORBIDDEN_TOOLS.map((tool) => `ln -sf quirky-forbidden-tool /usr/local/bin/${tool}`)
   return [
     ...cell.dockerfile,
-    'COPY forbidden-tool.sh /usr/local/bin/orca-forbidden-tool',
-    'COPY entrypoint.sh /orca-entrypoint.sh',
+    'COPY forbidden-tool.sh /usr/local/bin/quirky-forbidden-tool',
+    'COPY entrypoint.sh /quirky-entrypoint.sh',
     [
-      'RUN chmod 755 /usr/local/bin/orca-forbidden-tool /orca-entrypoint.sh',
+      'RUN chmod 755 /usr/local/bin/quirky-forbidden-tool /quirky-entrypoint.sh',
       ...shims,
       // Why '*': sshd without PAM refuses key logins to a locked ('!') root account.
       "sed -i 's/^root:[^:]*:/root:*:/' /etc/shadow",
       // Why: pam_loginuid cannot write loginuid in an unprivileged container.
       "{ [ ! -f /etc/pam.d/sshd ] || sed -i 's/^session\\s*required\\s*pam_loginuid.so/session optional pam_loginuid.so/' /etc/pam.d/sshd; }"
     ].join(' && '),
-    'CMD ["/orca-entrypoint.sh"]',
+    'CMD ["/quirky-entrypoint.sh"]',
     ''
   ].join('\n')
 }
@@ -87,7 +87,7 @@ async function buildImage(cell: DockerHostileHostCell, contextDir: string): Prom
     forbiddenToolShimScript(FORBIDDEN_TOOL_LOG)
   )
   await writeFile(join(contextDir, 'entrypoint.sh'), ENTRYPOINT)
-  const image = `orca-ssh-hostile-host:${cell.id}`
+  const image = `quirky-ssh-hostile-host:${cell.id}`
   await run('docker', ['build', '-q', '-t', image, contextDir], 900_000)
   return image
 }
@@ -108,9 +108,9 @@ export async function startHostileHostTarget(cell: HostileHostCell): Promise<Hos
 }
 
 async function startDockerTarget(cell: DockerHostileHostCell): Promise<DockerHostileHostTarget> {
-  const tempDir = await mkdtemp(join(tmpdir(), `orca-hostile-${cell.id}-`))
+  const tempDir = await mkdtemp(join(tmpdir(), `quirky-hostile-${cell.id}-`))
   const identityFile = join(tempDir, 'id_ed25519')
-  const containerName = `orca-hostile-${cell.id}-${randomUUID().slice(0, 8)}`
+  const containerName = `quirky-hostile-${cell.id}-${randomUUID().slice(0, 8)}`
   let networkName: string | null = null
   try {
     await run('ssh-keygen', ['-t', 'ed25519', '-N', '', '-q', '-f', identityFile])

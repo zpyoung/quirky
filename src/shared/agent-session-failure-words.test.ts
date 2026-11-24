@@ -21,8 +21,9 @@ import {
   DISPATCH_REJECTED_WRITE_FAILED
 } from './structured-agent-session-dispatch-rejection'
 
-/** What Orca's own text looks like: a code or marker, a uuid, a path, an exception. */
-const ORCA_INTERNAL = /\b[a-z]+_[a-z_]+\b|[0-9a-f]{8}-[0-9a-f]{4}-|[/\\][\w.-]+[/\\]|Error:|ENOENT/
+/** What Quirky's own text looks like: a code or marker, a uuid, a path, an exception. */
+const QUIRKY_INTERNAL =
+  /\b[a-z]+_[a-z_]+\b|[0-9a-f]{8}-[0-9a-f]{4}-|[/\\][\w.-]+[/\\]|Error:|ENOENT/
 
 const SURFACES: readonly AgentSessionFailureSurface[] = ['row', 'rejection', 'answer']
 const LEGACY_MARKER_KINDS: ReadonlySet<SubmissionRejectionKind> = new Set([
@@ -73,7 +74,7 @@ describe('the words written beside a failure fact', () => {
           const sentence = agentSessionFailureSentence(fact, surface, context)
           expect([fact, sentence]).toEqual([fact, expect.stringMatching(/[^.]\.$/)])
           expect(sentence).not.toMatch(/\.\./)
-          expect(sentence).not.toMatch(ORCA_INTERNAL)
+          expect(sentence).not.toMatch(QUIRKY_INTERNAL)
           if (surface === 'row') {
             expect(agentSessionFailureWords(fact, { ...context, surface }).text).toBe(sentence)
           } else if (
@@ -165,7 +166,7 @@ describe('the words written beside a failure fact', () => {
     ).toBe("Codex couldn't start. Start a new chat to continue.")
   })
 
-  it('says a start refused beside a process Orca could not stop in its own words', () => {
+  it('says a start refused beside a process Quirky could not stop in its own words', () => {
     const refused = (context: { command?: 'compact'; retryControl?: boolean } = {}) =>
       agentSessionFailureSentence(
         {

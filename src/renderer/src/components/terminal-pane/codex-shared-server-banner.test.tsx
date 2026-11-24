@@ -41,7 +41,7 @@ const NOT_JOINED: CodexSharedServerStatus = { joined: false }
 const OLD_TAB_JOINED: CodexSharedServerStatus = { joined: true, openedBeforeWrapper: true }
 const TITLE = 'This Codex is sharing a server'
 const OLD_TAB_BODY =
-  'This terminal was opened before Orca started giving each Codex its own server.'
+  'This terminal was opened before Quirky started giving each Codex its own server.'
 let paneElement: HTMLDivElement
 let root: Root
 let isCodexOnSharedServer: ReturnType<
@@ -139,7 +139,7 @@ describe('CodexSharedServerBanner', () => {
     expect(isCodexOnSharedServer).toHaveBeenCalledWith(ptyId)
     expect(paneElement.textContent).toContain('agent status may be wrong')
     expect(paneElement.querySelector(':scope > .pane-top-banner')).not.toBeNull()
-    expect(paneElement.style.getPropertyValue('--orca-pane-top-banner-height')).toMatch(/px$/)
+    expect(paneElement.style.getPropertyValue('--quirky-pane-top-banner-height')).toMatch(/px$/)
   })
 
   it('keeps the default Learn more on the Fix steps, with no old-terminal copy', async () => {
@@ -179,7 +179,7 @@ describe('CodexSharedServerBanner', () => {
     expect(isCodexOnSharedServer).toHaveBeenCalledTimes(2)
   })
 
-  it('shows each command Orca runs, then turns sharing off and reads back success', async () => {
+  it('shows each command Quirky runs, then turns sharing off and reads back success', async () => {
     setState({})
     await renderBanner()
     await advance(1_000)
@@ -202,7 +202,7 @@ describe('CodexSharedServerBanner', () => {
     await act(async () => button('Fix').click())
     await act(async () => button('Turn off').click())
 
-    expect(document.body.textContent).toContain("Orca couldn't turn this off.")
+    expect(document.body.textContent).toContain("Quirky couldn't turn this off.")
     expect(document.body.textContent).not.toContain('Turned off')
     await act(async () => button('Copy').click())
     expect(writeClipboardText).toHaveBeenCalledWith(CODEX_DISABLE_AUTO_START_COMMAND)
@@ -256,7 +256,7 @@ describe('CodexSharedServerBanner', () => {
     await advance(1_000)
     await act(async () => button('Dismiss').click())
     expect(paneElement.textContent).toBe('')
-    expect(paneElement.style.getPropertyValue('--orca-pane-top-banner-height')).toBe('')
+    expect(paneElement.style.getPropertyValue('--quirky-pane-top-banner-height')).toBe('')
     expect(updateSettings).not.toHaveBeenCalled()
 
     act(() => root.unmount())

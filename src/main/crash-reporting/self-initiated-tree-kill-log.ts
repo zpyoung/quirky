@@ -1,9 +1,9 @@
 import type { CrashReportDetailValue } from '../../shared/crash-reporting'
-import type { ProcessTreeKillScope } from '@orca/process-host/process-tree-kill-gate'
+import type { ProcessTreeKillScope } from '@quirky/process-host/process-tree-kill-gate'
 import { recordCoalescedDurableCrashBreadcrumb } from './durable-crash-breadcrumb'
 
 /**
- * Records the force-kills Orca itself issues, so a later `render-process-gone`
+ * Records the force-kills Quirky itself issues, so a later `render-process-gone`
  * can say whether we were holding the knife.
  *
  * Why: on Windows a `taskkill /T /F` we issue and an external one produce the
@@ -40,8 +40,8 @@ import { recordCoalescedDurableCrashBreadcrumb } from './durable-crash-breadcrum
  *
  * A daemon or relay kill missing from the count is a diagnostics gap, not a
  * missed suspect: those hosts cannot reach a Chromium pid in the first place
- * (see `orca-chromium-process-pids.ts`), and a group or Job-Object kill can
- * only contain what Orca put in it. Absence is evidence, not proof.
+ * (see `quirky-chromium-process-pids.ts`), and a group or Job-Object kill can
+ * only contain what Quirky put in it. Absence is evidence, not proof.
  */
 
 /** Which mechanism issued the kill; each has a different blast radius. */
@@ -77,9 +77,9 @@ let selfInitiatedKills: SelfInitiatedTreeKill[] = []
 
 /**
  * Whether the kill was addressed by pid and so could have reached a process
- * Orca did not put in its target: `taskkill /T /F` walks whatever tree the pid
+ * Quirky did not put in its target: `taskkill /T /F` walks whatever tree the pid
  * owns at kill time, including a recycled pid that is now our renderer. A
- * process group or Job Object contains only what Orca placed there, so it is
+ * process group or Job Object contains only what Quirky placed there, so it is
  * structurally incapable of taking a Chromium process with it.
  */
 function isPidAddressedTreeKill(scope: SelfInitiatedTreeKillScope): boolean {
@@ -142,7 +142,7 @@ export function recordSelfInitiatedTreeKill({
 /**
  * A tree-kill we refused because the target is one of our own Chromium
  * processes. Falsifiable on purpose: this crumb appearing in a field bundle is
- * direct proof that Orca was about to kill its own renderer.
+ * direct proof that Quirky was about to kill its own renderer.
  */
 export function recordRefusedOwnChromiumTreeKill(target: {
   pid: number
@@ -174,7 +174,7 @@ function describeSelfInitiatedTreeKill(kill: SelfInitiatedTreeKill, goneAt: numb
 }
 
 /**
- * Kills Orca issued near `goneAt`, split by whether the mechanism could have
+ * Kills Quirky issued near `goneAt`, split by whether the mechanism could have
  * reached a Chromium process at all — `selfInitiatedTreeKillCount` is the
  * discriminating one, and a pty-scoped sweep must never inflate it. Empty when
  * no instrumented choke point fired; see the module doc for what that omits.

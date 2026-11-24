@@ -23,10 +23,10 @@ The public split-close callback now probes the captured scoped handle before aut
 Run in the repository root with existing dependencies:
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node docs/audits/pending-runtime-pane-close/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node docs/audits/pending-runtime-pane-close/reproduce.mjs
 ```
 
-The script runs 13 tests using the actual split-close hook and remote transport, plus two tests delivering the close RPC into an actual `OrcaRuntimeService` with a fake PTY controller. React registration and unrelated presentation callbacks are mocked. No Electron window, host process inventory, or real PTY child is used.
+The script runs 13 tests using the actual split-close hook and remote transport, plus two tests delivering the close RPC into an actual `QuirkyRuntimeService` with a fake PTY controller. React registration and unrelated presentation callbacks are mocked. No Electron window, host process inventory, or real PTY child is used.
 
 The temporary Vite transform reverses only `fix.patch`; the baseline includes the IPC fix from #21001. Working sources remain untouched. The script uses the shared cross-platform process runner and records source hashes and exact cases in `results.json`.
 

@@ -155,7 +155,7 @@ describe('extractTerminalHandleLinks', () => {
 
 describe('extractOrchestrationTaskLinks', () => {
   it('detects task IDs from orchestration dispatch output', () => {
-    const line = 'Ran orca orchestration dispatch --task task_88f323f654c0 --to term_worker'
+    const line = 'Ran quirky orchestration dispatch --task task_88f323f654c0 --to term_worker'
 
     expect(extractOrchestrationTaskLinks(line)).toEqual([
       {

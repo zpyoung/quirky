@@ -43,7 +43,7 @@ const placement = {
 beforeEach(() => {
   installClientHostedPaneApi({ ui: { writeClipboardImage: mocks.clipboard } })
   useAppStore.setState({ browserCertificateFailuresByPageId: {} })
-  window.localStorage.setItem('orca.browser.markup-draw-hint-seen', 'true')
+  window.localStorage.setItem('quirky.browser.markup-draw-hint-seen', 'true')
   mocks.capture.mockResolvedValue(image)
   mocks.compose.mockResolvedValue({ dataUrl: 'data:image/png;base64,Y29tcG9zaXRl' })
   mocks.clipboard.mockResolvedValue(undefined)
@@ -114,7 +114,7 @@ function drawButton(): HTMLButtonElement {
   return screen.getByRole('button', { name: 'Draw on screenshot' })
 }
 function overlay(): HTMLElement | null {
-  return document.querySelector('[data-orca-markup-overlay]')
+  return document.querySelector('[data-quirky-markup-overlay]')
 }
 async function startDrawing() {
   fireEvent.click(drawButton())

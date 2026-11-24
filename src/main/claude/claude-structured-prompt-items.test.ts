@@ -212,8 +212,8 @@ describe('Claude structured question addressing', () => {
     }
 
     expect(body.questions).toHaveLength(4)
-    expect(body.questions?.[0]?.question).toContain('[Orca: output truncated')
-    expect(body.questions?.[0]?.options[0]?.description).toContain('[Orca: output truncated')
+    expect(body.questions?.[0]?.question).toContain('[Quirky: output truncated')
+    expect(body.questions?.[0]?.options[0]?.description).toContain('[Quirky: output truncated')
     expect(Buffer.byteLength(JSON.stringify(cancelled), 'utf8') + 4_096).toBeLessThan(
       MAX_JOURNAL_LIFECYCLE_BATCH_BYTES
     )

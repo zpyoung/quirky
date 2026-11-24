@@ -108,7 +108,7 @@ describe('terminal file links carry their source tab', () => {
     )
   })
 
-  it('refuses an explicit request that resolves to Orca browser HTML', async () => {
+  it('refuses an explicit request that resolves to Quirky browser HTML', async () => {
     setPlatform('Macintosh')
     seedSourceTab()
 

@@ -19,7 +19,7 @@ function clientFor(
   onFailure?: (error: Error) => void,
   startup = ''
 ) {
-  const root = mkdtempSync(join(tmpdir(), 'orca-writer-protocol-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-writer-protocol-'))
   roots.push(root)
   const workerPath = join(root, 'writer.cjs')
   writeFileSync(

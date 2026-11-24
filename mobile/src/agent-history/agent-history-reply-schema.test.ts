@@ -29,7 +29,7 @@ describe('agent history reply schemas', () => {
   })
 
   it('keeps a session row whose agent this build has never heard of', () => {
-    // The agent vocabulary grows with every CLI Orca learns to scan and is echoed back on resume,
+    // The agent vocabulary grows with every CLI Quirky learns to scan and is echoed back on resume,
     // so a newer host's rows must survive rather than being refused or dropped.
     const parsed = agentHistorySessionScanSchema.parse({
       sessions: [{ id: 's1', agent: 'some-new-agent' }],

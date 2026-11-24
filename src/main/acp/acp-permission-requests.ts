@@ -92,7 +92,7 @@ export function readAcpPermissionRequest(
   return request.data
 }
 
-/** Asks the caller; any answer Orca cannot send (a throw, a bad reply, an unoffered option) is `cancelled`. */
+/** Asks the caller; any answer Quirky cannot send (a throw, a bad reply, an unoffered option) is `cancelled`. */
 export function answerAcpPermission(
   request: RequestPermissionRequest,
   context: AcpRequestContext,

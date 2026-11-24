@@ -1,21 +1,21 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { closeTerminalImePaneArena, openTerminalImePaneArena } from './terminal-ime-pane-arena'
 import { setImeComposition } from './terminal-ime-cdp-composition'
 import { writeToActiveTerminal } from './terminal-ime-midline-occlusion-probe'
 
 test('keeps the CJK prefix in place across mixed text and the layout budget', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  const arena = await openTerminalImePaneArena(orcaPage)
+  const arena = await openTerminalImePaneArena(quirkyPage)
   let completed = false
   try {
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       const state = window.__store!.getState()
       const terminal = window.__paneManagers!.get(state.activeTabId!)!.getActivePane()!.terminal
       terminal.options.fontSize = 13
       terminal.options.fontFamily = 'monospace'
     })
-    await writeToActiveTerminal(orcaPage, '\x1b[2J\x1b[H')
+    await writeToActiveTerminal(quirkyPage, '\x1b[2J\x1b[H')
     const prefix = 'あ'.repeat(32)
     let initial: number[] | undefined
     for (const suffix of [
@@ -32,7 +32,7 @@ test('keeps the CJK prefix in place across mixed text and the layout budget', as
       'a'
     ]) {
       await setImeComposition(arena.session, prefix + suffix)
-      const preedit = orcaPage.locator('.composition-view.active .xterm-composition-preedit')
+      const preedit = quirkyPage.locator('.composition-view.active .xterm-composition-preedit')
       await expect(preedit).toHaveText(`‎${prefix + suffix}‎`)
       const sample = await preedit.evaluate((element) => {
         const bounds = element.getBoundingClientRect()

@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
 }))
 
 beforeEach(() => {
-  testState.dir = mkdtempSync(join(tmpdir(), 'orca-compact-notice-'))
+  testState.dir = mkdtempSync(join(tmpdir(), 'quirky-compact-notice-'))
 })
 afterEach(async () => {
   await closeTestStores()

@@ -1,5 +1,5 @@
 /**
- * Builds the exact bytes Orca writes into an interactive shell to deliver and
+ * Builds the exact bytes Quirky writes into an interactive shell to deliver and
  * submit a startup command (agent launch, setup script, etc.).
  *
  * Why bracketed paste: agent launch prompts are single-quoted, but their
@@ -21,7 +21,7 @@ const BRACKETED_PASTE_END = '\x1b[201~'
 const STARTUP_COMMAND_SUBMIT = '\r'
 
 export type StartupCommandSubmissionOptions = {
-  /** Whether the target line editor has bracketed-paste mode active (Orca's
+  /** Whether the target line editor has bracketed-paste mode active (Quirky's
    *  wrapped bash/zsh/fish). Only wrap multiline payloads when true — a shell
    *  without bracketed paste would echo the ESC[200~ markers as literal garbage. */
   bracketedPasteSafe: boolean

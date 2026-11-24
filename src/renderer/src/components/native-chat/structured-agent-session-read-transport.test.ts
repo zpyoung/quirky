@@ -410,7 +410,7 @@ describe('structured agent-session read transport unattached refusals', () => {
     }
   })
 
-  it.each(['journalCorrupt', 'journalWrittenByNewerOrca'])(
+  it.each(['journalCorrupt', 'journalWrittenByNewerQuirky'])(
     'hands the pane the refusal a read met, and stops reconnecting only past %s',
     async (final) => {
       vi.useFakeTimers()
@@ -436,7 +436,7 @@ describe('structured agent-session read transport unattached refusals', () => {
         await vi.advanceTimersByTimeAsync(750)
         expect(attempts).toHaveLength(2)
 
-        // Damage, or a newer Orca's chat, no retry reads past: decided from the reason, not the
+        // Damage, or a newer Quirky's chat, no retry reads past: decided from the reason, not the
         // message, which is the same.
         attempts[1].onError(journalRefusal(final))
         attempts[1].closed.resolve({ unsubscribe: attempts[1].unsubscribe })

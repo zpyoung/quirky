@@ -265,7 +265,7 @@ describe('PluginDevWatcher', () => {
   )
 
   it('watches physical and aliased root names without duplicating their parent', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-alias-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-alias-')
     startDevWatcher(undefined, undefined, [aliasedRoot.aliasRoot])
     expect(pluginRootSubscription().path).toBe(aliasedRoot.aliasRoot)
     expect(pluginParentSubscription().path).toBe(aliasedRoot.base)
@@ -277,7 +277,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('keeps the physical root name while a configured alias is dangling', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-missing-alias-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-missing-alias-')
     const { watcher } = startDevWatcher(undefined, undefined, [aliasedRoot.aliasRoot])
     await rm(aliasedRoot.realRoot, { recursive: true })
     subscriptions = []
@@ -289,7 +289,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('rewatches the new physical root when an ancestor alias is retargeted', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-ancestor-alias-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-ancestor-alias-')
     const nextRoot = join(aliasedRoot.base, 'next')
     await mkdir(join(aliasedRoot.realRoot, 'demo'))
     await mkdir(join(nextRoot, 'demo'), { recursive: true })
@@ -324,7 +324,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('detects changes through chained aliases without adding broad parent guards', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-nested-alias-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-nested-alias-')
     const nestedRoot = join(aliasedRoot.base, 'nested')
     await mkdir(join(nestedRoot, 'demo'), { recursive: true })
     await mkdir(join(nestedRoot, 'other'))
@@ -355,7 +355,7 @@ describe('PluginDevWatcher', () => {
   it.skipIf(originalPlatform !== 'darwin')(
     'detects alias retargeting with different casing',
     async () => {
-      aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-case-alias-')
+      aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-case-alias-')
       Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
       const configuredRoot = join(aliasedRoot.base, 'ALIAS')
       const { watcher } = startDevWatcher(undefined, undefined, [configuredRoot])
@@ -370,7 +370,7 @@ describe('PluginDevWatcher', () => {
   )
 
   it('detects a replacement inode at the same canonical root', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-inode-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-inode-')
     const { watcher } = startDevWatcher(undefined, undefined, [aliasedRoot.realRoot])
     expect(await watcher.checkRootBindings()).toBe(false)
     await rename(aliasedRoot.realRoot, join(aliasedRoot.base, 'old'))
@@ -382,7 +382,7 @@ describe('PluginDevWatcher', () => {
   it.each(['dev', 'ino'] as const)(
     'detects adjacent 64-bit %s values without losing precision',
     async (field) => {
-      aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-large-identity-')
+      aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-large-identity-')
       Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
       const path = aliasedRoot.realRoot
       const previousId = 9_007_199_254_740_992n
@@ -429,7 +429,7 @@ describe('PluginDevWatcher', () => {
   )
 
   it('detects inode-less replacement using full-precision birth time', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-inode-less-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-inode-less-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const path = aliasedRoot.realRoot
     const birthtimeNs = 9_007_199_254_740_992n
@@ -456,7 +456,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('distinguishes an inode ID from the same birth time on an inode-less replacement', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-identity-domain-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-identity-domain-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const path = aliasedRoot.realRoot
     const initial = Object.assign(statSync(path, { bigint: true }), {
@@ -479,7 +479,7 @@ describe('PluginDevWatcher', () => {
   it.each([0n, 77n])(
     'keeps timestamp edits from refreshing a healthy root with inode %s',
     async (ino) => {
-      aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-edited-binding-')
+      aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-edited-binding-')
       Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
       const path = aliasedRoot.realRoot
       const initial = Object.assign(statSync(path, { bigint: true }), {
@@ -517,7 +517,7 @@ describe('PluginDevWatcher', () => {
   )
 
   it('keeps a missing root unavailable while a file occupies its path', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-file-binding-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-file-binding-')
     const path = join(aliasedRoot.realRoot, 'demo')
     const { watcher } = startDevWatcher(undefined, undefined, [path])
     await writeFile(path, '')
@@ -528,7 +528,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('detects missing and restored roots once per transition', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-missing-binding-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-missing-binding-')
     const missingRoot = join(aliasedRoot.realRoot, 'demo')
     const { watcher } = startDevWatcher(undefined, undefined, [missingRoot])
     expect(await watcher.checkRootBindings()).toBe(false)
@@ -541,7 +541,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('uses constant metadata checks without refreshing healthy roots', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-stable-binding-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-stable-binding-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     const { watcher, refresh } = startDevWatcher(undefined, undefined, [aliasedRoot.realRoot])
     vi.mocked(realpath).mockClear()
@@ -556,7 +556,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('refreshes Windows child creates and deletes without restarting the healthy root', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-windows-edits-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-windows-edits-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.useFakeTimers()
     const lifecycle = new PluginServiceHousekeeping()
@@ -591,7 +591,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('recovers a silent Windows root replacement on the existing maintenance tick', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-windows-replacement-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-windows-replacement-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
     vi.useFakeTimers()
     const lifecycle = new PluginServiceHousekeeping()
@@ -623,7 +623,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('retries setup failures only for roots that are present', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-retry-availability-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-retry-availability-')
     Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
     subscribeMock.mockRejectedValue(new Error('native setup failed'))
     const existing = startDevWatcher(undefined, undefined, [aliasedRoot.realRoot])
@@ -635,7 +635,7 @@ describe('PluginDevWatcher', () => {
   })
 
   it('fences a pending binding check after disposal or restart', async () => {
-    aliasedRoot = await createAliasedWatcherRoot('orca-plugin-dev-late-binding-')
+    aliasedRoot = await createAliasedWatcherRoot('quirky-plugin-dev-late-binding-')
     const { watcher } = startDevWatcher(undefined, undefined, [aliasedRoot.realRoot])
     const { promise, resolve: resolveBinding } = Promise.withResolvers<string>()
     vi.mocked(realpath).mockReturnValueOnce(promise)

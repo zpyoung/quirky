@@ -99,9 +99,9 @@ jobs:
         id: module-cache
         if: inputs.module_cache == 'cold' || inputs.module_cache == 'warm'
         env:
-          ORCA_UNIT_SHARD_INDEX: ${{ matrix.shard.index }}
-          ORCA_UNIT_SHARD_COUNT: ${{ matrix.shard.count }}
-          ORCA_UNIT_CACHE_NAMESPACE: ${{ inputs.module_cache_namespace }}
+          QUIRKY_UNIT_SHARD_INDEX: ${{ matrix.shard.index }}
+          QUIRKY_UNIT_SHARD_COUNT: ${{ matrix.shard.count }}
+          QUIRKY_UNIT_CACHE_NAMESPACE: ${{ inputs.module_cache_namespace }}
         run: node config/scripts/ci-unit-module-cache.mjs identity
 
       - name: Restore exact unit module cache
@@ -116,7 +116,7 @@ jobs:
       - name: Validate restored unit module cache or use cold transforms
         if: steps.module-cache.outputs.key != ''
         env:
-          ORCA_UNIT_CACHE_RESTORE_HIT: ${{ steps.module-cache-restore.outputs.cache-hit }}
+          QUIRKY_UNIT_CACHE_RESTORE_HIT: ${{ steps.module-cache-restore.outputs.cache-hit }}
         run: node config/scripts/ci-unit-module-cache.mjs prepare
 
       - uses: actions/download-artifact@v8
@@ -136,13 +136,13 @@ jobs:
 
       - name: Test shard
         env:
-          NODE_COMPILE_CACHE: ${{ runner.temp }}/orca-node-compile-cache-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.node }}-${{ matrix.shard.index }}
-          ORCA_BALANCE_UNIT_SHARDS: '1'
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_UNIT_PHASE_REPORT: ${{ inputs.phase_diagnostics && 'ci-shards/unit-phases.json' || '' }}
+          NODE_COMPILE_CACHE: ${{ runner.temp }}/quirky-node-compile-cache-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.node }}-${{ matrix.shard.index }}
+          QUIRKY_BALANCE_UNIT_SHARDS: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
+          QUIRKY_UNIT_PHASE_REPORT: ${{ inputs.phase_diagnostics && 'ci-shards/unit-phases.json' || '' }}
         run: |
-          ORCA_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
-          export ORCA_SHARD_SOURCE_SHA
+          QUIRKY_SHARD_SOURCE_SHA="$(git rev-parse HEAD)"
+          export QUIRKY_SHARD_SOURCE_SHA
           node config/scripts/run-vitest.mjs run --config config/vitest.config.ts \
             --shard=${{ matrix.shard.index }}/${{ matrix.shard.count }} \
             ${{ runner.arch == 'ARM64' && '--maxWorkers=4' || '' }}
@@ -216,8 +216,8 @@ jobs:
       - name: Test external Chromium browser provider
         if: inputs.browser_contract && success()
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_BROWSER_EXECUTABLE: ${{ steps.browser_executable.outputs.executable }}
+          QUIRKY_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BROWSER_EXECUTABLE: ${{ steps.browser_executable.outputs.executable }}
         run: |
           pnpm exec vitest run --config config/vitest.config.ts \
-            src/main/orcad/external-chromium-browser-process.integration.test.ts
+            src/main/quirkyd/external-chromium-browser-process.integration.test.ts

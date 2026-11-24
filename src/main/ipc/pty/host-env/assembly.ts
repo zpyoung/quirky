@@ -9,14 +9,14 @@ import { ensureOpenCodeStartupPromptForLaunch } from '../../../opencode/opencode
 import { mimoCodeHookService } from '../../../mimo/hook-service'
 import { agentHookServer } from '../../../agent-hooks/server'
 import { piTitlebarExtensionService } from '../../../pi/titlebar-extension-service'
-import { prependOrcaCliDirToChildPath } from '../../../cli/orca-cli-child-path'
+import { prependQuirkyCliDirToChildPath } from '../../../cli/quirky-cli-child-path'
 import { stripLegacyTerminalShimEnv } from '../../../pty/legacy-terminal-shim-dir'
 import { resolveCodexShellLaunchPreflightCommand } from '../../../pty/codex-shell-launch-preflight'
 import { scheduleCodexHookReconcile } from '../../../codex/codex-hook-reconcile'
 import { buildConfiguredProxyEnv } from '../../../../shared/network-proxy'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { BuildPtyHostEnvOptions } from './types'
-import { stripInheritedOrcaCodexHomeOverride } from './codex-home'
+import { stripInheritedQuirkyCodexHomeOverride } from './codex-home'
 import {
   clearPiAgentShadowEnv,
   exposePiManagedExtensionEnv,
@@ -97,19 +97,19 @@ export function buildPtyHostEnv(
       const preexistingMimocodeHome = resolveMimocodeSourceHome(baseEnv)
       Object.assign(baseEnv, mimoCodeHookService.buildPtyEnv(id, preexistingMimocodeHome))
       if (baseEnv.MIMOCODE_HOME) {
-        baseEnv.ORCA_MIMOCODE_HOME = baseEnv.MIMOCODE_HOME
+        baseEnv.QUIRKY_MIMOCODE_HOME = baseEnv.MIMOCODE_HOME
         if (preexistingMimocodeHome) {
-          baseEnv.ORCA_MIMOCODE_SOURCE_HOME = preexistingMimocodeHome
+          baseEnv.QUIRKY_MIMOCODE_SOURCE_HOME = preexistingMimocodeHome
         } else {
-          delete baseEnv.ORCA_MIMOCODE_SOURCE_HOME
+          delete baseEnv.QUIRKY_MIMOCODE_SOURCE_HOME
         }
       }
     }
   } else {
     restoreOrStripOverlayEnv(baseEnv, {
       primary: 'MIMOCODE_HOME',
-      overlay: 'ORCA_MIMOCODE_HOME',
-      source: 'ORCA_MIMOCODE_SOURCE_HOME'
+      overlay: 'QUIRKY_MIMOCODE_HOME',
+      source: 'QUIRKY_MIMOCODE_SOURCE_HOME'
     })
   }
 
@@ -121,7 +121,7 @@ export function buildPtyHostEnv(
     Object.assign(baseEnv, agentHookServer.buildPtyEnv())
   }
 
-  // Why: PI_CODING_AGENT_DIR is the user's config/session root; install only Orca-owned extension files, don't override it.
+  // Why: PI_CODING_AGENT_DIR is the user's config/session root; install only Quirky-owned extension files, don't override it.
   if (opts.agentStatusHooksEnabled) {
     clearPiAgentShadowEnv(baseEnv, 'pi')
     clearPiAgentShadowEnv(baseEnv, 'omp')
@@ -166,31 +166,31 @@ export function buildPtyHostEnv(
     // Why: nested PTYs must not inherit stale source or overlay state from another agent.
     restoreOrStripOverlayEnv(baseEnv, {
       primary: 'PI_CODING_AGENT_DIR',
-      overlay: 'ORCA_PI_CODING_AGENT_DIR',
-      source: 'ORCA_PI_SOURCE_AGENT_DIR'
+      overlay: 'QUIRKY_PI_CODING_AGENT_DIR',
+      source: 'QUIRKY_PI_SOURCE_AGENT_DIR'
     })
     restoreOrStripOverlayEnv(baseEnv, {
       primary: 'PI_CODING_AGENT_DIR',
-      overlay: 'ORCA_OMP_CODING_AGENT_DIR',
-      source: 'ORCA_OMP_SOURCE_AGENT_DIR'
+      overlay: 'QUIRKY_OMP_CODING_AGENT_DIR',
+      source: 'QUIRKY_OMP_SOURCE_AGENT_DIR'
     })
     if (shouldPrepareOmpShadow) {
       Object.assign(baseEnv, piTitlebarExtensionService.buildFreshOmpEnv())
     }
-    delete baseEnv.ORCA_OMP_STATUS_EXTENSION
-    delete baseEnv.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR
-    delete baseEnv.ORCA_PRIME_AGENT_STATUS_EXTENSION
+    delete baseEnv.QUIRKY_OMP_STATUS_EXTENSION
+    delete baseEnv.QUIRKY_PRIME_AGENT_SOURCE_AGENT_DIR
+    delete baseEnv.QUIRKY_PRIME_AGENT_STATUS_EXTENSION
   }
 
-  // Why: keep the Codex home override PTY-scoped so dev/prod Orcas don't share hooks through ~/.codex.
+  // Why: keep the Codex home override PTY-scoped so dev/prod Quirkys don't share hooks through ~/.codex.
   if (opts.skipCodexHomeEnv) {
     delete baseEnv.CODEX_HOME
-    delete baseEnv.ORCA_CODEX_HOME
-    delete baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT
+    delete baseEnv.QUIRKY_CODEX_HOME
+    delete baseEnv.QUIRKY_CODEX_LAUNCH_PREFLIGHT
   } else if (opts.selectedCodexHomePath) {
     baseEnv.CODEX_HOME = opts.selectedCodexHomePath
     // Why: user startup files may re-export CODEX_HOME; shell-ready wrappers restore this runtime home before Codex launches.
-    baseEnv.ORCA_CODEX_HOME = opts.selectedCodexHomePath
+    baseEnv.QUIRKY_CODEX_HOME = opts.selectedCodexHomePath
     const preflightCommand = resolveCodexShellLaunchPreflightCommand({
       hooksEnabled:
         opts.agentStatusHooksEnabled && isTuiAgentEnabled('codex', opts.disabledTuiAgents),
@@ -199,26 +199,26 @@ export function buildPtyHostEnv(
       resourcesPath: opts.resourcesPath
     })
     if (preflightCommand) {
-      baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT = preflightCommand
+      baseEnv.QUIRKY_CODEX_LAUNCH_PREFLIGHT = preflightCommand
     } else {
-      delete baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT
+      delete baseEnv.QUIRKY_CODEX_LAUNCH_PREFLIGHT
     }
-  } else if (opts.stripInheritedOrcaCodexHome) {
-    stripInheritedOrcaCodexHomeOverride(baseEnv)
-    delete baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT
+  } else if (opts.stripInheritedQuirkyCodexHome) {
+    stripInheritedQuirkyCodexHomeOverride(baseEnv)
+    delete baseEnv.QUIRKY_CODEX_LAUNCH_PREFLIGHT
   } else {
-    delete baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT
+    delete baseEnv.QUIRKY_CODEX_LAUNCH_PREFLIGHT
   }
 
   // Why each native spawn: a codex typed in the pane reads ~/.codex, and Codex may have updated since.
   scheduleCodexHookReconcile()
 
   if (!opts.isPackaged) {
-    baseEnv.ORCA_USER_DATA_PATH ??= opts.userDataPath
+    baseEnv.QUIRKY_USER_DATA_PATH ??= opts.userDataPath
   }
-  delete baseEnv.ORCA_CLI_COMMAND
-  delete baseEnv.ORCA_WSL_CLI_DIR
-  prependOrcaCliDirToChildPath(baseEnv, {
+  delete baseEnv.QUIRKY_CLI_COMMAND
+  delete baseEnv.QUIRKY_WSL_CLI_DIR
+  prependQuirkyCliDirToChildPath(baseEnv, {
     isPackaged: opts.isPackaged,
     userDataPath: opts.userDataPath,
     resourcesPath: opts.resourcesPath
@@ -229,7 +229,7 @@ export function buildPtyHostEnv(
     baseEnv.BROWSER === undefined &&
     process.env.BROWSER === undefined
   ) {
-    baseEnv.BROWSER = 'orca open-url --url %s'
+    baseEnv.BROWSER = 'quirky open-url --url %s'
   }
   // Why the browser-relay flag: both mean a headless runtime whose viewer is another machine.
   applyCodexRemoteViewerClipboardEnv(baseEnv, {

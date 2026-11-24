@@ -1,9 +1,9 @@
 import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 test.use({ seedTestRepo: false })
 
@@ -14,12 +14,12 @@ declare global {
 
 for (const delayCreateResponse of [false, true]) {
   test(`created groups survive sidebar expansion (${delayCreateResponse ? 'refresh first' : 'ordinary timing'})`, async ({
-    orcaPage,
+    quirkyPage,
     electronApp,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-group-visibility-')))
+    await waitForSessionReady(quirkyPage)
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-group-visibility-')))
     registerPostElectronShutdownCleanup(async () => {
       rmSync(root, { recursive: true, force: true })
     })
@@ -55,7 +55,7 @@ for (const delayCreateResponse of [false, true]) {
     for (const repoPath of paths.slice(1)) {
       cpSync(templatePath, repoPath, { recursive: true, force: false, errorOnExist: true })
     }
-    const repoIds = await orcaPage.evaluate(async (paths) => {
+    const repoIds = await quirkyPage.evaluate(async (paths) => {
       const store = window.__store!
       for (const repoPath of paths) {
         await window.api.repos.add({ path: repoPath })
@@ -93,14 +93,14 @@ for (const delayCreateResponse of [false, true]) {
         })
       })
     }
-    const creation = orcaPage.evaluate(() =>
+    const creation = quirkyPage.evaluate(() =>
       window.__store!.getState().createProjectGroup('Crowded group', 'local')
     )
     if (delayCreateResponse) {
       try {
         await expect
           .poll(() =>
-            orcaPage.evaluate(() =>
+            quirkyPage.evaluate(() =>
               window
                 .__store!.getState()
                 .projectGroups.some((group) => group.name === 'Crowded group')
@@ -122,7 +122,7 @@ for (const delayCreateResponse of [false, true]) {
     if (!createdGroup) {
       throw new Error('Group creation failed')
     }
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       async ({ repoIds, groupId }) => {
         const store = window.__store!
         for (const repoId of repoIds.slice(0, 2)) {
@@ -141,7 +141,7 @@ for (const delayCreateResponse of [false, true]) {
       { repoIds, groupId: createdGroup.id }
     )
 
-    const scroller = orcaPage.locator('[data-worktree-sidebar]')
+    const scroller = quirkyPage.locator('[data-worktree-sidebar]')
     const group = scroller.locator(`[data-project-group-header-id="${createdGroup.id}"]`)
     const groupedRepos = repoIds
       .slice(0, 2)
@@ -149,7 +149,7 @@ for (const delayCreateResponse of [false, true]) {
     for (const repo of groupedRepos) {
       await expect(repo).toBeVisible()
     }
-    await orcaPage.screenshot({ path: testInfo.outputPath('before-expansion.png') })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('before-expansion.png') })
     for (const repoId of repoIds.slice(2, 12)) {
       const repo = scroller.locator(`[data-repo-header-id="${repoId}"]`)
       await expect
@@ -174,7 +174,7 @@ for (const delayCreateResponse of [false, true]) {
       }
     }
     await expect(group).toHaveCount(1)
-    await orcaPage.evaluate(() =>
+    await quirkyPage.evaluate(() =>
       window
         .__store!.getState()
         .fetchProjectGroups({ runtimeEnvironmentId: null, throwOnError: true })
@@ -188,6 +188,6 @@ for (const delayCreateResponse of [false, true]) {
     for (const repo of groupedRepos) {
       await expect(repo).toBeVisible()
     }
-    await orcaPage.screenshot({ path: testInfo.outputPath('after-expansion.png') })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('after-expansion.png') })
   })
 }

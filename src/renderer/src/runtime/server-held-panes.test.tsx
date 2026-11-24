@@ -54,7 +54,7 @@ const hoisted = vi.hoisted(
   })
 )
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
@@ -83,7 +83,7 @@ const { setServers, mirroredStore, install, uninstallAll } = createServerHarness
 const TAB_1 = toWebTerminalSurfaceTabId('host-tab-1')
 const PANE_KEY = makePaneKey(TAB_1, LEAF_ID)
 const REOPENS: Server = { ...CAPABLE, reopensHeldPanes: true }
-const TITLE = 'This terminal was opened in a newer version of Orca'
+const TITLE = 'This terminal was opened in a newer version of Quirky'
 const FAILED_TITLE = "Couldn't reopen this terminal"
 
 /** ENV's workspace with its one pane carrying `status`, as the server publishes it. */

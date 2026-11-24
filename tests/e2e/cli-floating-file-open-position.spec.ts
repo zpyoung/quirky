@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { runProcess } from '@orca/process-host'
-import { expect, test } from './helpers/orca-app'
+import { runProcess } from '@quirky/process-host'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { startHiddenRendererFrameCapture } from './helpers/hidden-renderer-frame-capture'
 
@@ -10,11 +10,11 @@ const PANEL = '[data-floating-terminal-panel][aria-hidden="false"]'
 
 test('CLI positions floating files without changing the main workspace or reclaiming its input', async ({
   electronApp,
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  const mainWorktreeId = await waitForActiveWorktree(orcaPage)
-  const mainRoot = await orcaPage.evaluate(
+  await waitForSessionReady(quirkyPage)
+  const mainWorktreeId = await waitForActiveWorktree(quirkyPage)
+  const mainRoot = await quirkyPage.evaluate(
     (id) =>
       Object.values(window.__store?.getState().worktreesByRepo ?? {})
         .flat()
@@ -33,7 +33,7 @@ test('CLI positions floating files without changing the main workspace or reclai
       bookmarks: []
     })
   }, roots.floating)
-  await orcaPage.evaluate(async (floatingPath) => {
+  await quirkyPage.evaluate(async (floatingPath) => {
     const store = window.__store
     if (!store) {
       throw new Error('Store unavailable')
@@ -72,13 +72,13 @@ test('CLI positions floating files without changing the main workspace or reclai
         '--json',
         ...flags
       ],
-      env: { ...process.env, ORCA_USER_DATA_PATH: userDataDir },
+      env: { ...process.env, QUIRKY_USER_DATA_PATH: userDataDir },
       timeoutMs: 30_000
     })
     expect(result.code, `${result.stderr}\n${result.stdout}`).toBe(0)
   }
   const pendingPosition = () =>
-    orcaPage.evaluate(() => {
+    quirkyPage.evaluate(() => {
       const reveal = window.__store?.getState().pendingEditorReveal
       return reveal && { line: reveal.line, column: reveal.column, eligible: reveal.canApply?.() }
     })
@@ -88,7 +88,7 @@ test('CLI positions floating files without changing the main workspace or reclai
     eligible: true
   }
   const resumeHiddenRendererFrames = async (): Promise<void> => {
-    const browserWindow = await electronApp.browserWindow(orcaPage)
+    const browserWindow = await electronApp.browserWindow(quirkyPage)
     // Linux throttles hidden renderers to one frame per second, beyond this reveal's frame budget.
     const state = await browserWindow.evaluate((window) => {
       window.webContents.setBackgroundThrottling(false)
@@ -104,17 +104,17 @@ test('CLI positions floating files without changing the main workspace or reclai
   let stopFrameCapture: (() => Promise<void>) | undefined
   try {
     await open(mainWorktreeId, relativePath, ['--focus'])
-    await expect(orcaPage.locator('.monaco-editor:visible')).toHaveCount(1)
-    const mainProbe = await orcaPage.evaluateHandle(() => window.__monacoEditorE2E)
-    const mainInput = orcaPage
+    await expect(quirkyPage.locator('.monaco-editor:visible')).toHaveCount(1)
+    const mainProbe = await quirkyPage.evaluateHandle(() => window.__monacoEditorE2E)
+    const mainInput = quirkyPage
       .locator('.monaco-editor:visible')
       .first()
       .getByRole('textbox', { name: 'Editor content' })
     await open(FLOATING, relativePath, ['--focus', '--line', '300', '--column', '7'])
-    const panel = orcaPage.locator(PANEL)
+    const panel = quirkyPage.locator(PANEL)
     await expect(panel).toBeVisible()
     await expect(panel.locator('.monaco-editor:visible')).toHaveCount(1)
-    const floatingProbe = await orcaPage.evaluateHandle(() => window.__monacoEditorE2E)
+    const floatingProbe = await quirkyPage.evaluateHandle(() => window.__monacoEditorE2E)
     const cursor = () =>
       floatingProbe.evaluate((probe) => {
         const selection = probe?.snapshot().selection
@@ -122,7 +122,7 @@ test('CLI positions floating files without changing the main workspace or reclai
       })
     await expect.poll(cursor).toEqual({ line: 300, column: 7 })
     const floatingInput = panel.getByRole('textbox', { name: 'Editor content' })
-    expect(await orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId)).toBe(
+    expect(await quirkyPage.evaluate(() => window.__store?.getState().activeWorktreeId)).toBe(
       mainWorktreeId
     )
     expect(
@@ -132,7 +132,7 @@ test('CLI positions floating files without changing the main workspace or reclai
     await expect(panel.locator('.editor-header-path')).toContainText(relativePath)
     expect(await cursor()).toEqual({ line: 300, column: 7 })
     await open(FLOATING, relativePath, ['--line', '17', '--column', '3'])
-    await orcaPage.waitForTimeout(200)
+    await quirkyPage.waitForTimeout(200)
     expect(await cursor()).toEqual({ line: 300, column: 7 })
     await mainInput.focus()
     await floatingInput.focus()
@@ -150,8 +150,8 @@ test('CLI positions floating files without changing the main workspace or reclai
     await mainInput.focus()
     expect(await pendingPosition()).toEqual({ ...oversizedPosition, eligible: false })
     await resumeHiddenRendererFrames()
-    stopFrameCapture = await startHiddenRendererFrameCapture(orcaPage)
-    await orcaPage.waitForTimeout(3500)
+    stopFrameCapture = await startHiddenRendererFrameCapture(quirkyPage)
+    await quirkyPage.waitForTimeout(3500)
     expect(await cursor()).toEqual({ line: 17, column: 3 })
     await expect(mainInput).toBeFocused()
     await floatingInput.focus()
@@ -161,7 +161,7 @@ test('CLI positions floating files without changing the main workspace or reclai
     const proofDir = path.join(process.cwd(), 'validation-screenshots', 'file-position-floating')
     mkdirSync(proofDir, { recursive: true })
     await testInfo.attach('floating-position-clamped.png', {
-      body: await orcaPage.screenshot({ path: path.join(proofDir, 'clamped.png') }),
+      body: await quirkyPage.screenshot({ path: path.join(proofDir, 'clamped.png') }),
       contentType: 'image/png'
     })
     await open(FLOATING, emptyPath, [
@@ -176,7 +176,7 @@ test('CLI positions floating files without changing the main workspace or reclai
     await expect
       .poll(
         () =>
-          orcaPage.evaluate(() => {
+          quirkyPage.evaluate(() => {
             const selection = window.__monacoEditorE2E?.snapshot().selection
             return { line: selection?.positionLineNumber, column: selection?.positionColumn }
           }),
@@ -184,9 +184,9 @@ test('CLI positions floating files without changing the main workspace or reclai
       )
       .toEqual({ line: 1, column: 1 })
     await expect
-      .poll(() => orcaPage.evaluate(() => window.__store?.getState().pendingEditorReveal))
+      .poll(() => quirkyPage.evaluate(() => window.__store?.getState().pendingEditorReveal))
       .toBeNull()
-    expect(await orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId)).toBe(
+    expect(await quirkyPage.evaluate(() => window.__store?.getState().activeWorktreeId)).toBe(
       mainWorktreeId
     )
     expect(

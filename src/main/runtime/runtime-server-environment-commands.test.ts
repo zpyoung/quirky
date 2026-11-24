@@ -10,7 +10,7 @@ describe('RuntimeServerEnvironmentCommands.browseDirectory', () => {
   let root: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-server-browse-symlink-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-server-browse-symlink-'))
   })
 
   afterEach(async () => {

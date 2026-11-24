@@ -1,6 +1,6 @@
 import type { PtySpawnIpcDeps } from '../../ipc/pty/ipc/spawn-types'
 import type { PtyRuntimeControllerDeps } from '../../ipc/pty/runtime/controller-deps'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { Store } from './store'
 
 function unexpectedPreflight(): never {
@@ -8,7 +8,7 @@ function unexpectedPreflight(): never {
 }
 
 export function createPtySpawnCommitDependencies(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store
 ): PtySpawnIpcDeps & PtyRuntimeControllerDeps {
   return {

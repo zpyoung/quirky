@@ -1,20 +1,20 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { startBrowserLinkServer } from './helpers/browser-link-server'
 
 for (const theme of ['light', 'dark'] as const) {
   test(`Cmd+J offers a website first and opens it with Enter (${theme})`, async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await orcaPage.evaluate(async (theme) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await quirkyPage.evaluate(async (theme) => {
       const state = window.__store!.getState()
       await state.updateSettingsOrThrow({ theme })
       state.openModal('worktree-palette')
     }, theme)
-    const palette = orcaPage.getByRole('dialog', { name: 'Jump to...' })
+    const palette = quirkyPage.getByRole('dialog', { name: 'Jump to...' })
     const input = palette.locator('[cmdk-input]')
     const website = palette.locator('[cmdk-item][data-value="quick-action:navigate-to-url"]')
     await input.fill('brex.com')
@@ -36,7 +36,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(website).toContainText('Go to readthedocs.io')
     await expect(website).toHaveAttribute('data-selected', 'true')
 
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       window.__store!.setState((state) => ({
         worktreesByRepo: Object.fromEntries(
           Object.entries(state.worktreesByRepo).map(([repoId, worktrees]) => [
@@ -63,10 +63,10 @@ for (const theme of ['light', 'dark'] as const) {
       await input.press('Enter')
       await expect(palette).toHaveCount(0)
       await expect(
-        orcaPage.locator('[data-orca-browser-address-bar="true"]').filter({ visible: true })
+        quirkyPage.locator('[data-quirky-browser-address-bar="true"]').filter({ visible: true })
       ).toHaveValue(server.sourceUrl)
       await expect(
-        orcaPage.locator('[data-tab-id]').filter({ hasText: 'Source page' }).first()
+        quirkyPage.locator('[data-tab-id]').filter({ hasText: 'Source page' }).first()
       ).toBeVisible()
       expect(
         await electronApp.evaluate(({ BrowserWindow }) =>

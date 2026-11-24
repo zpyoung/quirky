@@ -56,7 +56,7 @@ import { resetStructuredAgentSessionSendsForTests } from './structured-agent-ses
 import { clearNativeChatDraftCacheForTests } from './native-chat-draft-cache'
 
 const SESSION = 'session-1'
-const KEY = `orca:desktopStructuredAgentSessionOutbox:v1:${SESSION}`
+const KEY = `quirky:desktopStructuredAgentSessionOutbox:v1:${SESSION}`
 const IN_DOUBT = '1000-in-doubt'
 const SECOND = '2000-second'
 const THIRD = '3000-third'

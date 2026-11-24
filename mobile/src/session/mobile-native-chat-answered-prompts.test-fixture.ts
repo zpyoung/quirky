@@ -5,7 +5,7 @@ import type { AgentJournalRenderItem } from '../../../src/shared/agent-session-j
 
 export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
   {
-    itemId: 'orca:1792024009236-87ed41e5430c47008ef7978ca5d60505',
+    itemId: 'quirky:1792024009236-87ed41e5430c47008ef7978ca5d60505',
     revision: 0,
     body: {
       kind: 'message',
@@ -25,7 +25,7 @@ export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
   },
   {
     itemId:
-      'orca:claude-tool%3A2ee61cec-1207-4f44-a915-b6adbcbf169b%3Atoolu_01FhhC72BuRiD3d9hXkAsURD',
+      'quirky:claude-tool%3A2ee61cec-1207-4f44-a915-b6adbcbf169b%3Atoolu_01FhhC72BuRiD3d9hXkAsURD',
     revision: 2,
     body: {
       kind: 'tool-call',
@@ -53,7 +53,7 @@ export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
   },
   {
     itemId:
-      'orca:claude-prompt%3Aclaude_c65b4304_2acf_4eec_a749_e06876328e0c%3A79c45210-730e-482c-82bd-db0708c992e5',
+      'quirky:claude-prompt%3Aclaude_c65b4304_2acf_4eec_a749_e06876328e0c%3A79c45210-730e-482c-82bd-db0708c992e5',
     revision: 2,
     body: {
       kind: 'approval',
@@ -114,7 +114,7 @@ export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
     }
   },
   {
-    itemId: 'orca:1792024048049-e58989ce33eb411a970225d03d2e4a18',
+    itemId: 'quirky:1792024048049-e58989ce33eb411a970225d03d2e4a18',
     revision: 0,
     body: {
       kind: 'message',
@@ -134,7 +134,7 @@ export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
   },
   {
     itemId:
-      'orca:claude-tool%3A2ee61cec-1207-4f44-a915-b6adbcbf169b%3Atoolu_01WByTgphD4HFByq9zPKXn2J',
+      'quirky:claude-tool%3A2ee61cec-1207-4f44-a915-b6adbcbf169b%3Atoolu_01WByTgphD4HFByq9zPKXn2J',
     revision: 2,
     body: {
       kind: 'tool-call',
@@ -177,7 +177,7 @@ export const ANSWERED_PROMPT_ITEMS: AgentJournalRenderItem[] = [
   },
   {
     itemId:
-      'orca:claude-prompt%3Aclaude_c65b4304_2acf_4eec_a749_e06876328e0c%3A6fd8be6a-830f-44b4-a3ef-a7f044cd4a4f',
+      'quirky:claude-prompt%3Aclaude_c65b4304_2acf_4eec_a749_e06876328e0c%3A6fd8be6a-830f-44b4-a3ef-a7f044cd4a4f',
     revision: 2,
     body: {
       kind: 'question',

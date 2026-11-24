@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import type { FederationRuntime } from '../../runtime/orchestration/federation-runtime'
 import type { MessageType, OrchestrationDb } from '../../runtime/orchestration/db'
 import type { RelayedMessage } from '../../runtime/orchestration/federation-sync-message'
@@ -24,7 +24,7 @@ export type OrchestrationSubmissionPreflight = (
 const preflights = new WeakMap<FederationRuntime, OrchestrationSubmissionPreflight>()
 
 export function bindOrchestrationSubmissionPreflight(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   preflight: OrchestrationSubmissionPreflight
 ): void {
   preflights.set(runtime, preflight)
@@ -43,7 +43,7 @@ type RejectedSubmissionReceipt = {
 }
 
 export async function preflightPointToPointHeimdallSubmission(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   runId?: string
   dispatchId?: string
   from: string

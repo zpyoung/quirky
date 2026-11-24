@@ -64,7 +64,7 @@ export async function createQueuedMessageTestRig(
     probeOwner?: StructuredAgentSessionHostDeps['probeOwner']
   } = {}
 ) {
-  const root = await mkdtemp(join(tmpdir(), 'orca-queued-messages-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-queued-messages-'))
   resetHostTestOperationIds()
   const store = await openTestAgentSessionRecordStore(root)
   const provider = createQueuedRigProvider(store, options, () => host)

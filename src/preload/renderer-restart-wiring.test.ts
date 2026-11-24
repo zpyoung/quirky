@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { ORCA_RENDERER_UNLOAD_PREVENTED_EVENT } from '../shared/renderer-shutdown-events'
+import { QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT } from '../shared/renderer-shutdown-events'
 import {
-  ORCA_APP_RESTART_ABORTED_EVENT,
-  ORCA_APP_RESTART_STARTED_EVENT,
-  ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT
+  QUIRKY_APP_RESTART_ABORTED_EVENT,
+  QUIRKY_APP_RESTART_STARTED_EVENT,
+  QUIRKY_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT
 } from '../shared/updater-renderer-events'
 import {
   prepareAndInvokeAppRestart,
@@ -34,8 +34,8 @@ describe('renderer restart wiring', () => {
       const aborted = vi.fn()
       const started = vi.fn()
       const checkpoint = vi.fn(async () => {})
-      eventTarget.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, aborted)
-      eventTarget.addEventListener(ORCA_APP_RESTART_STARTED_EVENT, started)
+      eventTarget.addEventListener(QUIRKY_APP_RESTART_ABORTED_EVENT, aborted)
+      eventTarget.addEventListener(QUIRKY_APP_RESTART_STARTED_EVENT, started)
       await prepareAndInvokeAppRestart(
         eventTarget,
         async () => {
@@ -68,7 +68,7 @@ describe('renderer restart wiring', () => {
   it('refuses overlapping preparation without abandoning the accepted restart', async () => {
     const eventTarget = new EventTarget()
     const aborted = vi.fn()
-    eventTarget.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, aborted)
+    eventTarget.addEventListener(QUIRKY_APP_RESTART_ABORTED_EVENT, aborted)
     const checkpoint = Promise.withResolvers<void>()
     const invoke = vi.fn(async () => true)
     const first = prepareAndInvokeAppRestart(eventTarget, invoke, () => checkpoint.promise)
@@ -86,8 +86,8 @@ describe('renderer restart wiring', () => {
   it('retains late commitment across an unrelated unload veto', async () => {
     const eventTarget = new EventTarget()
     const abandoned = vi.fn()
-    eventTarget.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, abandoned)
-    eventTarget.addEventListener(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT, abandoned)
+    eventTarget.addEventListener(QUIRKY_APP_RESTART_ABORTED_EVENT, abandoned)
+    eventTarget.addEventListener(QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT, abandoned)
     const { ipcRenderer } = restartIpc(eventTarget)
     const checkpoint = vi.fn(async () => {})
     await prepareAndInvokeAppRestart(eventTarget, async () => true, checkpoint, Boolean)
@@ -127,8 +127,8 @@ describe('renderer restart wiring', () => {
     const unloadPrevented = vi.fn()
     const restartAborted = vi.fn()
     const { ipcRenderer, handleStatus, abort } = restartIpc(eventTarget)
-    eventTarget.addEventListener(ORCA_RENDERER_UNLOAD_PREVENTED_EVENT, unloadPrevented)
-    eventTarget.addEventListener(ORCA_APP_RESTART_ABORTED_EVENT, restartAborted)
+    eventTarget.addEventListener(QUIRKY_RENDERER_UNLOAD_PREVENTED_EVENT, unloadPrevented)
+    eventTarget.addEventListener(QUIRKY_APP_RESTART_ABORTED_EVENT, restartAborted)
     ipcRenderer.emit('updater:status', {}, { state: 'error', message: 'install failed' })
     // Why: main abandons an install without any status when its verdict outlived the cycle.
     ipcRenderer.emit('updater:quitAndInstallAborted')
@@ -144,7 +144,7 @@ describe('renderer restart wiring', () => {
   it('marks preparation before invoking main and aborts on IPC failure', async () => {
     const eventTarget = new EventTarget()
     const calls: string[] = []
-    eventTarget.addEventListener(ORCA_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT, () => {
+    eventTarget.addEventListener(QUIRKY_UPDATER_QUIT_AND_INSTALL_STARTED_EVENT, () => {
       calls.push('prepared')
     })
     const relay = {

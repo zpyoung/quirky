@@ -3,9 +3,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { OrcadManagedRuntimeStatus } from '../../../../shared/orcad-managed-runtime'
+import type { QuirkydManagedRuntimeStatus } from '../../../../shared/quirkyd-managed-runtime'
 import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-environments'
-import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import type { ManagedQuirkydPreloadApi } from '../../../../preload/api/managed-quirkyd-api'
 import {
   ManagedServerConfirmations,
   ManagedServerDetailLines,
@@ -31,7 +31,7 @@ function ManagedRowHarness({
   api,
   environment
 }: {
-  api: ManagedOrcadPreloadApi
+  api: ManagedQuirkydPreloadApi
   environment: PublicKnownRuntimeEnvironment
 }): React.JSX.Element {
   const lifecycle = useManagedServerLifecycle({
@@ -58,7 +58,7 @@ afterEach(() => {
   document.body.innerHTML = ''
 })
 
-const status: OrcadManagedRuntimeStatus = {
+const status: QuirkydManagedRuntimeStatus = {
   environmentId: 'env-1',
   sshTargetId: 'ssh-1',
   activeVersion: '1.2.0',
@@ -71,15 +71,15 @@ const status: OrcadManagedRuntimeStatus = {
   deferredUpdate: {
     outcome: 'deferred',
     candidateVersion: '1.3.0',
-    code: 'orcad_update_terminal_census_unavailable',
+    code: 'quirkyd_update_terminal_census_unavailable',
     reason: 'the daemon did not answer',
     deferredAt: 'now'
   }
 }
 
 async function render(
-  rowStatus: OrcadManagedRuntimeStatus = status,
-  getStatus: () => Promise<OrcadManagedRuntimeStatus> = async () => rowStatus
+  rowStatus: QuirkydManagedRuntimeStatus = status,
+  getStatus: () => Promise<QuirkydManagedRuntimeStatus> = async () => rowStatus
 ) {
   const stop = vi.fn(async () => ({ outcome: 'unlinked' }))
   const forget = vi.fn(async () => ({ outcome: 'forgotten' }))
@@ -89,7 +89,7 @@ async function render(
       : {
           outcome: 'refused',
           verdict: 'unverifiable',
-          code: 'orcad_recovery_changed_state'
+          code: 'quirkyd_recovery_changed_state'
         }
   )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the row calls only getStatus, stop, forget and recover here.
@@ -98,7 +98,7 @@ async function render(
     stop,
     forget,
     recover
-  } as unknown as ManagedOrcadPreloadApi
+  } as unknown as ManagedQuirkydPreloadApi
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the row reads only id and name.
   const environment = { id: 'env-1', name: 'Builder' } as PublicKnownRuntimeEnvironment
   const container = document.createElement('div')

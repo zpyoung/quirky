@@ -1,6 +1,6 @@
 // One home for shell-argument quoting. Each spelling below is a separate contract: callers embed,
 // compare or parse back these exact bytes, so variants stay separate functions, never flags.
-// PowerShell quoting lives in powershell-native-argument.ts; CommandLineToArgvW in @orca/process-host.
+// PowerShell quoting lives in powershell-native-argument.ts; CommandLineToArgvW in @quirky/process-host.
 
 /** POSIX sh single-quoting: each `'` closes the quote, is escaped, and reopens it (`'\''`). */
 export function quotePosixShell(value: string): string {

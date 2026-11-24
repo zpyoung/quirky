@@ -83,7 +83,7 @@ describe('send without ledger policy', () => {
     try {
       await expect(host.send(CALLER, expiredParams('long gone'))).resolves.toMatchObject({
         ok: false,
-        refusal: { details: { reason: 'journalWrittenByNewerOrca' } }
+        refusal: { details: { reason: 'journalWrittenByNewerQuirky' } }
       })
     } finally {
       // Teardown stops the live child, which writes.

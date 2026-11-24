@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { HEADLESS_LEAF_ID, TEST_WORKTREE_ID } from '../../orca-runtime-test-fixtures.spec'
+import { HEADLESS_LEAF_ID, TEST_WORKTREE_ID } from '../../quirky-runtime-test-fixtures.spec'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import type { PaneStartStatuses } from '../../pane-start-statuses'
 import { SURFACE_TAB_ID, surfaceRuntime } from './terminal-surface-replies.test-fixture'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const PANE_KEY = makePaneKey(SURFACE_TAB_ID, HEADLESS_LEAF_ID)
 

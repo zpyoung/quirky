@@ -1,12 +1,12 @@
 import { writeFileSync, rmSync, mkdtempSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { createPdfFindFixture } from './helpers/pdf-find-fixture'
 import { pressShortcut } from './helpers/shortcuts'
 
 test('PDF counter follows navigation, new queries, and reopening', async ({
-  orcaPage,
+  quirkyPage,
   electronApp,
   seededRepoPath,
   registerPostElectronShutdownCleanup
@@ -14,7 +14,7 @@ test('PDF counter follows navigation, new queries, and reopening', async ({
   const filePath = path.join(seededRepoPath, 'pdf-find-fixture.pdf')
   writeFileSync(filePath, createPdfFindFixture())
   registerPostElectronShutdownCleanup(async () => rmSync(filePath, { force: true }))
-  await orcaPage.evaluate((filePath) => {
+  await quirkyPage.evaluate((filePath) => {
     const state = window.__store?.getState()
     if (!state?.activeWorktreeId) {
       throw new Error('Missing fixture worktree')
@@ -27,14 +27,14 @@ test('PDF counter follows navigation, new queries, and reopening', async ({
       mode: 'edit'
     })
   }, filePath)
-  await expect(orcaPage.locator('.pdfViewer .page')).toHaveCount(3)
-  await expect(orcaPage.locator('.pdfViewer .page').first().locator('.textLayer')).toContainText(
+  await expect(quirkyPage.locator('.pdfViewer .page')).toHaveCount(3)
+  await expect(quirkyPage.locator('.pdfViewer .page').first().locator('.textLayer')).toContainText(
     'needle result 1'
   )
-  await pressShortcut(orcaPage, 'f')
-  const input = orcaPage.getByPlaceholder('Find in page...')
+  await pressShortcut(quirkyPage, 'f')
+  const input = quirkyPage.getByPlaceholder('Find in page...')
   const bar = input.locator('..')
-  const selected = orcaPage.locator('.pdfViewer .highlight.selected')
+  const selected = quirkyPage.locator('.pdfViewer .highlight.selected')
   const observations: object[] = []
   const capture = async (name: string, counter: string, selectedText?: string): Promise<void> => {
     if (selectedText) {
@@ -48,7 +48,7 @@ test('PDF counter follows navigation, new queries, and reopening', async ({
       actual: await bar.innerText(),
       selected: await selected.locator('..').allTextContents()
     })
-    await orcaPage.screenshot({ path: testInfo.outputPath(`${name}.png`) })
+    await quirkyPage.screenshot({ path: testInfo.outputPath(`${name}.png`) })
   }
   await input.fill('needle')
   await capture('initial', '1 of 6', 'needle result 1')
@@ -75,14 +75,14 @@ test('PDF counter follows navigation, new queries, and reopening', async ({
   await input.fill('absentword')
   await input.fill('needle')
   // The final query is unchanged; let PDF.js's 250ms debounce finish before stepping.
-  await orcaPage.waitForTimeout(350)
+  await quirkyPage.waitForTimeout(350)
   await capture('rapid-query', '1 of 6', 'needle result 1')
   await bar.getByTitle('Next match', { exact: true }).click()
   await capture('before-close', '2 of 6', 'needle result 2')
   await input.press('Escape')
   await expect(input).toHaveCount(0)
   await expect(selected).toHaveCount(0)
-  await pressShortcut(orcaPage, 'f')
+  await pressShortcut(quirkyPage, 'f')
   await capture('reopened', '1 of 6', 'needle result 1')
   await input.press('Enter')
   await capture('reopened-enter', '2 of 6', 'needle result 2')
@@ -95,8 +95,8 @@ test('PDF counter follows navigation, new queries, and reopening', async ({
   }))
   expect(windows.windows.every((window) => !window.focused)).toBe(true)
   const headful =
-    process.env.ORCA_E2E_FORCE_HEADFUL === '1' || testInfo.project.metadata.orcaHeadful === true
-  if (process.env.ORCA_BACKGROUND_LAUNCH === '1' || !headful) {
+    process.env.QUIRKY_E2E_FORCE_HEADFUL === '1' || testInfo.project.metadata.quirkyHeadful === true
+  if (process.env.QUIRKY_BACKGROUND_LAUNCH === '1' || !headful) {
     expect(windows.windows.every((window) => !window.visible)).toBe(true)
   }
   writeFileSync(
@@ -109,16 +109,16 @@ test.describe('PDF in a folder workspace', () => {
   test.use({ seedTestRepo: false })
 
   test('finds and navigates a PDF without a Git repository', async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const folderPath = mkdtempSync(path.join(os.tmpdir(), 'orca-pdf-folder-'))
+    const folderPath = mkdtempSync(path.join(os.tmpdir(), 'quirky-pdf-folder-'))
     const filePath = path.join(folderPath, 'pdf-find-fixture.pdf')
     writeFileSync(filePath, createPdfFindFixture())
     registerPostElectronShutdownCleanup(async () =>
       rmSync(folderPath, { recursive: true, force: true })
     )
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       async ({ folderPath, filePath }) => {
         const state = window.__store?.getState()
         if (!state) {
@@ -153,19 +153,19 @@ test.describe('PDF in a folder workspace', () => {
       },
       { folderPath, filePath }
     )
-    await expect(orcaPage.locator('.pdfViewer .page')).toHaveCount(3)
-    await expect(orcaPage.locator('.pdfViewer .page').first().locator('.textLayer')).toContainText(
-      'needle result 1'
-    )
-    await pressShortcut(orcaPage, 'f')
-    const input = orcaPage.getByPlaceholder('Find in page...')
+    await expect(quirkyPage.locator('.pdfViewer .page')).toHaveCount(3)
+    await expect(
+      quirkyPage.locator('.pdfViewer .page').first().locator('.textLayer')
+    ).toContainText('needle result 1')
+    await pressShortcut(quirkyPage, 'f')
+    const input = quirkyPage.getByPlaceholder('Find in page...')
     await input.fill('needle')
     await expect(input.locator('..')).toContainText('1 of 6')
-    const selected = orcaPage.locator('.pdfViewer .highlight.selected').locator('..')
+    const selected = quirkyPage.locator('.pdfViewer .highlight.selected').locator('..')
     await expect(selected).toHaveText('needle result 1')
     await input.press('Enter')
     await expect(input.locator('..')).toContainText('2 of 6')
     await expect(selected).toHaveText('needle result 2')
-    await orcaPage.screenshot({ path: testInfo.outputPath('folder-next.png') })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('folder-next.png') })
   })
 })

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { agentHookServer } from '../../../agent-hooks/server'
 import type { Store } from '../../../persistence'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import type { TerminalLeafMoveResult } from '../../../../shared/terminal-leaf-move'
 import { commitLeafMoveAndRekey } from './leaf-move'
 
@@ -21,7 +21,7 @@ function deps(result: TerminalLeafMoveResult) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the move reads only the orchestration DB accessor.
   const runtime = {
     getExistingOrchestrationDb: () => ({ rekeyWorkerTerminalResourcePaneKey })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return { store, runtime, rekeyWorkerTerminalResourcePaneKey }
 }
 

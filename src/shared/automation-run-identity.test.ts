@@ -45,7 +45,7 @@ describe('automation run identity', () => {
         hostId: 'ssh:builder',
         projectHostSetupId: 'setup-builder',
         repoId: 'remote-repo',
-        path: '/remote/orca'
+        path: '/remote/quirky'
       }
     })
 

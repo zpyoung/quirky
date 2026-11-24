@@ -11,7 +11,7 @@ import {
 import { pairMobileClient, type PairedMobileClient } from './paired-mobile-client'
 
 export type PhoneMirrorTopology<TDesktop> = {
-  /** Headless `orca serve`. */
+  /** Headless `quirky serve`. */
   host: HeadlessPairedRuntimeHost
   /** Desktop paired to `host` as a client; null when the phone pairs with the host directly. */
   desktop: TDesktop

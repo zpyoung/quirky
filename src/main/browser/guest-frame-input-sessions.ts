@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron'
 
-// Why: Orca attaches its own CDP sessions to a guest's cross-site frames to deliver agent input
+// Why: Quirky attaches its own CDP sessions to a guest's cross-site frames to deliver agent input
 // there (see guest-focused-frame-route.ts). This file owns those sessions: one per frame target,
 // adopted even when the attach answers late, and hidden from the agent's CDP client.
 
@@ -82,10 +82,10 @@ export async function settleWithin<T>(request: Promise<T>, fallback: T): Promise
 }
 
 /**
- * True for debugger traffic that belongs to Orca's own frame sessions; the CDP proxy keeps it
+ * True for debugger traffic that belongs to Quirky's own frame sessions; the CDP proxy keeps it
  * from the agent's client, which never asked for those sessions.
  */
-export function isOrcaFrameSessionTraffic(
+export function isQuirkyFrameSessionTraffic(
   webContents: WebContents,
   method: string,
   params: Record<string, unknown> | undefined,
@@ -108,7 +108,7 @@ export function isOrcaFrameSessionTraffic(
     forgetFrameSession(webContents, eventSessionId)
     sessions.ownedSessionIds.delete(eventSessionId)
   }
-  // Why: Chromium reports Orca's attach before answering it, while the attach is still in flight.
+  // Why: Chromium reports Quirky's attach before answering it, while the attach is still in flight.
   return owned || (targetId !== null && sessions.attachByTargetId.has(targetId))
 }
 
@@ -122,7 +122,7 @@ export function forgetFrameSession(webContents: WebContents, sessionId: string):
   }
 }
 
-/** Orca's session on a frame target; concurrent callers share one attach, and a late one is kept. */
+/** Quirky's session on a frame target; concurrent callers share one attach, and a late one is kept. */
 export async function frameSessionFor(
   webContents: WebContents,
   send: GuestSessionCdpSender,

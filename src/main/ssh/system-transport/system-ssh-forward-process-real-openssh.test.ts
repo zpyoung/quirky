@@ -1,7 +1,7 @@
 /**
  * Real OpenSSH: a forward process must own its listener and see sshd's refusals even when the
  * user's ssh_config multiplexes through a ControlMaster. Opt-in (needs sshd and ssh on PATH):
- * ORCA_REAL_OPENSSH_TEST=1 pnpm test src/main/ssh/system-transport/system-ssh-forward-process-real-openssh.test.ts
+ * QUIRKY_REAL_OPENSSH_TEST=1 pnpm test src/main/ssh/system-transport/system-ssh-forward-process-real-openssh.test.ts
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SshConnection } from '../connection/ssh-connection'

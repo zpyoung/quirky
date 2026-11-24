@@ -132,14 +132,14 @@ vi.mock('./WorktreeCardAgents', () => ({
 
 vi.mock('./WorktreeContextMenu', () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
-  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-orca-context-menu-scope',
+  WORKTREE_CONTEXT_MENU_SCOPE_ATTR: 'data-quirky-context-menu-scope',
   WORKTREE_NATIVE_CONTEXT_MENU_ATTR: 'data-worktree-native-context-menu'
 }))
 
 let workspacePortScan: { key: string; result: WorkspacePortScanResult } | null = null
 
 function makeRepo(): Repo {
-  return { id: 'repo-1', path: '/repo', displayName: 'orca', badgeColor: '#999999', addedAt: 1 }
+  return { id: 'repo-1', path: '/repo', displayName: 'quirky', badgeColor: '#999999', addedAt: 1 }
 }
 
 function makeWorktree(overrides: Partial<Worktree> = {}): Worktree {
@@ -236,7 +236,7 @@ describe('WorktreeCard compact hover ownership', () => {
           type: 'pr',
           number: 57,
           title: 'Review',
-          url: 'https://github.com/acme/orca/pull/57'
+          url: 'https://github.com/acme/quirky/pull/57'
         },
         {
           provider: 'linear',

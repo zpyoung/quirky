@@ -67,7 +67,7 @@ afterEach(async () => {
 })
 
 async function transcriptFile(content: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-file-order-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-file-order-'))
   roots.push(root)
   const filePath = join(root, 'session.jsonl')
   await writeFile(filePath, content)

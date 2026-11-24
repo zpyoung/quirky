@@ -33,7 +33,7 @@ import {
 function buildNoUiUnavailableReason(attribution: AskAttribution): string {
   return attribution.anyIdentityClaimed
     ? 'no attached UI and no active orchestration run to hand off to'
-    : 'no attached UI: set ORCA_PANE_KEY, ORCA_TERMINAL_HANDLE, ORCA_WORKTREE_ID, or ORCA_WORKSPACE_ID'
+    : 'no attached UI: set QUIRKY_PANE_KEY, QUIRKY_TERMINAL_HANDLE, QUIRKY_WORKTREE_ID, or QUIRKY_WORKSPACE_ID'
 }
 
 function formatSpecErrors(errors: { path: string; message: string }[]): string {

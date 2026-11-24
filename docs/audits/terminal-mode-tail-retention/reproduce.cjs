@@ -3,7 +3,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { loadSource, sha, read } = require('./load-source.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function', 'Run with --expose-gc')
 const pending = '\x1b[?1049;2004;1000;'
 const sizes = [

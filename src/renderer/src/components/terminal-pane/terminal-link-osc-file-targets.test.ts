@@ -47,7 +47,7 @@ describe('handleOscLink', () => {
     expect(openFilePathMock).not.toHaveBeenCalled()
   })
 
-  it('opens local file URL links in Orca with the platform modifier on desktop', async () => {
+  it('opens local file URL links in Quirky with the platform modifier on desktop', async () => {
     setPlatform('Windows')
 
     expect(handleOscLink('file:///tmp/test.txt', { metaKey: false, ctrlKey: true }, deps)).toBe(
@@ -139,7 +139,7 @@ describe('handleOscLink', () => {
     expect(openFileMock).not.toHaveBeenCalled()
   })
 
-  it('opens #L file URL links in Orca and preserves anchors', async () => {
+  it('opens #L file URL links in Quirky and preserves anchors', async () => {
     setPlatform('Macintosh')
 
     handleOscLink('file:///tmp/test.txt#L42', { metaKey: true, ctrlKey: false }, deps)

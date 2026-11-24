@@ -126,13 +126,13 @@ describe('a Codex send while a turn runs', () => {
     expect(connection.calls.at(-1)?.params).toMatchObject({ clientUserMessageId: 'client-1' })
   })
 
-  it('steers once more when Codex refuses because a turn Orca just heard of is running', async () => {
+  it('steers once more when Codex refuses because a turn Quirky just heard of is running', async () => {
     let steers = 0
     const { connection, settlements, send, methods, endTurn } = await rig({
       'turn/steer': () => {
         steers += 1
         if (steers === 1) {
-          // Codex moved on to a turn Orca did not start; its frames land before the refusal is read.
+          // Codex moved on to a turn Quirky did not start; its frames land before the refusal is read.
           endTurn('turn-1', 'completed')
           startTurn(connection, 'turn-2')
           throw refusedSteer('expected active turn id `turn-1` but found `turn-2`')

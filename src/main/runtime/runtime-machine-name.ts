@@ -1,5 +1,5 @@
 import os from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { normalizeMachineName } from '../../shared/machine-name'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
 
@@ -8,7 +8,7 @@ const MACOS_COMPUTER_NAME = '/usr/sbin/scutil'
 // under load; a slow right answer beats a fast wrong one, and publishers cap their own wait below.
 const MACOS_COMPUTER_NAME_TIMEOUT_MS = 5_000
 const MACOS_COMPUTER_NAME_MAX_OUTPUT_BYTES = 4 * 1024
-// Why: `orca status` probes status publishers with a 1 s budget; past this a publisher answers with
+// Why: `quirky status` probes status publishers with a 1 s budget; past this a publisher answers with
 // the hostname while the lookup keeps running, and the next status read carries the friendly name.
 export const MACHINE_NAME_PUBLISH_WAIT_MS = 750
 // Why: a failed lookup is retried, but every status read reaches for it, so bound the spawn rate.

@@ -12,7 +12,7 @@ import type { SshPendingPtyKill } from '../../../shared/ssh-pending-pty-kill'
 import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { SshConnection } from '../connection/ssh-connection'
 import { waitForSentinel } from './ssh-relay-sentinel'
-import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { LegacyRelayClient } from './legacy-relay-client'
 import { createLegacyRelayCliServer } from './legacy-relay-cli-server'
 import { listLegacyRelayEndpoints, posixEndpointExited } from './legacy-relay-endpoints'
@@ -44,10 +44,10 @@ export type LegacyRelayBridgeHost = {
   onData: (ptyId: string, data: string) => void
   onReplay: (ptyId: string, replay: string) => void
   onExit: (ptyId: string, code: number) => void
-  /** Absent: relay-era `orca` commands are refused, as before this host served them. */
+  /** Absent: relay-era `quirky` commands are refused, as before this host served them. */
   remoteCli?: {
-    runtime: () => OrcaRuntimeService | null
-    /** The per-host "Allow this host's orca CLI to control Orca" switch. */
+    runtime: () => QuirkyRuntimeService | null
+    /** The per-host "Allow this host's quirky CLI to control Quirky" switch. */
     allowed: (targetId: string) => boolean
   }
 }
@@ -94,7 +94,7 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
     return existing ?? null
   }
   const installed = host
-  const clientInstanceId = `orca-legacy-relay-bridge:${targetId}`
+  const clientInstanceId = `quirky-legacy-relay-bridge:${targetId}`
   const connection = (): SshConnection => {
     const conn = installed.connection(targetId)
     if (!conn) {

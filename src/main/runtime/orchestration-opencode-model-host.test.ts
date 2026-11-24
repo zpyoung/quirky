@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import {
   probeOpenCodeModelAvailability,
   resolveOpenCodeDirectModelExecutable
@@ -40,7 +40,7 @@ function probe(
   runtime: ReturnType<typeof host>,
   target = { worktree: 'id:folder', model: 'opencode/fledge-alpha-free' }
 ) {
-  return OrcaRuntimeService.prototype.probeOrchestrationOpenCodeModelLaunchSupport.call(
+  return QuirkyRuntimeService.prototype.probeOrchestrationOpenCodeModelLaunchSupport.call(
     runtime,
     target
   )

@@ -31,7 +31,7 @@ type ClaudeConfigEnv = {
   CLAUDE_CODE_CUSTOM_OAUTH_URL?: string
 }
 
-// Why: Orca must never break a lock — a held one means "skip and let Claude ask".
+// Why: Quirky must never break a lock — a held one means "skip and let Claude ask".
 // Large enough that proper-lockfile never judges it stale, small enough that its
 // half-stale refresh timer stays inside setTimeout's 32-bit range.
 const NEVER_STALE_MS = 2 ** 30
@@ -151,7 +151,7 @@ type ReplacementFile = { target: string; path: string }
  * renaming it over `target` can never widen them.
  */
 async function createReplacementFile(target: string): Promise<ReplacementFile> {
-  const path = `${target}.orca-trust-${randomUUID()}.tmp`
+  const path = `${target}.quirky-trust-${randomUUID()}.tmp`
   try {
     const mode = statSync(target).mode & 0o777
     writeFileSync(path, '', { flag: 'wx', mode })
@@ -191,7 +191,7 @@ export type ClaudeGlobalConfigUpdateOutcome =
   | 'updated'
 
 /**
- * Orca's one writer of a Claude global config. Never creates the file, never breaks Claude's
+ * Quirky's one writer of a Claude global config. Never creates the file, never breaks Claude's
  * lock, and never rewrites a file it could not read and parse. `change` must be pure: it runs
  * once to plan and again under the lock.
  */
@@ -236,7 +236,7 @@ async function updateClaudeGlobalConfigNow(args: {
       return 'locked'
     }
     try {
-      // Why: read → rename stays synchronous so Orca's own synchronous auth writer to
+      // Why: read → rename stays synchronous so Quirky's own synchronous auth writer to
       // this file cannot interleave and lose an update.
       const current = readConfigAt(resolveConfigTarget(args.configFile))
       if (typeof current === 'string') {
@@ -293,7 +293,7 @@ export type ClaudeTrustConfigTarget = {
   toClaudePath?: (hostPath: string) => string | null
 }
 
-/** The config file a local or WSL-guest Claude will read, or null when Orca cannot tell. */
+/** The config file a local or WSL-guest Claude will read, or null when Quirky cannot tell. */
 export function resolveLocalClaudeTrustConfig(args: {
   workspacePath: string
   /** The final spawn env layered over this process's env. */

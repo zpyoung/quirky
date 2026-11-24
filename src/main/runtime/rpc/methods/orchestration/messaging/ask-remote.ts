@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { WorkerDispatchState } from '../../../../orchestration/types'
 import { OrchestrationError } from '../../../../orchestration/orchestration-error'
 import { clampOrchestrationAskTimeoutMs } from '../../../../../../shared/orchestration-ask-timeout'
@@ -8,7 +8,7 @@ import { assertWorkerCanReport } from '../../../../orchestration/worker-report-a
 
 export async function askRemoteRunHome(args: {
   params: z.infer<typeof AskParams>
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   signal?: AbortSignal
   recordMutationReceipt?: (receipt: unknown) => void
   from: string

@@ -13,7 +13,7 @@ import {
 import { successResponse } from './errors'
 import { ALL_RPC_METHODS } from './methods'
 import { emulatorProbe, emulatorProbeError } from '../../emulator/emulator-probe'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { isDurableMutation } from '../../../shared/orchestration-rpc-contract'
 import type { OrchestrationSessionCaller } from '../orchestration/orchestration-caller-identity'
 import {
@@ -33,7 +33,7 @@ import type { RpcCallerScope } from './rpc-caller-scope'
 import { admitRpcRequest } from './rpc-request-admission-prologue'
 
 export type DispatcherOptions = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   methods?: readonly RpcAnyMethodDeclaration[]
   /** Pins every call to this scope, for in-process bridges that relay a non-owner caller. */
   callerScope?: RpcCallerScope
@@ -47,7 +47,7 @@ type AdmittedUnaryCall = {
 }
 
 export class RpcDispatcher {
-  private readonly runtime: OrcaRuntimeService
+  private readonly runtime: QuirkyRuntimeService
   private readonly registry: RpcRegistry
   private readonly orchestrationMutations: OrchestrationMutationExecutor
   private readonly legacyOrchestration: OrchestrationLegacyCompatibility
@@ -238,7 +238,7 @@ export class RpcDispatcher {
       effectiveParams,
       invoke,
       callerFingerprint,
-      context.orchestrationCaller?.orcaSessionId
+      context.orchestrationCaller?.quirkySessionId
     )
     recordRuntimeFeatureInteraction(runtime, request.method, result, undefined, request.params)
     return result

@@ -5,7 +5,7 @@
  */
 
 import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { parseShellForegroundRows, type ProcessTableRow } from '../../shared/process-table-snapshot'
 import { isShellProcess } from '../../shared/shell-process-detection'
 import type { TuiAgent } from '../../shared/tui-agent'

@@ -1,7 +1,7 @@
 import { useAppStore } from '../../store'
 import type { TabSplitDirection } from '../../store/slices/tabs'
 import { mirrorWebRuntimeTabMove } from './web-runtime-tab-move-mirror'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { dropTabThroughLayoutOwner } from '../tab-group/tab-group-layout-owner-commands'
 
 type TabMovePaneColumnState = Pick<
@@ -52,7 +52,7 @@ export function moveTabToNewPaneColumn(args: {
   }
   // Switch point: main places the tab beside its group first.
   if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     dropTabThroughLayoutOwner(worktreeId, {
       kind: 'split',
       tabId: args.unifiedTabId,

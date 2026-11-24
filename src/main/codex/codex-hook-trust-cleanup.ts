@@ -18,7 +18,7 @@ import {
   getManagedScriptPath,
   getSystemCodexConfigTomlPath
 } from './codex-hook-definition'
-import { getOrcaManagedCodexHomePath } from './codex-home-paths'
+import { getQuirkyManagedCodexHomePath } from './codex-home-paths'
 import { removeCodexManagedHookTrustEntries } from './codex-managed-trust-reconciliation'
 import type { CodexHookHashes } from './codex-hook-trust-derivation'
 
@@ -127,7 +127,7 @@ export function removeRuntimeManagedHookTrustEntries(
     removeCodexManagedHookTrustEntries({
       codexHashes,
       tomlPath: getCodexConfigTomlPath(),
-      runtimeHomePath: getOrcaManagedCodexHomePath(),
+      runtimeHomePath: getQuirkyManagedCodexHomePath(),
       sourcePaths: [configPath],
       command: getManagedCommand(getManagedScriptPath()),
       managedEventLabels: CODEX_MANAGED_EVENT_LABELS,

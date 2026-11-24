@@ -109,7 +109,7 @@ beforeEach(async () => {
   clock = HOST_TEST_NOW
   hosts = []
   compact.mockReset().mockResolvedValue({ state: 'accepted', providerIdentity: null })
-  directory = await mkdtemp(join(tmpdir(), 'orca-conversation-command-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-conversation-command-'))
   adapter = {
     supportsLocation: (location) =>
       location.executionHostId === 'local' && location.wslDistro === null,
@@ -188,7 +188,7 @@ describe('same-conversation clear', () => {
     const source = store.getRecord(HOST_TEST_SESSION)!
     const tab = store.getSessionTabId(HOST_TEST_SESSION)
     await journal().appendItem(
-      { provider: 'orca', clientMessageId: 'earlier' },
+      { provider: 'quirky', clientMessageId: 'earlier' },
       hostTestMessage('earlier'),
       {
         fence: source.lease.runtimeFence,

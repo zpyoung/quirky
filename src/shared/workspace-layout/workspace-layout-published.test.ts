@@ -42,7 +42,7 @@ describe('publishWorkspaceLayout: the explicit published projection', () => {
     })
     // A tab's launch inputs are published, so a window mounting it starts the same shell.
     expect(workspace.tabs[5]!.terminal).toMatchObject({
-      startupCwd: '/Users/dev/orca/src',
+      startupCwd: '/Users/dev/quirky/src',
       shellOverride: 'zsh'
     })
     const json = JSON.stringify(workspace)

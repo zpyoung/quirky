@@ -5,14 +5,14 @@ import { join } from 'node:path'
 // node-pty under resources, mirroring the packaged layout the copy expects.
 export function buildInstallFixture(root: string): void {
   mkdirSync(root, { recursive: true })
-  writeFileSync(join(root, 'Orca.exe'), 'exe-bytes')
-  const processHostDir = join(root, 'resources', 'node_modules', '@orca', 'process-host')
+  writeFileSync(join(root, 'Quirky.exe'), 'exe-bytes')
+  const processHostDir = join(root, 'resources', 'node_modules', '@quirky', 'process-host')
   mkdirSync(join(processHostDir, 'dist'), { recursive: true })
   mkdirSync(join(processHostDir, 'src'), { recursive: true })
   writeFileSync(
     join(processHostDir, 'package.json'),
     JSON.stringify({
-      name: '@orca/process-host',
+      name: '@quirky/process-host',
       type: 'commonjs',
       exports: {
         '.': { default: './dist/run-process.js' },

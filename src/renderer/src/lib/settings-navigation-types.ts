@@ -52,7 +52,7 @@ const SETTINGS_NAV_TARGETS = [
 
 const SETTINGS_NAV_INTENTS = [
   'add-quick-command',
-  'add-remote-orca-server',
+  'add-remote-quirky-server',
   'add-ssh-host'
 ] as const
 

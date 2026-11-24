@@ -32,12 +32,12 @@ type PluginModule = {
 }
 
 const ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_OPENCODE_AGENT',
-  'ORCA_OPENCODE_PLUGIN_API',
-  'ORCA_AGENT_HOOK_ENDPOINT',
-  'ORCA_AGENT_HOOK_PORT',
-  'ORCA_AGENT_HOOK_TOKEN'
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_OPENCODE_AGENT',
+  'QUIRKY_OPENCODE_PLUGIN_API',
+  'QUIRKY_AGENT_HOOK_ENDPOINT',
+  'QUIRKY_AGENT_HOOK_PORT',
+  'QUIRKY_AGENT_HOOK_TOKEN'
 ] as const
 
 // A live OpenCode 2 event bus: stays open until the subscriber aborts.
@@ -75,17 +75,17 @@ describe.each(['opencode', 'opencode2'] as const)('%s plugin disposal by host', 
   let names: string[]
 
   beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), 'orca-opencode-dispose-host-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'quirky-opencode-dispose-host-'))
     savedEnv = {}
     for (const key of ENV_KEYS) {
       savedEnv[key] = process.env[key]
     }
-    process.env.ORCA_PANE_KEY = 'tab-1:leaf-1'
-    process.env.ORCA_OPENCODE_AGENT = agent
-    process.env.ORCA_OPENCODE_PLUGIN_API = 'v2'
-    delete process.env.ORCA_AGENT_HOOK_ENDPOINT
-    process.env.ORCA_AGENT_HOOK_PORT = '59999'
-    process.env.ORCA_AGENT_HOOK_TOKEN = 'test-token'
+    process.env.QUIRKY_PANE_KEY = 'tab-1:leaf-1'
+    process.env.QUIRKY_OPENCODE_AGENT = agent
+    process.env.QUIRKY_OPENCODE_PLUGIN_API = 'v2'
+    delete process.env.QUIRKY_AGENT_HOOK_ENDPOINT
+    process.env.QUIRKY_AGENT_HOOK_PORT = '59999'
+    process.env.QUIRKY_AGENT_HOOK_TOKEN = 'test-token'
     names = []
     vi.stubGlobal(
       'fetch',
@@ -109,7 +109,7 @@ describe.each(['opencode', 'opencode2'] as const)('%s plugin disposal by host', 
   })
 
   async function loadPluginModule(): Promise<PluginModule> {
-    const pluginPath = join(tempDir, `orca-${agent}-status.mjs`)
+    const pluginPath = join(tempDir, `quirky-${agent}-status.mjs`)
     writeFileSync(
       pluginPath,
       agent === 'opencode2'

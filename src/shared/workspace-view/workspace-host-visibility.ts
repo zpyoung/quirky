@@ -8,7 +8,7 @@ import {
   expandEquivalentExecutionHostIds,
   pickerExecutionHosts,
   type MergedExecutionHost
-} from '../managed-orcad-execution-host'
+} from '../managed-quirkyd-execution-host'
 
 // The Workspace options "Hosts" value, shared so every surface reads and writes it the same way.
 

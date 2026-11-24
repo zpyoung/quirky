@@ -7,7 +7,7 @@ import { ProfileStateRevisionConflictError } from './profile-state-document-vali
 
 describe('profile export snapshot revision', () => {
   it('refuses a competing revision before publishing JSON', () => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-export-fence-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-export-fence-'))
     const database = join(root, 'profile-state.db')
     const target = join(root, 'retained.json')
     const owner = new ProfileStateSqliteAuthority(database, 'export-fence')

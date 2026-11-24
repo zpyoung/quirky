@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -43,10 +43,10 @@ vi.mock('child_process', async () => {
 import { main } from './index'
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
-describe('orca cli worktree awareness', () => {
+describe('quirky cli worktree awareness', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,
@@ -54,15 +54,15 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('starts a foreground headless server through `serve`', async () => {
-    serveOrcaAppMock.mockResolvedValue(0)
-    process.env.ORCA_ENVIRONMENT = 'stale-env'
+    serveQuirkyAppMock.mockResolvedValue(0)
+    process.env.QUIRKY_ENVIRONMENT = 'stale-env'
 
     await main(
       ['serve', '--json', '--port', '6768', '--pairing-address', '100.64.1.20', '--no-pairing'],
       '/tmp/repo'
     )
 
-    expect(serveOrcaAppMock).toHaveBeenCalledWith({
+    expect(serveQuirkyAppMock).toHaveBeenCalledWith({
       json: true,
       port: '6768',
       pairingAddress: '100.64.1.20',
@@ -77,44 +77,44 @@ describe('orca cli worktree awareness', () => {
   it.skipIf(process.platform === 'win32')(
     'turns on supervision only for an explicit --supervise, and never with --recipe-json',
     async () => {
-      serveOrcaAppMock.mockResolvedValue(0)
+      serveQuirkyAppMock.mockResolvedValue(0)
 
       await main(['serve', '--supervise', '--no-pairing'], '/tmp/repo')
-      expect(serveOrcaAppMock).toHaveBeenLastCalledWith(
+      expect(serveQuirkyAppMock).toHaveBeenLastCalledWith(
         expect.objectContaining({ supervise: true, noPairing: true })
       )
 
       await main(['serve', '--no-pairing'], '/tmp/repo')
-      expect(serveOrcaAppMock.mock.lastCall?.[0]).not.toHaveProperty('supervise')
+      expect(serveQuirkyAppMock.mock.lastCall?.[0]).not.toHaveProperty('supervise')
 
-      serveOrcaAppMock.mockClear()
+      serveQuirkyAppMock.mockClear()
       await main(
         ['serve', '--supervise', '--recipe-json', '--project-root', '/workspace/repo'],
         '/tmp/repo'
       )
-      expect(serveOrcaAppMock).not.toHaveBeenCalled()
+      expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     }
   )
 
   it('forwards the pairing-time desktop-control grant', async () => {
-    serveOrcaAppMock.mockResolvedValue(0)
+    serveQuirkyAppMock.mockResolvedValue(0)
 
     await main(['serve', '--grant-desktop-control'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).toHaveBeenCalledWith(
+    expect(serveQuirkyAppMock).toHaveBeenCalledWith(
       expect.objectContaining({ grantDesktopControl: true, mobilePairing: false })
     )
   })
 
   it('starts a foreground headless server with mobile pairing enabled', async () => {
-    serveOrcaAppMock.mockResolvedValue(0)
+    serveQuirkyAppMock.mockResolvedValue(0)
 
     await main(
       ['serve', '--pairing-address', '100.64.1.20', '--mobile-pairing', '--json'],
       '/tmp/repo'
     )
 
-    expect(serveOrcaAppMock).toHaveBeenCalledWith({
+    expect(serveQuirkyAppMock).toHaveBeenCalledWith({
       json: true,
       port: null,
       pairingAddress: '100.64.1.20',
@@ -127,7 +127,7 @@ describe('orca cli worktree awareness', () => {
   })
 
   it('starts a recipe JSON headless server for VM recipes', async () => {
-    serveOrcaAppMock.mockResolvedValue(0)
+    serveQuirkyAppMock.mockResolvedValue(0)
 
     await main(
       [
@@ -141,7 +141,7 @@ describe('orca cli worktree awareness', () => {
       '/tmp/repo'
     )
 
-    expect(serveOrcaAppMock).toHaveBeenCalledWith({
+    expect(serveQuirkyAppMock).toHaveBeenCalledWith({
       json: false,
       port: null,
       pairingAddress: 'wss://sandbox.example.com',
@@ -160,7 +160,7 @@ describe('orca cli worktree awareness', () => {
 
     await main(['serve', '--recipe-json'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Recipe JSON output requires --project-root.'
     )
@@ -179,7 +179,7 @@ describe('orca cli worktree awareness', () => {
       '/tmp/repo'
     )
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Recipe JSON output requires runtime pairing; remove --mobile-pairing.'
     )
@@ -195,7 +195,7 @@ describe('orca cli worktree awareness', () => {
 
     await main(['serve', '--mobile-pairing', '--no-pairing', '--json'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Use either --mobile-pairing or --no-pairing, not both.'
     )
@@ -211,7 +211,7 @@ describe('orca cli worktree awareness', () => {
 
     await main(['serve', '--port', 'not-a-port', '--json'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Invalid --port value: not-a-port'
     )
@@ -227,7 +227,7 @@ describe('orca cli worktree awareness', () => {
 
     await main(['serve', '--port', '--json'], '/tmp/repo')
 
-    expect(serveOrcaAppMock).not.toHaveBeenCalled()
+    expect(serveQuirkyAppMock).not.toHaveBeenCalled()
     expect([...logSpy.mock.calls, ...errSpy.mock.calls].flat().join('\n')).toContain(
       'Missing value for --port.'
     )

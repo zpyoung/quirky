@@ -23,7 +23,7 @@ const DEADLINE_MS = 45 * 60_000
 
 export type ManagedRuntimeInstallationDeps = {
   dataDirectory: string
-  /** Whether a start would run a copy found outside Orca's releases (PATH, install folders). */
+  /** Whether a start would run a copy found outside Quirky's releases (PATH, install folders). */
   findExternal: () => Promise<boolean>
   /** Runs `work` once nothing on this host runs the runtime; rejects without running it otherwise. */
   fence: (work: () => Promise<void>) => Promise<void>

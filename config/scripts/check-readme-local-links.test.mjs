@@ -23,7 +23,7 @@ function writeFiles(root, files) {
 }
 
 function makeFixture(files, { untracked = {} } = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), 'orca-readme-links-'))
+  const root = mkdtempSync(path.join(tmpdir(), 'quirky-readme-links-'))
   tempDirs.push(root)
   git(root, ['init', '--quiet'])
   git(root, ['config', 'user.email', 'readme-links-test@example.com'])

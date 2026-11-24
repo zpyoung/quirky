@@ -31,7 +31,7 @@ function renderBanners(titles: string[]): void {
 
 function offsets(): string[] {
   return Array.from(paneElement.querySelectorAll<HTMLElement>(':scope > .pane-top-banner')).map(
-    (banner) => banner.style.getPropertyValue('--orca-pane-top-banner-offset')
+    (banner) => banner.style.getPropertyValue('--quirky-pane-top-banner-offset')
   )
 }
 
@@ -55,13 +55,13 @@ describe('PaneTopWarningBanner', () => {
   it('stacks two banners in one pane and reserves their combined height', () => {
     renderBanners(['first', 'second'])
     expect(offsets()).toEqual(['0px', `${BANNER_HEIGHT}px`])
-    expect(paneElement.style.getPropertyValue('--orca-pane-top-banner-height')).toBe(
+    expect(paneElement.style.getPropertyValue('--quirky-pane-top-banner-height')).toBe(
       `${BANNER_HEIGHT * 2}px`
     )
 
     renderBanners(['first'])
     expect(offsets()).toEqual(['0px'])
-    expect(paneElement.style.getPropertyValue('--orca-pane-top-banner-height')).toBe(
+    expect(paneElement.style.getPropertyValue('--quirky-pane-top-banner-height')).toBe(
       `${BANNER_HEIGHT}px`
     )
   })
@@ -69,6 +69,6 @@ describe('PaneTopWarningBanner', () => {
   it('frees the reserved space once the last banner leaves', () => {
     renderBanners(['only'])
     renderBanners([])
-    expect(paneElement.style.getPropertyValue('--orca-pane-top-banner-height')).toBe('')
+    expect(paneElement.style.getPropertyValue('--quirky-pane-top-banner-height')).toBe('')
   })
 })

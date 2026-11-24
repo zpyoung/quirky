@@ -25,7 +25,7 @@ describe('historical worker repair safety', () => {
   let db: OrchestrationDb
   let runId: string
   beforeEach(() => {
-    directory = mkdtempSync(join(tmpdir(), 'orca-worker-repair-safety-'))
+    directory = mkdtempSync(join(tmpdir(), 'quirky-worker-repair-safety-'))
     databasePath = join(directory, 'orchestration.db')
     db = new OrchestrationDb(databasePath)
     runId = db.createRun({

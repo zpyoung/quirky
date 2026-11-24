@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import type { TerminalPaneRevealTarget } from '../../../../shared/terminal-pane-reveal'
 import type { RpcRequest } from '../core'
 import { RpcDispatcher } from '../dispatcher'
@@ -19,7 +19,7 @@ function createDispatcher() {
   const runtime = {
     getRuntimeId: () => 'runtime-1',
     revealTerminalPane
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return {
     revealTerminalPane,
     dispatcher: new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })

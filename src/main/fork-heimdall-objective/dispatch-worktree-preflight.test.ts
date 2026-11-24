@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest'
 import type { ExecuteContext } from '../../shared/fork-heimdall/kind-contract'
 import type { ObjectiveWorld } from '../../shared/fork-heimdall-objective/detail-types'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   ObjectiveEnrolledWorkspaceDirtyError,
   prepareObjectiveDispatchWorkspace
@@ -66,8 +66,8 @@ it('pauses before creating a child when serial output is still dirty in the enro
   } as unknown as ExecuteContext<ObjectiveWorld>
 
   const preparation = prepareObjectiveDispatchWorkspace({
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of OrcaRuntimeService, a class with private fields no object literal can structurally satisfy; only createManagedWorktree is exercised.
-    runtime: { createManagedWorktree } as unknown as OrcaRuntimeService,
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial double of QuirkyRuntimeService, a class with private fields no object literal can structurally satisfy; only createManagedWorktree is exercised.
+    runtime: { createManagedWorktree } as unknown as QuirkyRuntimeService,
     binding,
     context,
     objectiveStore,

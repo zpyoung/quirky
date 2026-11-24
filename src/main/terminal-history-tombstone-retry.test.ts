@@ -25,7 +25,7 @@ import {
  *  process start re-queued it. Prove the failure re-arms in-process, and that it stays bounded. */
 describe('tombstoned history removal retries', () => {
   beforeEach(() => {
-    userDataDir = mkdtempSync(join(tmpdir(), 'orca-history-retry-'))
+    userDataDir = mkdtempSync(join(tmpdir(), 'quirky-history-retry-'))
     installFakeAppEnvironment({ getPath: () => userDataDir })
     removeHostTreeMock.mockReset()
     removeHostTreeMock.mockImplementation(async (dir) => {

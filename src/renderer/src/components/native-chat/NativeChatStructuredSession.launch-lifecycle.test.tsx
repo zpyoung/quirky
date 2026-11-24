@@ -254,7 +254,7 @@ describe('NativeChatStructuredSession launch lifecycle', () => {
     rerender(sessionView())
     expect(
       screen.getByText(
-        "Chat could not be started. Orca couldn't open this chat's history right now."
+        "Chat could not be started. Quirky couldn't open this chat's history right now."
       )
     ).toBeTruthy()
   })

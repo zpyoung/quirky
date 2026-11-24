@@ -27,7 +27,7 @@ function turn(overrides: Record<string, unknown> = {}): string {
 
 describe('readClaudeSessionUsage', () => {
   it('scans only the authoritative transcript session and keeps sidechains inclusive', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-session-info-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-session-info-'))
     const transcriptPath = join(directory, 'session.jsonl')
     try {
       await writeFile(

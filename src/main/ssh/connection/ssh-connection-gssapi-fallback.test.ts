@@ -66,7 +66,7 @@ describe('SshConnection', () => {
     expect(spawnSystemSshCommandMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({ gssapiAuthentication: true }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       {
         gssapiOnly: true,
         wrapCommand: false
@@ -98,7 +98,7 @@ describe('SshConnection', () => {
 
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'manual', configHost: 'prod' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       expect.objectContaining({ gssapiOnly: true, wrapCommand: false })
     )
     expect(clientInstances).toHaveLength(0)
@@ -119,7 +119,7 @@ describe('SshConnection', () => {
     // so the test fails if the proactive block is removed.
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ gssapiAuthentication: true }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       {
         gssapiOnly: true,
         wrapCommand: false
@@ -213,7 +213,7 @@ describe('SshConnection', () => {
     // the test fails if the reactive fallback block is removed.
     expect(spawnSystemSshCommandMock).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'krb-host' }),
-      'echo ORCA-SYSTEM-SSH-OK',
+      'echo QUIRKY-SYSTEM-SSH-OK',
       expect.objectContaining({ wrapCommand: false })
     )
     expect(onCredentialRequest).toHaveBeenCalledWith(
@@ -231,7 +231,7 @@ describe('SshConnection', () => {
     // retry fails with a passphrase error, and resolved GSSAPI is on — so the
     // reactive probe must run before onCredentialRequest.
     vi.stubEnv('SSH_AUTH_SOCK', '/tmp/agent.sock')
-    const tempDir = mkdtempSync(join(tmpdir(), 'orca-ssh-key-'))
+    const tempDir = mkdtempSync(join(tmpdir(), 'quirky-ssh-key-'))
     const keyPath = join(tempDir, 'id_ed25519')
     writeFileSync(keyPath, 'test-key')
     ssh2Mock.connectSequence = [

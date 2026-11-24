@@ -8,7 +8,7 @@ import type { AgentJournalItemIdentity } from './agent-session-journal-types'
 
 const KEY_DELIMITER = ':'
 const VERBATIM_BOUNDED_COMPONENT_TAG = '%FF'
-const BOUNDED_COMPONENT_PATTERN = /^[\s\S]{0,40}~orca-oversized~(?:[1-9]\d*)~[0-9a-f]{16}$/
+const BOUNDED_COMPONENT_PATTERN = /^[\s\S]{0,40}~quirky-oversized~(?:[1-9]\d*)~[0-9a-f]{16}$/
 const PARSED_JOURNAL_ITEM_KEY = Symbol('parsedJournalItemKey')
 
 type ParsedJournalItemIdentity = AgentJournalItemIdentity & {
@@ -40,7 +40,7 @@ export function boundJournalKeyComponent(value: string): string {
   }
   const h1 = fnv1a32(value, 0x811c9dc5).toString(16).padStart(8, '0')
   const h2 = fnv1a32(value, 0x0100_0193).toString(16).padStart(8, '0')
-  return `${wellFormedBoundedHead(value, 40)}~orca-oversized~${value.length}~${h1}${h2}`
+  return `${wellFormedBoundedHead(value, 40)}~quirky-oversized~${value.length}~${h1}${h2}`
 }
 
 /** The diagnostic head must be valid Unicode for `encodeURIComponent`: a pair
@@ -139,8 +139,8 @@ export function agentJournalItemKey(identity: AgentJournalItemIdentity): string 
   if (identity.provider === 'claude') {
     return ['claude', encodePart(identity.sessionId), encodePart(identity.uuid)].join(KEY_DELIMITER)
   }
-  if (identity.provider === 'orca') {
-    return ['orca', encodePart(identity.clientMessageId)].join(KEY_DELIMITER)
+  if (identity.provider === 'quirky') {
+    return ['quirky', encodePart(identity.clientMessageId)].join(KEY_DELIMITER)
   }
   return [
     'legacy',
@@ -152,7 +152,7 @@ export function agentJournalItemKey(identity: AgentJournalItemIdentity): string 
 
 /** Key for the pre-dispatch submission placeholder, before any provider echo. */
 export function agentJournalSubmissionKey(clientMessageId: string): string {
-  return agentJournalItemKey({ provider: 'orca', clientMessageId })
+  return agentJournalItemKey({ provider: 'quirky', clientMessageId })
 }
 
 /**
@@ -192,7 +192,7 @@ export function parseAgentJournalItemKey(key: string): AgentJournalItemIdentity 
       preserveExactKey
     )
   }
-  if (provider === 'orca' && rest.length === 1) {
+  if (provider === 'quirky' && rest.length === 1) {
     return parsedIdentity({ provider, clientMessageId: rest[0] as string }, key, preserveExactKey)
   }
   if (provider === 'legacy' && rest.length === 3) {

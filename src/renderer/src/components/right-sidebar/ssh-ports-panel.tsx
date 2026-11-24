@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { useActiveWorktree } from '@/store/selectors'
 import { cn } from '@/lib/utils'
-import { resolvePortOpenInOrcaBrowser } from '@/lib/workspace-port-actions'
+import { resolvePortOpenInQuirkyBrowser } from '@/lib/workspace-port-actions'
 import { browserUrlForPortForwardEntry } from '@/lib/workspace-port-urls'
 import type { EnrichedDetectedPort, PortForwardEntry } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
@@ -81,7 +81,7 @@ export function SshPortsPanel({
     (entry: PortForwardEntry, event?: React.MouseEvent<HTMLButtonElement>) => {
       const url = browserUrlForPortForwardEntry(entry)
       if (
-        !resolvePortOpenInOrcaBrowser({
+        !resolvePortOpenInQuirkyBrowser({
           settings,
           event,
           isMac: navigator.userAgent.includes('Mac')

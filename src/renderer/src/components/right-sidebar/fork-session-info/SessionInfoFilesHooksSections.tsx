@@ -127,7 +127,7 @@ export function SessionInfoHooksSection({
               <p className="mt-1 text-xs text-muted-foreground">
                 {translate(
                   'fork.sessionInfo.statusLineConsent',
-                  'Orca will preserve and run your existing statusline command.'
+                  'Quirky will preserve and run your existing statusline command.'
                 )}
               </p>
               <Button

@@ -40,7 +40,7 @@ function readSettings(): Record<string, unknown> {
 
 describe('session info statusline chaining', () => {
   beforeEach(() => {
-    home = mkdtempSync(join(tmpdir(), 'orca-session-info-chain-'))
+    home = mkdtempSync(join(tmpdir(), 'quirky-session-info-chain-'))
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
   })
@@ -71,7 +71,7 @@ describe('session info statusline chaining', () => {
     expect(enableSessionInfoStatusLineChaining()).toEqual({ state: 'chained' })
     expect(enableSessionInfoStatusLineChaining()).toEqual({ state: 'chained' })
 
-    const agentHooksDir = join(home, '.orca', 'agent-hooks')
+    const agentHooksDir = join(home, '.quirky', 'agent-hooks')
     const metadataPath = join(agentHooksDir, 'claude-statusline-chain.json')
     const runnerPath = join(
       agentHooksDir,
@@ -104,20 +104,20 @@ describe('session info statusline chaining', () => {
 
     const installed = readSettings()
     const removed = removeManagedStatusLine(installed)
-    expect(existsSync(join(home, '.orca', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
+    expect(existsSync(join(home, '.quirky', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
       true
     )
     finalizeManagedStatusLineRemoval()
     expect(removed.changed).toBe(true)
     expect(removed.config.statusLine).toEqual(edited)
-    expect(existsSync(join(home, '.orca', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
+    expect(existsSync(join(home, '.quirky', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
       false
     )
     expect(
       existsSync(
         join(
           home,
-          '.orca',
+          '.quirky',
           'agent-hooks',
           process.platform === 'win32' ? 'claude-statusline-user.cmd' : 'claude-statusline-user.sh'
         )
@@ -136,7 +136,7 @@ describe('session info statusline chaining', () => {
 
     expect(removed.changed).toBe(false)
     expect(removed.config.statusLine).toEqual(drifted)
-    expect(existsSync(join(home, '.orca', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
+    expect(existsSync(join(home, '.quirky', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
       false
     )
   })
@@ -146,7 +146,7 @@ describe('session info statusline chaining', () => {
     writeSettings({ type: 'command', command: managedCommand })
 
     expect(enableSessionInfoStatusLineChaining()).toEqual({ state: 'managed' })
-    expect(existsSync(join(home, '.orca', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
+    expect(existsSync(join(home, '.quirky', 'agent-hooks', 'claude-statusline-chain.json'))).toBe(
       false
     )
   })

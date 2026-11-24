@@ -18,10 +18,10 @@ export function observeJournalProviderActivity(
     return
   }
   const identity = parseAgentJournalItemKey(itemId)
-  // Codex detail rows use the Orca namespace; fallback rows already name their provider.
+  // Codex detail rows use the Quirky namespace; fallback rows already name their provider.
   if (
     !identity ||
-    (identity.provider === 'orca' &&
+    (identity.provider === 'quirky' &&
       !identity.clientMessageId.startsWith('codex-item:') &&
       !(body.kind === 'status' && body.providerFrame !== undefined))
   ) {

@@ -30,9 +30,11 @@ describe('AskCard — onDraftChange', () => {
       />
     )
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), { target: { value: 'orca' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), {
+      target: { value: 'quirky' }
+    })
 
-    expect(onDraftChange).toHaveBeenCalledWith({ name: { draft: 'orca' } })
+    expect(onDraftChange).toHaveBeenCalledWith({ name: { draft: 'quirky' } })
   })
 
   it('omits a question with no meaningful input from the partial', () => {
@@ -52,18 +54,22 @@ describe('AskCard — onDraftChange', () => {
       />
     )
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), { target: { value: 'orca' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), {
+      target: { value: 'quirky' }
+    })
 
-    expect(onDraftChange).toHaveBeenCalledWith({ name: { draft: 'orca' } })
+    expect(onDraftChange).toHaveBeenCalledWith({ name: { draft: 'quirky' } })
   })
 
   it('behaves identically to the merged component when the prop is absent', () => {
     const onSubmit = vi.fn()
     render(<AskCard model={modelFor([nameQuestion])} onSubmit={onSubmit} onCancel={vi.fn()} />)
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), { target: { value: 'orca' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Project name?' }), {
+      target: { value: 'quirky' }
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
 
-    expect(onSubmit).toHaveBeenCalledWith({ name: { value: 'orca', source: 'input' } }, [])
+    expect(onSubmit).toHaveBeenCalledWith({ name: { value: 'quirky', source: 'input' } }, [])
   })
 })

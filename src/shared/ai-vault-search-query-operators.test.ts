@@ -7,10 +7,10 @@ import {
 
 describe('what counts as an operator', () => {
   it('splits repo: and path: out of the free text', () => {
-    const split = splitAiVaultSearchQuery('relay capacity repo:orca path:/work/app')
+    const split = splitAiVaultSearchQuery('relay capacity repo:quirky path:/work/app')
     expect(split.text).toBe('relay capacity')
     expect(split.terms).toEqual(['relay', 'capacity'])
-    expect(split.repoTerms).toEqual(['orca'])
+    expect(split.repoTerms).toEqual(['quirky'])
     expect(split.pathTerms).toEqual(['/work/app'])
     expect(hasAiVaultSearchQueryOperators(split)).toBe(true)
   })
@@ -29,8 +29,8 @@ describe('what counts as an operator', () => {
   })
 
   it('does not let an apostrophe in prose swallow the operator between quotes', () => {
-    const split = splitAiVaultSearchQuery("it's a repo:orca thing's")
-    expect(split.repoTerms).toEqual(['orca'])
+    const split = splitAiVaultSearchQuery("it's a repo:quirky thing's")
+    expect(split.repoTerms).toEqual(['quirky'])
   })
 
   it('preserves operator case, which the panel folds and the index must not', () => {
@@ -103,10 +103,10 @@ describe('the shapes where the panel parser used to answer differently', () => {
 describe('agrees with the sessions panel parser on operator recognition', () => {
   it.each([
     'relay capacity',
-    'repo:orca needle',
+    'repo:quirky needle',
     'path:/work/app needle',
     'myrepo:x',
-    'needle repo:orca path:/work/app',
+    'needle repo:quirky path:/work/app',
     'path:"/Users/ada/My Project"',
     'https://host/path:y'
   ])('reads the same operators out of %s', (query) => {

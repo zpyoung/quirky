@@ -27,7 +27,7 @@ export const UNCLAIMED_ATTACHMENT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000
 
 export type AgentSessionAttachmentSweepFacts = {
   /** The host's journal connection, or null when it cannot take writes (closed, or written by a
-   *  newer Orca): without it nothing claimed can be told apart, so only part files go. */
+   *  newer Quirky): without it nothing claimed can be told apart, so only part files go. */
   database: () => Database.Database | null
   /** Every chat this host holds a record for; null while that list is incomplete (records still
    *  owed their import), when no chat's claims can be judged orphaned. */

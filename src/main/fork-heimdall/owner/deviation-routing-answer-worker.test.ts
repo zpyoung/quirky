@@ -62,7 +62,7 @@ const escalation: WorkerEscalationDeviation = {
   escalationId: 'escalation-1',
   messageId: 'msg-escalation',
   dispatchId: 'dispatch-1',
-  reason: 'ORCA_SANDBOX_DOCKER_HOST is not set in .claude/settings.local.json'
+  reason: 'QUIRKY_SANDBOX_DOCKER_HOST is not set in .claude/settings.local.json'
 }
 
 function sentOwnerTurnText(index: number): string {

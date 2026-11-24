@@ -1,4 +1,4 @@
-// A provider request Orca stopped waiting for, carried on a start failure so a reader can say
+// A provider request Quirky stopped waiting for, carried on a start failure so a reader can say
 // which step stalled and for how long instead of a bare "couldn't start".
 
 export type AgentSessionRequestTimeout = {

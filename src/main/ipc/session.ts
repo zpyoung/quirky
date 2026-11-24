@@ -1,21 +1,21 @@
 import { ipcMain } from 'electron'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import { parseTerminalSurfaceCloseTarget } from '../../shared/terminal-surface-close-target'
-import { isFrozenOrcadSourceSessionPartition } from '../ssh/orcad-retained-source'
+import { isFrozenQuirkydSourceSessionPartition } from '../ssh/quirkyd-retained-source'
 import { markAgentLaunchesClosedByUser } from '../agent-launch/agent-launch-pane-attachment'
 import { windowViewPatchForMain, windowViewSaveForMain } from '../persistence/window-save-view'
 import { reportWindowSaveDrift } from '../persistence/window-save-divergence'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type {
   WorkspaceSessionPatch,
   WorkspaceSessionState
 } from '../../shared/workspace-session-state-types'
 
-export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeService): void {
+export function registerSessionHandlers(store: Store, runtime: QuirkyRuntimeService): void {
   // Why: renderer saves would change a fenced host's frozen source partition.
   const isFenced = (hostId?: string | null): boolean =>
-    isFrozenOrcadSourceSessionPartition(store, hostId)
+    isFrozenQuirkydSourceSessionPartition(store, hostId)
 
   // Why: hostId is an optional second arg so an older renderer that invokes
   // these channels without it keeps reading/writing the 'local' partition
@@ -51,7 +51,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
   ipcMain.handle('session:set', (_event, args: WorkspaceSessionState, hostId?: string | null) => {
     if (!isFenced(hostId)) {
       store.setWorkspaceSession(
-        ORCA_LAYOUT_OWNER_IS_MAIN ? sessionForMain(args, hostId) : args,
+        QUIRKY_LAYOUT_OWNER_IS_MAIN ? sessionForMain(args, hostId) : args,
         hostId
       )
     }
@@ -60,7 +60,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
   ipcMain.handle('session:patch', (_event, args: WorkspaceSessionPatch, hostId?: string | null) => {
     if (!isFenced(hostId)) {
       store.patchWorkspaceSession(
-        ORCA_LAYOUT_OWNER_IS_MAIN ? patchForMain(args, hostId) : args,
+        QUIRKY_LAYOUT_OWNER_IS_MAIN ? patchForMain(args, hostId) : args,
         hostId
       )
     }

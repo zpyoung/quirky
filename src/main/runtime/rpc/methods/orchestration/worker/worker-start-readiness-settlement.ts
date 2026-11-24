@@ -1,4 +1,4 @@
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { RunRow, TaskRow } from '../../../../orchestration/types'
 import type { WorkerStartModeReceipt } from '../../orchestration-worker-start-mode'
@@ -23,7 +23,7 @@ import {
  * prove one), `start_unknown` when observation is supported and nothing started.
  */
 export async function deliverAndSettleWorkerStartReadiness(args: {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   run: RunRow
   task: TaskRow
@@ -129,12 +129,12 @@ export async function deliverAndSettleWorkerStartReadiness(args: {
       ...(deliveredPrompt ? { prompt: deliveredPrompt } : {}),
       residualResources: JSON.parse(worker.residual_resources) as unknown[],
       nextCommands: [
-        `orca orchestration worker-show --dispatch ${args.dispatchId} --json`,
+        `quirky orchestration worker-show --dispatch ${args.dispatchId} --json`,
         // A structured worker or a chat has no screen to read.
         ...(structuredSession || chatAssigneeSessionId(terminalHandle)
           ? []
-          : [`orca terminal read --terminal ${terminalHandle} --screen`]),
-        `orca orchestration worker-abandon --dispatch ${args.dispatchId} --json`
+          : [`quirky terminal read --terminal ${terminalHandle} --screen`]),
+        `quirky orchestration worker-abandon --dispatch ${args.dispatchId} --json`
       ],
       ...(args.terminalRevealWarning ? { warning: args.terminalRevealWarning } : {})
     }

@@ -65,7 +65,7 @@ async function wireCodexAccountKey(settings: ReturnType<typeof createSettings>) 
     prepareCodexLaunchHome: codexStructuredLaunchHomeResolvers.prepareCodexStructuredLaunch,
     readCodexLaunchHome: codexStructuredLaunchHomeResolvers.resolveCodexStructuredLaunchHome,
     workspaceTrustSettings: () => settings,
-    stateDirectory: '/orca-data'
+    stateDirectory: '/quirky-data'
   }
   const resolve = (purpose: 'launch' | 'read') =>
     codex.resolveAccountHome(
@@ -107,7 +107,7 @@ describe('Codex catalog account key: picker read vs launch', () => {
     await expectOneKey(createSettings({ realHomeRoutable: true }), getSystemCodexHomePath())
   })
 
-  it("system account on Orca's shared runtime home", async () => {
+  it("system account on Quirky's shared runtime home", async () => {
     await expectOneKey(createSettings({ realHomeRoutable: false }), getRuntimeCodexHomePath())
   })
 

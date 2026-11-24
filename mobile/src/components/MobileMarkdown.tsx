@@ -23,7 +23,7 @@ type Props = {
    *  optional :line(:col) suffix). Omitted on screens with no file viewer, where
    *  paths render as plain text (no behavior change). */
   onOpenFile?: (pathText: string) => void
-  /** Native-chat assistant prose only: renders `::orca-visual{...}` directive lines. Without it,
+  /** Native-chat assistant prose only: renders `::quirky-visual{...}` directive lines. Without it,
    *  a directive line is ordinary text. Must be referentially stable (this component is memoized). */
   renderImage?: (href: string, alt: string) => ReactNode
   renderVisual?: (directive: NativeChatVisualDirective, index: number) => ReactNode

@@ -32,7 +32,7 @@ const { AGENT_LAUNCH_METHODS } = await import('../../src/main/runtime/rpc/method
 
 let directory: string
 beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), 'orca-launch-cli-'))
+  directory = await mkdtemp(join(tmpdir(), 'quirky-launch-cli-'))
   setAgentLaunchRecordStore(await openTestAgentSessionRecordStore(directory))
   chatCreate.mockReset().mockResolvedValue({ ok: true, value: { sessionId: 'codex_test' } })
   promptCommit.mockClear()
@@ -69,7 +69,7 @@ function hostClient(runtime: ReturnType<typeof runtimeStub>, loseReply = false) 
       lost = true
       throw new RuntimeClientError(
         'runtime_unavailable',
-        'The Orca runtime closed the connection before responding. Restart Orca and try again.'
+        'The Quirky runtime closed the connection before responding. Restart Quirky and try again.'
       )
     }
     return { id: 'reply', ok: true, result, _meta: { runtimeId: 'runtime-1' } }
@@ -297,7 +297,7 @@ describe('CLI launch through host surface creation and replay admission', () => 
         _meta: { runtimeId: 'runtime-1' }
       })
       .mockRejectedValueOnce(
-        new RuntimeClientError('runtime_unavailable', 'Restart Orca and try again.')
+        new RuntimeClientError('runtime_unavailable', 'Restart Quirky and try again.')
       )
     await expect(
       createWorktreeWithAgent({

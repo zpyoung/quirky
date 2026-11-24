@@ -14,7 +14,7 @@ describe('host screen reply schemas', () => {
   it('requires the repo list and drops a row no map could key', () => {
     expect(hostRepoCatalogSchema.safeParse({}).success).toBe(false)
     const parsed = hostRepoCatalogSchema.parse({
-      repos: [{ id: 'r1', displayName: 'orca' }, { id: 'r2' }, { displayName: 'ghost' }]
+      repos: [{ id: 'r1', displayName: 'quirky' }, { id: 'r2' }, { displayName: 'ghost' }]
     })
     expect(parsed.map((repo) => repo.id)).toEqual(['r1'])
   })
@@ -50,7 +50,7 @@ describe('host screen reply schemas', () => {
             type: 'image',
             src: 'https://example.invalid/a.png',
             source: 'gitlab',
-            label: 'acme/orca'
+            label: 'acme/quirky'
           }
         }
       ]
@@ -61,7 +61,7 @@ describe('host screen reply schemas', () => {
       type: 'image',
       src: 'https://example.invalid/a.png',
       source: 'gitlab',
-      label: 'acme/orca'
+      label: 'acme/quirky'
     })
   })
 

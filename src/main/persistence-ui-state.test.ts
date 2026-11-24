@@ -62,13 +62,13 @@ async function createStore() {
   // file's temp dir rather than the global fake's shared one, after resetModules.
   installFakeAppEnvironment({ getPath: () => testState.dir })
   initDataPath()
-  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
+  return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'quirky-data.json') })
 }
 
 describe('Store', () => {
   beforeEach(() => {
     hasCreatedStoreInCase = false
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {
@@ -669,7 +669,7 @@ describe('Store', () => {
     writeDataFile({
       ...getDefaultPersistedState(testState.dir),
       sshTargets: [
-        { id: 'ssh-1', label: 'SSH 1', host: 'example.test', port: 22, username: 'orca' }
+        { id: 'ssh-1', label: 'SSH 1', host: 'example.test', port: 22, username: 'quirky' }
       ],
       sshPtyConsumerRecoveries: [
         { ...legacyRecovery, ownerLease: sealedOwnerLease(legacyRecovery.ownerLease) }

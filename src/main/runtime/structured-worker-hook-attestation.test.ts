@@ -6,9 +6,9 @@ vi.mock('../native-chat/agent-session-wire/structured-agent-session-registry', (
   getStructuredAgentSessionHost: () => hostRef.current
 }))
 
-const { OrcaRuntimeWithGetOrchestrationDispatchAuthority } =
+const { QuirkyRuntimeWithGetOrchestrationDispatchAuthority } =
   await import('./terminal/output/terminal-orchestration-authority')
-const { OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller } =
+const { QuirkyRuntimeWithVerifyOrchestrationCompatibilityCaller } =
   await import('./orchestration/terminal-authority/verify-orchestration-compatibility-caller')
 const {
   mintStructuredWorkerHandle,
@@ -20,11 +20,11 @@ const {
 const SESSION_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 
 const getAuthority =
-  OrcaRuntimeWithGetOrchestrationDispatchAuthority.prototype.getOrchestrationDispatchAuthority
+  QuirkyRuntimeWithGetOrchestrationDispatchAuthority.prototype.getOrchestrationDispatchAuthority
 // Both borrowed from the real prototype through their public surface: a stubbed copy of the
 // method under test would pin nothing.
 const verifyCaller =
-  OrcaRuntimeWithVerifyOrchestrationCompatibilityCaller.prototype
+  QuirkyRuntimeWithVerifyOrchestrationCompatibilityCaller.prototype
     .verifyOrchestrationCompatibilityCaller
 
 function registerStructuredWorker(): string {

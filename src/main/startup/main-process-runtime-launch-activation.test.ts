@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const electronApp = vi.hoisted(() => ({
   isPackaged: false,
   on: vi.fn(),
-  getPath: vi.fn(() => '/tmp/orca-user-data'),
+  getPath: vi.fn(() => '/tmp/quirky-user-data'),
   getVersion: vi.fn(() => '0.0.0-test'),
   isReady: vi.fn(() => true),
   focus: vi.fn()
@@ -15,17 +15,17 @@ const launchHooks = vi.hoisted(() => ({
 
 vi.mock('electron', () => ({ app: electronApp, powerMonitor: { on: vi.fn() } }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
-vi.mock('../orca-profiles/profile-cloud-auth-config', () => ({
-  getOrcaCloudAuthConfig: () => ({ configured: false })
+vi.mock('../quirky-profiles/profile-cloud-auth-config', () => ({
+  getQuirkyCloudAuthConfig: () => ({ configured: false })
 }))
-vi.mock('../orca-profiles/profile-storage-paths', () => ({ getProfileUserDataPath: vi.fn() }))
+vi.mock('../quirky-profiles/profile-storage-paths', () => ({ getProfileUserDataPath: vi.fn() }))
 vi.mock('../persistence', () => ({
-  getCanonicalUserDataPath: () => '/tmp/orca-user-data',
+  getCanonicalUserDataPath: () => '/tmp/quirky-user-data',
   migrateMobilePairingDataToCanonicalUserDataPath: vi.fn()
 }))
 const launchOrder = vi.hoisted((): string[] => [])
 vi.mock('../runtime/runtime-rpc', () => ({
-  OrcaRuntimeRpcServer: class {
+  QuirkyRuntimeRpcServer: class {
     start = vi.fn(async () => {
       launchOrder.push('rpc-start')
     })
@@ -74,7 +74,9 @@ vi.mock('../runtime/runtime-rpc-startup-failure', () => ({
   showRuntimeRpcStartupFailureDialog: vi.fn()
 }))
 vi.mock('../cli/cli-installer', () => ({ CliInstaller: class {} }))
-vi.mock('../cli/linux-bare-orca-dispatcher', () => ({ installLinuxBareOrcaDispatcher: vi.fn() }))
+vi.mock('../cli/linux-bare-quirky-dispatcher', () => ({
+  installLinuxBareQuirkyDispatcher: vi.fn()
+}))
 vi.mock('../terminal-history-deletion', () => ({ scheduleAllPendingHistoryTreeRemovals: vi.fn() }))
 vi.mock('../ipc/startup-notification-registration', () => ({
   triggerStartupNotificationRegistration: vi.fn()

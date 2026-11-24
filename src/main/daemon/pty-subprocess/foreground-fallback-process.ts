@@ -17,7 +17,7 @@ export function resolveFallbackForegroundProcess(
   processName: string | null | undefined,
   shellPath: string
 ): string | null {
-  // Why: node-pty names Orca's exact wrapper path while it execs the shell, and as its spawn file
+  // Why: node-pty names Quirky's exact wrapper path while it execs the shell, and as its spawn file
   // once the foreground group's leader has exited (`true | claude`); both mean the shell.
   const normalized = normalizeForegroundProcessName(
     processName && isTerminalScopeWrapper(processName.trim()) ? shellPath : processName

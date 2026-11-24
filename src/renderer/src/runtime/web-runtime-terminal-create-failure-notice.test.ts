@@ -98,7 +98,7 @@ describe('a terminal the host fails to create', () => {
     ).resolves.toMatchObject({ status: 'failed' })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Orca couldn’t confirm that the new terminal opened on the host.',
+      'Quirky couldn’t confirm that the new terminal opened on the host.',
       expect.objectContaining({ description: expect.stringContaining(HOST_REFUSAL) })
     )
     // One toast per workspace however often automatic seeding retries.
@@ -112,7 +112,10 @@ describe('a terminal the host fails to create', () => {
       call: vi.fn().mockResolvedValue({
         id: 'create',
         ok: false,
-        error: { code: 'runtime_timeout', message: 'Timed out waiting for the remote Orca runtime' }
+        error: {
+          code: 'runtime_timeout',
+          message: 'Timed out waiting for the remote Quirky runtime'
+        }
       })
     })
     vi.spyOn(console, 'warn').mockImplementation(() => undefined)
@@ -120,7 +123,7 @@ describe('a terminal the host fails to create', () => {
     await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Orca couldn’t confirm that the new terminal opened on the host.',
+      'Quirky couldn’t confirm that the new terminal opened on the host.',
       expect.objectContaining({ description: expect.stringContaining('Timed out') })
     )
   })
@@ -134,7 +137,7 @@ describe('a terminal the host fails to create', () => {
     await createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })
 
     expect(mocks.toastError).toHaveBeenCalledExactlyOnceWith(
-      'Orca couldn’t confirm that the new terminal opened on the host.',
+      'Quirky couldn’t confirm that the new terminal opened on the host.',
       expect.objectContaining({ description: expect.stringContaining('Request timed out') })
     )
   })
@@ -157,7 +160,7 @@ describe('a terminal the host fails to create', () => {
   })
 
   it('stays quiet when no host session exists, so callers can fall back to a local tab', async () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', false)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', false)
     mocks.getState.mockReturnValue({ ...mocks.getState(), settings: {} })
     await expect(
       createWebRuntimeSessionTerminal({ worktreeId: WORKTREE_ID, activate: true })

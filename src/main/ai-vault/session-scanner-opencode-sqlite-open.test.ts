@@ -39,7 +39,7 @@ const SCHEMA = `
 `
 
 function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'orca-opencode-open-'))
+  const dir = mkdtempSync(join(tmpdir(), 'quirky-opencode-open-'))
   tempDirs.push(dir)
   return dir
 }

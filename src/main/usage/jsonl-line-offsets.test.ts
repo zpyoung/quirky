@@ -21,7 +21,7 @@ function writeFixture(name: string, contents: string): string {
 }
 
 beforeEach(() => {
-  workDir = mkdtempSync(join(tmpdir(), 'orca-jsonl-offsets-'))
+  workDir = mkdtempSync(join(tmpdir(), 'quirky-jsonl-offsets-'))
 })
 
 afterEach(() => {

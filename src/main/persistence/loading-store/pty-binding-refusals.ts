@@ -4,7 +4,7 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import type { TerminalSessionPartition } from '../../../shared/workspace-layout/terminal-owner-invariants'
 import { layoutContainsLeafId } from '../restoring-sessions/terminal-layout-normalization'
 import type { PtyBindingSourceExpectation } from './store'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { isClosedPaneFenced } from '../terminal-topology/closed-pane-binding-fence'
 
 export type PtyBindingRefusalRequest = {
@@ -78,7 +78,7 @@ export function ptyBindingIsRefused(
   }
   // Switch point: a pane main closed or took back is not minted again by a start already under way.
   if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    QUIRKY_LAYOUT_OWNER_IS_MAIN &&
     !layoutContainsLeafId(
       session.terminalLayoutsByTabId?.[args.tabId]?.root ?? null,
       args.leafId

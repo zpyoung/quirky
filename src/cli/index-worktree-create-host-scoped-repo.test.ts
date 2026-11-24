@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const {
   callMock,
   runtimeClientConstructorMock,
-  serveOrcaAppMock,
+  serveQuirkyAppMock,
   getDefaultUserDataPathMock,
   addEnvironmentFromPairingCodeMock,
   listEnvironmentsMock,
@@ -11,8 +11,8 @@ const {
 } = vi.hoisted(() => ({
   callMock: vi.fn(),
   runtimeClientConstructorMock: vi.fn(),
-  serveOrcaAppMock: vi.fn(),
-  getDefaultUserDataPathMock: vi.fn(() => '/tmp/orca-user-data'),
+  serveQuirkyAppMock: vi.fn(),
+  getDefaultUserDataPathMock: vi.fn(() => '/tmp/quirky-user-data'),
   addEnvironmentFromPairingCodeMock: vi.fn(),
   listEnvironmentsMock: vi.fn(),
   spawnMock: vi.fn()
@@ -23,7 +23,7 @@ vi.mock('./runtime-client', async () => {
   return createRuntimeClientModuleMock({
     callMock,
     runtimeClientConstructorMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock
   })
 })
@@ -45,16 +45,16 @@ import { buildWorktree, okFixture, queueFixtures, worktreeListFixture } from './
 import { useWorktreeAwarenessEnvironment } from './index-test-harness'
 
 const SSH_CALLER = {
-  ORCA_ORCHESTRATION_COMPATIBILITY_HOST_KIND: 'ssh',
-  ORCA_ORCHESTRATION_COMPATIBILITY_HOST_ID: 'box-b',
-  ORCA_ORCHESTRATION_COMPATIBILITY_HOST_INCARNATION: 'inc-1',
-  ORCA_ORCHESTRATION_COMPATIBILITY_ATTACHMENT: 'att-1'
+  QUIRKY_ORCHESTRATION_COMPATIBILITY_HOST_KIND: 'ssh',
+  QUIRKY_ORCHESTRATION_COMPATIBILITY_HOST_ID: 'box-b',
+  QUIRKY_ORCHESTRATION_COMPATIBILITY_HOST_INCARNATION: 'inc-1',
+  QUIRKY_ORCHESTRATION_COMPATIBILITY_ATTACHMENT: 'att-1'
 }
 
 describe('worktree create from a worktree another host shares an id with', () => {
   useWorktreeAwarenessEnvironment({
     callMock,
-    serveOrcaAppMock,
+    serveQuirkyAppMock,
     getDefaultUserDataPathMock,
     addEnvironmentFromPairingCodeMock,
     listEnvironmentsMock,

@@ -8,12 +8,12 @@ import {
 import { AgentLaunchTabClosedError } from '../../../../shared/agent-launch-tab-closed'
 import type { RunningAgentLaunchPane } from '../../../agent-launch/agent-launch-pane-attachment'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { agentLaunchFailureCode } from '../../../runtime/rpc/methods/agent-launch-failure-code'
 import type { PtyIpcSpawnState } from './spawn-state'
 
 export type PaneAgentLaunch = {
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   address: AgentLaunchPaneAddress
   paneKey: string
   running: RunningAgentLaunchPane

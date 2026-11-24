@@ -9,7 +9,7 @@ import { structuredSessionNotices } from './native-chat-structured-session-notic
 
 afterEach(cleanup)
 
-it('names the Command setting when it is not a program Orca can run', () => {
+it('names the Command setting when it is not a program Quirky can run', () => {
   const failure = agentSessionRefusalFailure({
     code: 'agent_session_operation_invalid',
     details: { reason: 'agentCommandNotRunnable' }
@@ -26,7 +26,7 @@ it('names the Command setting when it is not a program Orca can run', () => {
   )
   expect(
     screen.getByText(
-      "Chat could not be started. Claude's Command in Settings → Agents must be a program path or name Orca can find, with no arguments or variables. Change it or reset it."
+      "Chat could not be started. Claude's Command in Settings → Agents must be a program path or name Quirky can find, with no arguments or variables. Change it or reset it."
     )
   ).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
@@ -41,6 +41,6 @@ it('reads naturally where no agent name is known', () => {
       sayAgentSessionFailureEnglish
     )
   ).toBe(
-    "The agent's Command in Settings → Agents must be a program path or name Orca can find, with no arguments or variables. Change it or reset it."
+    "The agent's Command in Settings → Agents must be a program path or name Quirky can find, with no arguments or variables. Change it or reset it."
   )
 })

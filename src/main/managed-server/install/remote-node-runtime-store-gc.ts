@@ -1,12 +1,12 @@
 /**
- * Collects the shared `~/.orca-remote/runtimes/node-<sha256>/` store (design D5 GC).
+ * Collects the shared `~/.quirky-remote/runtimes/node-<sha256>/` store (design D5 GC).
  *
  * A runtime is deleted only when all of these hold: no retained directory references it
  * (`.runtime-node` or `.runtime-ref-node-<sha>`), it is neither a pin this client runs nor the
  * newest other verified runtime (keep two), and a process check ran and found nothing executing
  * from it. Process evidence can only add holds; a scan that could not run keeps everything.
  *
- * Legacy `relay-*` / `orcad-*` directories are read for references and reported as
+ * Legacy `relay-*` / `quirkyd-*` directories are read for references and reported as
  * diagnostics, never deleted here (design D10 two-step hand-over).
  *
  * The pass runs only while it holds the store lock that promotion takes, so a runtime cannot be
@@ -14,7 +14,7 @@
  */
 import { randomInt } from 'node:crypto'
 import type { RemoteInstallTransport } from './remote-install-transport'
-import { RUNTIME_STORE_STAGE_PREFIX } from './orcad-remote-node-runtime'
+import { RUNTIME_STORE_STAGE_PREFIX } from './quirkyd-remote-node-runtime'
 import { inventoryRemoteInstallDirs } from './remote-install-model'
 import {
   parseRuntimeStoreInventory,
@@ -237,7 +237,7 @@ async function collectHoldingStoreLock(
     return { state: 'skipped', reason: 'runtime store inventory was unverifiable' }
   }
   const legacy = inventoryRemoteInstallDirs(inventory.dirNames)
-  const legacyDirs = [...legacy.relay, ...legacy.orcad]
+  const legacyDirs = [...legacy.relay, ...legacy.quirkyd]
   const plan = planRuntimeStoreGc(inventory, options.currentPins)
   const removed: string[] = []
   const kept = [...plan.kept]

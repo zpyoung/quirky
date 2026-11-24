@@ -15,7 +15,7 @@ import {
 import { resolveSshBrowserNetworkExecutionRoute } from '../../src/main/browser/ssh-browser-network-execution-route'
 import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 
-const runDocker = process.env.ORCA_RUN_DOCKER_SSH_BROWSER_E2E === '1'
+const runDocker = process.env.QUIRKY_RUN_DOCKER_SSH_BROWSER_E2E === '1'
 const executionHost = {
   kind: 'ssh' as const,
   targetId: 'target-a',

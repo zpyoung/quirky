@@ -1,13 +1,13 @@
 import { fileURLToPath } from 'node:url'
 import * as pty from 'node-pty'
 import { describe, it, type TestContext } from 'vitest'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { makeTuiIdleRuntime } from './tui-idle-wait-test-harness'
 import type { RuntimeSyncWindowGraph } from '../../shared/runtime-types'
 import { TERMINAL_LIFECYCLE_METHODS } from './rpc/methods/terminal/terminal-lifecycle-methods'
 
 // #6011 end-to-end: a REAL pty running a REAL process that emits a REAL name-only
-// OSC title while streaming must not satisfy `orca terminal wait --for tui-idle`.
+// OSC title while streaming must not satisfy `quirky terminal wait --for tui-idle`.
 // Everything below is live — real bytes, real `ps` foreground reads, real timers —
 // because the bug was a wait that returned satisfied in ~0s, so timing IS the proof.
 
@@ -78,9 +78,9 @@ async function startRealAgentPane(
   return { runtime, transcript, handle: terminals[0].handle }
 }
 
-/** Exactly what `orca terminal wait --terminal <h> --for tui-idle` reaches over RPC. */
+/** Exactly what `quirky terminal wait --terminal <h> --for tui-idle` reaches over RPC. */
 async function terminalWait(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   terminal: string,
   timeoutMs: number
 ): Promise<{ satisfied: boolean; elapsedMs: number }> {

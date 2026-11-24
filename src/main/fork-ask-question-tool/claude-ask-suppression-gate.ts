@@ -23,7 +23,7 @@ export {
 export const CLAUDE_ASK_SUPPRESSION_VERSION_FLOOR = '1.0.51'
 
 // Why: suppress hot-loop re-probing of a broken host while still detecting an in-place Claude
-// Code upgrade during a long Orca session, mirroring GitCapabilityCache's rationale.
+// Code upgrade during a long Quirky session, mirroring GitCapabilityCache's rationale.
 export const CLAUDE_ASK_SUPPRESSION_GATE_RETRY_INTERVAL_MS = 30 * 60_000
 
 const CLAUDE_ASK_SUPPRESSION_FLAGS = [

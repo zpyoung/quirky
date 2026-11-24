@@ -1,10 +1,10 @@
-import type { OrcadManagedRuntimeStatus } from '../../shared/orcad-managed-runtime'
+import type { QuirkydManagedRuntimeStatus } from '../../shared/quirkyd-managed-runtime'
 
 function count(value: number | null): string {
   return value === null ? 'unverifiable' : String(value)
 }
 
-export function formatManagedServerStatus(status: OrcadManagedRuntimeStatus): string {
+export function formatManagedServerStatus(status: QuirkydManagedRuntimeStatus): string {
   const lines = [
     `Active version: ${status.activeVersion ?? 'none'}`,
     `Previous version: ${status.previousVersion ?? 'none'}${status.rollbackAvailable ? ' (rollback available)' : ''}`,
@@ -12,7 +12,7 @@ export function formatManagedServerStatus(status: OrcadManagedRuntimeStatus): st
   ]
   if (status.recovery) {
     lines.push(
-      `Interrupted ${status.recovery.operation} of ${status.recovery.version} (${status.recovery.phase}); run \`orca environment recover\`.`
+      `Interrupted ${status.recovery.operation} of ${status.recovery.version} (${status.recovery.phase}); run \`quirky environment recover\`.`
     )
   }
   if (status.migration) {

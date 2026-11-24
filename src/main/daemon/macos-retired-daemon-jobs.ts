@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { getDaemonPidPath, getDaemonSocketPath, getDaemonTokenPath } from './daemon-spawner'
 import { PROTOCOL_VERSION } from './daemon-protocol-version'
 import { macDaemonJobLabel } from './macos-daemon-job-label'

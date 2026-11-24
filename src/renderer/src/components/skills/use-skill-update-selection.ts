@@ -19,7 +19,7 @@ function choiceKey(group: SkillFreshnessGroupModel): string {
 }
 
 /**
- * Which updatable skills the next run rewrites. Orca's own skills are preselected;
+ * Which updatable skills the next run rewrites. Quirky's own skills are preselected;
  * a same-named copy from elsewhere is only replaced once the user ticks it.
  */
 export function useSkillUpdateSelection(
@@ -27,7 +27,7 @@ export function useSkillUpdateSelection(
 ): SkillUpdateSelection {
   const [choices, setChoices] = useState<ReadonlyMap<string, boolean>>(new Map())
   const isSelected = (group: SkillFreshnessGroupModel): boolean =>
-    choices.get(choiceKey(group)) ?? group.orcaOwned
+    choices.get(choiceKey(group)) ?? group.quirkyOwned
   const updatable = groups.filter((group) => group.status === 'update-available')
   return {
     checkboxFor: (group) => ({
@@ -37,8 +37,8 @@ export function useSkillUpdateSelection(
     }),
     reset: () => setChoices(new Map()),
     selectedNames: updatable.filter(isSelected).map((group) => group.name),
-    ownedCount: updatable.filter((group) => group.orcaOwned).length,
-    unselectedForeignCount: updatable.filter((group) => !group.orcaOwned && !isSelected(group))
+    ownedCount: updatable.filter((group) => group.quirkyOwned).length,
+    unselectedForeignCount: updatable.filter((group) => !group.quirkyOwned && !isSelected(group))
       .length
   }
 }

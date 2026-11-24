@@ -27,7 +27,7 @@ describe.skipIf(process.platform === 'win32')('browseSshDirectory over a POSIX s
   let root: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-ssh-browse-symlink-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-ssh-browse-symlink-'))
   })
 
   afterEach(async () => {

@@ -1,6 +1,6 @@
 import { InvalidArgumentError } from '../../core'
 import type { RuntimeTerminalSend } from '../../../../../shared/runtime-terminal-send-contract'
-import type { DriverState, OrcaRuntimeService } from '../../../orca-runtime'
+import type { DriverState, QuirkyRuntimeService } from '../../../quirky-runtime'
 import {
   TERMINAL_INPUT_MAX_BYTES,
   TERMINAL_INPUT_TOO_LARGE_ERROR,
@@ -9,7 +9,7 @@ import {
 import type { TerminalViewportClient } from './terminal-stream-types'
 
 export function isTerminalInputLockedForClient(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   ptyId: string,
   client: TerminalViewportClient | undefined
 ): boolean {
@@ -54,7 +54,7 @@ function isTerminalStreamInputRejection(error: unknown): boolean {
 }
 
 export async function sendTerminalStreamInput(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   args: {
     terminal: string
     text: string
@@ -105,7 +105,7 @@ function streamInputOutcome(result: RuntimeTerminalSend): TerminalStreamInputOut
 }
 
 export type MobileInputFloorClaimHolder = {
-  current: ReturnType<OrcaRuntimeService['beginMobileInputFloor']>
+  current: ReturnType<QuirkyRuntimeService['beginMobileInputFloor']>
 }
 
 export async function commitMobileInputFloorClaim(
@@ -144,7 +144,7 @@ export function isTerminalSendGuardNotWritable(error: unknown): boolean {
 }
 
 export function assertTerminalSendExactPtyBinding(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   handle: string,
   expectedPtyId: string | undefined
 ): void {

@@ -15,5 +15,5 @@ export function usesNodePtySpawnHelper(platform: string): boolean {
  * config/scripts/native-build-entry.cjs; only dev installs sharing a package dir have it.
  */
 export function nodePtyNativeBuildEntryDir(platform: string, arch: string): string {
-  return `build/orca-napi-${platform}-${arch}`
+  return `build/quirky-napi-${platform}-${arch}`
 }

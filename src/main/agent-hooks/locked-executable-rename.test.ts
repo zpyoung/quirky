@@ -45,10 +45,10 @@ afterEach(() => {
 })
 
 function stage(): { tmp: string; target: string; aside: string } {
-  const root = mkdtempSync(join(tmpdir(), 'orca-locked-rename-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-locked-rename-'))
   roots.push(root)
   const tmp = join(root, '.next.tmp')
-  const target = join(root, 'orca-agent-hook.exe')
+  const target = join(root, 'quirky-agent-hook.exe')
   writeFileSync(tmp, 'next build')
   writeFileSync(target, 'running build')
   return { tmp, target, aside: `${target}.old` }

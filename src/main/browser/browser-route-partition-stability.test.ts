@@ -17,14 +17,14 @@ const authority: BrowserHostLeaseAuthority = {
 }
 
 const baseIdentity = {
-  orcaProfileId: 'orca/profile:alpha',
+  quirkyProfileId: 'quirky/profile:alpha',
   browserProfileId: 'browser/profile:default',
   authorityConnectionIdentity: 'paired-runtime:authority-a'
 }
 
 function createBindingStorePath(): string {
   return join(
-    realpathSync(mkdtempSync(join(realpathSync(tmpdir()), 'orca-browser-partition-stability-'))),
+    realpathSync(mkdtempSync(join(realpathSync(tmpdir()), 'quirky-browser-partition-stability-'))),
     'bindings.json'
   )
 }
@@ -192,7 +192,7 @@ describe('client-hosted route partition stability', () => {
     )
 
     expect(second).not.toBe(first)
-    expect(first).toMatch(/^persist:orca-browser-v1-[a-f0-9]{64}$/)
+    expect(first).toMatch(/^persist:quirky-browser-v1-[a-f0-9]{64}$/)
     expect(first).not.toContain('runtime-a')
   })
 })

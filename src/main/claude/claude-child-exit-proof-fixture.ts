@@ -1,4 +1,4 @@
-import type { PipedChildProcess } from '@orca/process-host/process-spec'
+import type { PipedChildProcess } from '@quirky/process-host/process-spec'
 import {
   spawnManagedProviderProcess,
   type ManagedProviderProcess

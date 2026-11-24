@@ -41,7 +41,7 @@ export function AutoRenameFailedDialog({
         <>
           {translate(
             'auto.components.sidebar.AutoRenameFailedDialog.ff62a18580',
-            "Orca couldn't generate a branch name for"
+            "Quirky couldn't generate a branch name for"
           )}{' '}
           <span className="font-medium text-foreground">{worktreeName}</span>{' '}
           {translate(

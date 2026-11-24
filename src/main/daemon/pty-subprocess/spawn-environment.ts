@@ -2,7 +2,7 @@ import { getLegacyOpenCodeEnvKeysToDelete } from '../../opencode/legacy-shared-c
 import { restoreManagedDataAccountEnvironment } from '../../../shared/managed-data-account-environment'
 import { restoreOrStripOverlayEnv } from '../../../shared/agent-overlay-env'
 import { delimiter } from 'node:path'
-import { dropInheritedOrcaFishHistory } from '../../fish-history-session'
+import { dropInheritedQuirkyFishHistory } from '../../fish-history-session'
 import { removeAppImageRuntimeEnv } from '../../pty/appimage-terminal-env'
 import { removeChromiumDisabledSessionBus } from '../../pty/chromium-session-bus-env'
 import { stripInheritedBuildModeEnv } from '../../pty/build-mode-env'
@@ -11,15 +11,15 @@ import { dropIncoherentCondaActivationEnv } from '../../pty/conda-activation-env
 import { stripLegacyTerminalShimEnv } from '../../pty/legacy-terminal-shim-dir'
 import { removeInheritedNoColor } from '../../pty/terminal-color-env'
 import { resolvePathEnvKey } from '../../pty/windows-path-segment-merge'
-import { dropInheritedOrcaHistFile } from '../../worktree-history-file-path'
+import { dropInheritedQuirkyHistFile } from '../../worktree-history-file-path'
 import {
   gitCredentialPromptGuardEnv,
   mergeGitConfigEnvProtocol
 } from '../../../shared/git-credential-prompt-env'
 import { TERMINAL_GIT_CREDENTIAL_GUARD_POLICY_ENV } from '../../../shared/terminal-git-credential-guard'
 import {
-  ORCA_IMAGE_PROTOCOL_ENV,
-  ORCA_IMAGE_PROTOCOL_VALUE
+  QUIRKY_IMAGE_PROTOCOL_ENV,
+  QUIRKY_IMAGE_PROTOCOL_VALUE
 } from '../../../shared/terminal-image-protocol'
 import {
   expandWindowsEnvironmentVariables,
@@ -28,18 +28,18 @@ import {
 import { applyScrubSafeAgentEnvAliases } from '../../../shared/agent-hook-scrub-safe-env'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import type { PtySubprocessOptions } from '../pty-subprocess'
-import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../../shared/orcad-managed-launch-env'
+import { QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV } from '../../../shared/quirkyd-managed-launch-env'
 
 const PANE_IDENTITY_ENV_KEYS = [
-  'ORCA_PANE_KEY',
-  'ORCA_TAB_ID',
-  'ORCA_WORKTREE_ID',
-  'ORCA_AGENT_LAUNCH_TOKEN',
+  'QUIRKY_PANE_KEY',
+  'QUIRKY_TAB_ID',
+  'QUIRKY_WORKTREE_ID',
+  'QUIRKY_AGENT_LAUNCH_TOKEN',
   // Not identity but equally per-spawn: an inherited copy names another launch's CLI.
-  'ORCA_WSL_CLI_DIR',
+  'QUIRKY_WSL_CLI_DIR',
   'JCODE_RUNTIME_DIR',
-  // A server's own launch marker; a user's `orcad` in this shell is not client-managed.
-  ORCAD_MANAGED_ACTIVATION_ROOT_ENV
+  // A server's own launch marker; a user's `quirkyd` in this shell is not client-managed.
+  QUIRKYD_MANAGED_ACTIVATION_ROOT_ENV
 ] as const
 const WINDOWS_PATH_ENV_KEY_RE = /^path$/i
 
@@ -61,29 +61,29 @@ function deleteRequestedDaemonEnvKeys(
   env: Record<string, string>,
   keys: readonly string[] | undefined
 ): void {
-  const userDataPath = process.env.ORCA_USER_DATA_PATH
+  const userDataPath = process.env.QUIRKY_USER_DATA_PATH
   if (userDataPath) {
     for (const key of getLegacyOpenCodeEnvKeysToDelete(env, userDataPath, {})) {
       delete env[key]
     }
   }
-  // Why: persistent daemon state can differ from Electron; delete CODEX_HOME only when its Orca overlay owns it.
-  const deleteOrcaOwnedCodexHome =
-    keys?.includes('ORCA_CODEX_HOME') === true &&
-    env.ORCA_CODEX_HOME !== undefined &&
-    env.CODEX_HOME === env.ORCA_CODEX_HOME
+  // Why: persistent daemon state can differ from Electron; delete CODEX_HOME only when its Quirky overlay owns it.
+  const deleteQuirkyOwnedCodexHome =
+    keys?.includes('QUIRKY_CODEX_HOME') === true &&
+    env.QUIRKY_CODEX_HOME !== undefined &&
+    env.CODEX_HOME === env.QUIRKY_CODEX_HOME
   // A merged caller config can supersede the daemon's recorded overlay source.
   if (
-    keys?.includes('ORCA_OPENCODE_CONFIG_DIR') &&
+    keys?.includes('QUIRKY_OPENCODE_CONFIG_DIR') &&
     (env.OPENCODE_CONFIG_DIR === undefined ||
-      env.OPENCODE_CONFIG_DIR === env.ORCA_OPENCODE_CONFIG_DIR)
+      env.OPENCODE_CONFIG_DIR === env.QUIRKY_OPENCODE_CONFIG_DIR)
   ) {
     restoreOrStripOverlayEnv(
       env,
       {
         primary: 'OPENCODE_CONFIG_DIR',
-        overlay: 'ORCA_OPENCODE_CONFIG_DIR',
-        source: 'ORCA_OPENCODE_SOURCE_CONFIG_DIR'
+        overlay: 'QUIRKY_OPENCODE_CONFIG_DIR',
+        source: 'QUIRKY_OPENCODE_SOURCE_CONFIG_DIR'
       },
       {}
     )
@@ -91,7 +91,7 @@ function deleteRequestedDaemonEnvKeys(
   for (const key of keys ?? []) {
     delete env[key]
   }
-  if (deleteOrcaOwnedCodexHome) {
+  if (deleteQuirkyOwnedCodexHome) {
     delete env.CODEX_HOME
   }
 }
@@ -142,7 +142,7 @@ function promoteAgentTeamsShimPath(
   env: Record<string, string>,
   requestedPath: string | undefined
 ): void {
-  if (!env.ORCA_AGENT_TEAMS_TEAM_ID || !requestedPath) {
+  if (!env.QUIRKY_AGENT_TEAMS_TEAM_ID || !requestedPath) {
     return
   }
   const normalizedRequestedPath =
@@ -164,9 +164,12 @@ function removeInheritedDevAgentHookEndpoint(
   env: Record<string, string>,
   explicitEnv: Record<string, string> | undefined
 ): void {
-  if (explicitEnv?.ORCA_AGENT_HOOK_ENV === 'development' && !explicitEnv.ORCA_AGENT_HOOK_ENDPOINT) {
+  if (
+    explicitEnv?.QUIRKY_AGENT_HOOK_ENV === 'development' &&
+    !explicitEnv.QUIRKY_AGENT_HOOK_ENDPOINT
+  ) {
     // Why: strip only stale inherited endpoints; a fresh explicit one is needed by hooks that scrub token-like env vars before exec.
-    delete env.ORCA_AGENT_HOOK_ENDPOINT
+    delete env.QUIRKY_AGENT_HOOK_ENDPOINT
   }
 }
 
@@ -178,10 +181,10 @@ export function createDaemonPtyEnvironment(opts: PtySubprocessOptions): Record<s
     ...mergeGitConfigEnvProtocol(inheritedEnv, opts.env),
     TERM: 'xterm-256color',
     COLORTERM: 'truecolor',
-    TERM_PROGRAM: 'Orca',
-    TERM_PROGRAM_VERSION: process.env.ORCA_APP_VERSION ?? '0.0.0-dev',
+    TERM_PROGRAM: 'Quirky',
+    TERM_PROGRAM_VERSION: process.env.QUIRKY_APP_VERSION ?? '0.0.0-dev',
     FORCE_HYPERLINK: '1',
-    [ORCA_IMAGE_PROTOCOL_ENV]: ORCA_IMAGE_PROTOCOL_VALUE
+    [QUIRKY_IMAGE_PROTOCOL_ENV]: QUIRKY_IMAGE_PROTOCOL_VALUE
   } satisfies Record<string, string>
   stripLegacyTerminalShimEnv(env, process.platform)
   composeGuardedDaemonGitConfigEnv(env, opts.env, opts.launchAgent)
@@ -192,13 +195,13 @@ export function createDaemonPtyEnvironment(opts: PtySubprocessOptions): Record<s
   removeUnspecifiedPaneIdentityEnv(env, opts.env)
   stripPiProcessOwnerEnv(env)
   if (opts.env?.fish_history === undefined) {
-    dropInheritedOrcaFishHistory(env)
+    dropInheritedQuirkyFishHistory(env)
   }
   if (opts.env?.HISTFILE === undefined) {
-    dropInheritedOrcaHistFile(env)
+    dropInheritedQuirkyHistFile(env)
   }
-  if (opts.env?.ORCA_HISTFILE === undefined) {
-    delete env.ORCA_HISTFILE
+  if (opts.env?.QUIRKY_HISTFILE === undefined) {
+    delete env.QUIRKY_HISTFILE
   }
   removeInheritedDevAgentHookEndpoint(env, opts.env)
   delete env.ELECTRON_RUN_AS_NODE
@@ -239,11 +242,11 @@ export function finalizeDaemonPtyEnvironment(
   stripPiProcessOwnerEnv(env)
   // A live daemon pins this runtime across app updates; callers cannot name the host executable.
   for (const key of Object.keys(env)) {
-    if (key.toUpperCase() === 'ORCA_AGENT_HOOK_NODE') {
+    if (key.toUpperCase() === 'QUIRKY_AGENT_HOOK_NODE') {
       delete env[key]
     }
   }
   if (process.platform === 'win32') {
-    env.ORCA_AGENT_HOOK_NODE = process.execPath
+    env.QUIRKY_AGENT_HOOK_NODE = process.execPath
   }
 }

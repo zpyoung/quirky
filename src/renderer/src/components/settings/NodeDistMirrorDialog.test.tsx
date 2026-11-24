@@ -71,7 +71,7 @@ describe('Use a Node.js mirror', () => {
     expect(screen.getByRole('dialog', { name: 'Use a Node.js mirror' })).toBeInTheDocument()
     expect(input).toHaveValue('https://npmmirror.com/mirrors/node/')
     expect(input).toHaveFocus()
-    expect(screen.getByText(/checked against the checksum Orca pins/)).toBeInTheDocument()
+    expect(screen.getByText(/checked against the checksum Quirky pins/)).toBeInTheDocument()
   })
 
   it('saves to the mirror setting, then retries the connect and closes', async () => {
@@ -148,7 +148,7 @@ describe('Use a Node.js mirror', () => {
   })
 
   it('offers nothing in a paired browser, whose settings are not this computer’s', () => {
-    vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
+    vi.stubGlobal('__QUIRKY_WEB_CLIENT__', true)
     try {
       render(<Host status={blocked} />)
       expect(screen.queryByRole('button')).toBeNull()

@@ -33,7 +33,7 @@ function user(
   observedAt: number
 ): AgentJournalRenderItem {
   return {
-    itemId: `orca:${clientMessageId}`,
+    itemId: `quirky:${clientMessageId}`,
     revision: 0,
     sequence,
     observedAt,
@@ -57,7 +57,7 @@ function turn(
 
 function tool(sequence: number, observedAt: number): AgentJournalRenderItem {
   return {
-    itemId: `orca:claude-tool%3A${sequence}`,
+    itemId: `quirky:claude-tool%3A${sequence}`,
     revision: 1,
     sequence,
     observedAt,
@@ -194,8 +194,8 @@ describe('a send queued behind a running Claude turn', () => {
       whileQueued.submissions,
       whileQueued.turnId
     )
-    const transcript = [message('orca:prior'), message('orca:A'), message('orca:B')]
-    expect(barOf(transcript, whileQueued)).toBe('orca:A')
+    const transcript = [message('quirky:prior'), message('quirky:A'), message('quirky:B')]
+    expect(barOf(transcript, whileQueued)).toBe('quirky:A')
     // A was sent into an idle session: it counts from its own send, as before.
     expect(bars.runningTiming).toEqual({
       state: 'running',
@@ -203,14 +203,14 @@ describe('a send queued behind a running Claude turn', () => {
       requestedAt: A.sent,
       observedAt: T + 77_224
     })
-    expect(bars.settledTurns.has('orca:B')).toBe(false)
+    expect(bars.settledTurns.has('quirky:B')).toBe(false)
   })
 
   it("moves the bar to B when its own turn opens, counting from A's end", () => {
     const bars = selectStructuredAgentTurnBars(whileB.items, whileB.submissions, whileB.turnId)
-    const transcript = [message('orca:prior'), message('orca:A'), message('orca:B')]
-    expect(barOf(transcript, whileB)).toBe('orca:B')
-    expect(bars.settledTurns.get('orca:A')).toEqual({
+    const transcript = [message('quirky:prior'), message('quirky:A'), message('quirky:B')]
+    expect(barOf(transcript, whileB)).toBe('quirky:B')
+    expect(bars.settledTurns.get('quirky:A')).toEqual({
       startedAt: A.started,
       workedSeconds: 17,
       verdict: 'superseded'
@@ -224,15 +224,18 @@ describe('a send queued behind a running Claude turn', () => {
 
   it('settles from the same origin the live counter used, so the bars sum to wall time', () => {
     const settledTurns = selectStructuredAgentSettledTurns(settled.items, settled.submissions)
-    expect(settledTurns.get('orca:A')).toEqual({
+    expect(settledTurns.get('quirky:A')).toEqual({
       startedAt: A.started,
       workedSeconds: 17,
       verdict: 'superseded'
     })
     // Not 65 s from B's send, and not Claude's own 69.6 s, which counts from turn 1's start.
-    expect(settledTurns.get('orca:B')).toEqual({ startedAt: B.started, workedSeconds: 51 })
+    expect(settledTurns.get('quirky:B')).toEqual({ startedAt: B.started, workedSeconds: 51 })
     // The turn before A never overlapped a send; its duration is unchanged.
-    expect(settledTurns.get('orca:prior')).toEqual({ startedAt: PRIOR.startedAt, workedSeconds: 7 })
+    expect(settledTurns.get('quirky:prior')).toEqual({
+      startedAt: PRIOR.startedAt,
+      workedSeconds: 7
+    })
 
     const liveOriginB = structuredAgentTurnOrigin(
       selectStructuredAgentTurnBars(whileB.items, whileB.submissions, whileB.turnId).runningTiming!
@@ -245,8 +248,12 @@ describe('a send queued behind a running Claude turn', () => {
   })
 
   it('shows one live bar under A while B waits, then A settled and B live', () => {
-    const transcript = [message('orca:A'), message('orca:tool', 'assistant'), message('orca:B')]
-    const validTurnKeys = new Set(['orca:A', 'orca:B'])
+    const transcript = [
+      message('quirky:A'),
+      message('quirky:tool', 'assistant'),
+      message('quirky:B')
+    ]
+    const validTurnKeys = new Set(['quirky:A', 'quirky:B'])
     let timing: NativeChatTurnTimingByTurn = {}
     const pass = (
       snapshot: { items: AgentJournalRenderItem[]; submissions: AgentJournalSubmission[] },
@@ -273,12 +280,12 @@ describe('a send queued behind a running Claude turn', () => {
     }
 
     const queued = pass(whileQueued, whileQueued.turnId, B.sent + 1_000)
-    expect(timing['orca:A']?.startedAt).toBe(A.sent)
-    expect(timing['orca:B']).toBeUndefined()
-    expect(queued.completedByTurn['orca:B']).toBeUndefined()
+    expect(timing['quirky:A']?.startedAt).toBe(A.sent)
+    expect(timing['quirky:B']).toBeUndefined()
+    expect(queued.completedByTurn['quirky:B']).toBeUndefined()
 
     const running = pass(whileB, whileB.turnId, B.started + 1_000)
-    expect(running.completedByTurn['orca:A']?.workedSeconds).toBe(17)
+    expect(running.completedByTurn['quirky:A']?.workedSeconds).toBe(17)
     expect(running.active?.startedAt).toBe(A.ended)
   })
 })
@@ -321,17 +328,17 @@ describe('a send Codex folds into the running turn', () => {
     },
     items[2]!
   ]
-  const transcript = [message('orca:first'), message('orca:second')]
+  const transcript = [message('quirky:first'), message('quirky:second')]
 
   it('keeps exactly one bar, under the opening prompt, live and settled', () => {
     const live = selectStructuredAgentTurnBars(items, submissions, 't1')
-    expect(barOf(transcript, { items, submissions })).toBe('orca:first')
+    expect(barOf(transcript, { items, submissions })).toBe('quirky:first')
     expect(live.runningTiming && structuredAgentTurnOrigin(live.runningTiming)).toBe(1_000)
 
     let timing: NativeChatTurnTimingByTurn = {}
-    const validTurnKeys = new Set(['orca:first', 'orca:second'])
+    const validTurnKeys = new Set(['quirky:first', 'quirky:second'])
     timing = reduceNativeChatTurnTiming(timing, {
-      activeTurnKey: 'orca:first',
+      activeTurnKey: 'quirky:first',
       validTurnKeys,
       isWorking: true,
       workingStartedAt: 1_000,
@@ -341,7 +348,7 @@ describe('a send Codex folds into the running turn', () => {
     // The turn is over: nothing names an owner, so the key falls back to the newest prompt,
     // which never ran a turn of its own and so has nothing to settle.
     const activeTurnKey = barOf(transcript, { items: ended, submissions })!
-    expect(activeTurnKey).toBe('orca:second')
+    expect(activeTurnKey).toBe('quirky:second')
     timing = reduceNativeChatTurnTiming(timing, {
       activeTurnKey,
       validTurnKeys,
@@ -356,8 +363,8 @@ describe('a send Codex folds into the running turn', () => {
       settledByTurn: after.settledTurns
     })
     expect(statuses.active).toBeNull()
-    expect(Object.keys(statuses.completedByTurn)).toEqual(['orca:first'])
-    expect(statuses.completedByTurn['orca:first']?.workedSeconds).toBe(8)
+    expect(Object.keys(statuses.completedByTurn)).toEqual(['quirky:first'])
+    expect(statuses.completedByTurn['quirky:first']?.workedSeconds).toBe(8)
   })
 })
 
@@ -368,11 +375,11 @@ describe('turns whose host names no opener', () => {
       turn(2, 1_100, { turnId: 't1', state: 'running', startedAt: 1_100 }),
       user(3, 'u2', 2_000)
     ]
-    expect(barOf([message('orca:u1'), message('orca:u2')], { items, submissions: [] })).toBe(
-      'orca:u2'
+    expect(barOf([message('quirky:u1'), message('quirky:u2')], { items, submissions: [] })).toBe(
+      'quirky:u2'
     )
     // Settled timing keeps its journal-order attribution.
-    expect([...selectStructuredAgentSettledTurns(items).keys()]).toEqual(['orca:u1'])
+    expect([...selectStructuredAgentSettledTurns(items).keys()]).toEqual(['quirky:u1'])
   })
 
   it('anchors a turn the provider opened to its own record, never a bystander prompt', () => {
@@ -386,9 +393,9 @@ describe('turns whose host names no opener', () => {
         userItemId: self
       })
     ]
-    expect(barOf([message('orca:u1')], { items, submissions: [] })).toBe(self)
+    expect(barOf([message('quirky:u1')], { items, submissions: [] })).toBe(self)
     // A host that states each row's turn anchors it the same way.
-    expect(barOf([message('orca:u1')], { items: scoped(items), submissions: [] })).toBe(self)
+    expect(barOf([message('quirky:u1')], { items: scoped(items), submissions: [] })).toBe(self)
   })
 
   it('keeps the running bar on the send Codex opened a turn for before it echoes it', () => {
@@ -400,7 +407,7 @@ describe('turns whose host names no opener', () => {
       turn(2, 1_100, {
         turnId: 't1',
         state: 'completed',
-        userItemId: 'orca:first',
+        userItemId: 'quirky:first',
         startedAt: 1_100,
         completedAt: 2_000
       }),
@@ -408,12 +415,12 @@ describe('turns whose host names no opener', () => {
       user(4, 'second', 3_000),
       turn(5, 3_100, { turnId: 't2', state: 'running', startedAt: 3_100, userItemId: key })
     ]
-    const transcript = [message('orca:first'), message('orca:second')]
+    const transcript = [message('quirky:first'), message('quirky:second')]
     const submissions = [accepted('first', 'claude:first'), accepted('second', null)]
     for (const journal of [items, scoped(items)]) {
       const membership = nativeChatTurnMembership(transcript, { items: journal, submissions })
-      expect(membership.liveTurnKey).toBe('orca:second')
-      expect(membership.turnKeys[1]).toBe('orca:second')
+      expect(membership.liveTurnKey).toBe('quirky:second')
+      expect(membership.turnKeys[1]).toBe('quirky:second')
       // A turn with no send in flight still anchors to its own record.
       const selfOpened = [accepted('first', 'claude:first'), accepted('second', 'claude:second')]
       expect(barOf(transcript, { items: journal, submissions: selfOpened })).toBe(
@@ -431,20 +438,20 @@ describe('the previous turn has no recorded end', () => {
   it('leaves an unverifiable turn null and a later send counting from itself', () => {
     const items = [
       user(1, 'u1', 1_000),
-      turn(2, 3_000, { turnId: 't1', state: 'unverifiable', userItemId: 'orca:u1' }),
+      turn(2, 3_000, { turnId: 't1', state: 'unverifiable', userItemId: 'quirky:u1' }),
       user(3, 'u2', 10_000),
       turn(4, 12_000, {
         turnId: 't2',
         state: 'completed',
-        userItemId: 'orca:u2',
+        userItemId: 'quirky:u2',
         requestedAt: 10_000,
         startedAt: 11_000,
         completedAt: 20_000
       })
     ]
     const settledTurns = selectStructuredAgentSettledTurns(items)
-    expect(settledTurns.get('orca:u1')).toBeNull()
-    expect(settledTurns.get('orca:u2')).toEqual({ startedAt: 11_000, workedSeconds: 10 })
+    expect(settledTurns.get('quirky:u1')).toBeNull()
+    expect(settledTurns.get('quirky:u2')).toEqual({ startedAt: 11_000, workedSeconds: 10 })
   })
 
   it("waits out the previous row's last host revision, never past its own start", () => {
@@ -455,14 +462,14 @@ describe('the previous turn has no recorded end', () => {
           turn(2, lastSeenAt, {
             turnId: 't1',
             state: 'unverifiable',
-            userItemId: 'orca:u1',
+            userItemId: 'quirky:u1',
             startedAt: 1_000
           }),
           user(3, 'u2', 2_000),
           turn(4, 9_000, {
             turnId: 't2',
             state: 'running',
-            userItemId: 'orca:u2',
+            userItemId: 'quirky:u2',
             requestedAt: 2_000,
             startedAt: 9_000
           })
@@ -513,23 +520,23 @@ describe('which turn owns each transcript row', () => {
       tool(63, T + 80_300)
     ]
     const submissions = [accepted('A', turn1.userItemId), accepted('B', null)]
-    const steer = new Map([['orca:B', turn1Record]])
+    const steer = new Map([['quirky:B', turn1Record]])
     for (const journal of [items, scoped(items, steer)]) {
       const keys = keysOf({ items: journal, submissions })
-      expect(keys.get('orca:A')).toBe('orca:A')
-      expect(keys.get('orca:B')).toBe('orca:A')
+      expect(keys.get('quirky:A')).toBe('quirky:A')
+      expect(keys.get('quirky:B')).toBe('quirky:A')
       for (const sequence of [58, 61, 62, 63]) {
-        expect(keys.get(`orca:claude-tool%3A${sequence}`)).toBe('orca:A')
+        expect(keys.get(`quirky:claude-tool%3A${sequence}`)).toBe('quirky:A')
       }
     }
   })
 
   it('leaves a fresh tail send in its own group until the turn proves it continued past it', () => {
     // B is the newest row: nothing after it says the running turn absorbed it.
-    expect(keysOf(whileQueued).get('orca:B')).toBe('orca:B')
+    expect(keysOf(whileQueued).get('quirky:B')).toBe('quirky:B')
     // B's own turn opened: B is an opener and keys itself.
-    expect(keysOf(whileB).get('orca:B')).toBe('orca:B')
-    expect(keysOf(whileB).get(`orca:claude-tool%3A58`)).toBe('orca:A')
+    expect(keysOf(whileB).get('quirky:B')).toBe('quirky:B')
+    expect(keysOf(whileB).get(`quirky:claude-tool%3A58`)).toBe('quirky:A')
   })
 
   it('folds a Codex-coalesced send into the turn its provider key names', () => {
@@ -555,11 +562,11 @@ describe('which turn owns each transcript row', () => {
       tool(4, 5_000)
     ]
     const submissions = [accepted('first', key), accepted('second', key)]
-    for (const journal of [items, scoped(items, new Map([['orca:second', record]]))]) {
+    for (const journal of [items, scoped(items, new Map([['quirky:second', record]]))]) {
       const keys = keysOf({ items: journal, submissions })
-      expect(keys.get('orca:first')).toBe('orca:first')
-      expect(keys.get('orca:second')).toBe('orca:first')
-      expect(keys.get('orca:claude-tool%3A4')).toBe('orca:first')
+      expect(keys.get('quirky:first')).toBe('quirky:first')
+      expect(keys.get('quirky:second')).toBe('quirky:first')
+      expect(keys.get('quirky:claude-tool%3A4')).toBe('quirky:first')
     }
   })
 
@@ -578,8 +585,8 @@ describe('which turn owns each transcript row', () => {
     for (const journal of [items, scoped(items)]) {
       const keys = keysOf({ items: journal, submissions: [] })
       // u1 predates the wake turn and never opened one: it keeps its own group.
-      expect(keys.get('orca:u1')).toBe('orca:u1')
-      expect(keys.get('orca:claude-tool%3A3')).toBe(self)
+      expect(keys.get('quirky:u1')).toBe('quirky:u1')
+      expect(keys.get('quirky:claude-tool%3A3')).toBe(self)
     }
   })
 
@@ -592,10 +599,10 @@ describe('which turn owns each transcript row', () => {
       tool(5, 1_400)
     ]
     expect([...keysOf({ items, submissions: [] }).values()]).toEqual([
-      'orca:u1',
-      'orca:u1',
-      'orca:u2',
-      'orca:u2'
+      'quirky:u1',
+      'quirky:u1',
+      'quirky:u2',
+      'quirky:u2'
     ])
   })
 })

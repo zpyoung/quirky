@@ -1,4 +1,4 @@
-// Orca's folder for local native-chat pastes no send claims: a terminal-backed chat's, and every
+// Quirky's folder for local native-chat pastes no send claims: a terminal-backed chat's, and every
 // paste from before structured chats used their attachment store. Never swept, since nothing tells
 // which of them a sent message names; a restore keeps only files that really are inside it.
 

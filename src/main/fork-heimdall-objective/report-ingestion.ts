@@ -121,7 +121,13 @@ async function resolveObjectiveReportLocation(
     const pathFlavor = resolveLeasePathFlavor(target.executionHostId, target.workspacePath)
     return {
       authorityRoot: target.workspacePath,
-      directory: pathFlavor.join(target.workspacePath, '.orca', 'heimdall', 'objective', 'reports')
+      directory: pathFlavor.join(
+        target.workspacePath,
+        '.quirky',
+        'heimdall',
+        'objective',
+        'reports'
+      )
     }
   }
 
@@ -146,7 +152,7 @@ async function resolveObjectiveReportLocation(
   const pathFlavor = resolveLeasePathFlavor(target.executionHostId, gitDirectory)
   return {
     authorityRoot: gitDirectory,
-    directory: pathFlavor.join(gitDirectory, 'orca-heimdall', 'objective', 'reports')
+    directory: pathFlavor.join(gitDirectory, 'quirky-heimdall', 'objective', 'reports')
   }
 }
 

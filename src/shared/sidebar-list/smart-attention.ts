@@ -24,7 +24,7 @@ import { parsePaneKey } from '../stable-pane-id'
  *   1 — Needs you (`blocked` / `waiting`)
  *   2 — Done (`done`, not interrupted, completed within AGENT_STATUS_STALE_AFTER_MS)
  *   3 — Working (`working`)
- *   4 — Unverifiable (stale non-`done` entry on a pane Orca still holds a live PTY for:
+ *   4 — Unverifiable (stale non-`done` entry on a pane Quirky still holds a live PTY for:
  *       the reporting stream stopped, not necessarily the work)
  *   5 — Idle (no live entry, interrupted `done`, an aged-out completion, or a stale entry
  *       with no live PTY behind it)
@@ -104,7 +104,7 @@ export function mostRecentAttentionInHistory(history: AgentStateHistoryEntry[]):
  * panes fall back to the title heuristic (design doc Edge case 9). Authority is per-pane, not per-worktree.
  */
 export type PaneInput =
-  // Why hasLivePty: a stale entry's decay destination depends on whether Orca still holds the
+  // Why hasLivePty: a stale entry's decay destination depends on whether Quirky still holds the
   // pane's PTY — losing the reporting stream is not the same as nothing running there.
   | { kind: 'hook'; entry: AgentStatusEntry; hasLivePty: boolean }
   // Why: TerminalTab has no per-tab lastActivityAt; the worktree-level value suffices for cross-worktree ordering.
@@ -127,8 +127,8 @@ export function resolveAttention(panes: PaneInput[], now: number): WorktreeAtten
     if (pane.kind === 'hook') {
       const entry = pane.entry
       if (!isAgentStatusFresh(entry, now, AGENT_STATUS_STALE_AFTER_MS)) {
-        // Why: a pane Orca still holds a PTY for outranks a genuinely empty one — the user may
-        // know why it went quiet (a long build), which Orca never can. It never outranks a
+        // Why: a pane Quirky still holds a PTY for outranks a genuinely empty one — the user may
+        // know why it went quiet (a long build), which Quirky never can. It never outranks a
         // reporting pane, and it never claims the agent finished.
         if (resolveDecayedAgentRowState(entry, pane.hasLivePty) === 'unverifiable') {
           const observedAt = agentStatusEvidenceObservedAt(entry)

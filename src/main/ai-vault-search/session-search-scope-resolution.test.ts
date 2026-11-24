@@ -8,7 +8,7 @@ function catalog(overrides: Partial<SessionSearchScopeCatalog> = {}): SessionSea
     projects: [],
     projectHostSetups: [],
     worktreeMeta: {},
-    settings: { workspaceDir: '/home/me/orca/workspaces', nestWorkspaces: true },
+    settings: { workspaceDir: '/home/me/quirky/workspaces', nestWorkspaces: true },
     ...overrides
   }
 }
@@ -103,8 +103,8 @@ describe('workspace scope', () => {
 describe('project scope', () => {
   const projectCatalog = catalog({
     worktreeMeta: {
-      'repo-1::/home/me/orca/workspaces/app/one': {},
-      'repo-1::/home/me/orca/workspaces/app/two': {},
+      'repo-1::/home/me/quirky/workspaces/app/one': {},
+      'repo-1::/home/me/quirky/workspaces/app/two': {},
       'repo-1::/elsewhere/outside': { priorWorktreeIds: ['repo-1::/elsewhere/before'] }
     }
   })
@@ -117,7 +117,7 @@ describe('project scope', () => {
     expect(paths(resolution)).toEqual([
       '/elsewhere/before',
       '/elsewhere/outside',
-      '/home/me/orca/workspaces/app',
+      '/home/me/quirky/workspaces/app',
       '/work/app'
     ])
   })
@@ -125,13 +125,13 @@ describe('project scope', () => {
   it('folds hundreds of worktrees into the one directory that contains them', () => {
     const worktreeMeta: Record<string, Record<string, never>> = {}
     for (let index = 0; index < 580; index++) {
-      worktreeMeta[`repo-1::/home/me/orca/workspaces/app/wt-${index}`] = {}
+      worktreeMeta[`repo-1::/home/me/quirky/workspaces/app/wt-${index}`] = {}
     }
     const resolution = resolveSessionSearchScope(
       { kind: 'project', projectKey: 'repo:repo-1' },
       catalog({ worktreeMeta })
     )
-    expect(paths(resolution)).toEqual(['/home/me/orca/workspaces/app', '/work/app'])
+    expect(paths(resolution)).toEqual(['/home/me/quirky/workspaces/app', '/work/app'])
   })
 
   it("uses a repo's own worktree base path instead of the global root", () => {
@@ -141,7 +141,7 @@ describe('project scope', () => {
     )
     // The global nested root stays in: a worktree created before the base path
     // was set still lives there, which is why ownership enumerates both.
-    expect(paths(resolution)).toEqual(['/home/me/orca/workspaces/app', '/trees/app', '/work/app'])
+    expect(paths(resolution)).toEqual(['/home/me/quirky/workspaces/app', '/trees/app', '/work/app'])
   })
 
   it('hands a flat layout one path per worktree, with no cap to squeeze them through', () => {
@@ -163,14 +163,14 @@ describe('project scope', () => {
       { kind: 'project', projectKey: 'repo:repo-1' },
       catalog({
         settings: {
-          workspaceDir: '/home/me/orca/workspaces',
+          workspaceDir: '/home/me/quirky/workspaces',
           nestWorkspaces: true,
           workspaceDirHistory: [{ path: '/old/workspaces', nestWorkspaces: true }]
         }
       })
     )
     expect(paths(resolution)).toEqual([
-      '/home/me/orca/workspaces/app',
+      '/home/me/quirky/workspaces/app',
       '/old/workspaces/app',
       '/work/app'
     ])
@@ -180,11 +180,11 @@ describe('project scope', () => {
     const resolution = resolveSessionSearchScope(
       { kind: 'project', projectKey: 'repo:repo-1' },
       catalog({
-        settings: { workspaceDir: '/home/me/orca/workspaces', nestWorkspaces: false },
-        worktreeMeta: { 'repo-1::/home/me/orca/workspaces/one': {} }
+        settings: { workspaceDir: '/home/me/quirky/workspaces', nestWorkspaces: false },
+        worktreeMeta: { 'repo-1::/home/me/quirky/workspaces/one': {} }
       })
     )
-    expect(paths(resolution)).toEqual(['/home/me/orca/workspaces/one', '/work/app'])
+    expect(paths(resolution)).toEqual(['/home/me/quirky/workspaces/one', '/work/app'])
   })
 
   it('resolves a project id through this host’s setup for it', () => {
@@ -204,8 +204,8 @@ describe('project scope', () => {
       })
     )
     // The global nested root is in as well: this repo row carries no base path
-    // of its own, so that is still where Orca would create its worktrees.
-    expect(paths(resolution)).toEqual(['/home/me/orca/workspaces/app', '/srv/app', '/srv/trees'])
+    // of its own, so that is still where Quirky would create its worktrees.
+    expect(paths(resolution)).toEqual(['/home/me/quirky/workspaces/app', '/srv/app', '/srv/trees'])
   })
 
   it('takes a folder workspace project as its folder', () => {

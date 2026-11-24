@@ -82,7 +82,7 @@ function renderShellTooOldPanel(container: HTMLElement): void {
     'justify-content:center;gap:8px;padding:24px;text-align:center'
   const title = document.createElement('div')
   title.style.cssText = 'font-weight:600'
-  title.textContent = 'Update Orca to open this workspace'
+  title.textContent = 'Update Quirky to open this workspace'
   const body = document.createElement('div')
   body.style.cssText = 'color:#9a9a9a;font-size:14px'
   body.textContent = 'This version of the app cannot open the workspace it downloaded.'
@@ -92,7 +92,7 @@ function renderShellTooOldPanel(container: HTMLElement): void {
 
 const container = document.getElementById('root')
 if (!container) {
-  throw new Error('[orca-mobile-web-app] #root missing')
+  throw new Error('[quirky-mobile-web-app] #root missing')
 }
 const target = document.documentElement
 target.style.setProperty('--muted-foreground', colors.textMuted)

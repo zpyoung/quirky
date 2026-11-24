@@ -51,7 +51,7 @@ function asDataUrl(mimeType: string, bytes: Uint8Array): string | null {
 
 /**
  * The workspace icons the window shows (each repo's `repoIcon`), as small data URLs a phone can
- * draw even where its shell admits no https images. Without an encoder (orcad) small images pass
+ * draw even where its shell admits no https images. Without an encoder (quirkyd) small images pass
  * through unchanged and larger ones fall back.
  */
 export class RepoIconDataUrls {
@@ -148,7 +148,7 @@ export class RepoIconDataUrls {
       return null
     }
     // Why pass through when encoding fails: Electron decodes only PNG and JPEG everywhere, and
-    // a small GIF, WebP or ICO the phone can draw must not show worse than on orcad.
+    // a small GIF, WebP or ICO the phone can draw must not show worse than on quirkyd.
     return this.encodeFitting(image.bytes) ?? asDataUrl(image.mimeType, image.bytes)
   }
 

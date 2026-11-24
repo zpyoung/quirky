@@ -25,7 +25,7 @@ import {
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
 
 // Why: hosts from before reference.* still advertise the linked-items delta capability, so the
-// raw method_not_found would read as an Orca bug rather than a version gap.
+// raw method_not_found would read as an Quirky bug rather than a version gap.
 async function callReference<TResult>(
   client: HandlerContext['client'],
   method: 'reference.list' | 'reference.find',
@@ -37,7 +37,7 @@ async function callReference<TResult>(
     if (error instanceof RuntimeClientError && error.code === 'method_not_found') {
       throw new RuntimeClientError(
         'incompatible_runtime',
-        'This Orca host does not support reference commands yet. Update Orca on the execution host.'
+        'This Quirky host does not support reference commands yet. Update Quirky on the execution host.'
       )
     }
     throw error

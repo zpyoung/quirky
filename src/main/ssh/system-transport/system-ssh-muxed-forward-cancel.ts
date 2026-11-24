@@ -2,7 +2,7 @@
  * A forward made through a ControlMaster leaves its listener on that master after its `-N` client
  * exits, so no process holds the port for the orphan sweep to stop; only the master can drop it.
  */
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { buildSshArgs, type SystemSshBuildArgsOptions } from './system-ssh-args'
 import { findSystemSsh } from './system-ssh-binary'
 import type { SshTarget } from '../../../shared/ssh-types'
@@ -44,7 +44,7 @@ export function buildMuxedLocalForwardCancelArgs(
     '-L',
     `127.0.0.1:${localPort}:${remoteHost}:${remotePort}`,
     '--',
-    'orca-muxed-forward-cancel'
+    'quirky-muxed-forward-cancel'
   ]
 }
 
@@ -87,7 +87,7 @@ export async function cancelMuxedLocalForward(
     return false
   }
   console.warn(
-    `[ssh] Cancelled a forward a previous Orca left on 127.0.0.1:${localPort}, held by its ControlMaster`
+    `[ssh] Cancelled a forward a previous Quirky left on 127.0.0.1:${localPort}, held by its ControlMaster`
   )
   return true
 }

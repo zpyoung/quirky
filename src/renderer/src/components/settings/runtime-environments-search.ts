@@ -8,11 +8,11 @@ export const getRuntimeEnvironmentsSearchEntry = createLocalizedCatalog(
   (): SettingsSearchEntry => ({
     title: translate(
       'auto.components.settings.runtime.environments.search.3517fb2ec0',
-      'Remote Orca Servers'
+      'Remote Quirky Servers'
     ),
     description: translate(
       'auto.components.settings.runtime.environments.search.addShareDefault',
-      'Add a remote Orca server, share this computer, or choose where new projects open.'
+      'Add a remote Quirky server, share this computer, or choose where new projects open.'
     ),
     keywords: [
       ...translateSearchKeyword(
@@ -74,7 +74,7 @@ export const getRuntimeEnvironmentsSearchEntry = createLocalizedCatalog(
       ),
       ...translateSearchKeyword(
         'auto.components.settings.managedServers.search.title',
-        'Orca on your SSH hosts'
+        'Quirky on your SSH hosts'
       ),
       ...translateSearchKeyword('auto.components.settings.managedServers.search.keywordSsh', 'ssh'),
       ...translateSearchKeyword(
@@ -104,11 +104,11 @@ export const getWebRuntimeEnvironmentsSearchEntry = createLocalizedCatalog(
   (): SettingsSearchEntry => ({
     title: translate(
       'auto.components.settings.runtime.environments.search.3517fb2ec0',
-      'Remote Orca Servers'
+      'Remote Quirky Servers'
     ),
     description: translate(
       'auto.components.settings.runtime.environments.search.baec27aa8f',
-      'Connect this browser to a saved Orca server.'
+      'Connect this browser to a saved Quirky server.'
     ),
     keywords: [
       ...translateSearchKeyword(

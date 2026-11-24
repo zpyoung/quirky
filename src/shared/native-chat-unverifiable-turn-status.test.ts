@@ -18,7 +18,7 @@ describe('authoritative unknown turn duration at the shared status consumer', ()
     'does not convert a running turn to local Worked for after unverifiable recovery (start %s)',
     (startedAt) => {
       const user: AgentJournalRenderItem = {
-        itemId: 'orca:u1',
+        itemId: 'quirky:u1',
         revision: 0,
         sequence: 1,
         observedAt: 1_000,

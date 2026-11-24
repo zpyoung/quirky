@@ -27,7 +27,7 @@ afterEach(async () => {
 })
 
 it('creates cold and prepared worktrees with real Git while status capacity is occupied', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-create-policy-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-create-policy-'))
   roots.push(root)
   const repo = join(root, 'repo')
   await gitExecFileAsync(['init', '--quiet', repo], { cwd: root })

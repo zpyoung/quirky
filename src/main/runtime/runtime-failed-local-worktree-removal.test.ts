@@ -1,5 +1,5 @@
 // Real-Git coverage for a delete Git fails partway: `git worktree remove --force` drops the
-// registration even when it cannot delete a file, so Orca must keep the leftover listed and
+// registration even when it cannot delete a file, so Quirky must keep the leftover listed and
 // retryable itself. macOS only: `chflags uchg` is the portable way to make a file undeletable for
 // the file's owner; worktree-failed-removal.test.ts covers the same rules with Git mocked.
 import { execFile } from 'node:child_process'
@@ -88,8 +88,8 @@ function storeStub(pushTarget?: GitPushTarget) {
   }
 }
 
-/** A remote Orca added for a fork PR's push target, as worktree create does. */
-async function addOrcaPushTargetRemote(): Promise<GitPushTarget> {
+/** A remote Quirky added for a fork PR's push target, as worktree create does. */
+async function addQuirkyPushTargetRemote(): Promise<GitPushTarget> {
   const pushTarget = {
     remoteName: 'pr-contributor',
     branchName: 'feature',
@@ -97,7 +97,7 @@ async function addOrcaPushTargetRemote(): Promise<GitPushTarget> {
     remoteCreated: true
   }
   await git(['remote', 'add', pushTarget.remoteName, pushTarget.remoteUrl])
-  await git(['config', `remote.${pushTarget.remoteName}.orca-created`, 'true'])
+  await git(['config', `remote.${pushTarget.remoteName}.quirky-created`, 'true'])
   return pushTarget
 }
 
@@ -196,7 +196,7 @@ async function failInSession(): Promise<unknown> {
 describe.skipIf(process.platform !== 'darwin')('a worktree delete Git fails partway', () => {
   beforeEach(async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
-    scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'orca-failed-removal-')))
+    scratchDir = await realpath(await mkdtemp(join(tmpdir(), 'quirky-failed-removal-')))
     recordsDir = join(scratchDir, 'profile')
     repoPath = join(scratchDir, 'repo')
     worktreePath = join(scratchDir, 'workspaces', 'feature')
@@ -231,7 +231,7 @@ describe.skipIf(process.platform !== 'darwin')('a worktree delete Git fails part
     const error = await failStartupFinish()
 
     expect(String(error)).toMatch(/Operation not permitted/)
-    // What Git left: no registration, but the checkout and Orca's record. The merged branch went
+    // What Git left: no registration, but the checkout and Quirky's record. The merged branch went
     // with the failed delete, as its finish would have deleted it.
     expect(await isRegistered(worktreePath)).toBe(false)
     expect(existsSync(lockedFile)).toBe(true)
@@ -346,8 +346,8 @@ describe.skipIf(process.platform !== 'darwin')('a worktree delete Git fails part
     expect(await git(['status', '--porcelain'], other)).toBe('?? wip.txt\n')
   })
 
-  it('removes the push-target remote Orca added when a runtime delete fails', async () => {
-    const pushTarget = await addOrcaPushTargetRemote()
+  it('removes the push-target remote Quirky added when a runtime delete fails', async () => {
+    const pushTarget = await addQuirkyPushTargetRemote()
     const worktree = (await listWorktreesStrict(repoPath)).find((row) =>
       areWorktreePathsEqual(row.path, worktreePath)
     )!
@@ -387,8 +387,8 @@ describe.skipIf(process.platform !== 'darwin')('a worktree delete Git fails part
     expect(existsSync(lockedFile)).toBe(true)
   })
 
-  it('removes the push-target remote Orca added when the startup finish fails', async () => {
-    const pushTarget = await addOrcaPushTargetRemote()
+  it('removes the push-target remote Quirky added when the startup finish fails', async () => {
+    const pushTarget = await addQuirkyPushTargetRemote()
 
     expect(String(await finishAtStartup([], pushTarget))).toMatch(/Operation not permitted/)
 

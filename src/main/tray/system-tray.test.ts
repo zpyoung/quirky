@@ -89,12 +89,12 @@ vi.mock('electron', () => ({
   nativeTheme: nativeThemeMock
 }))
 
-vi.mock('../../../resources/tray/orca-menu-barTemplate.png?asset&asarUnpack', () => ({
-  default: '/assets/orca-menu-barTemplate.png'
+vi.mock('../../../resources/tray/quirky-menu-barTemplate.png?asset&asarUnpack', () => ({
+  default: '/assets/quirky-menu-barTemplate.png'
 }))
 
-vi.mock('../../../resources/tray/orca-menu-barTemplate@2x.png?asset&asarUnpack', () => ({
-  default: '/assets/orca-menu-barTemplate@2x.png'
+vi.mock('../../../resources/tray/quirky-menu-barTemplate@2x.png?asset&asarUnpack', () => ({
+  default: '/assets/quirky-menu-barTemplate@2x.png'
 }))
 
 vi.mock('../app-icon', () => ({
@@ -201,8 +201,8 @@ describe('createSystemTray', () => {
 
     expect(trayInstances).toHaveLength(1)
     expect(trayInstances[0].image).toBe(resizedImage)
-    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Orca')
-    expect(builtMenuItems().map((item) => item.label)).toEqual(['Open Orca', undefined, 'Quit'])
+    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Quirky')
+    expect(builtMenuItems().map((item) => item.label)).toEqual(['Open Quirky', undefined, 'Quit'])
     const clickHandler = trayInstances[0].on.mock.calls.find((call) => call[0] === 'click')?.[1]
     expect(clickHandler).toBeTypeOf('function')
 
@@ -228,7 +228,7 @@ describe('createSystemTray', () => {
       dataURL: 'data:image/png;base64,mac-retina'
     })
     expect(builtMenuItems().map((item) => item.label)).toEqual([
-      'Open Orca',
+      'Open Quirky',
       undefined,
       'Settings',
       'Check for Updates...',
@@ -239,7 +239,7 @@ describe('createSystemTray', () => {
     expect(nativeThemeMock.on).toHaveBeenCalledWith('updated', expect.any(Function))
 
     for (const [label, callback] of [
-      ['Open Orca', options.onOpen],
+      ['Open Quirky', options.onOpen],
       ['Settings', options.onOpenSettings],
       ['Check for Updates...', options.onCheckForUpdates],
       ['Quit', options.onQuit]
@@ -291,9 +291,9 @@ describe('dev instance indicator', () => {
     expect(devBadgeImage.setTemplateImage).toHaveBeenCalledWith(true)
     expect(trayInstances[0].image).toBe(devBadgeImage)
     expect(trayInstances[0].setTitle).not.toHaveBeenCalled()
-    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Orca DEV (my-branch)')
+    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Quirky DEV (my-branch)')
     expect(builtMenuItems()[0]).toMatchObject({
-      label: 'Orca DEV (my-branch)',
+      label: 'Quirky DEV (my-branch)',
       enabled: false
     })
   })
@@ -331,8 +331,8 @@ describe('dev instance indicator', () => {
 
     createSystemTray(createOptions({ isDevInstance: true }))
 
-    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Orca DEV')
-    expect(builtMenuItems()[0]).toMatchObject({ label: 'Orca DEV', enabled: false })
+    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Quirky DEV')
+    expect(builtMenuItems()[0]).toMatchObject({ label: 'Quirky DEV', enabled: false })
   })
 
   it('keeps the DEV marker in the tooltip across the attention toggle', async () => {
@@ -344,10 +344,10 @@ describe('dev instance indicator', () => {
 
     setTrayAttention(true)
     flushTraySceneMutation()
-    expect(created.setToolTip).toHaveBeenCalledWith('Orca DEV (my-branch) - activity waiting')
+    expect(created.setToolTip).toHaveBeenCalledWith('Quirky DEV (my-branch) - activity waiting')
     setTrayAttention(false)
     flushTraySceneMutation()
-    expect(created.setToolTip).toHaveBeenLastCalledWith('Orca DEV (my-branch)')
+    expect(created.setToolTip).toHaveBeenLastCalledWith('Quirky DEV (my-branch)')
   })
 
   it('marks the Windows tooltip without badging the icon', async () => {
@@ -356,9 +356,9 @@ describe('dev instance indicator', () => {
 
     createSystemTray(createOptions({ isDevInstance: true, devInstanceLabel: 'my-branch' }))
 
-    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Orca DEV (my-branch)')
+    expect(trayInstances[0].setToolTip).toHaveBeenCalledWith('Quirky DEV (my-branch)')
     expect(stampDevBadgeMock).not.toHaveBeenCalled()
-    expect(builtMenuItems()[0]).toMatchObject({ label: 'Orca DEV (my-branch)', enabled: false })
+    expect(builtMenuItems()[0]).toMatchObject({ label: 'Quirky DEV (my-branch)', enabled: false })
   })
 
   it('adds no DEV marker for production instances', async () => {
@@ -369,7 +369,7 @@ describe('dev instance indicator', () => {
 
     expect(stampDevBadgeMock).not.toHaveBeenCalled()
     expect(trayInstances[0].image).toBe(baseMacImage)
-    expect(builtMenuItems()[0].label).toBe('Open Orca')
+    expect(builtMenuItems()[0].label).toBe('Open Quirky')
   })
 })
 
@@ -428,13 +428,13 @@ describe('setTrayAttention', () => {
     })
     expect(attentionImage.setTemplateImage).toHaveBeenCalledWith(false)
     expect(created.setImage).toHaveBeenCalledWith(attentionImage)
-    expect(created.setToolTip).toHaveBeenCalledWith('Orca - activity waiting')
+    expect(created.setToolTip).toHaveBeenCalledWith('Quirky - activity waiting')
 
     setTrayAttention(false)
     flushTraySceneMutation()
     expect(baseMacImage.setTemplateImage).toHaveBeenLastCalledWith(true)
     expect(created.setImage).toHaveBeenLastCalledWith(baseMacImage)
-    expect(created.setToolTip).toHaveBeenLastCalledWith('Orca')
+    expect(created.setToolTip).toHaveBeenLastCalledWith('Quirky')
   })
 
   it('recomposes active macOS attention when the system appearance changes', async () => {
@@ -600,7 +600,7 @@ describe('macOS hardening', () => {
     setTrayAttention(true)
     expect(() => flushTraySceneMutation()).not.toThrow()
     expect(created.setImage).toHaveBeenLastCalledWith(baseMacImage)
-    expect(created.setToolTip).toHaveBeenLastCalledWith('Orca')
+    expect(created.setToolTip).toHaveBeenLastCalledWith('Quirky')
     expect(warn).toHaveBeenCalledWith(
       '[system-tray] macOS attention icon failed; showing plain icon',
       expect.any(Error)
@@ -633,16 +633,16 @@ describe('language changes', () => {
       await setMainUiLanguage('en')
       const options = createOptions()
       createSystemTray(options)
-      expect(builtMenuItems()[0].label).toBe('Open Orca')
+      expect(builtMenuItems()[0].label).toBe('Open Quirky')
 
       await setMainUiLanguage('ja')
       rebuildSystemTrayMenu()
-      expect(builtMenuItems()[0].label).toBe('Open Orca')
+      expect(builtMenuItems()[0].label).toBe('Open Quirky')
       flushTraySceneMutation()
 
       expect(trayInstances).toHaveLength(1)
       expect(trayInstances[0].setContextMenu).toHaveBeenCalledTimes(2)
-      expect(builtMenuItems()[0].label).toBe('Orca を開く')
+      expect(builtMenuItems()[0].label).toBe('Quirky を開く')
       expect(builtMenuItems().at(-1)?.label).toBe('終了')
       builtMenuItems()[0].click?.()
       builtMenuItems().at(-1)?.click?.()
@@ -674,15 +674,15 @@ describe('language changes', () => {
     rebuildSystemTrayMenu()
     flushTraySceneMutation()
     expect(trayInstances[0].setToolTip).toHaveBeenLastCalledWith(
-      'Orca DEV (language-test) - 件のアクティビティが待機中'
+      'Quirky DEV (language-test) - 件のアクティビティが待機中'
     )
-    expect(builtMenuItems()[0].label).toBe('Orca DEV (language-test)')
+    expect(builtMenuItems()[0].label).toBe('Quirky DEV (language-test)')
     expect(composeAttentionMock).toHaveBeenCalled()
 
-    mainI18n.addResource('ja', 'translation', 'tray.openOrca', 'Orca を表示')
+    mainI18n.addResource('ja', 'translation', 'tray.openQuirky', 'Quirky を表示')
     rebuildSystemTrayMenu()
     flushTraySceneMutation()
-    expect(builtMenuItems()[2].label).toBe('Orca を表示')
+    expect(builtMenuItems()[2].label).toBe('Quirky を表示')
   })
 
   it('does nothing without a tray or when destroyed before the deferred refresh', async () => {

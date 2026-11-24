@@ -35,7 +35,7 @@ function cell(id: string): HostileHostCell {
 }
 
 describe('hostile-host cells', () => {
-  it('states a managed orcad expectation for every host the matrix runs', () => {
+  it('states a managed quirkyd expectation for every host the matrix runs', () => {
     expect(HOSTILE_HOST_CELLS.map((c) => [c.id, c.managed.runtime, c.managed.outcome])).toEqual([
       ['debian10-glibc228', 'linux-x64-glibc', 'activated'],
       ['almalinux8-glibc228', 'linux-x64-glibc', 'activated'],
@@ -62,9 +62,9 @@ describe('hostile-host cells', () => {
   it('shims the toolchain and starts sshd in every image', () => {
     const dockerfile = hostileHostDockerfile(dockerCell('alpine-musl'))
     expect(dockerfile.startsWith('FROM alpine:3.20@sha256:')).toBe(true)
-    expect(dockerfile).toContain('ln -sf orca-forbidden-tool /usr/local/bin/npm')
-    expect(dockerfile).toContain('ln -sf orca-forbidden-tool /usr/local/bin/gcc')
-    expect(dockerfile.trimEnd().endsWith('CMD ["/orca-entrypoint.sh"]')).toBe(true)
+    expect(dockerfile).toContain('ln -sf quirky-forbidden-tool /usr/local/bin/npm')
+    expect(dockerfile).toContain('ln -sf quirky-forbidden-tool /usr/local/bin/gcc')
+    expect(dockerfile.trimEnd().endsWith('CMD ["/quirky-entrypoint.sh"]')).toBe(true)
   })
 
   it('selects named cells this machine can host and rejects unknown ones', () => {

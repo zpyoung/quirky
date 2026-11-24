@@ -129,7 +129,7 @@ describe('a new chat of an agent with no saved pick', () => {
     resetHostModelCatalogSnapshotsForTests()
     useAppStore.setState({
       settings: {
-        ...getDefaultSettings('/tmp/orca-workspaces'),
+        ...getDefaultSettings('/tmp/quirky-workspaces'),
         nativeChatSessionOptions: { claude: { model: 'opus[1m]' } }
       },
       runtimeStatusByEnvironmentId: new Map()

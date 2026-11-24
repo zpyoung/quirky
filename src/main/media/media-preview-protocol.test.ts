@@ -33,7 +33,7 @@ describe('media preview protocol', () => {
   const store = {} as Store
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-video-protocol-'))
+    directory = await mkdtemp(join(tmpdir(), 'quirky-video-protocol-'))
     authorize.mockReset().mockImplementation(async (path) => path)
   })
   afterEach(async () => {
@@ -83,9 +83,9 @@ describe('media preview protocol', () => {
     }
     authorize.mockResolvedValueOnce(directory)
     expect((await handleMediaPreviewRequest(new Request(result.mediaUrl))).status).toBe(404)
-    expect((await handleMediaPreviewRequest(new Request('orca-media://file/unknown'))).status).toBe(
-      404
-    )
+    expect(
+      (await handleMediaPreviewRequest(new Request('quirky-media://file/unknown'))).status
+    ).toBe(404)
     expect(readMediaPreview(event, { filePath: join(directory, 'secret.txt') }, store)).toBeNull()
   })
 

@@ -1,22 +1,22 @@
 import type { RuntimeWorkspaceCatalog } from './workspace-catalog'
-import type { OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController } from '../terminal/lifecycle/pty-worktree-refresh'
+import type { QuirkyRuntimeWithRefreshPtyWorktreeRecordsFromController } from '../terminal/lifecycle/pty-worktree-refresh'
 import type { RuntimeAccountController } from '../runtime-account-controller'
-import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
-import type { OrcaRuntimeWithGetStructuredAgentSessionCreateSupport } from '../session-tabs/structured-session-create-support'
-import type { OrcaRuntimeWithGetPtyRecordForPaneKey } from '../orchestration/terminal-pane-mail-routing'
-import { OrcaRuntimeWithStartTuiIdleVisibleReadProbe } from '../terminal/wait/terminal-wait-visible-probe'
+import type { QuirkyRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
+import type { QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport } from '../session-tabs/structured-session-create-support'
+import type { QuirkyRuntimeWithGetPtyRecordForPaneKey } from '../orchestration/terminal-pane-mail-routing'
+import { QuirkyRuntimeWithStartTuiIdleVisibleReadProbe } from '../terminal/wait/terminal-wait-visible-probe'
 
 /** Members the worktree listing reads from later runtime layers; declarations only. */
-export abstract class OrcaRuntimeWithWorktreePsDependencies extends OrcaRuntimeWithStartTuiIdleVisibleReadProbe {
+export abstract class QuirkyRuntimeWithWorktreePsDependencies extends QuirkyRuntimeWithStartTuiIdleVisibleReadProbe {
   protected abstract listResolvedWorktreeSnapshot(
     ...args: Parameters<RuntimeWorkspaceCatalog['listResolvedWorktreeSnapshot']>
   ): ReturnType<RuntimeWorkspaceCatalog['listResolvedWorktreeSnapshot']>
   protected abstract refreshPtyWorktreeRecordsFromController(
     ...args: Parameters<
-      OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
+      QuirkyRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
     >
   ): ReturnType<
-    OrcaRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
+    QuirkyRuntimeWithRefreshPtyWorktreeRecordsFromController['refreshPtyWorktreeRecordsFromController']
   >
   abstract notifyFolderWorkspaceChanged(): void
   abstract notifyBranchRenamed(repoId: string): void
@@ -28,22 +28,22 @@ export abstract class OrcaRuntimeWithWorktreePsDependencies extends OrcaRuntimeW
   declare getCommitMessageAgentEnvironmentResolvers: RuntimeAccountController['getCommitMessageAgentEnvironment']
   abstract refreshStructuredConversationTabTitle(
     ...args: Parameters<
-      OrcaRuntimeWithPruneMobileSessionTabGroupLayout['refreshStructuredConversationTabTitle']
+      QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['refreshStructuredConversationTabTitle']
     >
   ): ReturnType<
-    OrcaRuntimeWithPruneMobileSessionTabGroupLayout['refreshStructuredConversationTabTitle']
+    QuirkyRuntimeWithPruneMobileSessionTabGroupLayout['refreshStructuredConversationTabTitle']
   >
   abstract resolveStructuredAgentAccountHome(
     ...args: Parameters<
-      OrcaRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
+      QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
     >
   ): ReturnType<
-    OrcaRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
+    QuirkyRuntimeWithGetStructuredAgentSessionCreateSupport['resolveStructuredAgentAccountHome']
   >
   abstract onStructuredSessionStatusForMail(
-    ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
-  ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
+    ...args: Parameters<QuirkyRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
+  ): ReturnType<QuirkyRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionStatusForMail']>
   abstract onStructuredSessionTabHidden(
-    ...args: Parameters<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
-  ): ReturnType<OrcaRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
+    ...args: Parameters<QuirkyRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
+  ): ReturnType<QuirkyRuntimeWithGetPtyRecordForPaneKey['onStructuredSessionTabHidden']>
 }

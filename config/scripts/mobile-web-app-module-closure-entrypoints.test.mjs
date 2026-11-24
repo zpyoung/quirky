@@ -5,7 +5,7 @@ import { expect, it } from 'vitest'
 import { mobileWebAppModuleClosure } from './build-mobile-web-app-bundle.mjs'
 
 it('resolves local entry paths against the requested tree and selects browser siblings', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'orca-route-entrypoints-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-route-entrypoints-'))
   const modules = ['app/_layout', 'app/h/_layout', 'app/h/[hostId]/index']
   const expected = [
     'app/_layout.web.tsx',

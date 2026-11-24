@@ -8,25 +8,29 @@ import {
 describe('encodeClaudeProjectPath', () => {
   it('emits one dash per non-alphanumeric character rather than per run', () => {
     // The distinction is the whole contract: collapsing runs stops matching real bucket names.
-    expect(encodeClaudeProjectPath('/Users/ada/orca/workspaces')).toBe('-Users-ada-orca-workspaces')
-    expect(encodeClaudeProjectPath('/Users/ada/.orca/worktrees')).toBe('-Users-ada--orca-worktrees')
+    expect(encodeClaudeProjectPath('/Users/ada/quirky/workspaces')).toBe(
+      '-Users-ada-quirky-workspaces'
+    )
+    expect(encodeClaudeProjectPath('/Users/ada/.quirky/worktrees')).toBe(
+      '-Users-ada--quirky-worktrees'
+    )
   })
 
   it('encodes a Windows drive path', () => {
-    expect(encodeClaudeProjectPath('C:\\Users\\ada\\orca\\workspaces')).toBe(
-      'C--Users-ada-orca-workspaces'
+    expect(encodeClaudeProjectPath('C:\\Users\\ada\\quirky\\workspaces')).toBe(
+      'C--Users-ada-quirky-workspaces'
     )
     expect(encodeClaudeProjectPath('C:\\')).toBe('C--')
   })
 
   it('encodes a WSL UNC path', () => {
-    expect(encodeClaudeProjectPath('\\\\wsl$\\Ubuntu\\home\\ada\\orca\\workspaces')).toBe(
-      '--wsl--Ubuntu-home-ada-orca-workspaces'
+    expect(encodeClaudeProjectPath('\\\\wsl$\\Ubuntu\\home\\ada\\quirky\\workspaces')).toBe(
+      '--wsl--Ubuntu-home-ada-quirky-workspaces'
     )
   })
 
   it('drops trailing separators but keeps a bare root', () => {
-    expect(encodeClaudeProjectPath('/Users/ada/orca/')).toBe('-Users-ada-orca')
+    expect(encodeClaudeProjectPath('/Users/ada/quirky/')).toBe('-Users-ada-quirky')
     expect(encodeClaudeProjectPath('/')).toBe('-')
   })
 
@@ -42,12 +46,12 @@ describe('encodeClaudeProjectPath', () => {
 
 describe('isClaudeProjectDirInScope', () => {
   it('accepts the prefix itself and its dash-delimited descendants', () => {
-    expect(isClaudeProjectDirInScope('-w-orca', ['-w-orca'])).toBe(true)
-    expect(isClaudeProjectDirInScope('-w-orca-nautilus', ['-w-orca'])).toBe(true)
+    expect(isClaudeProjectDirInScope('-w-quirky', ['-w-quirky'])).toBe(true)
+    expect(isClaudeProjectDirInScope('-w-quirky-nautilus', ['-w-quirky'])).toBe(true)
   })
 
   it('rejects a sibling that merely starts with the prefix', () => {
-    // Without the boundary, "orca" would absorb every workspace under "orcadyne".
-    expect(isClaudeProjectDirInScope('-w-orcadyne-nautilus', ['-w-orca'])).toBe(false)
+    // Without the boundary, "quirky" would absorb every workspace under "quirkydyne".
+    expect(isClaudeProjectDirInScope('-w-quirkydyne-nautilus', ['-w-quirky'])).toBe(false)
   })
 })

@@ -85,7 +85,7 @@ async function closeTerminalRenderFixture({ browser, scratch, server }) {
  * Builds the bundle, serves it under the shell's own policy, and launches the browser.
  *
  * Nothing survives a setup that throws. The browser is launched last and is the step most likely
- * to fail — no Chromium on the machine, an `ORCA_MOBILE_WEB_RENDER_BROWSER` that points nowhere —
+ * to fail — no Chromium on the machine, an `QUIRKY_MOBILE_WEB_RENDER_BROWSER` that points nowhere —
  * and by then the server is listening and the scratch tree is on disk. A caller that never got a
  * handle back has nothing to close, so this closes them itself and rethrows what actually went
  * wrong rather than whatever the cleanup might say.
@@ -94,7 +94,7 @@ export async function startTerminalRenderFixture() {
   const cspHeader = await readShellCsp()
   const bridgeVersion = await readBridgeProtocolVersion()
   const faultGrant = await readBridgeFaultGrant()
-  const scratch = await mkdtemp(join(tmpdir(), 'orca-c75-terminal-render-'))
+  const scratch = await mkdtemp(join(tmpdir(), 'quirky-c75-terminal-render-'))
   let browser = null
   let served = null
   try {
@@ -118,7 +118,7 @@ export async function startTerminalRenderFixture() {
       ]
     })
     served = await createBundleServer({ outDir: built.outDir, cspHeader })
-    const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+    const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
     browser = await chromium.launch({
       headless: true,
       ...(executablePath ? { executablePath } : {})
@@ -168,16 +168,19 @@ export async function startTerminalRenderFixture() {
       }
     })
     await page.goto(`${origin}/`, { waitUntil: 'load' })
-    await page.waitForFunction(() => document.documentElement.dataset.orcaWebEntry === 'mounted', {
-      timeout: 60_000,
-      polling: 250
-    })
+    await page.waitForFunction(
+      () => document.documentElement.dataset.quirkyWebEntry === 'mounted',
+      {
+        timeout: 60_000,
+        polling: 250
+      }
+    )
     return { errors, page }
   }
 
   async function openTerminal(options) {
     const opened = await openPage(PROBE_ROUTE, options)
-    await opened.page.waitForFunction(() => globalThis.__orcaTerminalReady === true, {
+    await opened.page.waitForFunction(() => globalThis.__quirkyTerminalReady === true, {
       timeout: 60_000,
       polling: 100
     })
@@ -202,11 +205,11 @@ export async function startTerminalRenderFixture() {
 export async function openProbeTerminal(page) {
   await page.locator('#terminal-container').waitFor({ state: 'attached', timeout: 30_000 })
   await page.evaluate(
-    ([cols, rows]) => globalThis.__orcaTerminalProbe.init(cols, rows, ''),
+    ([cols, rows]) => globalThis.__quirkyTerminalProbe.init(cols, rows, ''),
     [COLS, ROWS]
   )
   // Attached rather than visible: the replacement surface is hidden until its writes drain, and
   // the commit that reveals it is the last step of the same rAF chain `awaitReady` waits on.
   await page.locator('#terminal-surface .xterm').waitFor({ state: 'attached', timeout: 30_000 })
-  await page.evaluate(() => globalThis.__orcaTerminalProbe.awaitReady())
+  await page.evaluate(() => globalThis.__quirkyTerminalProbe.awaitReady())
 }

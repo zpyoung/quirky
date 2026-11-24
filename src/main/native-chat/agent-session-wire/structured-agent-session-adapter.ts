@@ -76,7 +76,7 @@ export class AgentSessionAcquisitionRefusal extends Error {
 
   constructor(
     message: string,
-    /** The situation, so the chat can say what to do; the message is Orca's log wording. Absent,
+    /** The situation, so the chat can say what to do; the message is Quirky's log wording. Absent,
      *  the provider refused its own start. */
     readonly reason: AgentSessionRefusalReason<'agent_session_operation_invalid'> = 'providerStartFailed',
     readonly account?: AgentSessionAccountKind
@@ -138,7 +138,7 @@ export type AgentSessionPreSpawnReason = Extract<
 
 /** Acquisition failed with first-hand proof that no provider process existed. */
 export class AgentSessionPreSpawnError extends Error {
-  /** Absent: Orca's own reason, which only the log reads. A wrapped pre-spawn error keeps its. */
+  /** Absent: Quirky's own reason, which only the log reads. A wrapped pre-spawn error keeps its. */
   readonly reason: AgentSessionPreSpawnReason | undefined
 
   constructor(
@@ -204,7 +204,7 @@ export type StructuredAgentSessionEndedEvent = {
   /** Log text only; the chat's words come from `failure`. */
   reason: string
   /** Why it ended, as the adapter knows it: the provider's exit with its own diagnostic, or an
-   *  Orca fault. Absent reads as a provider exit with nothing to add. */
+   *  Quirky fault. Absent reads as a provider exit with nothing to add. */
   failure?: SubmissionRejectionFact
   cause: 'unexpected-exit' | 'requested-close'
   fence: number

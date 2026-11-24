@@ -81,7 +81,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('terminal file link actions', () => {
-  it('offers Orca and system-default actions for a local file', () => {
+  it('offers Quirky and system-default actions for a local file', () => {
     const request = vi.fn()
     expect(
       handleTerminalFileLink('/repo/src/main.ts', 12, 4, plainEvent(), deps, context(request))
@@ -203,7 +203,7 @@ describe('terminal file link actions', () => {
     it('selects a folder link in its parent instead of opening it', async () => {
       const request = vi.fn()
       handleTerminalFileLink(
-        '/repo/build/Orca.app',
+        '/repo/build/Quirky.app',
         null,
         null,
         plainEvent(),
@@ -212,7 +212,7 @@ describe('terminal file link actions', () => {
       )
 
       await revealRow(request).run()
-      expect(shellApi.openInFileManager).toHaveBeenCalledWith('/repo/build/Orca.app', 'local')
+      expect(shellApi.openInFileManager).toHaveBeenCalledWith('/repo/build/Quirky.app', 'local')
       expect(shellApi.openFilePath).not.toHaveBeenCalled()
       expect(fsApi.stat).not.toHaveBeenCalled()
       expect(mocks.openDetectedFilePath).not.toHaveBeenCalled()

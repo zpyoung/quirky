@@ -17,7 +17,7 @@ let nowMs: number
 let eventSequence: number
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-heimdall-runner-control-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-heimdall-runner-control-'))
   database = new HeimdallDatabase(root)
   ledger = new HeimdallLedgerStore(database)
   nowMs = 100

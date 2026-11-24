@@ -45,7 +45,7 @@ afterEach(async () => {
 
 describe("structured Claude's read grant for chat attachments", () => {
   it("hands the store root from the runtime to Claude's part of the launch", async () => {
-    stateDirectory = await mkdtemp(join(tmpdir(), 'orca-attachment-grant-'))
+    stateDirectory = await mkdtemp(join(tmpdir(), 'quirky-attachment-grant-'))
     const directory = stateDirectory
     await ensureStructuredAgentSessionHost({
       logger: createStructuredAgentSessionLogger(),

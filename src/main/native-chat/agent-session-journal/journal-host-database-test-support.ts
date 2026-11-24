@@ -80,11 +80,11 @@ export function createTrackedJournalOpener(): TrackedJournalOpener {
 }
 
 /** What a fresh open of the chat would replay, read from the test state directory's database. */
-/** What an open of a chat a newer Orca saved is refused with. */
-export const SAVED_BY_NEWER_ORCA = {
+/** What an open of a chat a newer Quirky saved is refused with. */
+export const SAVED_BY_NEWER_QUIRKY = {
   refusal: {
     code: 'agent_session_journal_unreadable',
-    details: { reason: 'journalWrittenByNewerOrca' }
+    details: { reason: 'journalWrittenByNewerQuirky' }
   }
 }
 

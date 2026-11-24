@@ -46,7 +46,7 @@ const LISTED = `${JSON.stringify({
   type: 'control_response',
   response: {
     subtype: 'success',
-    request_id: 'orca-model-discovery',
+    request_id: 'quirky-model-discovery',
     response: {
       models: [
         {
@@ -107,7 +107,7 @@ describe('claude model catalog probe', () => {
       type: 'control_response',
       response: {
         subtype: 'success',
-        request_id: 'orca-model-discovery',
+        request_id: 'quirky-model-discovery',
         response: {
           models: [
             { value: 'default', resolvedModel: 'claude-opus-5-5[1m]', supportsAutoMode: true },
@@ -167,7 +167,7 @@ describe('claude model catalog probe', () => {
   it.runIf(process.platform !== 'win32')(
     'lists through a supervised one-shot that answers after its input ends',
     async () => {
-      const folder = mkdtempSync(join(tmpdir(), 'orca-claude-probe-'))
+      const folder = mkdtempSync(join(tmpdir(), 'quirky-claude-probe-'))
       try {
         const parentFile = join(folder, 'parent-pid')
         const standIn = join(folder, 'claude')
@@ -197,7 +197,7 @@ process.stdin.on('end', () => setTimeout(() => {
           origin: 'probe',
           models: [{ id: 'sonnet', label: 'Sonnet' }]
         })
-        // The stand-in's parent is the supervisor, never Orca itself.
+        // The stand-in's parent is the supervisor, never Quirky itself.
         expect(Number(readFileSync(parentFile, 'utf8'))).not.toBe(process.pid)
       } finally {
         rmSync(folder, { recursive: true, force: true })
@@ -234,7 +234,7 @@ describe('Claude catalog availability', () => {
   })
 
   it('says the CLI is missing when the resolved executable is not there', async () => {
-    const folder = mkdtempSync(join(tmpdir(), 'orca-claude-missing-'))
+    const folder = mkdtempSync(join(tmpdir(), 'quirky-claude-missing-'))
     try {
       // Never created: the real runner's spawn reports ENOENT for this exact path.
       const missing = join(folder, 'claude with spaces', 'claude')

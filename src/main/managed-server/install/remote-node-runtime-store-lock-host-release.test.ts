@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess, spawnProcess } from '@orca/process-host'
+import { runProcess, spawnProcess } from '@quirky/process-host'
 import type { SshConnection } from '../../ssh/connection/ssh-connection'
 import {
   RUNTIME_STORE_LOCK_NAME,
@@ -65,8 +65,8 @@ describe.skipIf(process.platform === 'win32')('runtime store lock released by th
   it('passes the wrapped command output and exit status through and frees the lock', async () => {
     await withRuntimeStoreLock(conn, host, store, async (held) => {
       expect(existsSync(lock)).toBe(true)
-      expect((await sh(held.releasedByHostOnExit('echo ORCA_NODE_RUNTIME_READY'))).trim()).toBe(
-        'ORCA_NODE_RUNTIME_READY'
+      expect((await sh(held.releasedByHostOnExit('echo QUIRKY_NODE_RUNTIME_READY'))).trim()).toBe(
+        'QUIRKY_NODE_RUNTIME_READY'
       )
       expect(existsSync(lock)).toBe(false)
       await expect(sh(held.releasedByHostOnExit('echo partial; exit 3'))).rejects.toMatchObject({
@@ -82,7 +82,7 @@ describe.skipIf(process.platform === 'win32')('runtime store lock released by th
     await expect(
       withRuntimeStoreLock(conn, host, store, async (held) => {
         // The client's exec timer fires while the host is still extracting (HH-3).
-        orphan = sh(held.releasedByHostOnExit('sleep 1; echo ORCA_NODE_RUNTIME_READY'))
+        orphan = sh(held.releasedByHostOnExit('sleep 1; echo QUIRKY_NODE_RUNTIME_READY'))
         throw unconfirmed()
       })
     ).rejects.toMatchObject({ sshChannelCloseConfirmed: false })

@@ -5,7 +5,7 @@ export function getElectronIsolatedKeychainArgs(): string[] {
   return process.platform === 'darwin' ? ['--password-store=basic', '--use-mock-keychain'] : []
 }
 
-export function getOrcaElectronLaunchArgs(mainPath: string, headful: boolean): string[] {
+export function getQuirkyElectronLaunchArgs(mainPath: string, headful: boolean): string[] {
   // Launch through package.json so app version and resource paths match a packaged app.
   const appPath = dirname(dirname(dirname(mainPath)))
   const keychainArgs = getElectronIsolatedKeychainArgs()

@@ -1,4 +1,4 @@
-import type { SubscriptionRegistration } from '../orca-runtime'
+import type { SubscriptionRegistration } from '../quirky-runtime'
 
 type Cleanup = () => void | Promise<void>
 type Entry = {
@@ -31,7 +31,7 @@ export type SubscriptionRegistryDouble = {
 }
 
 /**
- * Faithful double of the runtime subscription registry (`OrcaRuntimeService`,
+ * Faithful double of the runtime subscription registry (`QuirkyRuntimeService`,
  * `registerSubscriptionCleanup` through `cleanupSubscriptionsForConnection`, plus
  * `releaseSubscriptionByRequest`).
  *
@@ -39,7 +39,7 @@ export type SubscriptionRegistryDouble = {
  * `registerSubscriptionCleanup`, `cleanupSubscriptionAndWait`,
  * `cleanupOwnedSubscription`, `cleanupSubscriptionIfOwnedByConnection`, or
  * `cleanupSubscriptionsForConnection`, change this too — the runtime-level tests in
- * `orca-runtime.test.ts` are what pin the real behavior; these doubles only pin routing.
+ * `quirky-runtime.test.ts` are what pin the real behavior; these doubles only pin routing.
  *
  * Why this exists: the ad-hoc `Map` stubs these tests used to carry never evicted the
  * prior generation and had no connection index, so no test could observe a

@@ -83,7 +83,7 @@ function formatUnavailable(
     return 'Session search is off on this host.'
   }
   if (reason === 'unsupported-agent') {
-    return 'This host does not support history search for the selected agent. Update Orca on that host or select another agent.'
+    return 'This host does not support history search for the selected agent. Update Quirky on that host or select another agent.'
   }
   // The CLI scopes with --path, never with an identity, so this only reaches a
   // caller that built a request by hand.
@@ -95,7 +95,7 @@ function formatUnavailable(
   }
   return [
     'This host runs no session search service.',
-    'An Orca host older than session search answers the same way; update it and try again.'
+    'An Quirky host older than session search answers the same way; update it and try again.'
   ].join('\n')
 }
 

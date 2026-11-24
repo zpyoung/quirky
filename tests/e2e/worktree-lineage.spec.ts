@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@stablyai/playwright-test'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { addRepoWithWorkspaces, linkWorkspaces } from './helpers/repo-with-workspaces'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
@@ -18,7 +18,7 @@ function worktreeOption(page: Page, worktreeId: string) {
 }
 
 async function captureEvidence(page: Page, name: string, locator?: Locator): Promise<void> {
-  if (process.env.ORCA_CAPTURE_EVIDENCE !== '1') {
+  if (process.env.QUIRKY_CAPTURE_EVIDENCE !== '1') {
     return
   }
   const outputDir = resolve(process.cwd(), 'pr-evidence')
@@ -38,15 +38,15 @@ async function captureSidebarEvidence(page: Page, name: string): Promise<void> {
 test.describe('Worktree Lineage', () => {
   test.describe.configure({ mode: 'serial' })
 
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
-  test('renders existing child lineage in the sidebar', async ({ orcaPage }) => {
-    const { parentId, childId } = await seedLineageScenario(orcaPage)
-    const parentRow = worktreeOption(orcaPage, parentId)
-    const childRow = worktreeOption(orcaPage, childId)
+  test('renders existing child lineage in the sidebar', async ({ quirkyPage }) => {
+    const { parentId, childId } = await seedLineageScenario(quirkyPage)
+    const parentRow = worktreeOption(quirkyPage, parentId)
+    const childRow = worktreeOption(quirkyPage, childId)
 
     await expect(parentRow).toBeVisible()
     await parentRow.click()
@@ -57,7 +57,7 @@ test.describe('Worktree Lineage', () => {
     await expect(childToggle).toBeVisible({ timeout: 10_000 })
     await expect(childRow).toBeVisible()
 
-    const positions = await orcaPage.evaluate(
+    const positions = await quirkyPage.evaluate(
       ({ parentId, childId }) => {
         const rowFor = (worktreeId: string) =>
           [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
@@ -83,7 +83,7 @@ test.describe('Worktree Lineage', () => {
     await expect(childRow).toBeHidden()
 
     await parentRow.getByRole('button', { name: 'Show 1 child workspace' }).click()
-    await orcaPage.evaluate(async (childId) => {
+    await quirkyPage.evaluate(async (childId) => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -96,7 +96,7 @@ test.describe('Worktree Lineage', () => {
     await expect
       .poll(
         () =>
-          orcaPage.evaluate((childId) => {
+          quirkyPage.evaluate((childId) => {
             const store = window.__store
             return Boolean(store?.getState().worktreeLineageById[childId])
           }, childId),
@@ -110,15 +110,15 @@ test.describe('Worktree Lineage', () => {
   })
 
   test('renders legacy-only inline lineage when side-map hydration is absent', async ({
-    orcaPage
+    quirkyPage
   }) => {
     test.skip(
       SIDEBAR_INPUTS_BUILD,
       "the window's legacy inline link is unused when rows come from main"
     )
-    const { parentId, childId } = await seedLineageScenario(orcaPage, { inlineOnly: true })
-    const parentRow = worktreeOption(orcaPage, parentId)
-    const childRow = worktreeOption(orcaPage, childId)
+    const { parentId, childId } = await seedLineageScenario(quirkyPage, { inlineOnly: true })
+    const parentRow = worktreeOption(quirkyPage, parentId)
+    const childRow = worktreeOption(quirkyPage, childId)
 
     await expect(parentRow.getByRole('button', { name: 'Hide 1 child workspace' })).toBeVisible()
     await expect(childRow).toBeVisible()
@@ -133,17 +133,17 @@ test.describe('Worktree Lineage', () => {
       .toBe(true)
     // The link must come from the records alone, not a side map hydrated after the seed.
     expect(
-      await orcaPage.evaluate((id) => window.__store!.getState().worktreeLineageById[id], childId)
+      await quirkyPage.evaluate((id) => window.__store!.getState().worktreeLineageById[id], childId)
     ).toBeUndefined()
-    await captureSidebarEvidence(orcaPage, 'legacy-inline-lineage-nested.png')
+    await captureSidebarEvidence(quirkyPage, 'legacy-inline-lineage-nested.png')
   })
 
   test('injects filtered parents structurally without showing a parent badge', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const { parentId, childId } = await seedLineageScenario(orcaPage)
+    const { parentId, childId } = await seedLineageScenario(quirkyPage)
 
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ parentId, childId }) => {
         const store = window.__store
         if (!store) {
@@ -173,14 +173,14 @@ test.describe('Worktree Lineage', () => {
       { parentId, childId }
     )
 
-    const parentRow = worktreeOption(orcaPage, parentId)
-    const childRow = worktreeOption(orcaPage, childId)
+    const parentRow = worktreeOption(quirkyPage, parentId)
+    const childRow = worktreeOption(quirkyPage, childId)
 
     await expect(parentRow).toBeVisible()
     await expect(childRow).toBeVisible()
     await expect(childRow).not.toContainText(/\bfrom\b/)
 
-    const positions = await orcaPage.evaluate(
+    const positions = await quirkyPage.evaluate(
       ({ parentId, childId }) => {
         const rowFor = (worktreeId: string) =>
           [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
@@ -203,34 +203,34 @@ test.describe('Worktree Lineage', () => {
   })
 
   test('updates nested child preview status when the child terminal sleeps', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const { parentId, childId } = await seedLineageScenario(orcaPage)
-    const parentRow = worktreeOption(orcaPage, parentId)
-    const childRow = worktreeOption(orcaPage, childId)
+    const { parentId, childId } = await seedLineageScenario(quirkyPage)
+    const parentRow = worktreeOption(quirkyPage, parentId)
+    const childRow = worktreeOption(quirkyPage, childId)
 
     await expect(parentRow).toBeVisible()
     await expect(childRow).toBeVisible()
 
-    const childTabId = await seedWorkspaceLiveTerminal(orcaPage, childId)
+    const childTabId = await seedWorkspaceLiveTerminal(quirkyPage, childId)
     await expect(childRow).toContainText('Active')
 
-    await markWorkspaceTerminalSlept(orcaPage, { worktreeId: childId, tabId: childTabId })
+    await markWorkspaceTerminalSlept(quirkyPage, { worktreeId: childId, tabId: childTabId })
     await expect(childRow).toContainText('Inactive')
   })
 
   test('sleeps a workspace and every descendant from the parent context menu', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
     // A repo's own checkout offers no delete, so the parent is one of its worktrees.
-    const repo = await addRepoWithWorkspaces(orcaPage, testInfo, 2)
+    const repo = await addRepoWithWorkspaces(quirkyPage, testInfo, 2)
     const [parentId, childId] = [repo.ids[0]!, repo.ids[1]!]
-    await linkWorkspaces(orcaPage, [{ childId, parentId }])
-    await orcaPage.evaluate(() => window.__store!.getState().setShowSleepingWorkspaces(true))
-    const parentTabId = await seedWorkspaceLiveTerminal(orcaPage, parentId)
-    const childTabId = await seedWorkspaceLiveTerminal(orcaPage, childId)
+    await linkWorkspaces(quirkyPage, [{ childId, parentId }])
+    await quirkyPage.evaluate(() => window.__store!.getState().setShowSleepingWorkspaces(true))
+    const parentTabId = await seedWorkspaceLiveTerminal(quirkyPage, parentId)
+    const childTabId = await seedWorkspaceLiveTerminal(quirkyPage, childId)
 
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -254,19 +254,21 @@ test.describe('Worktree Lineage', () => {
       window.api.ephemeralVm.suspendWorkspace = async () => null
     })
 
-    await worktreeOption(orcaPage, parentId).click({ button: 'right' })
-    const sleepSubtree = orcaPage.getByRole('menuitem', {
+    await worktreeOption(quirkyPage, parentId).click({ button: 'right' })
+    const sleepSubtree = quirkyPage.getByRole('menuitem', {
       name: 'Sleep with Descendants (1)'
     })
     await expect(sleepSubtree).toBeVisible()
     await expect(sleepSubtree).toBeEnabled()
-    await expect(orcaPage.getByRole('menuitem', { name: 'Delete with Descendants…' })).toBeVisible()
-    await captureEvidence(orcaPage, 'workspace-descendant-actions.png')
+    await expect(
+      quirkyPage.getByRole('menuitem', { name: 'Delete with Descendants…' })
+    ).toBeVisible()
+    await captureEvidence(quirkyPage, 'workspace-descendant-actions.png')
     await sleepSubtree.click()
 
     await expect
       .poll(() =>
-        orcaPage.evaluate(
+        quirkyPage.evaluate(
           ({ parentTabId, childTabId }) => {
             const state = window.__store?.getState()
             return {
@@ -281,18 +283,18 @@ test.describe('Worktree Lineage', () => {
   })
 
   test('shows parent and child agent rows while the parent workspace is active', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const { parentId, childId } = await seedLineageScenario(orcaPage)
-    const parentRow = worktreeOption(orcaPage, parentId)
-    const childRow = worktreeOption(orcaPage, childId)
+    const { parentId, childId } = await seedLineageScenario(quirkyPage)
+    const parentRow = worktreeOption(quirkyPage, parentId)
+    const childRow = worktreeOption(quirkyPage, childId)
 
     await parentRow.click()
     await expect(parentRow).toHaveAttribute('aria-current', 'page')
     await expect(childRow).toBeVisible()
 
-    const parentAgentPrompt = await seedWorkspaceAgentStatus(orcaPage, parentId, 'PARENT')
-    const childAgentPrompt = await seedWorkspaceAgentStatus(orcaPage, childId, 'CHILD')
+    const parentAgentPrompt = await seedWorkspaceAgentStatus(quirkyPage, parentId, 'PARENT')
+    const childAgentPrompt = await seedWorkspaceAgentStatus(quirkyPage, childId, 'CHILD')
 
     await expect(
       parentRow.getByRole('treeitem').filter({ hasText: parentAgentPrompt })

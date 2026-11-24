@@ -1,12 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService, getDefaultWorkspaceSession } from '../../orca-runtime-test-mocks.spec'
-import '../../orca-runtime-test-lifecycle.spec'
+import {
+  QuirkyRuntimeService,
+  getDefaultWorkspaceSession
+} from '../../quirky-runtime-test-mocks.spec'
+import '../../quirky-runtime-test-lifecycle.spec'
 import {
   TEST_WORKTREE_ID,
   makeRuntimeStoreWithWorkspaceSession
-} from '../../orca-runtime-test-fixtures.spec'
+} from '../../quirky-runtime-test-fixtures.spec'
 
-vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 const LEAF = '11111111-1111-4111-8111-111111111111'
 
@@ -24,7 +27,7 @@ function runtimeWithSavedGrid() {
       }
     }
   })
-  const runtime = new OrcaRuntimeService(runtimeStore)
+  const runtime = new QuirkyRuntimeService(runtimeStore)
   runtime.setPtyController({
     spawn,
     write: () => true,

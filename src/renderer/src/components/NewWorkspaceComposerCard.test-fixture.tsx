@@ -32,8 +32,8 @@ export const hostOptions: ProjectHostSetupOption[] = [
     hostId: 'local',
     repoId: 'repo-a',
     label: 'Local Mac',
-    detail: 'Orca',
-    path: '/Users/alice/orca'
+    detail: 'Quirky',
+    path: '/Users/alice/quirky'
   },
   {
     kind: 'needs-setup',

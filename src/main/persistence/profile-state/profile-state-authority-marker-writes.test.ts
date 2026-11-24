@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as durableFileWrite from '../../durable-file-write'
-import { prepareProfileProjectDomainChanges } from '../../orca-profiles/profile-project-domain-changes'
+import { prepareProfileProjectDomainChanges } from '../../quirky-profiles/profile-project-domain-changes'
 import {
   readProfileProjectTransferState,
   writeProfileProjectDomainChanges
-} from '../../orca-profiles/profile-project-domain-state'
-import { writeSerializedProfileState } from '../../orca-profiles/profile-project-state-file'
+} from '../../quirky-profiles/profile-project-domain-state'
+import { writeSerializedProfileState } from '../../quirky-profiles/profile-project-state-file'
 import {
   hasProfileStateAuthorityMarker,
   profileStateAuthorityMarkerPath
@@ -34,14 +34,14 @@ afterEach(() => {
 })
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), 'orca-authority-marker-writes-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-authority-marker-writes-'))
   roots.push(root)
   const profileId = 'marker-writer'
   const directory = join(root, 'profiles', profileId)
   mkdirSync(directory, { recursive: true })
   const location = {
     profileId,
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     databaseFile: join(directory, 'profile-state.db')
   }
   const opened = openProfileStateDatabase(location.databaseFile, profileId)

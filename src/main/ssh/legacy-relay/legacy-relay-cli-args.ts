@@ -1,5 +1,5 @@
 /**
- * Reads the argv an older relay forwards for one `orca` command run in its terminal.
+ * Reads the argv an older relay forwards for one `quirky` command run in its terminal.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
 import { CLI_BOOLEAN_FLAGS } from '../../../shared/cli-argument-boundary'

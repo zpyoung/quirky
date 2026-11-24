@@ -18,7 +18,7 @@ installTerminalLinkTestEnvironment(doubles)
 describe('terminal host-confirmed chat regression cases', () => {
   it.each([
     {
-      text: 'Type /orca-native-chat:orca-chat-visuals, run /code-review, strip /api/v1, use /clear and /compact, then open /tmp/report.html.',
+      text: 'Type /quirky-native-chat:quirky-chat-visuals, run /code-review, strip /api/v1, use /clear and /compact, then open /tmp/report.html.',
       files: ['/tmp/report.html'],
       linked: ['/tmp/report.html']
     },

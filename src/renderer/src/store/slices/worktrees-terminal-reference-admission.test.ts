@@ -29,8 +29,8 @@ function context(tabId = 'tab-1') {
 function link(number: number) {
   return {
     number,
-    url: `https://github.com/acme/orca/pull/${number}`,
-    slug: { owner: 'acme', repo: 'orca' }
+    url: `https://github.com/acme/quirky/pull/${number}`,
+    slug: { owner: 'acme', repo: 'quirky' }
   }
 }
 function review(number: number): GitHubWorkItem {
@@ -62,7 +62,7 @@ function setup() {
     value: { forBranch: branchLookup }
   })
   store.setState({
-    repos: [{ id: 'repo', path: '/repo', displayName: 'Orca', addedAt: 0, badgeColor: '' }],
+    repos: [{ id: 'repo', path: '/repo', displayName: 'Quirky', addedAt: 0, badgeColor: '' }],
     worktreesByRepo: {
       repo: [makeWorktree({ id: workspaceId, repoId: 'repo', linkedPR: 7 })]
     },

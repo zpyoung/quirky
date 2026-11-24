@@ -48,13 +48,13 @@ describe('runtime environment store', () => {
   function writeProfileKeypair(userDataPath: string, fill: number): void {
     const publicKeyB64 = Buffer.from(new Uint8Array(32).fill(fill)).toString('base64')
     writeFileSync(
-      join(userDataPath, 'orca-e2ee-keypair.json'),
+      join(userDataPath, 'quirky-e2ee-keypair.json'),
       JSON.stringify({ v: 1, publicKeyB64, secretKeyB64: publicKeyB64 })
     )
   }
 
-  it('refuses a pairing code that this same Orca profile issued', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+  it('refuses a pairing code that this same Quirky profile issued', () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     writeProfileKeypair(userDataPath, 1)
 
@@ -63,12 +63,12 @@ describe('runtime environment store', () => {
         name: 'myself',
         pairingCode: pairingCode('ws://192.0.2.10:6768')
       })
-    ).toThrow(/this Orca itself/)
+    ).toThrow(/this Quirky itself/)
     expect(listEnvironments(userDataPath)).toEqual([])
   })
 
-  it('refuses re-pairing a saved server with a code this same Orca profile issued', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+  it('refuses re-pairing a saved server with a code this same Quirky profile issued', () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const environment = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',
@@ -85,7 +85,7 @@ describe('runtime environment store', () => {
   })
 
   it('pairs a server with a different key even at a loopback address', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     writeProfileKeypair(userDataPath, 2)
 
@@ -97,7 +97,7 @@ describe('runtime environment store', () => {
   })
 
   it('rejects duplicate server names instead of silently replacing the saved server', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
 
     const first = addEnvironmentFromPairingCode(userDataPath, {
@@ -115,7 +115,7 @@ describe('runtime environment store', () => {
   })
 
   it('rejects a name that differs only in case or surrounding spaces, as --environment resolves it', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
 
     const first = addEnvironmentFromPairingCode(userDataPath, {
@@ -135,7 +135,7 @@ describe('runtime environment store', () => {
   })
 
   it('advances pairing revisions across equal and backward clock readings', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const environment = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',
@@ -164,7 +164,7 @@ describe('runtime environment store', () => {
   })
 
   it('keeps SSH-tunnel metadata only while the pairing endpoint is loopback', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const environment = addEnvironmentFromPairingCode(userDataPath, {
       name: 'tunneled box',
@@ -187,7 +187,7 @@ describe('runtime environment store', () => {
   })
 
   it('throttles lastUsedAt writes so it does not rewrite the store on every runtime call', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const env = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',
@@ -211,7 +211,7 @@ describe('runtime environment store', () => {
   })
 
   it('persists immediately when the runtimeId changes within the throttle window', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const env = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',
@@ -228,7 +228,7 @@ describe('runtime environment store', () => {
   })
 
   it('persists paired device identity from pairing and status backfill', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-'))
     tempDirs.push(userDataPath)
     const paired = addEnvironmentFromPairingCode(userDataPath, {
       name: 'paired box',
@@ -254,7 +254,7 @@ describe('runtime environment store', () => {
   })
 
   it('rejects an oversized sparse environment store before parsing it', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-bound-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-bound-'))
     tempDirs.push(userDataPath)
     const path = getEnvironmentStorePath(userDataPath)
     writeFileSync(path, '{"version":1,"environments":[]}')
@@ -264,7 +264,7 @@ describe('runtime environment store', () => {
   })
 
   it('rejects an oversized write without replacing the durable environment list', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-runtime-env-store-write-bound-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-runtime-env-store-write-bound-'))
     tempDirs.push(userDataPath)
     const first = addEnvironmentFromPairingCode(userDataPath, {
       name: 'dev box',

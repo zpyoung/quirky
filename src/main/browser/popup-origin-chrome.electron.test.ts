@@ -104,7 +104,7 @@ async function expectOrigin(label: string, kind: string): Promise<Snapshot> {
 }
 
 async function captureBar(stage: string): Promise<void> {
-  if (process.env.ORCA_POPUP_IDENTITY_ARTIFACT_DIR) {
+  if (process.env.QUIRKY_POPUP_IDENTITY_ARTIFACT_DIR) {
     await command('capture', { stage })
   }
 }
@@ -151,7 +151,7 @@ afterAll(async () => {
   for (const response of held) {
     response.destroy()
   }
-  const artifacts = process.env.ORCA_POPUP_IDENTITY_ARTIFACT_DIR
+  const artifacts = process.env.QUIRKY_POPUP_IDENTITY_ARTIFACT_DIR
   if (artifacts) {
     mkdirSync(artifacts, { recursive: true })
     writeFileSync(

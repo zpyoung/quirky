@@ -6,7 +6,7 @@ import { activateAndRevealWorktree } from './worktree-activation'
 import { waitForWorktreeAgentActivationGateForTests } from './worktree-agent-activation-gate'
 import { makeCreatedAgentWorktree as makeWorktree } from '@/lib/worktree-activation-created-agent.test-fixture'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
 import { publishWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
@@ -206,7 +206,7 @@ describe('STA-1111 worktree reopen does not fork-bomb tabs', () => {
       }
     })
 
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       useAppStore.setState({ unifiedTabsByWorktree: { [worktree.id]: [] } })
       sync = openWorkspaceLayoutFrameSync(useAppStore)
       provideLayoutFrameTerminalPanes(sync)
@@ -236,7 +236,7 @@ describe('STA-1111 worktree reopen does not fork-bomb tabs', () => {
     )
     // A frame-drawn row is a restored row: its pane, not the row, carries the binding until mount.
     expect(restored.tabsByWorktree[worktree.id]?.[0]?.ptyId).toBe(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? null : livePtyId
+      QUIRKY_LAYOUT_OWNER_IS_MAIN ? null : livePtyId
     )
     // The host's pane, not a freshly minted duplicate surface.
     expect(restored.tabsByWorktree[worktree.id]?.[0]?.id).toBe('packaged-restart-pane')
@@ -306,6 +306,6 @@ describe('STA-1111 worktree reopen does not fork-bomb tabs', () => {
     // A layout-owner build asks main for the resumed tab once; no reopen asks again.
     expect(
       layoutApply.commands.filter((command) => command.type === 'createTerminalTab')
-    ).toHaveLength(ORCA_LAYOUT_OWNER_IS_MAIN ? 1 : 0)
+    ).toHaveLength(QUIRKY_LAYOUT_OWNER_IS_MAIN ? 1 : 0)
   })
 })

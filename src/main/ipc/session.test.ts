@@ -32,7 +32,7 @@ describe('registerSessionHandlers', () => {
   it('drops renderer writes to a fenced host source partition and keeps every other one', async () => {
     const store = {
       getSshTarget: vi.fn((id: string) =>
-        id === 'fenced' ? { orcadFence: { environmentId: 'env-1' } } : {}
+        id === 'fenced' ? { quirkydFence: { environmentId: 'env-1' } } : {}
       ),
       // Read by the switch-on save, which keeps main's own layout.
       getWorkspaceSession: vi.fn(() => getDefaultWorkspaceSession()),

@@ -117,7 +117,7 @@ export function createComputerUsePermissionsApi(): NonNullable<
         helperAppPath: null,
         openedSettings: false,
         launchedHelper: false,
-        nextStep: 'Computer-use permissions are managed on the Orca server.'
+        nextStep: 'Computer-use permissions are managed on the Quirky server.'
       })),
     reset: () =>
       Promise.resolve({

@@ -69,7 +69,7 @@ test('tag guards preserve malformed markup, protected code and highlighted match
     ['plain > text', 'plain > text'],
     ['<!>text', 'text'],
     ['<><', '<><'],
-    ['<\0orca-search-code-99\0', '<'],
+    ['<\0quirky-search-code-99\0', '<'],
     ['Use <mark>[**unclosed**</mark>', 'Use <mark>[unclosed</mark>'],
     ['<span>[<em>text</em></span>', '[text'],
     ['Use `[**literal**` and **emphasis**', 'Use [**literal** and emphasis'],

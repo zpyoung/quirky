@@ -19,7 +19,7 @@ const mirrorUrl = `${MIRROR}/v${NODE_RUNTIME_PIN.version}/${originalAsset.archiv
 let root = ''
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-node-mirror-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-node-mirror-'))
   Object.assign(NODE_RUNTIME_ASSETS[TARGET], {
     archiveSha256: createHash('sha256').update(BODY).digest('hex')
   })

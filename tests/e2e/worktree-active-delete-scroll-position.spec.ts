@@ -1,5 +1,5 @@
 import type { Page, TestInfo } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
 import { addRepoWithWorkspaces, writeWorkspaceMeta } from './helpers/repo-with-workspaces'
 import { waitForSessionReady } from './helpers/store'
@@ -29,7 +29,7 @@ declare global {
 }
 
 async function pauseForVisualProof(page: Page): Promise<void> {
-  if (process.env.ORCA_E2E_RECORD_VIDEO === '1') {
+  if (process.env.QUIRKY_E2E_RECORD_VIDEO === '1') {
     await page.waitForTimeout(VISUAL_PROOF_PAUSE_MS)
   }
 }
@@ -187,36 +187,36 @@ async function finishRowRemovalSampling(page: Page): Promise<RowRemovalFrame[]> 
 }
 
 test('deleting the active scrolled worktree preserves position and closes the row gap', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await orcaPage.setViewportSize({ width: 1_200, height: 800 })
-  const { belowId, successorId, targetId } = await seedActiveDeletionRows(orcaPage, testInfo)
-  await prepareScrolledActiveRow(orcaPage, targetId)
-  const target = orcaPage.locator(
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.setViewportSize({ width: 1_200, height: 800 })
+  const { belowId, successorId, targetId } = await seedActiveDeletionRows(quirkyPage, testInfo)
+  await prepareScrolledActiveRow(quirkyPage, targetId)
+  const target = quirkyPage.locator(
     `[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(targetId)}]`
   )
-  const below = orcaPage.locator(
+  const below = quirkyPage.locator(
     `[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(belowId)}]`
   )
-  await pauseForVisualProof(orcaPage)
+  await pauseForVisualProof(quirkyPage)
   const contextMenuScope = target.locator('[data-worktree-context-menu-scope="worktree"]')
   await expect(contextMenuScope).toBeVisible()
   await contextMenuScope.click({ button: 'right' })
-  const deleteItem = orcaPage.getByRole('menuitem', { name: /^Delete(?:\s|$)/ })
+  const deleteItem = quirkyPage.getByRole('menuitem', { name: /^Delete(?:\s|$)/ })
   await expect(deleteItem).toBeVisible()
   await expect(deleteItem).toBeInViewport()
-  await pauseForVisualProof(orcaPage)
-  await startRowRemovalSampling(orcaPage, targetId, belowId)
+  await pauseForVisualProof(quirkyPage)
+  await startRowRemovalSampling(quirkyPage, targetId, belowId)
   await deleteItem.click()
 
   await expect(target).toHaveCount(0)
   await expect(below).toBeVisible()
   await expect
-    .poll(() => orcaPage.evaluate(() => window.__store?.getState().activeWorktreeId ?? null))
+    .poll(() => quirkyPage.evaluate(() => window.__store?.getState().activeWorktreeId ?? null))
     .toBe(successorId)
-  const frames = await finishRowRemovalSampling(orcaPage)
-  await pauseForVisualProof(orcaPage)
+  const frames = await finishRowRemovalSampling(quirkyPage)
+  await pauseForVisualProof(quirkyPage)
   const mountedTops = frames.flatMap((frame) => (frame.belowTop === null ? [] : [frame.belowTop]))
   const firstRemovedFrame = frames.findIndex((frame) => !frame.targetExists)
   const scrollTopBeforeDelete = frames[0]?.scrollTop
@@ -235,21 +235,21 @@ test('deleting the active scrolled worktree preserves position and closes the ro
     scrollTopBeforeDelete - 1
   )
   await expect(
-    orcaPage.locator(`[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(successorId)}]`)
+    quirkyPage.locator(`[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(successorId)}]`)
   ).toHaveCount(0)
 })
 
 test('reduced motion removes the active row without animating its neighbor', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  await orcaPage.emulateMedia({ reducedMotion: 'reduce' })
-  await waitForSessionReady(orcaPage)
-  const { belowId, targetId } = await seedActiveDeletionRows(orcaPage, testInfo)
-  await prepareScrolledActiveRow(orcaPage, targetId)
+  await quirkyPage.emulateMedia({ reducedMotion: 'reduce' })
+  await waitForSessionReady(quirkyPage)
+  const { belowId, targetId } = await seedActiveDeletionRows(quirkyPage, testInfo)
+  await prepareScrolledActiveRow(quirkyPage, targetId)
 
-  await startRowRemovalSampling(orcaPage, targetId, belowId)
+  await startRowRemovalSampling(quirkyPage, targetId, belowId)
   await evaluatePolled(
-    orcaPage,
+    quirkyPage,
     async (targetId) => {
       const removed = await window
         .__store!.getState()
@@ -260,7 +260,7 @@ test('reduced motion removes the active row without animating its neighbor', asy
     },
     targetId
   )
-  const frames = await finishRowRemovalSampling(orcaPage)
+  const frames = await finishRowRemovalSampling(quirkyPage)
 
   expect(frames.some((frame) => !frame.targetExists)).toBe(true)
   expect(Math.max(...frames.map((frame) => frame.animationCount))).toBe(0)

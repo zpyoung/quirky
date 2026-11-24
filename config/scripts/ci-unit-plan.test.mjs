@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { FULL_SHARD_COUNT } from './ci-unit-selection.mjs'
 
 it.each([
@@ -13,7 +13,7 @@ it.each([
 ])(
   'plans from a real Git diff, retaining full coverage for incomplete package evidence: %j',
   ({ withParent, unresolvedPackage }) => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-unit-plan-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-unit-plan-'))
     const git = (args) => {
       const result = runProcessSync({ program: 'git', args, cwd: root })
       expect(result.code, result.stderr).toBe(0)
@@ -24,7 +24,7 @@ it.each([
       writeFileSync(join(root, 'src/value.ts'), 'export const value = 1')
       writeFileSync(
         join(root, 'src/consumer.test.ts'),
-        unresolvedPackage ? "import '@orca/missing-package'" : "import './value'"
+        unresolvedPackage ? "import '@quirky/missing-package'" : "import './value'"
       )
       writeFileSync(join(root, 'src/unrelated.test.ts'), 'export const unrelated = true')
       git(['init', '--quiet'])
@@ -54,12 +54,12 @@ it.each([
         cwd: root,
         env: {
           ...process.env,
-          ORCA_BACKGROUND_LAUNCH: '1',
-          ORCA_UNIT_SELECTION_MODE: 'selected',
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_UNIT_SELECTION_MODE: 'selected',
           GITHUB_EVENT_NAME: 'pull_request',
-          ORCA_PULL_REQUEST_DRAFT: 'true',
+          QUIRKY_PULL_REQUEST_DRAFT: 'true',
           GITHUB_SHA: sourceSha,
-          ORCA_SHARD_SOURCE_SHA: sourceSha,
+          QUIRKY_SHARD_SOURCE_SHA: sourceSha,
           GITHUB_OUTPUT: join(root, 'outputs'),
           GITHUB_STEP_SUMMARY: join(root, 'summary')
         }
@@ -76,7 +76,7 @@ it.each([
         !withParent
           ? 'Error: Changed paths unavailable'
           : unresolvedPackage
-            ? 'Error: No public orca-source export for @orca/missing-package'
+            ? 'Error: No public quirky-source export for @quirky/missing-package'
             : 'Transitive imports plus indirect-input consumers'
       )
       expect(plan.shards).toHaveLength(selected ? 1 : FULL_SHARD_COUNT)
@@ -89,7 +89,7 @@ it.each([
 it.each(['5', '10', 'invalid'])(
   'validates the requested full shard count and keeps fallback coverage: %s',
   (requestedCount) => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-unit-count-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-unit-count-'))
     try {
       mkdirSync(join(root, 'src'))
       writeFileSync(join(root, 'src/retained.test.ts'), 'export const retained = true')
@@ -99,15 +99,15 @@ it.each(['5', '10', 'invalid'])(
         cwd: root,
         env: {
           ...process.env,
-          ORCA_BACKGROUND_LAUNCH: '1',
-          ORCA_UNIT_FULL_SHARD_COUNT: requestedCount,
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_UNIT_FULL_SHARD_COUNT: requestedCount,
           GITHUB_EVENT_NAME: 'workflow_dispatch',
-          ORCA_SHARD_SOURCE_SHA: 'full-count-fixture'
+          QUIRKY_SHARD_SOURCE_SHA: 'full-count-fixture'
         }
       })
       if (requestedCount === 'invalid') {
         expect(result.code).not.toBe(0)
-        expect(result.stderr).toContain('ORCA_UNIT_FULL_SHARD_COUNT must be 5 or 10')
+        expect(result.stderr).toContain('QUIRKY_UNIT_FULL_SHARD_COUNT must be 5 or 10')
         return
       }
       expect(result.code, result.stderr).toBe(0)

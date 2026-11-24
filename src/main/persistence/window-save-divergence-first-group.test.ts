@@ -14,7 +14,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { layoutModelOf, windowSaveDivergences } from './window-save-divergence'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 
 function withoutTabBar(session: WorkspaceSessionState, key: string): WorkspaceSessionState {
   const drop = <T>(records: Record<string, T> | undefined) =>

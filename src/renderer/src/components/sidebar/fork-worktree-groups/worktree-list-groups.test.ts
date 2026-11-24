@@ -15,15 +15,15 @@ import { buildRows, buildSidebarRowPlan } from '../worktree-list/grouping/build-
 const LOCAL_HOST_LABEL = getExecutionHostLabel('local')
 const repo: Repo = {
   id: 'repo-1',
-  path: '/tmp/orca',
-  displayName: 'orca',
+  path: '/tmp/quirky',
+  displayName: 'quirky',
   badgeColor: '#000000',
   addedAt: 0
 }
 const remoteRepo: Repo = {
   id: 'repo-remote',
-  path: '/home/alice/orca',
-  displayName: 'orca',
+  path: '/home/alice/quirky',
+  displayName: 'quirky',
   badgeColor: '#111111',
   addedAt: 1,
   connectionId: 'gpu-vm'
@@ -31,7 +31,7 @@ const remoteRepo: Repo = {
 const worktree: Worktree = {
   id: 'wt-1',
   repoId: repo.id,
-  path: '/tmp/orca-feature',
+  path: '/tmp/quirky-feature',
   branch: 'refs/heads/feature/super-critical',
   head: 'abc123',
   isBare: false,

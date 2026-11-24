@@ -1,5 +1,5 @@
 // A layout-owner server's promise to a paired desktop (design H5). Advertised in status.get only
-// by a build with ORCA_LAYOUT_OWNER=main, it versions this contract as one unit:
+// by a build with QUIRKY_LAYOUT_OWNER=main, it versions this contract as one unit:
 // - `layout.subscribe` sends a snapshot, then one records frame per change, carrying the stream's
 //   `epoch` and gapless `seq` (workspace-layout-stream-frames.ts); a reader that sees a gap or a
 //   new epoch resubscribes for a fresh snapshot.

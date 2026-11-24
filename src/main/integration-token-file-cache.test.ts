@@ -9,7 +9,7 @@ let directory = ''
 const decrypt = vi.fn((value: Buffer) => value.toString('utf-8'))
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-token-file-cache-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-token-file-cache-'))
   decrypt.mockReset().mockImplementation((value) => value.toString('utf-8'))
   setSecretStore({
     isEncryptionAvailable: () => true,

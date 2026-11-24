@@ -55,7 +55,7 @@ export function findPaneCodex(
   }
   const parent = index.byPid.get(outermost.ppid)
   const shell = parent ? executableName(parent) : null
-  // Why: fish without config never loads Orca's codex function, so it counts as unwrapped.
+  // Why: fish without config never loads Quirky's codex function, so it counts as unwrapped.
   const unwrappedFish =
     shell === 'fish' && fishArgsSkipConfig(parent?.command.trim().split(/\s+/).slice(1) ?? [])
   return { command: outermost.command, shell: unwrappedFish ? null : shell }
@@ -71,11 +71,11 @@ export function resolveCodexPaneHome(ptyId: string): string | null {
     return null
   }
   switch (record.homeRoute) {
-    // Why: a custom CODEX_HOME routes a pane to Orca's mirror, so real-home is always ~/.codex.
+    // Why: a custom CODEX_HOME routes a pane to Quirky's mirror, so real-home is always ~/.codex.
     case 'real-home':
       return getSystemCodexHomePath()
     // Why: an unnamed home (managed account, WSL, pre-route record) skips the
-    // warning rather than probing the wrong server. Orca's mirror (shared-home)
+    // warning rather than probing the wrong server. Quirky's mirror (shared-home)
     // gets none either, as macOS and Linux already did: it is a fallback lane
     // (custom CODEX_HOME, hook approval) or a pre-upgrade home refreshed from ~/.codex.
     case 'shared-home':

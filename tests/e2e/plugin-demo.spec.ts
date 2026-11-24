@@ -1,5 +1,5 @@
 /**
- * Invariant: the documented hello-orca plugin stays inert before visible
+ * Invariant: the documented hello-quirky plugin stays inert before visible
  * consent, then its panel, worker command, and event subscription all work.
  */
 
@@ -7,7 +7,7 @@ import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { removeWorktreeViaStore } from './helpers/dead-terminal'
 
 async function openPluginSettings(page: Page): Promise<void> {
@@ -33,11 +33,11 @@ async function openDemoPanel(page: Page): Promise<void> {
       state.toggleRightSidebar()
     }
   })
-  const panelButton = page.getByRole('button', { name: 'Hello Orca', exact: true })
+  const panelButton = page.getByRole('button', { name: 'Hello Quirky', exact: true })
   await expect(panelButton).toBeVisible({ timeout: 15_000 })
   await panelButton.click()
-  const frame = page.frameLocator('iframe[title="Hello Orca"]')
-  await expect(frame.getByRole('heading', { name: 'Hello Orca 👋' })).toBeVisible()
+  const frame = page.frameLocator('iframe[title="Hello Quirky"]')
+  await expect(frame.getByRole('heading', { name: 'Hello Quirky 👋' })).toBeVisible()
   await expect(frame.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveAttribute(
     'content',
     /default-src 'none'/
@@ -69,16 +69,18 @@ async function createWorktree(page: Page, name: string): Promise<string> {
   }, name)
 }
 
-test('runs hello-orca panel, command, and event behind visible consent', async ({ orcaPage }) => {
-  const tempRoot = await mkdtemp(join(tmpdir(), 'orca-hello-plugin-e2e-'))
-  const pluginRoot = join(tempRoot, 'hello-orca')
+test('runs hello-quirky panel, command, and event behind visible consent', async ({
+  quirkyPage
+}) => {
+  const tempRoot = await mkdtemp(join(tmpdir(), 'quirky-hello-plugin-e2e-'))
+  const pluginRoot = join(tempRoot, 'hello-quirky')
   let createdWorktreeId: string | null = null
-  await cp(join(process.cwd(), 'examples', 'plugins', 'hello-orca'), pluginRoot, {
+  await cp(join(process.cwd(), 'examples', 'plugins', 'hello-quirky'), pluginRoot, {
     recursive: true
   })
 
   try {
-    const installed = await orcaPage.evaluate(async (sourcePath) => {
+    const installed = await quirkyPage.evaluate(async (sourcePath) => {
       const settings = await window.api.settings.set({ pluginSystemEnabled: true })
       window.__store?.setState({ settings })
       const result = await window.api.plugins.install({ kind: 'local-path', path: sourcePath })
@@ -107,12 +109,12 @@ test('runs hello-orca panel, command, and event behind visible consent', async (
     expect(installed.status).toBe('pending')
     expect(installed.blocked).toBe(true)
 
-    await openPluginSettings(orcaPage)
-    await orcaPage.getByRole('tab', { name: /^Installed/ }).click()
-    const row = orcaPage.locator(`[data-plugin-key="${installed.pluginKey}"]`)
+    await openPluginSettings(quirkyPage)
+    await quirkyPage.getByRole('tab', { name: /^Installed/ }).click()
+    const row = quirkyPage.locator(`[data-plugin-key="${installed.pluginKey}"]`)
     await expect(row).toContainText('Needs review')
     await row.getByRole('button', { name: 'Review & enable' }).click()
-    const consent = orcaPage.getByRole('dialog', { name: 'Review permissions' })
+    const consent = quirkyPage.getByRole('dialog', { name: 'Review permissions' })
     await expect(consent).toBeVisible()
     await expect(consent).toContainText('Local folder')
     await expect(consent).toContainText('full access to your files, network, and other processes')
@@ -121,7 +123,7 @@ test('runs hello-orca panel, command, and event behind visible consent', async (
     await expect(consent).toBeHidden()
     await expect(row).toContainText('Enabled')
 
-    const commandResults = await orcaPage.evaluate(async (pluginKey) => {
+    const commandResults = await quirkyPage.evaluate(async (pluginKey) => {
       const first = await window.api.plugins.invokeCommand({
         pluginKey,
         commandId: 'hello-ping',
@@ -137,28 +139,28 @@ test('runs hello-orca panel, command, and event behind visible consent', async (
     expect(commandResults.first).toEqual({ pong: true, count: 1, args: { source: 'e2e' } })
     expect(commandResults.second).toEqual({ pong: true, count: 2, args: { source: 'e2e' } })
 
-    await orcaPage.evaluate(async (sourcePath) => {
+    await quirkyPage.evaluate(async (sourcePath) => {
       const settings = await window.api.settings.set({ devPluginPaths: [sourcePath] })
       window.__store?.setState({ settings })
       await window.api.plugins.refresh()
     }, pluginRoot)
 
-    await openDemoPanel(orcaPage)
+    await openDemoPanel(quirkyPage)
 
     const panelPath = join(pluginRoot, 'panel.html')
     const panelHtml = await readFile(panelPath, 'utf8')
-    await writeFile(panelPath, panelHtml.replace('Hello Orca 👋', 'Hello Orca reloaded'))
+    await writeFile(panelPath, panelHtml.replace('Hello Quirky 👋', 'Hello Quirky reloaded'))
     await expect(
-      orcaPage.frameLocator('iframe[title="Hello Orca"]').getByRole('heading', {
-        name: 'Hello Orca reloaded'
+      quirkyPage.frameLocator('iframe[title="Hello Quirky"]').getByRole('heading', {
+        name: 'Hello Quirky reloaded'
       })
     ).toBeVisible({ timeout: 15_000 })
 
-    createdWorktreeId = await createWorktree(orcaPage, `plugin-event-${Date.now()}`)
+    createdWorktreeId = await createWorktree(quirkyPage, `plugin-event-${Date.now()}`)
     await expect
       .poll(
         () =>
-          orcaPage.evaluate(
+          quirkyPage.evaluate(
             async ({ pluginKey, worktreeId }) =>
               (await window.api.plugins.getLogs({ pluginKey })).some(
                 (entry) =>
@@ -172,7 +174,7 @@ test('runs hello-orca panel, command, and event behind visible consent', async (
   } finally {
     try {
       if (createdWorktreeId) {
-        await removeWorktreeViaStore(orcaPage, createdWorktreeId)
+        await removeWorktreeViaStore(quirkyPage, createdWorktreeId)
       }
     } finally {
       await rm(tempRoot, { recursive: true, force: true })

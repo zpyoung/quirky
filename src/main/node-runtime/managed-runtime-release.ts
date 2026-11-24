@@ -1,4 +1,4 @@
-// The installed releases of a runtime Orca downloads for an agent: `<root>/<version>/` holding the
+// The installed releases of a runtime Quirky downloads for an agent: `<root>/<version>/` holding the
 // pinned members and a receipt written before the folder was renamed into place. Read-only, and
 // cheap enough for every launch: a full hash is only ever taken by an install.
 
@@ -19,7 +19,7 @@ export type ManagedRuntimePin = {
   members: readonly { path: string; sha256: string; bytes: number }[]
 }
 
-/** A runtime Orca installs only when the person asks; a launch reads what is installed. */
+/** A runtime Quirky installs only when the person asks; a launch reads what is installed. */
 export type ManagedRuntime = {
   /** Shown to the person, e.g. "Antigravity". */
   label: string

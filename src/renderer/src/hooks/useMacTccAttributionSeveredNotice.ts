@@ -79,13 +79,13 @@ export function useMacTccAttributionSeveredNotice(): void {
       toast.warning(
         translate(
           'auto.hooks.useMacTccAttributionSeveredNotice.title',
-          'macOS permissions may not reach Orca terminals'
+          'macOS permissions may not reach Quirky terminals'
         ),
         {
           id: SEVERED_TCC_NOTICE_ID,
           description: translate(
             'auto.hooks.useMacTccAttributionSeveredNotice.description',
-            'Running Orca terminals are hosted by a daemon started by a previous Orca installation. macOS may not apply Orca’s Accessibility, Automation, or protected-file permissions to them. Restart the daemon from Manage Sessions to restore access. This will close all running Orca terminals.'
+            'Running Quirky terminals are hosted by a daemon started by a previous Quirky installation. macOS may not apply Quirky’s Accessibility, Automation, or protected-file permissions to them. Restart the daemon from Manage Sessions to restore access. This will close all running Quirky terminals.'
           ),
           duration: Infinity,
           action: {
@@ -131,7 +131,7 @@ export function useMacTccAttributionSeveredNotice(): void {
           id: FOLDER_ACCESS_MISMATCH_NOTICE_ID,
           description: translate(
             'auto.hooks.useMacTccAttributionSeveredNotice.folderAccessDescription',
-            'macOS is blocking Orca’s terminal service from this folder, so commands run there may fail until it’s fixed.'
+            'macOS is blocking Quirky’s terminal service from this folder, so commands run there may fail until it’s fixed.'
           ),
           duration: Infinity,
           action: {

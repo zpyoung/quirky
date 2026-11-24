@@ -2,7 +2,7 @@ import { createEncryptedApiKeyFileStore } from '../credentials/encrypted-api-key
 
 const store = createEncryptedApiKeyFileStore({
   fileName: 'minimax-api-key.enc',
-  envelopePrefix: 'orca-minimax-api-key:v1:',
+  envelopePrefix: 'quirky-minimax-api-key:v1:',
   providerLabel: 'MiniMax',
   logScope: 'minimax'
 })

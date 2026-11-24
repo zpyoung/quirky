@@ -34,7 +34,7 @@ export async function snapshotWorkingTree(target: LoopGitTarget): Promise<TreeSn
     const { stdout } = await runGit([
       'rev-parse',
       '--git-path',
-      `orca-loop-snapshot-${randomUUID()}.index`
+      `quirky-loop-snapshot-${randomUUID()}.index`
     ])
     const reported = stdout.trim()
     if (!reported) {

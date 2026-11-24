@@ -8,7 +8,7 @@ import {
   specPaths,
   validateCommandAndFlags
 } from './args'
-import { readOrcaCliVersion } from './cli-version'
+import { readQuirkyCliVersion } from './cli-version'
 import { dispatch } from './dispatch'
 import {
   resolveEnvironmentSelectorForStore,
@@ -52,12 +52,12 @@ async function loadRuntimeClientClass(): Promise<typeof RuntimeClient> {
   return (await import('./runtime-client.js')).RuntimeClient
 }
 
-// Why: the SSH relay bridge executes this CLI on the Orca host while the
+// Why: the SSH relay bridge executes this CLI on the Quirky host while the
 // caller's shell cwd lives on the remote machine (which cannot be chdir'd
-// into). ORCA_CLI_CWD carries that remote cwd so cwd-based selectors like
+// into). QUIRKY_CLI_CWD carries that remote cwd so cwd-based selectors like
 // `--worktree active` resolve against the caller's directory.
 function resolveInvocationCwd(): string {
-  const override = process.env.ORCA_CLI_CWD
+  const override = process.env.QUIRKY_CLI_CWD
   return typeof override === 'string' && override.length > 0 ? override : process.cwd()
 }
 
@@ -67,9 +67,9 @@ export async function main(
 ): Promise<void> {
   // Why: version audits use the bundled launcher; Electron intercepts direct binary version flags.
   if (argv.length === 1 && (argv[0] === '--version' || argv[0] === '-v')) {
-    const version = readOrcaCliVersion()
+    const version = readQuirkyCliVersion()
     if (!version) {
-      process.stderr.write('Could not determine the Orca version for this build.\n')
+      process.stderr.write('Could not determine the Quirky version for this build.\n')
       process.exitCode = 1
       return
     }
@@ -108,7 +108,7 @@ export async function main(
 
   try {
     // Why: CLI syntax and flag errors should be reported before any runtime
-    // lookup so users do not get misleading "Orca is not running" failures for
+    // lookup so users do not get misleading "Quirky is not running" failures for
     // simple command typos or unsupported flags.
     validateCommandAndFlags(COMMAND_SPECS, parsed)
     const commandSpec = findCommandSpec(COMMAND_SPECS, parsed.commandPath)
@@ -117,7 +117,7 @@ export async function main(
     const ignoreRemoteSelection = shouldIgnoreRemoteSelection(parsed.commandPath)
     const pairingCode = ignoreRemoteSelection ? null : parsed.flags.get('pairing-code')
     const environmentSelector = ignoreRemoteSelection ? null : parsed.flags.get('environment')
-    // Why: only the explicit flag is asserted eagerly. An ambient ORCA_ENVIRONMENT is background
+    // Why: only the explicit flag is asserted eagerly. An ambient QUIRKY_ENVIRONMENT is background
     // config, and failing local-only commands because of a stale one would be a regression; the
     // explicit flag means the caller named that machine, so a bad name should fail immediately
     // with the cross-kind hint rather than a bare store error at first use.
@@ -129,7 +129,7 @@ export async function main(
         : null
     // Why: --host runtime:<id> names a paired server, not a filter over this
     // runtime's rows, so it has to pick the connection before the client exists.
-    // An ambient ORCA_ENVIRONMENT is checked for disagreement too — silently
+    // An ambient QUIRKY_ENVIRONMENT is checked for disagreement too — silently
     // retargeting a mutation to another server is the bug this flag already had.
     // An ambient pairing code cannot be resolved to an id to compare, so the
     // explicit flag simply wins there.
@@ -149,8 +149,8 @@ export async function main(
           environmentSelector:
             typeof environmentSelector === 'string'
               ? { value: environmentSelector, label: '--environment' }
-              : process.env.ORCA_ENVIRONMENT
-                ? { value: process.env.ORCA_ENVIRONMENT, label: 'ORCA_ENVIRONMENT' }
+              : process.env.QUIRKY_ENVIRONMENT
+                ? { value: process.env.QUIRKY_ENVIRONMENT, label: 'QUIRKY_ENVIRONMENT' }
                 : null
         })
     // Why: --host runtime:<name> is canonicalized to the environment's id so downstream host-id
@@ -161,7 +161,7 @@ export async function main(
     }
     // Why: pass `null` (not `undefined`) when remote selection is suppressed
     // so the RuntimeClient default parameter does not re-activate the
-    // ORCA_PAIRING_CODE / ORCA_ENVIRONMENT env-var fallback for commands
+    // QUIRKY_PAIRING_CODE / QUIRKY_ENVIRONMENT env-var fallback for commands
     // that must run locally (environment / serve).
     const suppressed = ignoreRemoteSelection ? null : undefined
     // An explicit --host runtime:<id> outranks an ambient pairing code or environment.
@@ -199,7 +199,7 @@ export async function main(
         parsed.flags.has('environment') ||
         parsed.flags.has('pairing-code') ||
         (typeof hostFlag === 'string' && hostFlag.startsWith('runtime:')) ||
-        Boolean(process.env.ORCA_ENVIRONMENT?.trim() || process.env.ORCA_PAIRING_CODE?.trim())
+        Boolean(process.env.QUIRKY_ENVIRONMENT?.trim() || process.env.QUIRKY_PAIRING_CODE?.trim())
     })
     process.exitCode = 1
   }
@@ -207,8 +207,8 @@ export async function main(
 
 async function runClaudeTeams(argv: string[], cwd: string): Promise<void> {
   try {
-    // Why: everything after `orca claude-teams` belongs to Claude Code, not
-    // Orca's own flag parser, so new Claude flags work without Orca changes.
+    // Why: everything after `quirky claude-teams` belongs to Claude Code, not
+    // Quirky's own flag parser, so new Claude flags work without Quirky changes.
     const client = new (await loadRuntimeClientClass())(undefined, undefined, null, null)
     await dispatch(['claude-teams'], {
       flags: new Map(),
@@ -231,8 +231,8 @@ async function runAgentTeamsTmuxShim(argv: string[]): Promise<void> {
     }>(
       'agentTeams.tmuxCompat',
       {
-        teamId: process.env.ORCA_AGENT_TEAMS_TEAM_ID,
-        token: process.env.ORCA_AGENT_TEAMS_TOKEN,
+        teamId: process.env.QUIRKY_AGENT_TEAMS_TEAM_ID,
+        token: process.env.QUIRKY_AGENT_TEAMS_TOKEN,
         envPane: process.env.TMUX_PANE,
         cwd: process.cwd(),
         argv

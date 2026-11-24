@@ -3,18 +3,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 import {
   ensureMacPressAndHoldDefault,
   interpretDefaultsRead,
-  isOrcaPreferencesDomain,
+  isQuirkyPreferencesDomain,
   readBundleIdentifierFromExecutablePath,
   type PressAndHoldDecision,
   type PressAndHoldHost,
   type PressAndHoldRecord
 } from './macos-press-and-hold-default'
 
-const ORCA_DOMAIN = 'com.stablyai.orca'
+const QUIRKY_DOMAIN = 'com.zpyoung.quirky'
 
 type HostOverrides = Partial<PressAndHoldHost> & { record?: PressAndHoldRecord | null }
 
@@ -29,7 +29,7 @@ function createHost(overrides: HostOverrides = {}): {
   let stored = overrides.record ?? null
   const host: PressAndHoldHost = {
     platform: 'darwin',
-    resolveBundleIdentifier: () => ORCA_DOMAIN,
+    resolveBundleIdentifier: () => QUIRKY_DOMAIN,
     readRecord: () => stored,
     writeRecord: (record) => {
       stored = record
@@ -47,7 +47,7 @@ function createHost(overrides: HostOverrides = {}): {
 }
 
 function terminalRecord(decision: PressAndHoldDecision): PressAndHoldRecord {
-  return { version: 1, decision, domain: ORCA_DOMAIN, decidedAt: '2026-01-01T00:00:00.000Z' }
+  return { version: 1, decision, domain: QUIRKY_DOMAIN, decidedAt: '2026-01-01T00:00:00.000Z' }
 }
 
 describe('ensureMacPressAndHoldDefault', () => {
@@ -55,12 +55,12 @@ describe('ensureMacPressAndHoldDefault', () => {
     const { host, writes, records } = createHost()
 
     expect(ensureMacPressAndHoldDefault(host)).toBe('applied')
-    expect(writes).toEqual([{ domain: ORCA_DOMAIN, value: false }])
+    expect(writes).toEqual([{ domain: QUIRKY_DOMAIN, value: false }])
     expect(records.at(-1)?.decision).toBe('applied')
   })
 
   it('recovers a rejected fork bundle and applies the default only once', () => {
-    const domain = 'com.zpyoung.orca'
+    const domain = 'com.zpyoung.quirky'
     const { host, writes, records } = createHost({
       resolveBundleIdentifier: () => domain,
       record: { ...terminalRecord('foreign-bundle'), domain }
@@ -75,7 +75,7 @@ describe('ensureMacPressAndHoldDefault', () => {
 
   it('preserves an explicit preference in the fork domain', () => {
     const { host, writes } = createHost({
-      resolveBundleIdentifier: () => 'com.zpyoung.orca',
+      resolveBundleIdentifier: () => 'com.zpyoung.quirky',
       readDomainPreference: () => 'set'
     })
 
@@ -165,15 +165,15 @@ describe('ensureMacPressAndHoldDefault', () => {
       expect(writes).toEqual([])
     })
 
-    it('accepts Orca and its channel-scoped bundles, and nothing else', () => {
-      expect(isOrcaPreferencesDomain('com.stablyai.orca')).toBe(true)
-      expect(isOrcaPreferencesDomain('com.stablyai.orca.dev')).toBe(true)
-      expect(isOrcaPreferencesDomain('com.zpyoung.orca')).toBe(true)
-      expect(isOrcaPreferencesDomain('com.zpyoung.orca.local')).toBe(true)
-      expect(isOrcaPreferencesDomain('com.zpyoung.orcafake')).toBe(false)
-      expect(isOrcaPreferencesDomain('com.github.Electron')).toBe(false)
+    it('accepts Quirky and its channel-scoped bundles, and nothing else', () => {
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirky')).toBe(true)
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirky.dev')).toBe(true)
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirky')).toBe(true)
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirky.local')).toBe(true)
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirkyfake')).toBe(false)
+      expect(isQuirkyPreferencesDomain('com.github.Electron')).toBe(false)
       // Why: a prefix test without the dot would accept a lookalike bundle id.
-      expect(isOrcaPreferencesDomain('com.stablyai.orcafake')).toBe(false)
+      expect(isQuirkyPreferencesDomain('com.zpyoung.quirkyfake')).toBe(false)
     })
   })
 
@@ -192,7 +192,7 @@ describe('ensureMacPressAndHoldDefault', () => {
 
       const retry = createHost({ record: records.at(-1) })
       expect(ensureMacPressAndHoldDefault(retry.host)).toBe('applied')
-      expect(retry.writes).toEqual([{ domain: ORCA_DOMAIN, value: false }])
+      expect(retry.writes).toEqual([{ domain: QUIRKY_DOMAIN, value: false }])
     })
   })
 
@@ -263,20 +263,20 @@ describe('readBundleIdentifierFromExecutablePath', () => {
   })
 
   function bundleWithPlist(body: string): string {
-    const root = mkdtempSync(join(tmpdir(), 'orca-press-hold-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-press-hold-'))
     roots.push(root)
-    mkdirSync(join(root, 'Orca.app', 'Contents', 'MacOS'), { recursive: true })
-    writeFileSync(join(root, 'Orca.app', 'Contents', 'Info.plist'), body)
-    return join(root, 'Orca.app', 'Contents', 'MacOS', 'Orca')
+    mkdirSync(join(root, 'Quirky.app', 'Contents', 'MacOS'), { recursive: true })
+    writeFileSync(join(root, 'Quirky.app', 'Contents', 'Info.plist'), body)
+    return join(root, 'Quirky.app', 'Contents', 'MacOS', 'Quirky')
   }
 
   it('reads CFBundleIdentifier from the plist beside the executable', () => {
     const exe = bundleWithPlist(
-      '<plist><dict>\n<key>CFBundleName</key>\n<string>Orca</string>\n' +
-        '<key>CFBundleIdentifier</key>\n\t<string>com.stablyai.orca</string>\n</dict></plist>'
+      '<plist><dict>\n<key>CFBundleName</key>\n<string>Quirky</string>\n' +
+        '<key>CFBundleIdentifier</key>\n\t<string>com.zpyoung.quirky</string>\n</dict></plist>'
     )
 
-    expect(readBundleIdentifierFromExecutablePath(exe)).toBe('com.stablyai.orca')
+    expect(readBundleIdentifierFromExecutablePath(exe)).toBe('com.zpyoung.quirky')
   })
 
   it('returns null when the plist is missing or carries no identifier', () => {
@@ -312,7 +312,7 @@ describe('startup wiring', () => {
     expect(callIndex).toBeGreaterThanOrEqual(0)
     expect(readyIndex).toBeGreaterThanOrEqual(0)
     expect(preflightCall).toBeGreaterThanOrEqual(0)
-    // Why after initDataPath: the record lives beside orca-data.json, and the canonical userData
+    // Why after initDataPath: the record lives beside quirky-data.json, and the canonical userData
     // path is only captured there.
     expect(callIndex).toBeGreaterThan(initDataPathIndex)
     expect(preflightCall).toBeLessThan(readyIndex)

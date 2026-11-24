@@ -32,10 +32,10 @@ export const FEATURE_WALL_SETUP_STEPS: readonly FeatureWallSetupStep[] = [
   },
   {
     id: 'browser',
-    name: "Use Orca's browser",
-    subtitle: "Use Orca's browser",
+    name: "Use Quirky's browser",
+    subtitle: "Use Quirky's browser",
     description:
-      'Browse your web app without leaving Orca. Grab any element and send its exact source and styles to an agent with one click.'
+      'Browse your web app without leaving Quirky. Grab any element and send its exact source and styles to an agent with one click.'
   },
   {
     id: 'notifications',
@@ -51,10 +51,10 @@ export const FEATURE_WALL_SETUP_STEPS: readonly FeatureWallSetupStep[] = [
   },
   {
     id: 'agent-capabilities',
-    name: 'Give agents Orca skills',
-    subtitle: 'Give agents Orca skills',
+    name: 'Give agents Quirky skills',
+    subtitle: 'Give agents Quirky skills',
     description:
-      "Install the skills agents use to drive Orca's browser, control your computer, and coordinate multi-step work."
+      "Install the skills agents use to drive Quirky's browser, control your computer, and coordinate multi-step work."
   },
   {
     id: 'task-sources',
@@ -74,7 +74,7 @@ export const FEATURE_WALL_SETUP_STEPS: readonly FeatureWallSetupStep[] = [
     name: 'Start work in multiple repos',
     subtitle: 'Start work in multiple repos',
     description:
-      'Bring your key repos into Orca so you can start agent work without hunting for folders.'
+      'Bring your key repos into Quirky so you can start agent work without hunting for folders.'
   }
 ] as const
 

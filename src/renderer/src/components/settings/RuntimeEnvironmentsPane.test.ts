@@ -219,7 +219,7 @@ describe('RuntimeEnvironmentsPane host details', () => {
     expect(getHostDetailsDescription(details({ status: 'ready' }))).toContain(
       'SSH transport is connected'
     )
-    expect(getHostDetailsSummary(details({ status: 'ready' }))).toBe('Orca unavailable')
+    expect(getHostDetailsSummary(details({ status: 'ready' }))).toBe('Quirky unavailable')
     expect(getRuntimeServerConnectionState(undefined)).toBe('checking')
     expect(getRuntimeServerConnectionState(details({ status: 'loading' }))).toBe('checking')
     expect(getRuntimeServerConnectionState(details({ status: 'error', error: 'offline' }))).toBe(
@@ -249,7 +249,7 @@ describe('RuntimeEnvironmentsPane host details', () => {
       error: 'runtime.status.get timed out'
     })
 
-    expect(getHostDetailsSummary(failedProbe)).toBe('Orca unavailable')
+    expect(getHostDetailsSummary(failedProbe)).toBe('Quirky unavailable')
     expect(getHostDetailsDescription(failedProbe)).toContain('SSH transport is connected')
     expect(getHostDetailsDescription(failedProbe)).toContain('runtime.status.get timed out')
     expect(getRuntimeServerConnectionState(failedProbe)).toBe('runtime-unavailable')

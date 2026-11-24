@@ -49,7 +49,7 @@ type BlackoutProbePane = { terminal?: BlackoutProbeTerminal }
 // live on `window` to survive between page.evaluate calls, and `declare global`
 // would need an `interface` the lint rules forbid.
 type BlackoutProbeWindow = Window & {
-  __orcaSyncOutputBlackoutProbe?: { stop: () => SynchronizedOutputBlackoutSnapshot }
+  __quirkySyncOutputBlackoutProbe?: { stop: () => SynchronizedOutputBlackoutSnapshot }
 }
 
 /**
@@ -64,7 +64,7 @@ export async function startSynchronizedOutputBlackoutProbe(
   return page.evaluate((activeTabId) => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the probe owns this property on its own renderer window; nothing else reads or writes it.
     const target = window as BlackoutProbeWindow
-    target.__orcaSyncOutputBlackoutProbe?.stop()
+    target.__quirkySyncOutputBlackoutProbe?.stop()
     const manager = window.__paneManagers?.get(activeTabId)
     const pane: BlackoutProbePane | null =
       manager?.getActivePane?.() ?? manager?.getPanes?.()[0] ?? null
@@ -101,7 +101,7 @@ export async function startSynchronizedOutputBlackoutProbe(
     }
     const timer = window.setInterval(sampleLatch, 4)
 
-    target.__orcaSyncOutputBlackoutProbe = {
+    target.__quirkySyncOutputBlackoutProbe = {
       stop: () => {
         window.clearInterval(timer)
         subscription.dispose()
@@ -146,6 +146,6 @@ export async function stopSynchronizedOutputBlackoutProbe(
   return page.evaluate(
     () =>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: same probe-owned property as startSynchronizedOutputBlackoutProbe installs.
-      (window as BlackoutProbeWindow).__orcaSyncOutputBlackoutProbe?.stop() ?? null
+      (window as BlackoutProbeWindow).__quirkySyncOutputBlackoutProbe?.stop() ?? null
   )
 }

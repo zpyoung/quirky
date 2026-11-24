@@ -1,5 +1,5 @@
 // What an operation that needs the agent is told when it cannot have one: a typed refusal in
-// words a person can read, never Orca's own error text.
+// words a person can read, never Quirky's own error text.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
@@ -16,7 +16,7 @@ const SESSION = 'session-1'
 describe('an operation whose agent start throws', () => {
   it('is refused as a failed restart, with the error only in the log', async () => {
     const log = recordingStructuredAgentSessionLogger()
-    const cause = new Error('EACCES: permission denied, open /Users/me/.orca/leases.json')
+    const cause = new Error('EACCES: permission denied, open /Users/me/.quirky/leases.json')
     const context = {
       deps: { logger: log.logger },
       sessions: new Map(),

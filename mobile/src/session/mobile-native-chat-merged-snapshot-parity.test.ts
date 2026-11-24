@@ -36,7 +36,7 @@ import {
 } from './mobile-native-chat-stop-journal.test-fixture'
 import { useMobileNativeChatTurnDisclosure } from './use-mobile-native-chat-turn-disclosure'
 
-const STOP_ROW = `stopped-before-start:orca:${NEVER_OPENED}`
+const STOP_ROW = `stopped-before-start:quirky:${NEVER_OPENED}`
 
 type Drawn = { header: string; rows: { id: string; role: string; line: string }[] }
 
@@ -216,8 +216,8 @@ describe.each(['after-end', 'during-turn'] as const)(
         apply(EMPTY_STRUCTURED_AGENT_SESSION, [journal.snapshotAt(journal.takenBack)])
       )
       expect(fresh.rows.slice(-2).map((row) => row.line.split(' ').slice(0, 3).join(' '))).toEqual([
-        `orca:${NEVER_OPENED} user stopped`,
-        `stopped-before-start:orca:${NEVER_OPENED} system `
+        `quirky:${NEVER_OPENED} user stopped`,
+        `stopped-before-start:quirky:${NEVER_OPENED} system `
       ])
     })
 

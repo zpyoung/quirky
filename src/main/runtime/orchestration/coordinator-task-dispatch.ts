@@ -106,13 +106,13 @@ export async function dispatchTaskToWorker(params: {
     assigneePaneKey,
     launchTokenHash: dispatchAuthority?.launchTokenHash ?? undefined,
     processIncarnation,
-    // Why system: the automatic loop is host-local Orca code driven by
+    // Why system: the automatic loop is host-local Quirky code driven by
     // coordinator_runs, not a CLI caller, so it is a root by construction.
     creator: { kind: 'system' },
     maxDepth: params.nestedWorkerMaxDepth
   })
 
-  // Why: dispatched agents use orca-dev in dev mode to reach the dev runtime's socket, not production (Section 6.4).
+  // Why: dispatched agents use quirky-dev in dev mode to reach the dev runtime's socket, not production (Section 6.4).
   const preamble = buildDispatchPreamble({
     taskId: task.id,
     dispatchId: dispatch.id,
@@ -121,7 +121,7 @@ export async function dispatchTaskToWorker(params: {
     taskSpec: strippedSpec,
     coordinatorHandle: params.coordinatorHandle,
     workerHandle: targetHandle,
-    devMode: process.env.ORCA_USER_DATA_PATH?.includes('orca-dev'),
+    devMode: process.env.QUIRKY_USER_DATA_PATH?.includes('quirky-dev'),
     ...(runtime.getTerminalOrchestrationCliCommand
       ? { cliCommand: runtime.getTerminalOrchestrationCliCommand(targetHandle) }
       : {}),

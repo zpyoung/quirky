@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithOnClientDisconnected } from '../layout/terminal-client-disconnect'
+import { QuirkyRuntimeWithOnClientDisconnected } from '../layout/terminal-client-disconnect'
 import type { PtyIncarnationId } from '../../../../shared/pty-incarnation'
 import type { TerminalExitCause } from '../../../../shared/terminal-exit-cause'
 import {
@@ -11,14 +11,14 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import { captureWorkerExitTail } from '../../../fork-heimdall/orchestration/worker-exit-tail-capture'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { exitedSplitPaneFacts } from './exited-split-pane-rule'
 import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
 } from '../../runtime-terminal-state-records'
 
-export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDisconnected {
+export abstract class QuirkyRuntimeWithOnPtyExit extends QuirkyRuntimeWithOnClientDisconnected {
   protected abstract pruneDisconnectedPtyRecords(): void
 
   protected abstract failActiveDispatchOnExit(
@@ -258,7 +258,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
             incarnationId,
             exactSurfaces,
             // Switch point: main decides an exited split pane's close.
-            ORCA_LAYOUT_OWNER_IS_MAIN
+            QUIRKY_LAYOUT_OWNER_IS_MAIN
               ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, {
                   ...options,
                   endVouched

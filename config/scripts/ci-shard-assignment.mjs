@@ -59,7 +59,7 @@ export function writeAssignment(path, assignment) {
     path,
     `${JSON.stringify(
       {
-        sourceSha: process.env.ORCA_SHARD_SOURCE_SHA ?? process.env.GITHUB_SHA ?? null,
+        sourceSha: process.env.QUIRKY_SHARD_SOURCE_SHA ?? process.env.GITHUB_SHA ?? null,
         runId: process.env.GITHUB_RUN_ID ?? null,
         runAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
         ...assignment

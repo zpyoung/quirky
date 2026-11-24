@@ -73,7 +73,7 @@ function assertNodePtySourceDeniesMsysBreakaway({ nodePtyDir }) {
  * Why here and not only at packaging: a rebuild that did not honour `--arch`
  * leaves a binary the target cannot load, the app falls back to the published
  * prebuild, and the packaged gate then reports it two steps from the command
- * that could fix it. `PE_MACHINE` covers the Windows arches Orca ships; anything
+ * that could fix it. `PE_MACHINE` covers the Windows arches Quirky ships; anything
  * else this cannot judge, so it does not pretend to.
  */
 function assertRebuiltConptyMatchesArch(addonPath, rebuildArch) {

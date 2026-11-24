@@ -20,7 +20,7 @@ import {
   packCompilerCache
 } from './headless-detector-compiler-cache.mjs'
 import { collectNodeServerInputs } from './node-server-change-scope.mjs'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 
 const temporary = []
 afterEach(() => {
@@ -75,7 +75,7 @@ it('activates the compiler and workspace-policy parser and preserves import grap
     'node-server-test-paths',
     'node-server-qualification',
     'node-server-native-compat-scope',
-    'orcad-entry-build',
+    'quirkyd-entry-build',
     'workspace-source-exports'
   ]) {
     mkdirSync(join(root, 'config', 'scripts'), { recursive: true })
@@ -90,20 +90,22 @@ it('activates the compiler and workspace-policy parser and preserves import grap
   )
   mkdirSync(join(root, 'src', 'shared'), { recursive: true })
   cpSync(
-    new URL('../../src/shared/orcad-artifacts.ts', import.meta.url),
-    join(root, 'src', 'shared', 'orcad-artifacts.ts')
+    new URL('../../src/shared/quirkyd-artifacts.ts', import.meta.url),
+    join(root, 'src', 'shared', 'quirkyd-artifacts.ts')
   )
   writeFileSync(
     join(root, 'entry.ts'),
-    "import './first'; export * from './exports'; import('./dynamic'); require('./required'); import 'external-package'; import './native.node'; import '@orca/process-host'"
+    "import './first'; export * from './exports'; import('./dynamic'); require('./required'); import 'external-package'; import './native.node'; import '@quirky/process-host'"
   )
   writeFileSync(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - src/packages/*\n')
   mkdirSync(join(root, 'src/packages/process-host/src'), { recursive: true })
   writeFileSync(
     join(root, 'src/packages/process-host/package.json'),
     JSON.stringify({
-      name: '@orca/process-host',
-      exports: { '.': { 'orca-source': './src/run-process.ts', default: './dist/run-process.js' } }
+      name: '@quirky/process-host',
+      exports: {
+        '.': { 'quirky-source': './src/run-process.ts', default: './dist/run-process.js' }
+      }
     })
   )
   writeFileSync(

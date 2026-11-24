@@ -19,7 +19,7 @@ export type AiVaultScopeRealPaths = {
 
 /**
  * Why here: this runs on the host that owns the files (the desktop for local
- * scans, orcad for SSH and server hosts), so a symlink resolves against the
+ * scans, quirkyd for SSH and server hosts), so a symlink resolves against the
  * disk the agents actually wrote their cwd on.
  */
 export async function resolveAiVaultScopeRealPaths(

@@ -16,7 +16,7 @@ import {
 } from './codex-state-db'
 
 /**
- * Bridges Codex history between Orca-managed Codex homes.
+ * Bridges Codex history between Quirky-managed Codex homes.
  *
  * Why: a managed account launches Codex against its own self-contained
  * CODEX_HOME, and Codex's `/resume` picker only lists rollouts under that home.

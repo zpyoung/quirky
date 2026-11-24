@@ -52,7 +52,7 @@
 [2GPlease[9Gconfirm[17Gthis[22Gis[25Gyour[30Gown[34Gproject[42Gor[45Gfrom[50Ga[52Gtrusted[60Gsource.[68GOnce[73Gtrusted,[82GQoder[88GCLI[92GCN[95Gcan[99Gread,[105Gmodify,[113Gand
 [2Gexecute[10Gfiles[16Ghere,[22Gand[26Gwill[31Gload[36Glocal[42Gconfigurations[57G(commands,[68Ghooks,[75GMCP[79Gservers,[88Gagents,[96Gskills,[104Gsettings).
 
-[2G[1m/private/tmp/orca-qoder-validation-1002/workspace[22m
+[2G[1m/private/tmp/quirky-qoder-validation-1002/workspace[22m
 
 [3G❯[5G1.[8GTrust[14Gfolder
 [5G2.[8GDon't[14Gtrust[20Gand[24Gexit

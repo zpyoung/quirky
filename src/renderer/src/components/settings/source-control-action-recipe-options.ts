@@ -36,7 +36,7 @@ export const getActionDescriptions = createLocalizedCatalog((): Record<AiActionI
   ),
   branchName: translate(
     'auto.components.settings.source.control.action.recipe.options.branchName',
-    'Rename Orca-created branches from the initial agent task.'
+    'Rename Quirky-created branches from the initial agent task.'
   ),
   fixCommitFailure: translate(
     'auto.components.settings.source.control.action.recipe.options.fixCommitFailure',

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { pairMobileClient } from './helpers/paired-mobile-client'
 import type { RuntimeMobileSessionTabsResult } from '../../src/shared/runtime-session-contracts'

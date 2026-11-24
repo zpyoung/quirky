@@ -6,14 +6,14 @@ import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { Store } from './loading-store/store'
 import { closeTestStores, createSqliteTestStore } from '../persistence-test-harness'
-import { OrcaRuntimeService } from '../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   REPO_ID,
   TAB_ID,
   WORKTREE_ID,
   WORKTREE_PATH,
   makeSession
-} from '../runtime/__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
+} from '../runtime/__fixtures__/quirky-runtime-terminal-close-continuity-fixtures'
 import { advanceTerminalTopologyRevision } from './terminal-topology/terminal-topology-membership'
 
 const SSH_HOST_ID = 'ssh:target-1'
@@ -29,9 +29,9 @@ afterEach(async () => {
 })
 
 function createPersistedStore() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-closed-tab-fence-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-closed-tab-fence-'))
   directories.push(directory)
-  const dataFile = join(directory, 'orca-data.json')
+  const dataFile = join(directory, 'quirky-data.json')
   const store = createSqliteTestStore(Store, { dataFile })
   store.addRepo({
     id: REPO_ID,
@@ -50,7 +50,7 @@ function createPersistedStore() {
   })
   return {
     store,
-    runtime: new OrcaRuntimeService(store),
+    runtime: new QuirkyRuntimeService(store),
     reload: async () => {
       store.flush()
       store.freezeWrites()

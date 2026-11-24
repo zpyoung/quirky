@@ -35,7 +35,7 @@ vi.mock('electron', () => ({
 
 describe('Store SSH remote PTY bindings across host partitions', () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

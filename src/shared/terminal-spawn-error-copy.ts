@@ -1,6 +1,6 @@
 // Host-published English copy; the renderer matches it to show a translation (#9194).
 export const PTY_ALLOCATION_HINT =
-  'Your system cannot allocate any more pty devices. Close some terminals you are not using, in Orca or another program, then try again.'
+  'Your system cannot allocate any more pty devices. Close some terminals you are not using, in Quirky or another program, then try again.'
 
 export const TERMINAL_PROCESS_LIMIT_HINT =
   'Your system cannot start another terminal process. Close unused terminals or quit unused processes, then try again.'
@@ -9,7 +9,7 @@ export const TERMINAL_PROCESS_LIMIT_HINT =
 export const LEGACY_PTY_ALLOCATION_HINT = [
   'Your system cannot allocate any more pty devices.',
   '',
-  'Orca requires a pty device to launch a new terminal. This error is usually due to having too many terminal windows or terminal sessions open, either in Orca or another program.',
+  'Quirky requires a pty device to launch a new terminal. This error is usually due to having too many terminal windows or terminal sessions open, either in Quirky or another program.',
   '',
   'Free up some pty devices and try again.'
 ].join('\n')
@@ -26,4 +26,4 @@ export const TERMINAL_SPAWN_ISSUE_REQUEST = 'If this persists, please file an is
 
 /** The host refused a new terminal at its cap; no running terminal was touched. */
 export const TERMINAL_HOST_CAP_HINT =
-  'The host is already running as many terminals as Orca allows. Close a terminal you no longer need, then try again.'
+  'The host is already running as many terminals as Quirky allows. Close a terminal you no longer need, then try again.'

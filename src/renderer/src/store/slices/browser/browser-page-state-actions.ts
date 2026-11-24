@@ -1,6 +1,6 @@
 import type { BrowserSlice, BrowserSliceGet, BrowserSliceSet } from './browser-slice-contract'
 import type { AppState } from '../../types'
-import { ORCA_BROWSER_BLANK_URL } from '../../../../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../../../../shared/constants'
 import {
   browserWorkspaceMirrorFieldsEqual,
   findPage,
@@ -168,7 +168,7 @@ export function createBrowserPageStateActions(
 
     setBrowserPageUrl: (pageId, url, options) => {
       const nextUrl = normalizeUrl(url)
-      if (nextUrl !== 'about:blank' && nextUrl !== ORCA_BROWSER_BLANK_URL) {
+      if (nextUrl !== 'about:blank' && nextUrl !== QUIRKY_BROWSER_BLANK_URL) {
         const currentPage = findPage(get().browserPagesByWorkspace, pageId)
         if (currentPage) {
           get().recordFeatureInteraction?.('browser')
@@ -186,7 +186,7 @@ export function createBrowserPageStateActions(
         // Why a document page keeps its blank url here too: this is the third door onto a page's url,
         // and a document's url is blank by construction. A grant committed here would reach
         // persistence, the publish boundary and the address bar, exactly as at the other two doors.
-        const nextPageUrl = page.docLocation ? ORCA_BROWSER_BLANK_URL : nextUrl
+        const nextPageUrl = page.docLocation ? QUIRKY_BROWSER_BLANK_URL : nextUrl
         // Saved feedback survives navigation; its old document coordinates do not.
         const shouldInvalidateGeometry = normalizeUrl(page.url) !== nextPageUrl
         const nextPages = (s.browserPagesByWorkspace[workspace.id] ?? []).map((entry) =>

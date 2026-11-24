@@ -216,7 +216,7 @@ describe('a conversation command whose reply lands after the fence moved', () =>
       ok: false,
       refusal: {
         code: 'agent_session_conflict',
-        message: 'Orca log text.',
+        message: 'Quirky log text.',
         retryable: false
       }
     })

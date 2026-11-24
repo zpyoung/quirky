@@ -53,7 +53,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: 'git' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -75,7 +75,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: 'git' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -98,7 +98,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: undefined })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -120,7 +120,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'ssh.github.com', user: 'git' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -145,7 +145,7 @@ describe('SshConnection', () => {
     spawnSystemSshCommandMock.mockImplementation(() =>
       createFailingSystemCommandChannel(
         1,
-        'Invalid command: echo ORCA-SYSTEM-SSH-OK\n' +
+        'Invalid command: echo QUIRKY-SYSTEM-SSH-OK\n' +
           '  You appear to be using ssh to clone a git:// URL.\n' +
           '  Make sure your core.gitProxy config option and the\n' +
           '  GIT_PROXY_COMMAND environment variable are NOT set.'
@@ -167,10 +167,10 @@ describe('SshConnection', () => {
   })
 
   it('accepts GitHub restricted-shell SSH probes when OpenSSH config resolution fails', async () => {
-    vi.stubEnv('ORCA_SSH_FORCE_SYSTEM_TRANSPORT', '1')
+    vi.stubEnv('QUIRKY_SSH_FORCE_SYSTEM_TRANSPORT', '1')
     vi.mocked(resolveWithSshG).mockRejectedValueOnce(new Error('ssh -G failed'))
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -192,7 +192,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'gitlab.com', user: 'git' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -212,7 +212,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: 'deploy' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -234,7 +234,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: 'git' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({
@@ -256,7 +256,7 @@ describe('SshConnection', () => {
     spawnSystemSshCommandMock.mockImplementation(() =>
       createFailingSystemCommandChannel(
         1,
-        'remote: rejected\nInvalid command: echo ORCA-SYSTEM-SSH-OK\ntry again'
+        'remote: rejected\nInvalid command: echo QUIRKY-SYSTEM-SSH-OK\ntry again'
       )
     )
     const conn = new SshConnection(
@@ -277,7 +277,7 @@ describe('SshConnection', () => {
       createResolvedConfig({ hostname: 'github.com', user: 'deploy' })
     )
     spawnSystemSshCommandMock.mockImplementation(() =>
-      createFailingSystemCommandChannel(1, 'Invalid command: echo ORCA-SYSTEM-SSH-OK')
+      createFailingSystemCommandChannel(1, 'Invalid command: echo QUIRKY-SYSTEM-SSH-OK')
     )
     const conn = new SshConnection(
       createTarget({

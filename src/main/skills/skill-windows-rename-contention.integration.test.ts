@@ -3,12 +3,12 @@ import type * as FsPromises from 'node:fs/promises'
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renameSkillPathWithWindowsRetry } from './skill-filesystem-retry'
 
 const RUN_REAL_WINDOWS =
-  process.platform === 'win32' && process.env.ORCA_REAL_WINDOWS_SKILL_TEST === '1'
+  process.platform === 'win32' && process.env.QUIRKY_REAL_WINDOWS_SKILL_TEST === '1'
 const roots: string[] = []
 const lockers: {
   child: ChildProcessWithoutNullStreams
@@ -32,7 +32,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 })
 
 const LOCK_SCRIPT = [
-  '$stream = [System.IO.File]::Open($env:ORCA_SKILL_LOCK_PATH, [System.IO.FileMode]::Open,',
+  '$stream = [System.IO.File]::Open($env:QUIRKY_SKILL_LOCK_PATH, [System.IO.FileMode]::Open,',
   '  [System.IO.FileAccess]::Read, [System.IO.FileShare]::None)',
   "[Console]::Out.WriteLine('LOCKED')",
   '$null = [Console]::In.ReadLine()',
@@ -45,7 +45,7 @@ function holdFile(path: string) {
     args: ['-NoProfile', '-NonInteractive', '-Command', LOCK_SCRIPT],
     env: {
       ...process.env,
-      ORCA_SKILL_LOCK_PATH: path
+      QUIRKY_SKILL_LOCK_PATH: path
     }
   })
   const closed = new Promise<number | null>((resolve) => child.once('close', resolve))
@@ -77,7 +77,7 @@ function holdFile(path: string) {
 }
 
 async function fixture(label: string) {
-  const root = await mkdtemp(join(tmpdir(), `orca-windows-rename-${label}-`))
+  const root = await mkdtemp(join(tmpdir(), `quirky-windows-rename-${label}-`))
   roots.push(root)
   const source = join(root, 'source')
   const target = join(root, 'target')

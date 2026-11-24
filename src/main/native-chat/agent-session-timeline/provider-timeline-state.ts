@@ -28,7 +28,7 @@ export type ProviderTimelineOpenTurn = ProviderTimelineTurnRef & {
   running: AgentJournalTurnLifecycle
 }
 
-/** Orca's send, waiting for the turn it opens. */
+/** Quirky's send, waiting for the turn it opens. */
 export type ProviderTimelinePendingInput = {
   userItemId: string
   requestedAt: number

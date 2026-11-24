@@ -17,7 +17,7 @@ test('pre-v41 code opens, acknowledges and writes a current-schema database, the
     'src/main/runtime/orchestration/db.ts'
   )
   const OldDb = baseline.OrchestrationDb as typeof OrchestrationDb
-  const directory = mkdtempSync(join(tmpdir(), 'orca-delivery-downgrade-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-delivery-downgrade-'))
   const path = join(directory, 'orchestration.db')
   let db: OrchestrationDb | undefined
   try {

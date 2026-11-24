@@ -15,13 +15,13 @@ import {
   FOLDER_KEY,
   GIT_KEY
 } from '../../shared/workspace-layout/workspace-layout-session.test-fixture'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { WorkspaceLayoutStream } from './workspace-layout-stream'
 import { collectLayoutEvents } from './workspace-layout-stream-events.test-fixture'
 
 const mocks = vi.hoisted(() => ({ layoutOwnerIsMain: true }))
 vi.mock('../../shared/layout-owner-switch', () => ({
-  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+  get QUIRKY_LAYOUT_OWNER_IS_MAIN() {
     return mocks.layoutOwnerIsMain
   }
 }))
@@ -47,7 +47,7 @@ function runtimeWithMixedFolder(
     applyLayoutCommand
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: routing, the stream and apply read only these store methods.
-  return { runtime: new OrcaRuntimeService(store as never), applyLayoutCommand }
+  return { runtime: new QuirkyRuntimeService(store as never), applyLayoutCommand }
 }
 
 const RATIOS = {

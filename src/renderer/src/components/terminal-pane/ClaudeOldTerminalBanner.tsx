@@ -91,7 +91,7 @@ export function ClaudeOldTerminalBanner({
         <PaneTopWarningBanner
           title={translate(
             'terminal.claudeOldTerminalBanner.title',
-            "This terminal was opened before Orca's Claude account update, so claude here uses System default's login."
+            "This terminal was opened before Quirky's Claude account update, so claude here uses System default's login."
           )}
           body={
             <PaneBannerLearnMore
@@ -125,7 +125,7 @@ export function ClaudeOldTerminalBanner({
         )}
         description={translate(
           'terminal.claudeOldTerminalBanner.dialogDescription',
-          'Orca now keeps each Claude account in its own folder, and claude in a new terminal follows the account you select.'
+          'Quirky now keeps each Claude account in its own folder, and claude in a new terminal follows the account you select.'
         )}
         cause={translate(
           'terminal.claudeOldTerminalBanner.dialogCause',

@@ -94,7 +94,7 @@ export function registerJournalCrashBoundaryTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-crash-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-crash-'))
     clock = 1_000
   })
 
@@ -208,7 +208,7 @@ export function registerJournalCrashBoundaryTests(): void {
       expect(hasUnansweredStructuredAgentSessionDispatch(restarted.submissions())).toBe(false)
     })
 
-    // Only an older Orca minted this reason -- Codex now settles a send on the
+    // Only an older Quirky minted this reason -- Codex now settles a send on the
     // provider echo -- but rows written under it still come back from disk.
     it('keeps a codex turn it could not name in doubt, never rejected', async () => {
       const journal = await open()

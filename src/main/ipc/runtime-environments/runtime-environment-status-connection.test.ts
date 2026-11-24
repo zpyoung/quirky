@@ -31,7 +31,7 @@ it('publishes real same-socket verification after every authenticated reconnect'
       capabilities: [REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY]
     })
   })
-  const profile = mkdtempSync(join(tmpdir(), 'orca-status-socket-'))
+  const profile = mkdtempSync(join(tmpdir(), 'quirky-status-socket-'))
   profiles.push(profile)
   const environment = addEnvironmentFromPairingCode(profile, {
     name: 'host',

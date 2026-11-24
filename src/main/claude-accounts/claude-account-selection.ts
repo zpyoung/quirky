@@ -23,7 +23,7 @@ export const CLAUDE_ACCOUNT_NEEDS_SIGN_IN_MESSAGE =
   'Sign in to this Claude account again before selecting it.'
 
 export const CLAUDE_ACCOUNT_FOLDER_IN_USE_MESSAGE =
-  "Orca couldn't delete this Claude account's folder. Quit any Claude running in this account, then remove it again."
+  "Quirky couldn't delete this Claude account's folder. Quit any Claude running in this account, then remove it again."
 
 export type ClaudeAccountSettings = Pick<
   GlobalSettings,
@@ -96,7 +96,7 @@ export class ClaudeAccountSelection {
   private summarize(account: ClaudeManagedAccount): ClaudeManagedAccountSummary {
     const summary = this.savedSummary(account)
     if (account.managedAuthRuntime === 'wsl') {
-      // Why no read: listing must not start a stopped distro. Only an older Orca's folder layout
+      // Why no read: listing must not start a stopped distro. Only an older Quirky's folder layout
       // is known to hold no login; a launch refuses a missing folder with its own reason.
       return savedWslClaudeAccountHome(account) ? summary : { ...summary, needsSignIn: true }
     }

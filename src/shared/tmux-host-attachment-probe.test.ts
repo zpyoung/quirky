@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { probeTmuxHostAttachments } from './tmux-host-attachment-probe'
 const run = vi.hoisted(() => vi.fn())
-vi.mock('@orca/process-host', () => ({ runProcess: run }))
+vi.mock('@quirky/process-host', () => ({ runProcess: run }))
 vi.mock('node:fs/promises', () => ({
   stat: async () => ({ isSocket: () => true, uid: process.getuid?.() })
 }))

@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { z } from 'zod'
 import { tokenizeCommandLine } from '../../shared/agent-command-line-entrypoint'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import { AntigravityHookService } from './hook-service'
 
 const { homeMock } = vi.hoisted(() => ({ homeMock: vi.fn<() => string>() }))
@@ -16,7 +16,7 @@ vi.mock('node:os', async (importOriginal) => ({
 }))
 
 const hooksSchema = z.object({
-  'orca-status': z.record(
+  'quirky-status': z.record(
     z.string(),
     z.array(
       z.object({
@@ -33,7 +33,7 @@ function installedCommand(home: string, event: string): string {
   const config = hooksSchema.parse(
     JSON.parse(readFileSync(join(home, '.gemini', 'config', 'hooks.json'), 'utf8'))
   )
-  const hook = config['orca-status'][event]?.[0]
+  const hook = config['quirky-status'][event]?.[0]
   const command = hook?.command ?? hook?.hooks?.[0]?.command
   if (!command) {
     throw new Error(`Missing ${event} hook`)
@@ -79,7 +79,7 @@ afterEach(() => {
 
 describe.skipIf(process.platform === 'win32')('Antigravity POSIX hook executable contract', () => {
   it('delivers UTF-8 JSON with open stdin through a directly spawned command', async () => {
-    home = mkdtempSync(join(tmpdir(), "orca-agy-hook-'quoted-"))
+    home = mkdtempSync(join(tmpdir(), "quirky-agy-hook-'quoted-"))
     const payload = JSON.stringify({
       tool_name: 'run_command',
       tool_input: { command: 'echo café 日本語 😀' }
@@ -104,10 +104,10 @@ describe.skipIf(process.platform === 'win32')('Antigravity POSIX hook executable
     try {
       const result = await invoke(installedCommand(home, 'PreToolUse'), payload, {
         ...process.env,
-        ORCA_AGENT_HOOK_ENDPOINT: '',
-        ORCA_AGENT_HOOK_PORT: String(address.port),
-        ORCA_AGENT_HOOK_TOKEN: 'test-only-token',
-        ORCA_PANE_KEY: 'test-pane'
+        QUIRKY_AGENT_HOOK_ENDPOINT: '',
+        QUIRKY_AGENT_HOOK_PORT: String(address.port),
+        QUIRKY_AGENT_HOOK_TOKEN: 'test-only-token',
+        QUIRKY_PANE_KEY: 'test-pane'
       })
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('{"decision":"ask"}')
@@ -121,13 +121,13 @@ describe.skipIf(process.platform === 'win32')('Antigravity POSIX hook executable
   }, 10000)
 
   it('returns after a bounded wait when stdin has no bytes and remains open', async () => {
-    home = mkdtempSync(join(tmpdir(), 'orca-agy-empty-hook-'))
+    home = mkdtempSync(join(tmpdir(), 'quirky-agy-empty-hook-'))
     const result = await invoke(installedCommand(home, 'PreInvocation'), '', {
       ...process.env,
-      ORCA_AGENT_HOOK_ENDPOINT: '',
-      ORCA_AGENT_HOOK_PORT: '',
-      ORCA_AGENT_HOOK_TOKEN: '',
-      ORCA_PANE_KEY: ''
+      QUIRKY_AGENT_HOOK_ENDPOINT: '',
+      QUIRKY_AGENT_HOOK_PORT: '',
+      QUIRKY_AGENT_HOOK_TOKEN: '',
+      QUIRKY_PANE_KEY: ''
     })
     expect(result.code).toBe(0)
     expect(result.stdout).toBe('{}')

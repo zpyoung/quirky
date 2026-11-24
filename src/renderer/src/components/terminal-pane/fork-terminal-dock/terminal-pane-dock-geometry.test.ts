@@ -16,7 +16,7 @@ describe('applyTerminalDockGeometryChange', () => {
   it('sends exactly one PTY resize even when fit queues several', () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
 
@@ -32,7 +32,7 @@ describe('applyTerminalDockGeometryChange', () => {
   it('sends no resize when fit never changes the terminal grid', () => {
     const pane = makeFakePane()
     let flushCount = 0
-    pane.container.addEventListener('orca-pane-pty-resize-hold-flush', () => {
+    pane.container.addEventListener('quirky-pane-pty-resize-hold-flush', () => {
       flushCount += 1
     })
 

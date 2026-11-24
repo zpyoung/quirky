@@ -58,7 +58,7 @@ async function writeLongDocument(
 it.each(providers)(
   'folds a large local $agent document without retaining all decoded messages',
   async ({ agent, parse, array }) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-json-document-memory-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-json-document-memory-'))
     try {
       const path = join(root, 'session.json')
       const messageCount = 8192
@@ -99,7 +99,7 @@ it.each(providers)(
 it.each(providers)(
   'cancels a streamed local $agent document before consuming the whole file',
   async ({ agent, parse, array }) => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-json-document-cancel-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-json-document-cancel-'))
     try {
       const path = join(root, 'session.json')
       const contentPath = agent === 'cline' ? join(root, 'session.messages.json') : path

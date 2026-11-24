@@ -16,7 +16,7 @@ export function wasStructuredAgentLaunchClosedByLocalCancel(sessionId: string): 
 }
 
 /**
- * ORCA_LAYOUT_OWNER=main only: this machine's host refuses a create whose close came first, or
+ * QUIRKY_LAYOUT_OWNER=main only: this machine's host refuses a create whose close came first, or
  * closes the chat as it lands, so a local cancel retires the chat on the host at once instead of
  * keeping a tombstone until the host lists it. A host that cannot be told gets the tombstone.
  */

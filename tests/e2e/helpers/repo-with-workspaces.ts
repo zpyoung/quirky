@@ -3,7 +3,7 @@ import { mkdirSync, realpathSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import type { Page, TestInfo } from '@stablyai/playwright-test'
 import type { WorktreeMeta } from '../../../src/shared/worktree/meta-types'
-import { expect } from './orca-app'
+import { expect } from './quirky-app'
 import { evaluatePolled } from './page-evaluate-polled'
 import { loadWorktreesUntilPathsPresent } from './worktree-registration'
 
@@ -70,7 +70,7 @@ export async function addRepoWithWorkspaces(
   await evaluatePolled(
     page,
     async (repoId) => {
-      // Checkouts made outside Orca's workspace root are hidden by default.
+      // Checkouts made outside Quirky's workspace root are hidden by default.
       const shown = await window
         .__store!.getState()
         .updateRepo(repoId, { externalWorktreeVisibility: 'show' })

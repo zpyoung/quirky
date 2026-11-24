@@ -5,11 +5,11 @@ description: Cmd-J scoped jump across worktrees, recents, and tabs.
 
 import { Callout } from '@/components/docs/prose'
 
-Once you have more than a handful of worktrees, navigation becomes the bottleneck. Orca ships two keyboard-first navigation tools.
+Once you have more than a handful of worktrees, navigation becomes the bottleneck. Quirky ships two keyboard-first navigation tools.
 
 ## Quick Open (Cmd-P)
 
-File search scoped to the current worktree. Type a fragment; Orca ranks by recency plus match score and opens the file in a new editor tab. Result rows lead with the **filename** and truncate the parent directory when space is tight (hover for the full path). Gitignored files are included in results — they're surfaced as a second pass after tracked matches, so the files you frequently quick-open (build outputs, env files) stay reachable without polluting the top of the list.
+File search scoped to the current worktree. Type a fragment; Quirky ranks by recency plus match score and opens the file in a new editor tab. Result rows lead with the **filename** and truncate the parent directory when space is tight (hover for the full path). Gitignored files are included in results — they're surfaced as a second pass after tracked matches, so the files you frequently quick-open (build outputs, env files) stay reachable without polluting the top of the list.
 
 ## New-tab omnibox
 
@@ -19,7 +19,7 @@ Type a web search instead of a path or URL to open it in the worktree browser wi
 
 ## Worktree Jump Palette (Cmd-J)
 
-Jump across worktrees and tabs in one search. The palette opens with the sidebar's current host and project scope, including individual repository selections. The placeholder in the empty input reads _repo/worktree_ — type either half and Orca filters accordingly. Typing can still find non-archived worktrees hidden by the sidebar's other visibility toggles, but it keeps that host and repository scope. Slack-style emoji shortcodes (`:rocket:`) use the same suggestion popover as workspace naming.
+Jump across worktrees and tabs in one search. The palette opens with the sidebar's current host and project scope, including individual repository selections. The placeholder in the empty input reads _repo/worktree_ — type either half and Quirky filters accordingly. Typing can still find non-archived worktrees hidden by the sidebar's other visibility toggles, but it keeps that host and repository scope. Slack-style emoji shortcodes (`:rocket:`) use the same suggestion popover as workspace naming.
 
 Press **Tab** in the palette for a host and project filter menu. Project choices are repository-granular. Selected hosts and repositories narrow the result set and show as chips you can remove one at a time. Changes are temporary: closing the palette discards them, and the next open reseeds the filter from the sidebar.
 
@@ -30,7 +30,7 @@ Results include:
 - Projects and repo groups, so you can jump to a sidebar section by name.
 - Every worktree grouped by repo once you start typing.
 - Worktrees matched by cached GitHub PR title or number (`#123`) and cached GitLab merge request title or number (`!123`) when that review metadata is already available.
-- Every open tab, scoped first by current worktree, then globally. A match in the tab's title or content ranks ahead of a match only in its worktree, branch, or repo; equally strong matches prefer the tab you used more recently. Rows show the last-active age when Orca has one. Type aliases such as `terminal` or `simulator` still match those tab types without cluttering the row label.
+- Every open tab, scoped first by current worktree, then globally. A match in the tab's title or content ranks ahead of a match only in its worktree, branch, or repo; equally strong matches prefer the tab you used more recently. Rows show the last-active age when Quirky has one. Type aliases such as `terminal` or `simulator` still match those tab types without cluttering the row label.
 
 When a typed query hits **both** open tabs and worktrees, the palette interleaves a short preview of each section so neither primary list is buried. If a section has more matches, click **See more** in its _N more_ row to reveal 20 additional entries at a time. Changing the query resets the expanded sections. Single-section results keep a full hard-capped list.
 

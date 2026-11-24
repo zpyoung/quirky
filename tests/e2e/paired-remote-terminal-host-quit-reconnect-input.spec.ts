@@ -5,7 +5,7 @@
  * the window a slow (e.g. Windows) host start leaves open in the field.
  *
  * Run:
- *   ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test \
+ *   QUIRKY_BACKGROUND_LAUNCH=1 pnpm exec playwright test \
  *     tests/e2e/paired-remote-terminal-host-quit-reconnect-input.spec.ts \
  *     --config tests/playwright.config.ts --project electron-headless --workers=1
  */
@@ -18,21 +18,21 @@ import {
   HOST_TERMINAL_SURFACE_SEPARATOR,
   toWebTerminalSurfaceTabId
 } from '../../src/shared/terminal-surface-id'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient,
   type PairedElectronClient
 } from './helpers/paired-electron-client'
-import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/orca-restart'
+import { attachRepoAndOpenTerminal, createRestartSession } from './helpers/quirky-restart'
 import {
   holdWindowGraphPublication,
   releaseWindowGraphPublication
 } from './helpers/hold-window-graph-publication'
 import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 
-const scratch = mkdtempSync(path.join(os.tmpdir(), 'orca-paired-host-quit-input-'))
+const scratch = mkdtempSync(path.join(os.tmpdir(), 'quirky-paired-host-quit-input-'))
 const fixturePath = path.join(scratch, 'paired-host-quit-terminal.mjs')
 
 writeFileSync(

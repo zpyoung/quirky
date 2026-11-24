@@ -8,7 +8,7 @@ import {
 } from './runtime-environments'
 import { hardenExistingSecureFile } from './secure-file'
 
-const ENVIRONMENTS_FILE = 'orca-environments.json'
+const ENVIRONMENTS_FILE = 'quirky-environments.json'
 export const MAX_RUNTIME_ENVIRONMENT_STORE_FILE_BYTES = 1024 * 1024
 
 export type RuntimeEnvironmentStoreErrorCode = 'invalid_argument' | 'runtime_error'
@@ -91,7 +91,7 @@ export function readEnvironmentStoreRecords(
   } catch {
     throw new RuntimeEnvironmentStoreError(
       'runtime_error',
-      `Could not read Orca environments at ${path}; the file is invalid.`
+      `Could not read Quirky environments at ${path}; the file is invalid.`
     )
   }
   const result: EnvironmentStoreRecords = { environments: [], unreadable: [] }

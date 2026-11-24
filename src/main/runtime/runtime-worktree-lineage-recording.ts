@@ -96,7 +96,7 @@ export function recordCreatedWorktreeLineage(
     warnings.push({
       code: 'LINEAGE_PARENT_CONTEXT_MISSING',
       message:
-        'Worktree created, but Orca could not record lineage because instance identity was unavailable.',
+        'Worktree created, but Quirky could not record lineage because instance identity was unavailable.',
       details: {
         childHasInstanceId: Boolean(childInstanceId),
         parentHasInstanceId: Boolean(parentInstanceId),

@@ -6,15 +6,15 @@ import {
   decodeTerminalStreamFrame,
   decodeTerminalStreamText
 } from '../../../shared/terminal-stream-protocol'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
 import { createSubscriptionRegistryDouble } from './subscription-registry-test-double'
 
-function asRuntime(double: Record<string, unknown>): OrcaRuntimeService {
+function asRuntime(double: Record<string, unknown>): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: terminal.subscribe reads only the members the double provides.
-  return double as unknown as OrcaRuntimeService
+  return double as unknown as QuirkyRuntimeService
 }
 
 const request: RpcRequest = {
@@ -71,7 +71,7 @@ describe('terminal subscribe mount replay', () => {
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {}))
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const dispatchPromise = dispatcher.dispatchStreaming(request, vi.fn(), {
@@ -244,7 +244,7 @@ describe('terminal subscribe mount replay', () => {
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {}))
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const dispatchPromise = dispatcher.dispatchStreaming(request, vi.fn(), {
@@ -415,7 +415,7 @@ describe('terminal subscribe mount replay', () => {
       registerOwnedSubscriptionCleanup: vi.fn(registry.registerOwnedSubscriptionCleanup),
       cleanupSubscription: vi.fn(registry.cleanupSubscription),
       waitForTerminal: vi.fn(() => new Promise<RuntimeTerminalWait>(() => {}))
-    } as unknown as OrcaRuntimeService
+    } as unknown as QuirkyRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
 
     const dispatchPromise = dispatcher.dispatchStreaming(request, vi.fn(), {

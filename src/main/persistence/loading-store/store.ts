@@ -17,7 +17,7 @@ import {
   type StoreDomainOperations
 } from './store-domain-composition'
 import type { PersistedState } from '../../../shared/persisted-state-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { dropInvalidWorkspaceLayoutsAtLoad } from '../restoring-sessions/invalid-workspace-layout-purge'
 import {
   bindPersistedTabTerminalPanes,
@@ -130,7 +130,7 @@ export class Store {
     // Load is the only place an orphaned repo id can be swept: every removal path needs the repo to
     // still be registered, so rows outlive their owner without one (#17776).
     const sweptRepoIds = this.domains.repos.sweepDeregisteredRepoResidue()
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN) {
       dropInvalidWorkspaceLayoutsAtLoad(this, this.state)
       this.state = bindPersistedTabTerminalPanes(sweepPersistedUnattachedTerminalRows(this.state))
       this.runtime.state = this.state
@@ -139,7 +139,7 @@ export class Store {
     if (!imported) {
       // A committed migration whose blob install failed or was cut short is finished here; shell
       // history waits for the runtime's post-attach pass, which can see live shells.
-      this.domains.orcadMigrationBlobInstalls.installPendingOrcadMigrationReceivedBlobs()
+      this.domains.quirkydMigrationBlobInstalls.installPendingQuirkydMigrationReceivedBlobs()
       for (const entry of initial?.unboundPaneAliases ?? []) {
         agentHookServer.registerPaneKeyAlias(
           entry.legacyPaneKey,

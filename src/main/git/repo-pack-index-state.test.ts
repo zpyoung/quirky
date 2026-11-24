@@ -6,7 +6,7 @@ import { probeRepoPackIndexDirectory } from './repo-pack-index-state'
 
 const roots: string[] = []
 async function directory(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-pack-index-state-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-pack-index-state-'))
   roots.push(root)
   return root
 }

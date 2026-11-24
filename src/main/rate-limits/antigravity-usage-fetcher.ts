@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { hasReachedAppVersion, parseCliVersion } from '../../shared/app-version'
 import { resolveCommandOnLocalPath } from '../ipc/command-path-resolver'
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
@@ -27,7 +27,7 @@ const FAILURE_REASONS: Partial<Record<UsageRateLimitFailureKind, string>> = {
 }
 
 const UNSUPPORTED_USAGE_COMMAND_REASON =
-  'Antigravity usage is not available. This version of the Antigravity CLI answers `/usage` as a prompt instead of a command, so Orca stopped asking rather than spend quota on it. Update `agy` and restart Orca.'
+  'Antigravity usage is not available. This version of the Antigravity CLI answers `/usage` as a prompt instead of a command, so Quirky stopped asking rather than spend quota on it. Update `agy` and restart Quirky.'
 
 /**
  * Latched once agy answers the quota read with a model turn.
@@ -98,7 +98,7 @@ function failed(
 /**
  * Reads Antigravity quota from the Antigravity CLI itself.
  *
- * Why the CLI and not the Gemini mirror it replaces: Orca used to publish a *successful* Gemini
+ * Why the CLI and not the Gemini mirror it replaces: Quirky used to publish a *successful* Gemini
  * `retrieveUserQuota` read under the Antigravity provider id. That reported Gemini CLI per-model
  * buckets on a 60-minute window, so Antigravity's real pools ("Gemini Models" and "Claude and GPT
  * models", each weekly) were never shown and the weekly limit was always null (#9122, #22511). It
@@ -133,7 +133,7 @@ export async function fetchAntigravityRateLimits(
     )
   }
 
-  // Recheck each read: the CLI can be replaced while Orca runs; unsupported reads spend quota.
+  // Recheck each read: the CLI can be replaced while Quirky runs; unsupported reads spend quota.
   let versionRun: Awaited<ReturnType<typeof runProcess>>
   try {
     versionRun = await run({

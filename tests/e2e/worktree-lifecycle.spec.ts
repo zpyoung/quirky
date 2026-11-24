@@ -20,7 +20,7 @@
  *   must not appear in worktree B's tab list.
  */
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   waitForSessionReady,
   waitForActiveWorktree,
@@ -90,19 +90,19 @@ test.describe('Worktree Lifecycle', () => {
   // clean even when a test aborts before its own cleanup runs.
   let createdWorktreeId: string | null = null
 
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
-    await ensureTerminalVisible(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
+    await ensureTerminalVisible(quirkyPage)
   })
 
-  test.afterEach(async ({ orcaPage }) => {
+  test.afterEach(async ({ quirkyPage }) => {
     if (!createdWorktreeId) {
       return
     }
     const idToClean = createdWorktreeId
     createdWorktreeId = null
-    await orcaPage
+    await quirkyPage
       .evaluate(async (id) => {
         try {
           const state = window.__store?.getState()
@@ -122,21 +122,21 @@ test.describe('Worktree Lifecycle', () => {
    * from the store, not leak IDs into the next render.
    */
   test('removing a worktree clears its tabs, open files, and browser tabs', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const originalWorktreeId = await waitForActiveWorktree(orcaPage)
+    const originalWorktreeId = await waitForActiveWorktree(quirkyPage)
 
-    createdWorktreeId = await createIsolatedWorktree(orcaPage)
+    createdWorktreeId = await createIsolatedWorktree(quirkyPage)
     const newWorktreeId = createdWorktreeId
-    await switchToWorktree(orcaPage, newWorktreeId)
+    await switchToWorktree(quirkyPage, newWorktreeId)
     await expect
-      .poll(async () => getActiveWorktreeId(orcaPage), { timeout: 10_000 })
+      .poll(async () => getActiveWorktreeId(quirkyPage), { timeout: 10_000 })
       .toBe(newWorktreeId)
-    await ensureTerminalVisible(orcaPage)
+    await ensureTerminalVisible(quirkyPage)
 
     // Seed one of each surface on the new worktree so removeWorktree has to
     // clean up all three in a single atomic set().
-    await orcaPage.evaluate((worktreeId) => {
+    await quirkyPage.evaluate((worktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -150,23 +150,23 @@ test.describe('Worktree Lifecycle', () => {
       })
     }, newWorktreeId)
 
-    await openFileExplorer(orcaPage)
-    await clickFileInExplorer(orcaPage, ['README.md', 'package.json'])
+    await openFileExplorer(quirkyPage)
+    await clickFileInExplorer(quirkyPage, ['README.md', 'package.json'])
 
     // Baseline: the new worktree now has tabs/browser tabs/open files.
-    expect((await getWorktreeTabs(orcaPage, newWorktreeId)).length).toBeGreaterThan(0)
-    expect((await getBrowserTabs(orcaPage, newWorktreeId)).length).toBeGreaterThan(0)
-    expect((await getOpenFiles(orcaPage, newWorktreeId)).length).toBeGreaterThan(0)
+    expect((await getWorktreeTabs(quirkyPage, newWorktreeId)).length).toBeGreaterThan(0)
+    expect((await getBrowserTabs(quirkyPage, newWorktreeId)).length).toBeGreaterThan(0)
+    expect((await getOpenFiles(quirkyPage, newWorktreeId)).length).toBeGreaterThan(0)
 
     // Switch away before removing so we're not deleting the active worktree —
     // that's an easier code path and hides the cleanup regression this spec
     // is protecting.
-    await switchToWorktree(orcaPage, originalWorktreeId)
+    await switchToWorktree(quirkyPage, originalWorktreeId)
     await expect
-      .poll(async () => getActiveWorktreeId(orcaPage), { timeout: 10_000 })
+      .poll(async () => getActiveWorktreeId(quirkyPage), { timeout: 10_000 })
       .toBe(originalWorktreeId)
 
-    const result = await removeWorktreeViaStore(orcaPage, newWorktreeId)
+    const result = await removeWorktreeViaStore(quirkyPage, newWorktreeId)
     expect(result.ok).toBe(true)
     // Successful removal — afterEach hook no longer needs to clean this up.
     createdWorktreeId = null
@@ -175,19 +175,21 @@ test.describe('Worktree Lifecycle', () => {
     // be dropped. A regression that leaves any of these behind will show up
     // in the sidebar as a worktree-less tab strip.
     await expect
-      .poll(async () => (await getWorktreeTabs(orcaPage, newWorktreeId)).length, {
+      .poll(async () => (await getWorktreeTabs(quirkyPage, newWorktreeId)).length, {
         timeout: 10_000,
         message: 'tabsByWorktree still holds entries for the removed worktree'
       })
       .toBe(0)
     await expect
-      .poll(async () => (await getBrowserTabs(orcaPage, newWorktreeId)).length, { timeout: 5_000 })
+      .poll(async () => (await getBrowserTabs(quirkyPage, newWorktreeId)).length, {
+        timeout: 5_000
+      })
       .toBe(0)
     await expect
-      .poll(async () => (await getOpenFiles(orcaPage, newWorktreeId)).length, { timeout: 5_000 })
+      .poll(async () => (await getOpenFiles(quirkyPage, newWorktreeId)).length, { timeout: 5_000 })
       .toBe(0)
 
-    const allIds = await getAllWorktreeIds(orcaPage)
+    const allIds = await getAllWorktreeIds(quirkyPage)
     expect(allIds).not.toContain(newWorktreeId)
   })
 
@@ -212,23 +214,23 @@ test.describe('Worktree Lifecycle', () => {
    * verify.
    */
   test('switching worktrees preserves per-worktree state across a round-trip', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    const allIds = await getAllWorktreeIds(orcaPage)
+    const allIds = await getAllWorktreeIds(quirkyPage)
     expect(
       allIds.length,
       'fixture should provide primary + e2e-secondary worktrees'
     ).toBeGreaterThanOrEqual(2)
 
-    const originalWorktreeId = await waitForActiveWorktree(orcaPage)
+    const originalWorktreeId = await waitForActiveWorktree(quirkyPage)
 
-    await openFileExplorer(orcaPage)
-    await clickFileInExplorer(orcaPage, ['README.md', 'package.json'])
+    await openFileExplorer(quirkyPage)
+    await clickFileInExplorer(quirkyPage, ['README.md', 'package.json'])
 
     // Snapshot the original worktree's state so we can assert preservation
     // after the round-trip. An empty `openFiles` here would make the second
     // assertion tautological, so guard that expectation up-front.
-    const originalState = await orcaPage.evaluate((wId) => {
+    const originalState = await quirkyPage.evaluate((wId) => {
       const store = window.__store
       if (!store) {
         // Surface a store-unavailable failure via a clear empty baseline
@@ -247,9 +249,9 @@ test.describe('Worktree Lifecycle', () => {
     ).toBeGreaterThan(0)
 
     const otherWorktreeId = allIds.find((id) => id !== originalWorktreeId)!
-    await switchToWorktree(orcaPage, otherWorktreeId)
+    await switchToWorktree(quirkyPage, otherWorktreeId)
     await expect
-      .poll(async () => getActiveWorktreeId(orcaPage), { timeout: 10_000 })
+      .poll(async () => getActiveWorktreeId(quirkyPage), { timeout: 10_000 })
       .toBe(otherWorktreeId)
 
     // Sidebar UI state must survive the switch — user shouldn't have to
@@ -257,7 +259,7 @@ test.describe('Worktree Lifecycle', () => {
     await expect
       .poll(
         async () =>
-          orcaPage.evaluate(() => {
+          quirkyPage.evaluate(() => {
             const state = window.__store?.getState()
             return Boolean(state?.rightSidebarOpen && state?.rightSidebarTab === 'explorer')
           }),
@@ -265,16 +267,16 @@ test.describe('Worktree Lifecycle', () => {
       )
       .toBe(true)
 
-    await switchToWorktree(orcaPage, originalWorktreeId)
+    await switchToWorktree(quirkyPage, originalWorktreeId)
     await expect
-      .poll(async () => getActiveWorktreeId(orcaPage), { timeout: 10_000 })
+      .poll(async () => getActiveWorktreeId(quirkyPage), { timeout: 10_000 })
       .toBe(originalWorktreeId)
 
     // Original worktree's state must be intact: the openFiles it had before
     // the switch are all still present, and its layout entry (if any) was
     // not torn down. A regression that clears these on setActiveWorktree
     // would fail here even though `activeWorktreeId` round-tripped cleanly.
-    const afterRoundTrip = await orcaPage.evaluate((wId) => {
+    const afterRoundTrip = await quirkyPage.evaluate((wId) => {
       const store = window.__store
       if (!store) {
         // Match the originalState guard so assertion failures point at
@@ -297,18 +299,18 @@ test.describe('Worktree Lifecycle', () => {
    * Guard the underlying invariant — tabsByWorktree[A] and tabsByWorktree[B]
    * do not share IDs — at the model layer where the bug actually lived.
    */
-  test('terminal tabs stay scoped to the worktree that created them', async ({ orcaPage }) => {
-    const allIds = await getAllWorktreeIds(orcaPage)
+  test('terminal tabs stay scoped to the worktree that created them', async ({ quirkyPage }) => {
+    const allIds = await getAllWorktreeIds(quirkyPage)
     expect(
       allIds.length,
       'fixture should provide primary + e2e-secondary worktrees'
     ).toBeGreaterThanOrEqual(2)
 
-    const worktreeA = await waitForActiveWorktree(orcaPage)
+    const worktreeA = await waitForActiveWorktree(quirkyPage)
     const worktreeB = allIds.find((id) => id !== worktreeA)!
 
     // Create an extra tab on A so it has a distinctive tab ID set.
-    await orcaPage.evaluate((worktreeId) => {
+    await quirkyPage.evaluate((worktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -317,16 +319,16 @@ test.describe('Worktree Lifecycle', () => {
       store.getState().createTab(worktreeId)
     }, worktreeA)
     await expect
-      .poll(async () => (await getWorktreeTabs(orcaPage, worktreeA)).length, { timeout: 5_000 })
+      .poll(async () => (await getWorktreeTabs(quirkyPage, worktreeA)).length, { timeout: 5_000 })
       .toBeGreaterThanOrEqual(2)
 
     // Switch to B and create a tab there too.
-    await switchToWorktree(orcaPage, worktreeB)
+    await switchToWorktree(quirkyPage, worktreeB)
     await expect
-      .poll(async () => getActiveWorktreeId(orcaPage), { timeout: 10_000 })
+      .poll(async () => getActiveWorktreeId(quirkyPage), { timeout: 10_000 })
       .toBe(worktreeB)
-    await ensureTerminalVisible(orcaPage)
-    await orcaPage.evaluate((worktreeId) => {
+    await ensureTerminalVisible(quirkyPage)
+    await quirkyPage.evaluate((worktreeId) => {
       const store = window.__store
       if (!store) {
         return
@@ -335,11 +337,11 @@ test.describe('Worktree Lifecycle', () => {
       store.getState().createTab(worktreeId)
     }, worktreeB)
     await expect
-      .poll(async () => (await getWorktreeTabs(orcaPage, worktreeB)).length, { timeout: 5_000 })
+      .poll(async () => (await getWorktreeTabs(quirkyPage, worktreeB)).length, { timeout: 5_000 })
       .toBeGreaterThanOrEqual(2)
 
-    const tabsA = await getWorktreeTabs(orcaPage, worktreeA)
-    const tabsB = await getWorktreeTabs(orcaPage, worktreeB)
+    const tabsA = await getWorktreeTabs(quirkyPage, worktreeA)
+    const tabsB = await getWorktreeTabs(quirkyPage, worktreeB)
     const idsA = new Set(tabsA.map((tab) => tab.id))
     const idsB = new Set(tabsB.map((tab) => tab.id))
 

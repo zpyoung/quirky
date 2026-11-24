@@ -40,7 +40,7 @@ export type FailedAcquisitionWording = {
 }
 
 /** The refusal a failed acquisition answers with, worded as the start failure it records: its
- *  error text is Orca's or the provider's log wording, so it goes to the log, never the wire. */
+ *  error text is Quirky's or the provider's log wording, so it goes to the log, never the wire. */
 function failedAcquisitionWireRefusal(
   details: AgentSessionRefusalDetailsByCode['agent_session_operation_invalid'] | undefined,
   wording: FailedAcquisitionWording,
@@ -110,7 +110,7 @@ function isExitProvenAcquisitionFailure(error: unknown): error is Error {
 
 /** The situation a failed acquisition stands for: what the adapter typed, or a provider the
  *  adapter saw exit while starting. A provider refusing a request, a timeout, a store refusal or
- *  Orca's own fault names none: the child being gone now says nothing about why. */
+ *  Quirky's own fault names none: the child being gone now says nothing about why. */
 function failedAcquisitionDetails(
   error: unknown
 ): AgentSessionRefusalDetailsByCode['agent_session_operation_invalid'] | undefined {
@@ -159,7 +159,7 @@ export function failedAcquisitionRefusal(
 }
 
 /** A start that failed before any process still throws, in the sentence its replay reads: the
- *  error's own text is Orca's or the refusing site's, so it goes to the log. A message that is
+ *  error's own text is Quirky's or the refusing site's, so it goes to the log. A message that is
  *  itself a code keeps it, since the wire routes on it. */
 export function preSpawnFailureInWords(error: unknown, wording: FailedAcquisitionWording): unknown {
   if (!isAgentSessionPreSpawnError(error) || /^[a-z0-9_]+$/.test(error.message)) {

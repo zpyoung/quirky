@@ -8,11 +8,11 @@ import { openCodexAppServerConnection } from './codex-app-server-connection'
 import { codexStructuredPermissionPolicy } from './codex-structured-permission-policy'
 import { openCodexThread } from './codex-structured-thread-open'
 
-const enabled = process.env.ORCA_REAL_CODEX_CLI_TEST === '1'
+const enabled = process.env.QUIRKY_REAL_CODEX_CLI_TEST === '1'
 
 describe.skipIf(!enabled)('Codex real app-server permissions', () => {
   it('starts in Auto and resets inherited policy on cold resume', async () => {
-    const base = mkdtempSync(join(tmpdir(), 'orca-real-codex-permissions-'))
+    const base = mkdtempSync(join(tmpdir(), 'quirky-real-codex-permissions-'))
     const cwd = join(base, 'workspace')
     const codexHome = join(base, 'codex-home')
     try {

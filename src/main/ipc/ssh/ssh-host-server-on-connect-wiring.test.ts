@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SshTarget } from '../../../shared/ssh-types'
 import { closeTestStores, createSqliteTestStore } from '../../persistence-test-harness'
 import { Store } from '../../persistence/loading-store/store'
-import { OrcadHostUnsupportedError } from '../../orcad/orcad-host-unavailable'
-import { RemoteNodeRuntimeNoexecError } from '../../ssh/orcad-remote-node-runtime-report'
+import { QuirkydHostUnsupportedError } from '../../quirkyd/quirkyd-host-unavailable'
+import { RemoteNodeRuntimeNoexecError } from '../../ssh/quirkyd-remote-node-runtime-report'
 import { allowsDirectSshRelay, SshConnectionStore } from '../../ssh/connection/ssh-connection-store'
 import { resolveHostServerOnConnect } from '../../ssh/ssh-host-server-on-connect'
 import { unservedHostServerMessage } from '../../ssh/ssh-host-unserved-status'
@@ -27,16 +27,16 @@ vi.mock('../../../shared/app-environment', () => ({
 vi.mock('../../ssh/targets/ssh-target-registry', () => ({
   getSshTargetRegistryStore: () => mocks.registry.current
 }))
-vi.mock('../../managed-server/lifecycle/orcad-runtime-deployment', () => ({
-  createManagedOrcadEnvironment: mocks.deploy
+vi.mock('../../managed-server/lifecycle/quirkyd-runtime-deployment', () => ({
+  createManagedQuirkydEnvironment: mocks.deploy
 }))
-vi.mock('../../managed-server/lifecycle/orcad-runtime-conversion', () => ({
-  convertSshTargetToManagedOrcad: mocks.convert
+vi.mock('../../managed-server/lifecycle/quirkyd-runtime-conversion', () => ({
+  convertSshTargetToManagedQuirkyd: mocks.convert
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  ensureOrcadManagedTunnel: mocks.tunnel
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  ensureQuirkydManagedTunnel: mocks.tunnel
 }))
-vi.mock('../../orcad/orcad-artifact-materializer', () => ({ hasOrcadTemplate: () => true }))
+vi.mock('../../quirkyd/quirkyd-artifact-materializer', () => ({ hasQuirkydTemplate: () => true }))
 vi.mock('./ssh-renderer-broadcast', () => ({ broadcastSshState: mocks.broadcast }))
 vi.mock('./ssh-ipc-context', () => ({ getCurrentMainWindow: () => null }))
 vi.mock('./ssh-session-teardown', () => ({ disconnectRegisteredSshTarget: vi.fn() }))
@@ -60,7 +60,7 @@ let store: Store
 beforeEach(() => {
   vi.clearAllMocks()
   userDataPath = mkdtempSync(join(tmpdir(), 'host-server-wiring-'))
-  store = createSqliteTestStore(Store, { dataFile: join(userDataPath, 'orca-data.json') })
+  store = createSqliteTestStore(Store, { dataFile: join(userDataPath, 'quirky-data.json') })
   store.addSshTarget(TARGET)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: SshConnectionStore wraps the real test store it is given.
   mocks.registry.current = new SshConnectionStore(store as never)
@@ -74,25 +74,25 @@ afterEach(async () => {
 const target = (): SshTarget => store.getSshTarget(TARGET.id)!
 
 describe('connect-time server decision against the real profile', () => {
-  it('releases an empty host claim when orcad cannot run, records why, and keeps the relay', async () => {
+  it('releases an empty host claim when quirkyd cannot run, records why, and keeps the relay', async () => {
     mocks.deploy.mockImplementation(async () => {
       // The real deploy claims the host before it finds the template missing the target.
       store.updateSshTarget(TARGET.id, {
-        orcadFence: { environmentId: 'env-new' },
-        orcadProvisioning: { requestId: 'env-new', name: 'Box' }
+        quirkydFence: { environmentId: 'env-new' },
+        quirkydProvisioning: { requestId: 'env-new', name: 'Box' }
       })
-      throw new OrcadHostUnsupportedError('Packaged orcad template does not support x')
+      throw new QuirkydHostUnsupportedError('Packaged quirkyd template does not support x')
     })
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     await expect(
       resolveHostServerOnConnect(target(), hostServerOnConnectDeps(userDataPath))
     ).resolves.toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'unsupported_host'
     })
     warn.mockRestore()
-    expect(target().orcadFence).toBeUndefined()
+    expect(target().quirkydFence).toBeUndefined()
     expect(target().managedServerUnavailable).toEqual({
       reason: 'unsupported_host',
       appVersion: '1.5.0'
@@ -115,7 +115,7 @@ describe('connect-time server decision against the real profile', () => {
     warn.mockRestore()
     expect(decision).toEqual({
       route: 'unserved',
-      reason: 'orcad_unavailable',
+      reason: 'quirkyd_unavailable',
       detail: 'runtime_noexec'
     })
     // The connect's own error, which the host row shows, names noexec rather than "unsupported".

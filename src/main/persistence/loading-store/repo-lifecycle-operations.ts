@@ -6,7 +6,7 @@ import type { GhAccountBinding } from '../../../shared/github/account-binding'
 import {
   removeRepoFromHostWorkspaceSessions,
   removeRepoFromWorkspaceSession
-} from '../../orca-profiles/profile-project-session-state'
+} from '../../quirky-profiles/profile-project-session-state'
 import {
   getRepoExecutionHostId,
   parseExecutionHostId,
@@ -30,7 +30,7 @@ import type { WriteSchedulingOperations } from './write-scheduling'
 import { scheduleSave } from './write-scheduling'
 import { pruneDeregisteredRepoUiResidue } from './repo-lifecycle-ui-residue'
 import { isWslMoveProjectSessionFrozen } from '../moving-wsl-projects/wsl-move-scope-guard'
-import { dropOrcadTerminalRestoreHintsForWorktrees } from '../migrating-orcad-catalog/orcad-terminal-restore-hint-store'
+import { dropQuirkydTerminalRestoreHintsForWorktrees } from '../migrating-quirkyd-catalog/quirkyd-terminal-restore-hint-store'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 
 // A paused WSL move keeps its local rows for a downgrade.
@@ -49,7 +49,7 @@ type RepoLifecycleOperationsRuntime = Pick<
   | 'repoOrderOperations'
   | 'repoUpdateOperations'
   | 'state'
-  | 'orcadTerminalRestoreHints'
+  | 'quirkydTerminalRestoreHints'
 >
 
 const repoLifecycleOperationsContext = Symbol('RepoLifecycleOperations')
@@ -195,8 +195,8 @@ export class RepoLifecycleOperations {
 }
 
 function dropRepoRestoreHints(owner: RepoLifecycleOperations, repoId: string): void {
-  dropOrcadTerminalRestoreHintsForWorktrees(
-    owner[repoLifecycleOperationsContext].runtime.orcadTerminalRestoreHints,
+  dropQuirkydTerminalRestoreHintsForWorktrees(
+    owner[repoLifecycleOperationsContext].runtime.quirkydTerminalRestoreHints,
     (worktreeId) => getRepoIdFromWorktreeId(worktreeId) === repoId
   )
 }

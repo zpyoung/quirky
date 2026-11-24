@@ -19,7 +19,7 @@ let tempDir = ''
 let localFile = ''
 
 beforeEach(async () => {
-  tempDir = await mkdtemp(join(tmpdir(), 'orca-sftp-late-'))
+  tempDir = await mkdtemp(join(tmpdir(), 'quirky-sftp-late-'))
   localFile = join(tempDir, 'relay.js')
   await writeFile(localFile, 'console.log(1)\n')
 })
@@ -43,7 +43,7 @@ describe('late SFTP stream errors', () => {
     const stream = new PassThrough()
     stream.resume()
 
-    await uploadFile(sftpDoubleReturning(stream), localFile, '/home/user/.orca-remote/relay.js')
+    await uploadFile(sftpDoubleReturning(stream), localFile, '/home/user/.quirky-remote/relay.js')
 
     expect(() => stream.emit('error', sftpNoSuchFileError())).not.toThrow()
   })
@@ -52,7 +52,11 @@ describe('late SFTP stream errors', () => {
     const stream = new PassThrough()
     stream.resume()
 
-    await writeStringViaSftp(sftpDoubleReturning(stream), '/home/user/.orca-remote/.version', 'v1')
+    await writeStringViaSftp(
+      sftpDoubleReturning(stream),
+      '/home/user/.quirky-remote/.version',
+      'v1'
+    )
 
     expect(() => stream.emit('error', sftpNoSuchFileError())).not.toThrow()
   })
@@ -94,7 +98,7 @@ describe('sandboxed SFTP subsystem diagnosis', () => {
     const failure: unknown = await writeRelayFile(
       conn,
       getRemoteHostPlatform('linux-x64'),
-      '/home/user/.orca-remote/relay-1/.version',
+      '/home/user/.quirky-remote/relay-1/.version',
       'v1'
     ).then(
       () => null,
@@ -115,7 +119,7 @@ describe('sandboxed SFTP subsystem diagnosis', () => {
       writeRelayFile(
         conn,
         getRemoteHostPlatform('win32-x64'),
-        'C:/Users/user/.orca-remote/relay-1/.version',
+        'C:/Users/user/.quirky-remote/relay-1/.version',
         'v1'
       )
     ).rejects.toThrow(/SFTP subsystem sees a different filesystem/)

@@ -12,7 +12,7 @@ import {
 } from './facet'
 import { ProgramStatusRecordSet, type ProgramStatusRecord } from './records'
 
-/** OSC 7501 `app` ids whose Orca agent id differs. Other apps pass through verbatim. */
+/** OSC 7501 `app` ids whose Quirky agent id differs. Other apps pass through verbatim. */
 const APP_TO_AGENT_TYPE: Readonly<Record<string, string>> = {
   'claude-code': 'claude',
   'grok-build': 'grok'
@@ -40,7 +40,7 @@ function boundedChildId(id: string): string {
 }
 
 function blockedState(record: ProgramStatusRecord): 'waiting' | 'blocked' {
-  // Why: Orca's hooks report approvals and questions as `waiting`; auth and unnamed blocks stay `blocked`.
+  // Why: Quirky's hooks report approvals and questions as `waiting`; auth and unnamed blocks stay `blocked`.
   return record.kind === 'permission' || record.kind === 'question' ? 'waiting' : 'blocked'
 }
 
@@ -120,7 +120,7 @@ export function createProgramStatusProjector(now: () => number = Date.now): Prog
         return { state: 'done', outcome: 'failure' }
       case 'idle':
         // Why no cancellation verdict: idle also follows startup work (Codex reports a working blip
-        // while it boots), so it only proves the program is at rest. Orca infers a user's cancel
+        // while it boots), so it only proves the program is at rest. Quirky infers a user's cancel
         // from the interrupt keystroke itself. Idle after a finished turn keeps the unseen `done`.
         return !newInvocation && lastRoot?.state === 'done' && lastRoot.sessionBoundary !== true
           ? lastRoot

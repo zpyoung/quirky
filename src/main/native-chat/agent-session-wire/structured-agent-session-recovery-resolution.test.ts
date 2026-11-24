@@ -28,7 +28,7 @@ afterEach(async () => {
 })
 
 async function newStoreDirectory(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-recovery-resolution-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-recovery-resolution-'))
   roots.push(root)
   return root
 }

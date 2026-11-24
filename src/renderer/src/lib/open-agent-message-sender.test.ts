@@ -52,14 +52,14 @@ import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 import { RUNTIME_COMPAT_BLOCK_CODE } from '@/runtime/runtime-protocol-compat'
 import type { AgentMessageSource } from '../../../shared/agent-session-message-source'
 import { AGENT_SESSION_WRITE_NOTICE_COPY } from '../../../shared/agent-session-write-notice-copy'
-import { testOrcaSessionId } from '../../../shared/orca-session-address-test-fixture'
+import { testQuirkySessionId } from '../../../shared/quirky-session-address-test-fixture'
 import { openAgentMessageSender } from './open-agent-message-sender'
 
 const HOST = { kind: 'environment', environmentId: 'env-host' }
-const ROOT = testOrcaSessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
-const chat = { address: `orca_session_id:${ROOT}`, terminalHandle: null, orcaSessionId: ROOT }
-const terminal = { address: 'term_a', terminalHandle: 'term_a', orcaSessionId: null }
-const dispatch = { address: 'dispatch:d1', terminalHandle: 'dispatch:d1', orcaSessionId: null }
+const ROOT = testQuirkySessionId('4a1f6c2e-8b3d-4e7a-9c15-0d2b6e8f1a37')
+const chat = { address: `quirky_session_id:${ROOT}`, terminalHandle: null, quirkySessionId: ROOT }
+const terminal = { address: 'term_a', terminalHandle: 'term_a', quirkySessionId: null }
+const dispatch = { address: 'dispatch:d1', terminalHandle: 'dispatch:d1', quirkySessionId: null }
 
 /** A notice carrying mail from each party: m1 from the terminal, m2 from someone else. */
 function sourceFor(party: typeof chat | typeof terminal | typeof dispatch): AgentMessageSource {
@@ -96,9 +96,9 @@ function versionBlock(): Error {
   return Object.assign(new Error('update needed'), { code: RUNTIME_COMPAT_BLOCK_CODE })
 }
 
-// Existing sentences, each translated whole: the cause and what to do, or which Orca to update.
+// Existing sentences, each translated whole: the cause and what to do, or which Quirky to update.
 const UNREACHABLE = `${AGENT_SESSION_WRITE_NOTICE_COPY.unreachable} ${AGENT_SESSION_WRITE_NOTICE_COPY.tryAgain}`
-const UPDATE = AGENT_SESSION_WRITE_NOTICE_COPY.updateOrcaToOpenChat
+const UPDATE = AGENT_SESSION_WRITE_NOTICE_COPY.updateQuirkyToOpenChat
 const OLDER_HOST = AGENT_SESSION_WRITE_NOTICE_COPY.unsupported
 
 beforeEach(() => {

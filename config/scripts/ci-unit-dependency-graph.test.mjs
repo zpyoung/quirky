@@ -22,24 +22,27 @@ function fixture(extra = {}) {
     JSON.stringify({
       name,
       exports: {
-        '.': { 'orca-source': source, types: './dist/index.d.ts', default: './dist/index.js' }
+        '.': { 'quirky-source': source, types: './dist/index.d.ts', default: './dist/index.js' }
       }
     })
   const files = {
     'pnpm-workspace.yaml': 'packages:\n  - src/packages/*\n',
     'src/packages/process-host/package.json': manifest(
-      '@orca/process-host',
+      '@quirky/process-host',
       './src/run-process.ts'
     ),
     'src/packages/process-host/src/run-process.ts':
-      "import { value } from '@orca/byte-buffer'; export { value }; throw Error('source must not execute')",
+      "import { value } from '@quirky/byte-buffer'; export { value }; throw Error('source must not execute')",
     'src/packages/process-host/dist/index.js': 'throw Error("stale output")',
-    'src/packages/byte-buffer/package.json': manifest('@orca/byte-buffer', './src/byte-buffer.ts'),
+    'src/packages/byte-buffer/package.json': manifest(
+      '@quirky/byte-buffer',
+      './src/byte-buffer.ts'
+    ),
     'src/packages/byte-buffer/src/byte-buffer.ts': 'export const value = 1',
-    'src/consumer.test.ts': "import '@orca/process-host'",
-    'src/dynamic.test.ts': "import('@orca/process-host')",
-    'src/require.test.ts': "require('@orca/process-host')",
-    'src/type.test.ts': "import type { value } from '@orca/process-host'",
+    'src/consumer.test.ts': "import '@quirky/process-host'",
+    'src/dynamic.test.ts': "import('@quirky/process-host')",
+    'src/require.test.ts': "require('@quirky/process-host')",
+    'src/type.test.ts': "import type { value } from '@quirky/process-host'",
     'src/unrelated.test.ts': 'export const unrelated = true',
     ...extra
   }
@@ -81,12 +84,12 @@ it('tracks package manifests as inputs to all public consumers', () => {
   }
 })
 
-it.each(['@orca/unknown', '@orca/process-host/private'])(
+it.each(['@quirky/unknown', '@quirky/process-host/private'])(
   'does not silently drop unresolved internal imports: %s',
   (specifier) => {
     expect(() =>
       collectUnitDependencyGraph(fixture({ 'src/consumer.test.ts': `import '${specifier}'` }))
-    ).toThrow('No public orca-source export')
+    ).toThrow('No public quirky-source export')
   }
 )
 
@@ -94,7 +97,7 @@ it.each([
   [
     'an assigned native loader',
     'src/main/windows-native-registry.ts',
-    "import { createRequire } from 'node:module'; const requireFromMain = createRequire(__filename); export const loadWindowsNativeRegistry = () => requireFromMain('@orca/windows-registry')",
+    "import { createRequire } from 'node:module'; const requireFromMain = createRequire(__filename); export const loadWindowsNativeRegistry = () => requireFromMain('@quirky/windows-registry')",
     'src/main/windows-registry-addon.test.ts',
     "import { loadWindowsNativeRegistry } from './windows-native-registry'"
   ],

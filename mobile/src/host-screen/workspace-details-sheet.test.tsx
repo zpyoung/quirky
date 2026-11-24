@@ -41,7 +41,7 @@ function render(overrides: Partial<Worktree>) {
   const row: Worktree = {
     worktreeId: 'repo::/src/app',
     repoId: 'repo',
-    repo: 'orca',
+    repo: 'quirky',
     branch: 'refs/heads/feat/x',
     displayName: 'jira-sync',
     path: '/src/app',
@@ -125,6 +125,6 @@ describe('the long-press details sheet', () => {
     act(() => renderer?.unmount())
     expect(texts(render({ automationCreated: true }).root)[2]).toBe('Created by automation')
     act(() => renderer?.unmount())
-    expect(texts(render({ cliCreated: true }).root)[2]).toBe('Created from Orca CLI')
+    expect(texts(render({ cliCreated: true }).root)[2]).toBe('Created from Quirky CLI')
   })
 })

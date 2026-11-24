@@ -1,5 +1,5 @@
 import type { WaitBlockedCheckState } from '../../wait-blocked-check-state'
-import { OrcaRuntimeWithStopRequestedPtyIds } from '../../construction/runtime-service-state'
+import { QuirkyRuntimeWithStopRequestedPtyIds } from '../../construction/runtime-service-state'
 import { RuntimeSubscriptionRegistry } from '../../runtime-subscription-registry'
 import { RuntimeMobileNotificationController } from '../../runtime-mobile-notification-controller'
 import type {
@@ -15,7 +15,7 @@ import type { createAgentStatusOscProcessor } from '../../../../shared/agent-sta
 import { RuntimeTerminalViewSubscribers } from '../../runtime-terminal-view-subscribers'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 
-export abstract class OrcaRuntimeWithFitOverrideListeners extends OrcaRuntimeWithStopRequestedPtyIds {
+export abstract class QuirkyRuntimeWithFitOverrideListeners extends QuirkyRuntimeWithStopRequestedPtyIds {
   protected abstract notifyRemoteTerminalViewPresenceChanged(ptyId: string): void
 
   // Why: mobile clients need to know when the desktop restores a terminal

@@ -600,7 +600,7 @@ describe('captureRemoteCliBrowserRevocation guest routing', () => {
 describe('isHostReachableDocument', () => {
   it('refuses a page showing a desktop file, even in a routed tab', () => {
     expect(isHostReachableDocument('file:///Users/me/.ssh/id_ed25519')).toBe(false)
-    expect(isHostReachableDocument('orca-doc://preview')).toBe(false)
+    expect(isHostReachableDocument('quirky-doc://preview')).toBe(false)
     expect(isHostReachableDocument('chrome://settings')).toBe(false)
   })
 

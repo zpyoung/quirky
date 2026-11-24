@@ -9,21 +9,21 @@ import { WORK_ITEM_LINK_QUERY_MAX_BYTES } from './work-item-link-query-bounds'
 
 describe('buildGitHubRepoUrl', () => {
   it('builds a GitHub repository URL from an owner/repo slug', () => {
-    expect(buildGitHubRepoUrl({ owner: 'stablyai', repo: 'orca' })).toBe(
+    expect(buildGitHubRepoUrl({ owner: 'stablyai', repo: 'quirky' })).toBe(
       'https://github.com/stablyai/orca'
     )
   })
 
   it('encodes path segments', () => {
-    expect(buildGitHubRepoUrl({ owner: 'stably ai', repo: 'orca/tools' })).toBe(
-      'https://github.com/stably%20ai/orca%2Ftools'
+    expect(buildGitHubRepoUrl({ owner: 'stably ai', repo: 'quirky/tools' })).toBe(
+      'https://github.com/stably%20ai/quirky%2Ftools'
     )
   })
 
   it('links hosted slugs to their GitHub Enterprise server', () => {
-    expect(buildGitHubRepoUrl({ owner: 'team', repo: 'orca', host: 'github.acme-corp.com' })).toBe(
-      'https://github.acme-corp.com/team/orca'
-    )
+    expect(
+      buildGitHubRepoUrl({ owner: 'team', repo: 'quirky', host: 'github.acme-corp.com' })
+    ).toBe('https://github.acme-corp.com/team/quirky')
   })
 })
 
@@ -72,7 +72,7 @@ describe('parseGitHubIssueOrPRNumber', () => {
 describe('parseGitHubIssueOrPRLink', () => {
   it('parses slug, number, and type for direct item URLs', () => {
     expect(parseGitHubIssueOrPRLink('https://github.com/stablyai/orca/pull/123')).toEqual({
-      slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+      slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
       number: 123,
       type: 'pr'
     })
@@ -91,7 +91,7 @@ describe('parseGitHubIssueOrPRLink', () => {
       type: 'pr'
     })
     expect(parseGitHubIssueOrPRLink('https://github.com/stablyai/orca/issues/923')).toEqual({
-      slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+      slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
       number: 923,
       type: 'issue'
     })
@@ -141,7 +141,7 @@ describe('normalizeGitHubLinkQuery', () => {
       query: 'https://github.com/stablyai/orca/issues/923',
       directNumber: 923,
       directLink: {
-        slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+        slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
         number: 923,
         type: 'issue'
       }
@@ -153,7 +153,7 @@ describe('normalizeGitHubLinkQuery', () => {
       query: 'https://github.com/stablyai/orca/pull/6934',
       directNumber: 6934,
       directLink: {
-        slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+        slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
         number: 6934,
         type: 'pr'
       }
@@ -165,7 +165,7 @@ describe('normalizeGitHubLinkQuery', () => {
       query: 'HTTPS://github.com/stablyai/orca/pull/6934',
       directNumber: 6934,
       directLink: {
-        slug: { owner: 'stablyai', repo: 'orca', host: 'github.com' },
+        slug: { owner: 'stablyai', repo: 'quirky', host: 'github.com' },
         number: 6934,
         type: 'pr'
       }

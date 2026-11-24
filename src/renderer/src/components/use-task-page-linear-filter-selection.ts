@@ -18,7 +18,7 @@ import { buildLinearIssueWorkspaceAttachmentIndex } from '@/lib/linear-issue-wor
 import {
   collectLinkedLinearIssueRefsFromWorktrees,
   linkedLinearIssueRefsSignature
-} from '@/components/task-page-linear-in-orca-issues'
+} from '@/components/task-page-linear-in-quirky-issues'
 export function useTaskPageLinearFilterSelection(model: TaskPageLinearListSelectionPreludeModel) {
   const {
     allWorktrees,
@@ -116,7 +116,7 @@ export function useTaskPageLinearFilterSelection(model: TaskPageLinearListSelect
     () => buildLinearIssueWorkspaceAttachmentIndex(linearAttachmentWorkspaces),
     [linearAttachmentWorkspaces]
   )
-  const inOrcaLinkedLinearRefs = useMemo(
+  const inQuirkyLinkedLinearRefs = useMemo(
     () =>
       collectLinkedLinearIssueRefsFromWorktrees(linearAttachmentWorkspaces, {
         workspaceId: selectedLinearWorkspaceId,
@@ -124,15 +124,15 @@ export function useTaskPageLinearFilterSelection(model: TaskPageLinearListSelect
       }),
     [linearAttachmentWorkspaces, linearStatus.workspaces, selectedLinearWorkspaceId]
   )
-  const inOrcaLinkedLinearRefsSignature = useMemo(
-    () => linkedLinearIssueRefsSignature(inOrcaLinkedLinearRefs),
-    [inOrcaLinkedLinearRefs]
+  const inQuirkyLinkedLinearRefsSignature = useMemo(
+    () => linkedLinearIssueRefsSignature(inQuirkyLinkedLinearRefs),
+    [inQuirkyLinkedLinearRefs]
   )
-  const inOrcaLinkedLinearRefsRef = useRef(inOrcaLinkedLinearRefs)
-  // Keep latest linked refs for the in-orca loader without re-running it on identity churn.
+  const inQuirkyLinkedLinearRefsRef = useRef(inQuirkyLinkedLinearRefs)
+  // Keep latest linked refs for the in-quirky loader without re-running it on identity churn.
   useEffect(() => {
-    inOrcaLinkedLinearRefsRef.current = inOrcaLinkedLinearRefs
-  }, [inOrcaLinkedLinearRefs])
+    inQuirkyLinkedLinearRefsRef.current = inQuirkyLinkedLinearRefs
+  }, [inQuirkyLinkedLinearRefs])
   const nextModel = model as typeof model & {
     linearAttributePrimaryTeam: typeof linearAttributePrimaryTeam
     applyLinearAttributeFilter: typeof applyLinearAttributeFilter
@@ -140,9 +140,9 @@ export function useTaskPageLinearFilterSelection(model: TaskPageLinearListSelect
     showLinearAttributeFilters: typeof showLinearAttributeFilters
     linearAttachmentWorkspaces: typeof linearAttachmentWorkspaces
     linearIssueAttachmentIndex: typeof linearIssueAttachmentIndex
-    inOrcaLinkedLinearRefs: typeof inOrcaLinkedLinearRefs
-    inOrcaLinkedLinearRefsSignature: typeof inOrcaLinkedLinearRefsSignature
-    inOrcaLinkedLinearRefsRef: typeof inOrcaLinkedLinearRefsRef
+    inQuirkyLinkedLinearRefs: typeof inQuirkyLinkedLinearRefs
+    inQuirkyLinkedLinearRefsSignature: typeof inQuirkyLinkedLinearRefsSignature
+    inQuirkyLinkedLinearRefsRef: typeof inQuirkyLinkedLinearRefsRef
   }
   nextModel.linearAttributePrimaryTeam = linearAttributePrimaryTeam
   nextModel.applyLinearAttributeFilter = applyLinearAttributeFilter
@@ -150,9 +150,9 @@ export function useTaskPageLinearFilterSelection(model: TaskPageLinearListSelect
   nextModel.showLinearAttributeFilters = showLinearAttributeFilters
   nextModel.linearAttachmentWorkspaces = linearAttachmentWorkspaces
   nextModel.linearIssueAttachmentIndex = linearIssueAttachmentIndex
-  nextModel.inOrcaLinkedLinearRefs = inOrcaLinkedLinearRefs
-  nextModel.inOrcaLinkedLinearRefsSignature = inOrcaLinkedLinearRefsSignature
-  nextModel.inOrcaLinkedLinearRefsRef = inOrcaLinkedLinearRefsRef
+  nextModel.inQuirkyLinkedLinearRefs = inQuirkyLinkedLinearRefs
+  nextModel.inQuirkyLinkedLinearRefsSignature = inQuirkyLinkedLinearRefsSignature
+  nextModel.inQuirkyLinkedLinearRefsRef = inQuirkyLinkedLinearRefsRef
   return nextModel
 }
 export type TaskPageLinearFilterSelectionModel = ReturnType<typeof useTaskPageLinearFilterSelection>

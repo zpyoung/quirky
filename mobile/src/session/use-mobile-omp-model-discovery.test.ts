@@ -38,7 +38,7 @@ function Probe(): null {
   return null
 }
 async function mount(client: Args['client']): Promise<void> {
-  switchCapability = 'orca-model'
+  switchCapability = 'quirky-model'
   args = { client, enabled: true, hostId: 'host-a', worktreeId: 'folder:one' }
   await act(async () => {
     renderer = create(createElement(Probe))

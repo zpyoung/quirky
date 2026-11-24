@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getHostHeaderDetail } from './host-header-detail'
 
-const runtimeRow = { kind: 'runtime', detail: 'Orca server' } as const
+const runtimeRow = { kind: 'runtime', detail: 'Quirky server' } as const
 
 describe('getHostHeaderDetail', () => {
   it('asks for a re-pair when the host revoked this client', () => {

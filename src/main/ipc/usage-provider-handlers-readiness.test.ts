@@ -104,7 +104,7 @@ function nextTurn(): Promise<void> {
 }
 
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-usage-ipc-readiness-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-usage-ipc-readiness-'))
   stores = []
   releasePending = []
   handlers.clear()
@@ -127,7 +127,7 @@ afterEach(async () => {
 it('awaits loading before the first disabled cached snapshot and all historical queries', async () => {
   const cached = historicalState()
   writeFileSync(
-    join(directory, 'orca-claude-usage.json'),
+    join(directory, 'quirky-claude-usage.json'),
     `${JSON.stringify(cached)}${' '.repeat(9 * 1024 * 1024)}`
   )
   const pending = Promise.withResolvers<UsageCacheSplitResult>()

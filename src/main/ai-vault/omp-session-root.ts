@@ -42,7 +42,7 @@ export function resolveOmpSessionsDir(
   const env = options.env ?? process.env
   const home = options.homeDir ?? homedir()
   const platform = options.platform ?? process.platform
-  // Orca's legacy override accepts a sessions root, agent root, or .omp root.
+  // Quirky's legacy override accepts a sessions root, agent root, or .omp root.
   if (env.OMP_CODING_AGENT_DIR?.trim()) {
     return safeRoot(normalizeAgentSessionsDir(env.OMP_CODING_AGENT_DIR, '.omp'))
   }

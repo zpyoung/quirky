@@ -10,7 +10,7 @@ import { RUNTIME_CAPABILITIES } from '../../../../../shared/protocol-version'
 import { LoopDatabase } from '../../../../fork-loops/loop-database'
 import { LoopService } from '../../../../fork-loops/loop-service'
 import { LoopStore } from '../../../../fork-loops/loop-store'
-import { OrcaRuntimeService } from '../../../orca-runtime'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
 import { eraseRpcMethods, type RpcContext } from '../../core'
 import { mapRuntimeError } from '../../errors'
 import { ALL_RPC_METHODS } from '../index'
@@ -97,7 +97,7 @@ function createHarness() {
     },
     notify: vi.fn()
   })
-  const runtime = new OrcaRuntimeService()
+  const runtime = new QuirkyRuntimeService()
   bindLoopService(runtime, service)
   store.insertLoop({
     id: 'loop-seed',
@@ -211,7 +211,7 @@ describe('loops RPC params', () => {
 
 describe('loops RPC handlers', () => {
   it('reports an unbound runtime as loop_runtime_unavailable for every method', async () => {
-    const ctx: RpcContext = { runtime: new OrcaRuntimeService() }
+    const ctx: RpcContext = { runtime: new QuirkyRuntimeService() }
 
     for (const [name, params] of Object.entries(VALID_PARAMS)) {
       await expect(call(name, params, ctx), name).rejects.toMatchObject({

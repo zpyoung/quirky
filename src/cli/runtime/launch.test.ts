@@ -24,8 +24,8 @@ vi.mock('child_process', () => ({
   spawnSync: spawnSyncMock
 }))
 
-import { launchOrcaApp, serveOrcaApp } from './launch'
-import { getExecutableAppArgs, stripElectronRunAsNode } from './orca-app-executable'
+import { launchQuirkyApp, serveQuirkyApp } from './launch'
+import { getExecutableAppArgs, stripElectronRunAsNode } from './quirky-app-executable'
 
 class FakeChildProcess extends EventEmitter {
   stdout = new EventEmitter()
@@ -44,7 +44,7 @@ const RECIPE_JSON = JSON.stringify({
   }),
   projectRoot: '/workspace/repo'
 })
-const SERVE_INSTALL_STATUS = '[serve] orca CLI install: installed'
+const SERVE_INSTALL_STATUS = '[serve] quirky CLI install: installed'
 const SSH_PRIVATE_KEY = 'TOP-SECRET-PRIVATE-KEY'
 const SSH_AUTHORIZATION = 'Bearer TOP-SECRET-AUTHORIZATION'
 const SSH_PASSPHRASE = 'TOP-SECRET-PASSPHRASE'
@@ -88,7 +88,7 @@ function restoreEnv(key: string, value: string | undefined): void {
 function firstServeSpawnArgs(): string[] {
   const args: unknown = spawnMock.mock.calls[0]?.[1]
   if (!Array.isArray(args)) {
-    throw new Error('orca serve did not spawn its server')
+    throw new Error('quirky serve did not spawn its server')
   }
   return args.map(String)
 }
@@ -98,43 +98,43 @@ function startRecipeJsonServer() {
   spawnMock.mockReturnValue(child)
   const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
   const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-  const result = serveOrcaApp({
+  const result = serveQuirkyApp({
     recipeJson: true,
     projectRoot: '/workspace/repo'
   })
   return { child, result, stdoutSpy, stderrSpy }
 }
 
-describe('serveOrcaApp', () => {
+describe('serveQuirkyApp', () => {
   const temporaryDirectories: string[] = []
 
   beforeEach(() => {
     spawnMock.mockReset()
     spawnSyncMock.mockReset()
-    process.env.ORCA_APP_EXECUTABLE = '/Applications/Orca.app/Contents/MacOS/Orca'
-    // These cover Electron serve itself; the orcad default is in launch-serve-runtime.test.ts.
-    process.env.ORCA_SERVE_RUNTIME = 'electron'
-    process.env.ORCA_USER_DATA_PATH = PROFILE
+    process.env.QUIRKY_APP_EXECUTABLE = '/Applications/Quirky.app/Contents/MacOS/Quirky'
+    // These cover Electron serve itself; the quirkyd default is in launch-serve-runtime.test.ts.
+    process.env.QUIRKY_SERVE_RUNTIME = 'electron'
+    process.env.QUIRKY_USER_DATA_PATH = PROFILE
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    delete process.env.ORCA_SERVE_RUNTIME
-    delete process.env.ORCA_APP_EXECUTABLE
-    delete process.env.ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_SERVE_RUNTIME
+    delete process.env.QUIRKY_APP_EXECUTABLE
+    delete process.env.QUIRKY_APP_EXECUTABLE_NEEDS_APP_ROOT
+    delete process.env.QUIRKY_USER_DATA_PATH
     return Promise.all(
       temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))
     )
   })
 
-  it('names what to run when this orca is not an Orca app (an SSH host server CLI)', () => {
-    delete process.env.ORCA_APP_EXECUTABLE
+  it('names what to run when this quirky is not an Quirky app (an SSH host server CLI)', () => {
+    delete process.env.QUIRKY_APP_EXECUTABLE
     const previous = process.env.ELECTRON_RUN_AS_NODE
     delete process.env.ELECTRON_RUN_AS_NODE
     try {
-      expect(() => serveOrcaApp({ supervise: true })).toThrow(
-        /Install the Orca app on this machine/
+      expect(() => serveQuirkyApp({ supervise: true })).toThrow(
+        /Install the Quirky app on this machine/
       )
       expect(spawnMock).not.toHaveBeenCalled()
     } finally {
@@ -143,9 +143,9 @@ describe('serveOrcaApp', () => {
   })
 
   it('launches an isolated profile with the keychain mocked, so serve is not blocked on it', async () => {
-    const previousUserData = process.env.ORCA_E2E_USER_DATA_DIR
-    const previousHome = process.env.ORCA_E2E_HOME_DIR
-    process.env.ORCA_E2E_USER_DATA_DIR = '/tmp/orca-e2e-profile'
+    const previousUserData = process.env.QUIRKY_E2E_USER_DATA_DIR
+    const previousHome = process.env.QUIRKY_E2E_HOME_DIR
+    process.env.QUIRKY_E2E_USER_DATA_DIR = '/tmp/quirky-e2e-profile'
     try {
       const { child, result } = startRecipeJsonServer()
       queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
@@ -156,16 +156,16 @@ describe('serveOrcaApp', () => {
         expect.arrayContaining(['--password-store=basic', '--use-mock-keychain'])
       )
     } finally {
-      restoreEnv('ORCA_E2E_USER_DATA_DIR', previousUserData)
-      restoreEnv('ORCA_E2E_HOME_DIR', previousHome)
+      restoreEnv('QUIRKY_E2E_USER_DATA_DIR', previousUserData)
+      restoreEnv('QUIRKY_E2E_HOME_DIR', previousHome)
     }
   })
 
   it('keeps the real keychain when only HOME is overridden', async () => {
-    const previousUserData = process.env.ORCA_E2E_USER_DATA_DIR
-    const previousHome = process.env.ORCA_E2E_HOME_DIR
-    delete process.env.ORCA_E2E_USER_DATA_DIR
-    process.env.ORCA_E2E_HOME_DIR = '/tmp/orca-e2e-home-only'
+    const previousUserData = process.env.QUIRKY_E2E_USER_DATA_DIR
+    const previousHome = process.env.QUIRKY_E2E_HOME_DIR
+    delete process.env.QUIRKY_E2E_USER_DATA_DIR
+    process.env.QUIRKY_E2E_HOME_DIR = '/tmp/quirky-e2e-home-only'
     try {
       const { child, result } = startRecipeJsonServer()
       queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
@@ -175,16 +175,16 @@ describe('serveOrcaApp', () => {
       expect(args).not.toContain('--use-mock-keychain')
       expect(args).not.toContain('--password-store=basic')
     } finally {
-      restoreEnv('ORCA_E2E_USER_DATA_DIR', previousUserData)
-      restoreEnv('ORCA_E2E_HOME_DIR', previousHome)
+      restoreEnv('QUIRKY_E2E_USER_DATA_DIR', previousUserData)
+      restoreEnv('QUIRKY_E2E_HOME_DIR', previousHome)
     }
   })
 
   it('leaves a normal profile on the real keychain', async () => {
-    const previousUserData = process.env.ORCA_E2E_USER_DATA_DIR
-    const previousHome = process.env.ORCA_E2E_HOME_DIR
-    delete process.env.ORCA_E2E_USER_DATA_DIR
-    delete process.env.ORCA_E2E_HOME_DIR
+    const previousUserData = process.env.QUIRKY_E2E_USER_DATA_DIR
+    const previousHome = process.env.QUIRKY_E2E_HOME_DIR
+    delete process.env.QUIRKY_E2E_USER_DATA_DIR
+    delete process.env.QUIRKY_E2E_HOME_DIR
     try {
       const { child, result } = startRecipeJsonServer()
       queueMicrotask(() => child.stdout.emit('data', `${RECIPE_JSON}\n`))
@@ -194,18 +194,18 @@ describe('serveOrcaApp', () => {
       expect(args).not.toContain('--use-mock-keychain')
       expect(args).not.toContain('--password-store=basic')
     } finally {
-      restoreEnv('ORCA_E2E_USER_DATA_DIR', previousUserData)
-      restoreEnv('ORCA_E2E_HOME_DIR', previousHome)
+      restoreEnv('QUIRKY_E2E_USER_DATA_DIR', previousUserData)
+      restoreEnv('QUIRKY_E2E_HOME_DIR', previousHome)
     }
   })
 
   it.runIf(process.platform === 'darwin')(
     'keeps the serve supervisor alive until the installed target version can take ownership',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-serve-update-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-serve-update-'))
       temporaryDirectories.push(root)
-      const appPath = join(root, 'Orca.app')
-      const executable = join(appPath, 'Contents', 'MacOS', 'Orca')
+      const appPath = join(root, 'Quirky.app')
+      const executable = join(appPath, 'Contents', 'MacOS', 'Quirky')
       const infoPlistPath = join(appPath, 'Contents', 'Info.plist')
       const userDataPath = join(root, 'user-data')
       await mkdir(join(appPath, 'Contents', 'MacOS'), { recursive: true })
@@ -214,20 +214,20 @@ describe('serveOrcaApp', () => {
         infoPlistPath,
         '<plist><dict><key>CFBundleShortVersionString</key><string>1.0.51</string></dict></plist>'
       )
-      process.env.ORCA_APP_EXECUTABLE = executable
-      process.env.ORCA_USER_DATA_PATH = userDataPath
+      process.env.QUIRKY_APP_EXECUTABLE = executable
+      process.env.QUIRKY_USER_DATA_PATH = userDataPath
 
       const oldOwner = new FakeChildProcess()
       const replacementOwner = new FakeChildProcess()
       replacementOwner.pid = 4102
       spawnMock.mockReturnValueOnce(oldOwner).mockReturnValueOnce(replacementOwner)
       let supervisorExited = false
-      const supervisor = serveOrcaApp({ json: true }).then((code) => {
+      const supervisor = serveQuirkyApp({ json: true }).then((code) => {
         supervisorExited = true
         return code
       })
       const childEnv = spawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv | undefined
-      const handoffPath = childEnv?.ORCA_SERVE_UPDATE_HANDOFF_PATH
+      const handoffPath = childEnv?.QUIRKY_SERVE_UPDATE_HANDOFF_PATH
       expect(handoffPath).toBeTruthy()
       await writeFile(
         handoffPath!,
@@ -256,7 +256,7 @@ describe('serveOrcaApp', () => {
       await rename(updateAppPath, appPath)
       await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledTimes(2))
       replacementOwner.emit('message', {
-        type: 'orca:serve-ready',
+        type: 'quirky:serve-ready',
         version: '1.0.61',
         runtimeId: 'runtime-new'
       })
@@ -271,10 +271,10 @@ describe('serveOrcaApp', () => {
   it.runIf(process.platform === 'darwin')(
     'records a replacement version mismatch without starting a retry loop',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-serve-update-mismatch-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-serve-update-mismatch-'))
       temporaryDirectories.push(root)
-      const appPath = join(root, 'Orca.app')
-      const executable = join(appPath, 'Contents', 'MacOS', 'Orca')
+      const appPath = join(root, 'Quirky.app')
+      const executable = join(appPath, 'Contents', 'MacOS', 'Quirky')
       const userDataPath = join(root, 'user-data')
       await mkdir(join(appPath, 'Contents', 'MacOS'), { recursive: true })
       await mkdir(userDataPath, { recursive: true })
@@ -293,17 +293,17 @@ describe('serveOrcaApp', () => {
           servingPid: 4101
         })
       )
-      process.env.ORCA_APP_EXECUTABLE = executable
-      process.env.ORCA_USER_DATA_PATH = userDataPath
+      process.env.QUIRKY_APP_EXECUTABLE = executable
+      process.env.QUIRKY_USER_DATA_PATH = userDataPath
       const replacementOwner = new FakeChildProcess()
       replacementOwner.pid = 4102
       spawnMock.mockReturnValue(replacementOwner)
       vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-      const supervisor = serveOrcaApp({ json: true })
+      const supervisor = serveQuirkyApp({ json: true })
       await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledOnce())
       replacementOwner.emit('message', {
-        type: 'orca:serve-ready',
+        type: 'quirky:serve-ready',
         version: '1.0.51',
         runtimeId: 'runtime-old'
       })
@@ -325,10 +325,10 @@ describe('serveOrcaApp', () => {
   it.runIf(process.platform === 'darwin')(
     'records replacement spawn failure before rejecting without a retry loop',
     async () => {
-      const root = await mkdtemp(join(tmpdir(), 'orca-serve-update-spawn-failure-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-serve-update-spawn-failure-'))
       temporaryDirectories.push(root)
-      const appPath = join(root, 'Orca.app')
-      const executable = join(appPath, 'Contents', 'MacOS', 'Orca')
+      const appPath = join(root, 'Quirky.app')
+      const executable = join(appPath, 'Contents', 'MacOS', 'Quirky')
       const userDataPath = join(root, 'user-data')
       await mkdir(join(appPath, 'Contents', 'MacOS'), { recursive: true })
       await mkdir(userDataPath, { recursive: true })
@@ -347,13 +347,13 @@ describe('serveOrcaApp', () => {
           servingPid: 4101
         })
       )
-      process.env.ORCA_APP_EXECUTABLE = executable
-      process.env.ORCA_USER_DATA_PATH = userDataPath
+      process.env.QUIRKY_APP_EXECUTABLE = executable
+      process.env.QUIRKY_USER_DATA_PATH = userDataPath
       const replacementOwner = new FakeChildProcess()
       spawnMock.mockReturnValue(replacementOwner)
       vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
-      const supervisor = serveOrcaApp({ json: true })
+      const supervisor = serveQuirkyApp({ json: true })
       await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledOnce())
       replacementOwner.emit('error', new Error('spawn ENOENT'))
 
@@ -373,10 +373,10 @@ describe('serveOrcaApp', () => {
     'fails a replacement that never reports runtime readiness without retrying it',
     async () => {
       vi.useFakeTimers()
-      const root = await mkdtemp(join(tmpdir(), 'orca-serve-update-no-readiness-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-serve-update-no-readiness-'))
       temporaryDirectories.push(root)
-      const appPath = join(root, 'Orca.app')
-      const executable = join(appPath, 'Contents', 'MacOS', 'Orca')
+      const appPath = join(root, 'Quirky.app')
+      const executable = join(appPath, 'Contents', 'MacOS', 'Quirky')
       const userDataPath = join(root, 'user-data')
       await mkdir(join(appPath, 'Contents', 'MacOS'), { recursive: true })
       await mkdir(userDataPath, { recursive: true })
@@ -395,14 +395,14 @@ describe('serveOrcaApp', () => {
           servingPid: 4101
         })
       )
-      process.env.ORCA_APP_EXECUTABLE = executable
-      process.env.ORCA_USER_DATA_PATH = userDataPath
+      process.env.QUIRKY_APP_EXECUTABLE = executable
+      process.env.QUIRKY_USER_DATA_PATH = userDataPath
       const replacementOwner = new FakeChildProcess()
       spawnMock.mockReturnValue(replacementOwner)
       vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
 
       try {
-        const supervisor = serveOrcaApp({ json: true })
+        const supervisor = serveQuirkyApp({ json: true })
         await vi.waitFor(() => expect(spawnMock).toHaveBeenCalledOnce())
 
         await vi.advanceTimersByTimeAsync(SERVE_REPLACEMENT_READY_TIMEOUT_MS)
@@ -439,10 +439,10 @@ describe('serveOrcaApp', () => {
     }
     spawnMock.mockReturnValue(child)
 
-    await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+    await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
 
     expect(spawnMock).toHaveBeenCalledWith(
-      '/Applications/Orca.app/Contents/MacOS/Orca',
+      '/Applications/Quirky.app/Contents/MacOS/Quirky',
       [PIN_PROFILE, '--serve', '--serve-json', ...HOST_SERVE_OZONE_SWITCHES],
       expect.objectContaining({
         cwd: resolve(__dirname, '../../..')
@@ -465,7 +465,7 @@ describe('serveOrcaApp', () => {
     spawnMock.mockReturnValue(child)
 
     await expect(
-      serveOrcaApp({
+      serveQuirkyApp({
         json: true,
         port: '6768',
         pairingAddress: '100.64.1.20',
@@ -474,7 +474,7 @@ describe('serveOrcaApp', () => {
     ).resolves.toBe(0)
 
     expect(spawnMock).toHaveBeenCalledWith(
-      '/Applications/Orca.app/Contents/MacOS/Orca',
+      '/Applications/Quirky.app/Contents/MacOS/Quirky',
       [
         PIN_PROFILE,
         '--serve',
@@ -493,8 +493,8 @@ describe('serveOrcaApp', () => {
   })
 
   it('passes the app root before serve flags for dev Electron executables', async () => {
-    process.env.ORCA_APP_EXECUTABLE = '/repo/node_modules/.bin/electron'
-    process.env.ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT = '1'
+    process.env.QUIRKY_APP_EXECUTABLE = '/repo/node_modules/.bin/electron'
+    process.env.QUIRKY_APP_EXECUTABLE_NEEDS_APP_ROOT = '1'
     const child = {
       kill: vi.fn(),
       once: vi.fn(
@@ -508,7 +508,7 @@ describe('serveOrcaApp', () => {
     }
     spawnMock.mockReturnValue(child)
 
-    await expect(serveOrcaApp({ json: true, port: '6768' })).resolves.toBe(0)
+    await expect(serveQuirkyApp({ json: true, port: '6768' })).resolves.toBe(0)
 
     expect(spawnMock).toHaveBeenCalledWith(
       '/repo/node_modules/.bin/electron',
@@ -528,12 +528,12 @@ describe('serveOrcaApp', () => {
   })
 
   it("re-applies a direct launch's --no-sandbox to the Electron it starts, not to terminals", () => {
-    process.env.ORCA_ELECTRON_NO_SANDBOX = '1'
+    process.env.QUIRKY_ELECTRON_NO_SANDBOX = '1'
     try {
-      expect(getExecutableAppArgs('/opt/Orca/orca-ide')).toEqual(['--no-sandbox'])
-      expect(stripElectronRunAsNode(process.env)).not.toHaveProperty('ORCA_ELECTRON_NO_SANDBOX')
+      expect(getExecutableAppArgs('/opt/Quirky/quirky-ide')).toEqual(['--no-sandbox'])
+      expect(stripElectronRunAsNode(process.env)).not.toHaveProperty('QUIRKY_ELECTRON_NO_SANDBOX')
     } finally {
-      delete process.env.ORCA_ELECTRON_NO_SANDBOX
+      delete process.env.QUIRKY_ELECTRON_NO_SANDBOX
     }
   })
 
@@ -558,11 +558,11 @@ describe('serveOrcaApp', () => {
     async ({ result: userNamespaceResult, expectedPrefix }) => {
       const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
       const getuidDescriptor = Object.getOwnPropertyDescriptor(process, 'getuid')
-      const root = await mkdtemp(join(tmpdir(), 'orca-extracted-appimage-'))
+      const root = await mkdtemp(join(tmpdir(), 'quirky-extracted-appimage-'))
       temporaryDirectories.push(root)
-      const executable = join(root, 'orca-ide')
+      const executable = join(root, 'quirky-ide')
       await writeFile(join(root, 'AppRun'), '', { mode: 0o755 })
-      process.env.ORCA_APP_EXECUTABLE = executable
+      process.env.QUIRKY_APP_EXECUTABLE = executable
       Object.defineProperty(process, 'platform', { value: 'linux' })
       Object.defineProperty(process, 'getuid', { configurable: true, value: () => 1000 })
       spawnSyncMock.mockReturnValue(userNamespaceResult)
@@ -570,7 +570,7 @@ describe('serveOrcaApp', () => {
       spawnMock.mockReturnValue(child)
 
       try {
-        const result = serveOrcaApp({ json: true })
+        const result = serveQuirkyApp({ json: true })
         queueMicrotask(() => child.emit('exit', 0, null))
         await expect(result).resolves.toBe(0)
         expect(spawnSyncMock).toHaveBeenCalledWith(
@@ -602,7 +602,7 @@ describe('serveOrcaApp', () => {
     spawnMock.mockReturnValue(child)
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    const result = serveOrcaApp({
+    const result = serveQuirkyApp({
       pairingAddress: 'wss://sandbox.example.com',
       recipeJson: true,
       projectRoot: '/workspace/repo'
@@ -614,7 +614,7 @@ describe('serveOrcaApp', () => {
     await expect(result).resolves.toBe(0)
 
     expect(spawnMock).toHaveBeenCalledWith(
-      '/Applications/Orca.app/Contents/MacOS/Orca',
+      '/Applications/Quirky.app/Contents/MacOS/Quirky',
       [
         PIN_PROFILE,
         '--serve',
@@ -678,9 +678,9 @@ describe('serveOrcaApp', () => {
     const { child, result, stdoutSpy, stderrSpy } = startRecipeJsonServer()
     const secrets = ['UPPER-SECRET', 'SLASH-SECRET', 'LEGACY-SECRET', 'PRIVATE-SECRET']
     const untrustedLines = [
-      'ORCA://pair?code=UPPER-SECRET',
-      'orca://pair/?code=SLASH-SECRET',
-      'orca://pair#LEGACY-SECRET',
+      'QUIRKY://pair?code=UPPER-SECRET',
+      'quirky://pair/?code=SLASH-SECRET',
+      'quirky://pair#LEGACY-SECRET',
       '"embedded privateKey PRIVATE-SECRET"',
       '{privateKey:"PRIVATE-SECRET"}'
     ].join('\n')
@@ -692,7 +692,7 @@ describe('serveOrcaApp', () => {
 
     await expect(result).rejects.toMatchObject({
       code: 'runtime_serve_failed',
-      message: 'Orca serve exited before printing valid recipe JSON with code 0.'
+      message: 'Quirky serve exited before printing valid recipe JSON with code 0.'
     })
     expect(stdoutSpy).not.toHaveBeenCalled()
     expect(stderrSpy).toHaveBeenCalledTimes(5)
@@ -720,7 +720,7 @@ describe('serveOrcaApp', () => {
   it('runs a Windows command-shim Electron executable through cmd.exe without a raw shell', async () => {
     const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
     Object.defineProperty(process, 'platform', { value: 'win32' })
-    process.env.ORCA_APP_EXECUTABLE = 'C:\\repo\\node_modules\\.bin\\electron.cmd'
+    process.env.QUIRKY_APP_EXECUTABLE = 'C:\\repo\\node_modules\\.bin\\electron.cmd'
     const child = {
       kill: vi.fn(),
       once: vi.fn(
@@ -735,7 +735,7 @@ describe('serveOrcaApp', () => {
     spawnMock.mockReturnValue(child)
 
     try {
-      await expect(serveOrcaApp({ json: true })).resolves.toBe(0)
+      await expect(serveQuirkyApp({ json: true })).resolves.toBe(0)
       const [program, [commandLine], options] = spawnMock.mock.calls[0]
       expect(program).toMatch(/cmd\.exe$/i)
       expect(commandLine).toContain('C:\\repo\\node_modules\\.bin\\electron.cmd')
@@ -751,26 +751,26 @@ describe('serveOrcaApp', () => {
   })
 })
 
-describe('launchOrcaApp', () => {
+describe('launchQuirkyApp', () => {
   beforeEach(() => {
     spawnMock.mockReset()
     spawnSyncMock.mockReset()
-    process.env.ORCA_USER_DATA_PATH = PROFILE
+    process.env.QUIRKY_USER_DATA_PATH = PROFILE
   })
 
   afterEach(() => {
-    delete process.env.ORCA_USER_DATA_PATH
-    delete process.env.ORCA_OPEN_COMMAND
-    delete process.env.ORCA_APP_EXECUTABLE
-    delete process.env.ORCA_APP_EXECUTABLE_NEEDS_APP_ROOT
+    delete process.env.QUIRKY_USER_DATA_PATH
+    delete process.env.QUIRKY_OPEN_COMMAND
+    delete process.env.QUIRKY_APP_EXECUTABLE
+    delete process.env.QUIRKY_APP_EXECUTABLE_NEEDS_APP_ROOT
   })
 
   it('handles asynchronous detached spawn errors without throwing', async () => {
-    process.env.ORCA_APP_EXECUTABLE = '/missing/Orca'
+    process.env.QUIRKY_APP_EXECUTABLE = '/missing/Quirky'
     const child = new FakeChildProcess()
     spawnMock.mockReturnValue(child)
 
-    launchOrcaApp()
+    launchQuirkyApp()
     child.emit('error', new Error('ENOENT'))
     await Promise.resolve()
 
@@ -780,12 +780,12 @@ describe('launchOrcaApp', () => {
   it('adds the extracted-AppImage sandbox fallback for open launches', async () => {
     const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
     const getuidDescriptor = Object.getOwnPropertyDescriptor(process, 'getuid')
-    const root = await mkdtemp(join(tmpdir(), 'orca-open-extracted-appimage-'))
-    const executable = join(root, 'orca-ide')
+    const root = await mkdtemp(join(tmpdir(), 'quirky-open-extracted-appimage-'))
+    const executable = join(root, 'quirky-ide')
 
     try {
       await writeFile(join(root, 'AppRun'), '')
-      process.env.ORCA_APP_EXECUTABLE = executable
+      process.env.QUIRKY_APP_EXECUTABLE = executable
       process.env.ELECTRON_RUN_AS_NODE = '1'
       Object.defineProperty(process, 'platform', { configurable: true, value: 'linux' })
       Object.defineProperty(process, 'getuid', { configurable: true, value: () => 1000 })
@@ -793,7 +793,7 @@ describe('launchOrcaApp', () => {
       const child = new FakeChildProcess()
       spawnMock.mockReturnValue(child)
 
-      launchOrcaApp()
+      launchQuirkyApp()
 
       expect(spawnSyncMock).toHaveBeenCalledWith(
         'unshare',

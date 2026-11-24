@@ -1,6 +1,6 @@
 import '../unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { RpcDispatcher } from '../dispatcher'
 import { WORKTREE_METHODS } from './worktree'
 import { WORKTREE_VISIBILITY_SOURCE_DEFAULTS_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
@@ -25,7 +25,7 @@ function runtimeReturning(...results: RuntimeWorktreePsResult[]) {
     getWorktreePs.mockResolvedValueOnce(result)
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: worktree.ps reads only these two runtime members.
-  return { getRuntimeId: () => 'test-runtime', getWorktreePs } as unknown as OrcaRuntimeService
+  return { getRuntimeId: () => 'test-runtime', getWorktreePs } as unknown as QuirkyRuntimeService
 }
 
 describe('worktree.ps catalog snapshots', () => {

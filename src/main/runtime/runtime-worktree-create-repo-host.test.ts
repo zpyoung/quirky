@@ -6,7 +6,7 @@ import type { RpcContext, RpcRequest } from './rpc/core'
 import { REPO_METHODS } from './rpc/methods/repo'
 import { WORKTREE_METHODS } from './rpc/methods/worktree'
 import { agentLaunchWorkspaceFactory } from './rpc/methods/agent-launch-worktree-creation'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 // Why twins: a project copied between hosts keeps its repo id (Codex review 6 #6).
 const REPOS: Repo[] = [
@@ -30,9 +30,9 @@ const REPOS: Repo[] = [
   }
 ]
 
-function createRuntime(): OrcaRuntimeService {
+function createRuntime(): QuirkyRuntimeService {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these paths stop right after repo resolution, which reads only these store methods.
-  return new OrcaRuntimeService({
+  return new QuirkyRuntimeService({
     getRepos: () => REPOS,
     getRepo: (id: string) => REPOS.find((repo) => repo.id === id) ?? null,
     getAllWorktreeMeta: () => ({}),
@@ -48,7 +48,7 @@ function stopAtResolvedProject() {
   return vi
     .spyOn(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: spies on the private step that receives the resolved repo; it exists on the prototype.
-      OrcaRuntimeService.prototype as unknown as {
+      QuirkyRuntimeService.prototype as unknown as {
         createInResolvedProject: (args: unknown, repo: Repo) => Promise<never>
       },
       'createInResolvedProject'

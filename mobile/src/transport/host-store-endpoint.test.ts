@@ -58,7 +58,7 @@ describe('updateHostNameAndEndpoint', () => {
   function writtenHosts(): unknown {
     expect(AsyncStorage.setItem).toHaveBeenCalledTimes(1)
     const [key, value] = vi.mocked(AsyncStorage.setItem).mock.calls[0]!
-    expect(key).toBe('orca:hosts')
+    expect(key).toBe('quirky:hosts')
     return JSON.parse(value)
   }
 
@@ -114,7 +114,7 @@ describe('updateHostNameAndEndpoint', () => {
 })
 
 describe('relay routing after a host edit', () => {
-  const OVERLAY_KEY = 'orca:mobile-relay:host-overlays:v2'
+  const OVERLAY_KEY = 'quirky:mobile-relay:host-overlays:v2'
   const OLD_ENDPOINT = 'ws://192.168.1.10:6768'
   const NEW_ENDPOINT = 'ws://192.168.1.20:6768'
   const relay = {
@@ -137,7 +137,7 @@ describe('relay routing after a host edit', () => {
     resetMobileRelayHostOverlayStoreForTests()
     storage.clear()
     storage.set(
-      'orca:hosts',
+      'quirky:hosts',
       JSON.stringify([
         { id: 'host-1', name: 'Desk', endpoint: OLD_ENDPOINT, publicKeyB64: 'pk', lastConnected: 1 }
       ])
@@ -186,11 +186,11 @@ describe('relay routing after a host edit', () => {
 
   it('keeps an edited endpoint and the device token when relay routing is learned later', async () => {
     await updateHostNameAndEndpoint('host-1', { personalName: 'Renamed', endpoint: NEW_ENDPOINT })
-    const hostsAfterEdit = storage.get('orca:hosts')
+    const hostsAfterEdit = storage.get('quirky:hosts')
 
     await setRelayRouting('host-1', moved)
 
-    expect(storage.get('orca:hosts')).toBe(hostsAfterEdit)
+    expect(storage.get('quirky:hosts')).toBe(hostsAfterEdit)
     expect(SecureStore.setItemAsync).not.toHaveBeenCalled()
     const [host] = await loadHosts()
     expect(host).toMatchObject({ name: 'Renamed', endpoint: NEW_ENDPOINT, relay: moved })
@@ -207,7 +207,7 @@ describe('relay routing after a host edit', () => {
   })
 
   it('refuses to write routing for a removed host and leaves no overlay behind', async () => {
-    storage.set('orca:hosts', '[]')
+    storage.set('quirky:hosts', '[]')
     storage.set(OVERLAY_KEY, '[]')
 
     await expect(setRelayRouting('host-1', relay)).rejects.toBeInstanceOf(
@@ -215,7 +215,7 @@ describe('relay routing after a host edit', () => {
     )
 
     expect(writesTo(OVERLAY_KEY)).toEqual([])
-    expect(writesTo('orca:hosts')).toEqual([])
+    expect(writesTo('quirky:hosts')).toEqual([])
     await expect(loadHosts()).resolves.toEqual([])
   })
 })

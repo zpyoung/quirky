@@ -28,7 +28,7 @@ const request: RuntimeUploadFileStreamRequest = {
   entryRelativePath: '',
   expected: { byteLength: 4, inode: 1, deviceId: 2, modifiedAtMs: 3 },
   worktree: 'id:wt-1',
-  relativePath: 'uploads/.clip.mp4.orca-upload-abc',
+  relativePath: 'uploads/.clip.mp4.quirky-upload-abc',
   expectedEnvironmentPairingRevision: 17,
   expectedEnvironmentRuntimeId: 'runtime-7',
   expectedExecutionHostId: 'local'

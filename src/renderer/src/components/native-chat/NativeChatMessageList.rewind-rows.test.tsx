@@ -85,7 +85,7 @@ const REWIND = { disabledReason: null, request: vi.fn() }
 describe('which transcript rows offer Rewind to here', () => {
   it('offers it only on prompts that opened their own turn', () => {
     const steer = agentJournalSubmissionKey('steer')
-    const compact = agentJournalItemKey({ provider: 'orca', clientMessageId: 'cmd-1' })
+    const compact = agentJournalItemKey({ provider: 'quirky', clientMessageId: 'cmd-1' })
     const items = [
       say('u1', 'user', 'List three fruits'),
       settledTurn('t1', 'u1', 1_000),

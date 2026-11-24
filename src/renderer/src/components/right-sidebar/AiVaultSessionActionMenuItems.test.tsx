@@ -65,7 +65,7 @@ describe('SessionActionMenuItems hand-off placement', () => {
 describe('SessionActionMenuItems jump label', () => {
   it.each([
     ['folder:folder-1', 'Jump to Folder'],
-    ['repo-1::/repo/orca', 'Jump to Worktree']
+    ['repo-1::/repo/quirky', 'Jump to Worktree']
   ])('names the jump by the workspace kind of %s', (jumpWorkspaceId, label) => {
     const order = renderMenuOrder({
       showJumpToWorktree: true,

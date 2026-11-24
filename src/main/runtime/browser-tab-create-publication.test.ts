@@ -35,9 +35,9 @@ vi.mock('../ipc/browser-tab-registration-wait', () => ({
 
 vi.mock('../browser/browser-session-registry', () => ({
   browserSessionRegistry: {
-    getDefaultProfile: () => ({ id: 'default', partition: 'persist:orca-browser' }),
+    getDefaultProfile: () => ({ id: 'default', partition: 'persist:quirky-browser' }),
     getProfile: () => null,
-    resolveKnownPartition: () => 'persist:orca-browser'
+    resolveKnownPartition: () => 'persist:quirky-browser'
   }
 }))
 

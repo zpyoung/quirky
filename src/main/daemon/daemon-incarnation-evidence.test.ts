@@ -28,7 +28,7 @@ const auditClassifierDependencies = {
 } satisfies DaemonAuditClassifierDependencies
 
 function linuxStat(state: string, startTicks: string): string {
-  return `42 (orca daemon with spaces) ${[state, ...Array(18).fill('0'), startTicks].join(' ')}`
+  return `42 (quirky daemon with spaces) ${[state, ...Array(18).fill('0'), startTicks].join(' ')}`
 }
 
 function linuxDependencies(
@@ -229,7 +229,7 @@ describe('daemon audit availability evidence', () => {
   it('accepts Windows named-pipe absence only with exact incarnation evidence', async () => {
     const windowsContext: DaemonAuditContext = {
       ...context,
-      endpoint: '\\\\?\\pipe\\orca-daemon',
+      endpoint: '\\\\?\\pipe\\quirky-daemon',
       endpointKind: 'windows-named-pipe'
     }
     const observation = await classifyDaemonAuditFailure(
@@ -254,7 +254,7 @@ describe('daemon audit availability evidence', () => {
   it('keeps contradictory Windows pipe and process evidence unknown', async () => {
     const windowsContext: DaemonAuditContext = {
       ...context,
-      endpoint: '\\\\?\\pipe\\orca-daemon',
+      endpoint: '\\\\?\\pipe\\quirky-daemon',
       endpointKind: 'windows-named-pipe'
     }
     const dependencies = {

@@ -68,7 +68,7 @@ describe('windows-process-tree node-gyp rebuild', () => {
     { moduleName: 'node-pty', platform: 'win32', arch: 'arm64', ci: '' },
     { moduleName: 'node-pty', platform: 'win32', arch: 'arm64', ci: 'false' },
     { moduleName: 'node-pty', platform: 'win32', arch: 'arm64', ci: '1' },
-    { moduleName: '@orca/windows-registry', platform: 'win32', arch: 'arm64', ci: 'true' },
+    { moduleName: '@quirky/windows-registry', platform: 'win32', arch: 'arm64', ci: 'true' },
     { moduleName: '@vscode/windows-process-tree', platform: 'win32', arch: 'arm64', ci: 'true' }
   ])('keeps the five-minute bound for $moduleName on $platform/$arch with CI=$ci', (host) => {
     expect(nodeGypRebuildTimeoutMs(host.moduleName, host)).toBe(300_000)
@@ -83,7 +83,7 @@ describe('windows-process-tree node-gyp rebuild', () => {
   })
 
   it('copies node-addon-api headers into the patched include dir', () => {
-    const packageDir = mkdtempSync(join(tmpdir(), 'orca-windows-process-tree-headers-'))
+    const packageDir = mkdtempSync(join(tmpdir(), 'quirky-windows-process-tree-headers-'))
     try {
       const nodeAddonApiDir = join(packageDir, 'node_modules', 'node-addon-api')
       mkdirSync(nodeAddonApiDir, { recursive: true })
@@ -108,7 +108,7 @@ describe('inspecting a compiled windows-process-tree addon', () => {
   let dir
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-windows-process-tree-addon-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-windows-process-tree-addon-'))
   })
   afterEach(() => {
     removeTreeSync(dir)
@@ -145,7 +145,7 @@ describe('windows-process-tree CreationTime patch assertion', () => {
   let dir
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-windows-process-tree-creation-time-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-windows-process-tree-creation-time-'))
   })
   afterEach(() => {
     removeTreeSync(dir)

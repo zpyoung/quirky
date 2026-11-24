@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { RpcDispatcher } from './rpc/dispatcher'
 import type { RpcRequest } from './rpc/core'
 import { TERMINAL_METHODS } from './rpc/methods/terminal'
@@ -47,7 +47,7 @@ function graph(ptyId: string | null, extraLeafPtyId?: string) {
 function makeHost(options: { livePtyIds: Set<string> }) {
   const writes: string[] = []
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Graph sync and terminal send read no store fields.
-  const runtime = new OrcaRuntimeService(null as never)
+  const runtime = new QuirkyRuntimeService(null as never)
   runtime.setPtyController({
     write: (_ptyId, data) => {
       writes.push(data)
@@ -61,12 +61,12 @@ function makeHost(options: { livePtyIds: Set<string> }) {
   return { runtime, writes }
 }
 
-async function handleFor(runtime: OrcaRuntimeService): Promise<string> {
+async function handleFor(runtime: QuirkyRuntimeService): Promise<string> {
   const listing = await runtime.listTerminals()
   return listing.terminals.find((terminal) => terminal.tabId === TAB_ID)!.handle
 }
 
-function startMultiplex(runtime: OrcaRuntimeService) {
+function startMultiplex(runtime: QuirkyRuntimeService) {
   const binaryFrames: StreamFrame[] = []
   const handlers = new Map<number, (frame: StreamFrame) => void>()
   const messages: { result?: { type?: string; streamId?: number } }[] = []

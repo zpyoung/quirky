@@ -45,7 +45,7 @@ function stubWriterLiveness(): void {
 function seedStaging(name: string): string {
   const staging = join(versionRoot, name)
   mkdirSync(join(staging, 'resources'), { recursive: true })
-  writeFileSync(join(staging, 'Orca.exe'), 'partial-exe')
+  writeFileSync(join(staging, 'Quirky.exe'), 'partial-exe')
   return staging
 }
 
@@ -64,7 +64,7 @@ function useInstall(dir: string): void {
     exit: () => {},
     getAppMetrics: () => []
   })
-  setProcessProp('execPath', join(installDir, 'Orca.exe'))
+  setProcessProp('execPath', join(installDir, 'Quirky.exe'))
   setProcessProp('resourcesPath', join(installDir, 'resources'))
 }
 
@@ -80,9 +80,9 @@ function selectedBuild(): string {
 function seedLeftovers(): { staleBuild: string; staging: string; legacyExe: string } {
   const staleBuild = join(versionRoot, 'build-stale-000000000000')
   mkdirSync(join(staleBuild, 'resources'), { recursive: true })
-  writeFileSync(join(staleBuild, 'Orca.exe'), 'stale-exe')
+  writeFileSync(join(staleBuild, 'Quirky.exe'), 'stale-exe')
   const staging = seedStaging(daemonHostStagingName(DEAD_WRITER_PID, '0123456789ab'))
-  const legacyExe = join(versionRoot, 'Orca.exe')
+  const legacyExe = join(versionRoot, 'Quirky.exe')
   writeFileSync(legacyExe, 'legacy-exe')
   return { staleBuild, staging, legacyExe }
 }
@@ -123,9 +123,9 @@ describe('current-version daemon-host staging cleanup', () => {
 
     expect(existsSync(staging)).toBe(false)
     expect(existsSync(staleBuild)).toBe(true)
-    expect(existsSync(join(selected, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(selected, 'Quirky.exe'))).toBe(true)
     expect(existsSync(legacyExe)).toBe(true)
-    expect(materializeRelocatedDaemonHost()?.execPath).toBe(join(selected, 'Orca.exe'))
+    expect(materializeRelocatedDaemonHost()?.execPath).toBe(join(selected, 'Quirky.exe'))
   })
 
   it.each<[string, ProcessLivenessVerdict]>([
@@ -138,8 +138,8 @@ describe('current-version daemon-host staging cleanup', () => {
 
     prune([['9.9.9', verdict]])
 
-    expect(existsSync(join(staleBuild, 'Orca.exe'))).toBe(true)
-    expect(existsSync(join(selected, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(staleBuild, 'Quirky.exe'))).toBe(true)
+    expect(existsSync(join(selected, 'Quirky.exe'))).toBe(true)
     expect(existsSync(staging)).toBe(false)
   })
 
@@ -182,7 +182,7 @@ describe('current-version daemon-host staging cleanup', () => {
         unobserved,
         'resources',
         'node_modules',
-        '@orca',
+        '@quirky',
         'process-host',
         'dist',
         'run-process.js'
@@ -207,7 +207,7 @@ describe('current-version daemon-host staging cleanup', () => {
 
     prune([])
 
-    expect(existsSync(join(kept, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(kept, 'Quirky.exe'))).toBe(true)
     expect(existsSync(abandoned)).toBe(false)
   })
 
@@ -222,7 +222,7 @@ describe('current-version daemon-host staging cleanup', () => {
 
     pruneDaemonHostStaging()
     expect(existsSync(staleBuild)).toBe(true)
-    expect(existsSync(join(selected, 'Orca.exe'))).toBe(true)
+    expect(existsSync(join(selected, 'Quirky.exe'))).toBe(true)
 
     // Publication also preserves all current-version mirrors.
     mkdirSync(secondStale, { recursive: true })

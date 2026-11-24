@@ -7,7 +7,7 @@ import {
 } from '../../../daemon/daemon-errors'
 import type { Store } from '../../../persistence'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
-import { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import * as providers from '../provider/registry'
 import { adoptStablePane } from './adopt-stable'
 import type { StablePaneOwner } from './stable-owner'
@@ -159,7 +159,7 @@ describe('stable pane adoption after the owning host reports the PTY absent', ()
     const provider = new LocalPtyProvider()
     vi.spyOn(provider, 'spawn').mockRejectedValueOnce(new SessionNotFoundError(OWNER.ptyId))
     vi.spyOn(providers, 'getProvider').mockReturnValue(provider)
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     runtime.registerPty(OWNER.ptyId, WORKTREE, 'conn-1', OWNER)
     await expect(
       adoptStablePane(runtime, undefined, {

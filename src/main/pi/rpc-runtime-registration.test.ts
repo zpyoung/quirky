@@ -2,13 +2,13 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { observeAgentCliVersion } from '../agent-cli-version-probe'
 import { isAgentSessionPreSpawnError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentCommandSettings } from '../native-chat/structured-agent-command-resolution'
 import { PI_RPC_RUNTIME_REGISTRATION } from './rpc-runtime-registration'
 
-vi.mock('@orca/process-host', () => ({ runProcess: vi.fn() }))
+vi.mock('@quirky/process-host', () => ({ runProcess: vi.fn() }))
 
 type LaunchInput = {
   cwd: string
@@ -46,7 +46,7 @@ beforeEach(async () => {
   vi.mocked(runProcess).mockReset()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.spyOn(console, 'info').mockImplementation(() => {})
-  root = await mkdtemp(join(tmpdir(), 'orca-pi-support-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-pi-support-'))
   stockPi = join(root, process.platform === 'win32' ? 'pi.cmd' : 'pi')
   await writeFile(stockPi, '')
   await chmod(stockPi, 0o755)

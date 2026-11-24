@@ -9,7 +9,7 @@ import {
   getDefaultUserDataPath
 } from '../runtime-client'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
-import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../shared/orca-profiles'
+import { DEFAULT_LOCAL_QUIRKY_PROFILE_ID } from '../../shared/quirky-profiles'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { ProfileStateOfflineLocation } from '../../main/persistence/profile-state/profile-state-offline-settings'
 
@@ -24,7 +24,8 @@ type AgentHookCommandResult = {
 
 async function getDataPath(): Promise<string> {
   return (
-    (await getProfileStateLocation())?.dataFile ?? join(getDefaultUserDataPath(), 'orca-data.json')
+    (await getProfileStateLocation())?.dataFile ??
+    join(getDefaultUserDataPath(), 'quirky-data.json')
   )
 }
 
@@ -36,9 +37,9 @@ async function getProfileStateLocation(): Promise<ProfileStateOfflineLocation | 
 function legacyProfileStateLocation(): ProfileStateOfflineLocation {
   const userDataPath = getDefaultUserDataPath()
   return {
-    dataFile: join(userDataPath, 'orca-data.json'),
+    dataFile: join(userDataPath, 'quirky-data.json'),
     databaseFile: join(userDataPath, 'profile-state.db'),
-    profileId: DEFAULT_LOCAL_ORCA_PROFILE_ID
+    profileId: DEFAULT_LOCAL_QUIRKY_PROFILE_ID
   }
 }
 
@@ -100,9 +101,9 @@ async function updateAdmittedEnabledOnDisk(enabled: boolean): Promise<{
     }
     // Validate retained recovery evidence and source bytes before creating the index.
     readAgentHookSettingsFromProfileState(legacy)
-    const { ensureActiveOrcaProfile } =
-      await import('../../main/orca-profiles/profile-index-store.js')
-    const profile = ensureActiveOrcaProfile(getDefaultUserDataPath())
+    const { ensureActiveQuirkyProfile } =
+      await import('../../main/quirky-profiles/profile-index-store.js')
+    const profile = ensureActiveQuirkyProfile(getDefaultUserDataPath())
     location = {
       dataFile: profile.dataFile,
       databaseFile: profile.stateDatabaseFile,
@@ -118,7 +119,7 @@ async function updateRunningRuntime(client: RuntimeClient, enabled: boolean): Pr
     if (status.result.app.running) {
       throw new RuntimeClientError(
         'runtime_error',
-        'Orca is running but unavailable. Retry when it responds, or stop Orca before changing agent hooks offline.'
+        'Quirky is running but unavailable. Retry when it responds, or stop Quirky before changing agent hooks offline.'
       )
     }
     return false

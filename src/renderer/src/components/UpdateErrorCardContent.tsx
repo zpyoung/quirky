@@ -133,7 +133,7 @@ export function UpdateErrorCardContent({
 
       {blockers && blockers.length > 0 && (
         <ul
-          aria-label={translate('updates.installBlock.instancesLabel', 'Instances using Orca')}
+          aria-label={translate('updates.installBlock.instancesLabel', 'Instances using Quirky')}
           className="space-y-2"
         >
           {blockers.map(({ pid, kind }) => (
@@ -144,8 +144,8 @@ export function UpdateErrorCardContent({
                   : kind === 'server'
                     ? translate('updates.installBlock.serverLabel', 'Background server')
                     : kind === 'window'
-                      ? translate('updates.installBlock.windowLabel', 'Other Orca window')
-                      : translate('updates.installBlock.instanceLabel', 'Other Orca instance')}
+                      ? translate('updates.installBlock.windowLabel', 'Other Quirky window')
+                      : translate('updates.installBlock.instanceLabel', 'Other Quirky instance')}
               </span>
               <span className="font-mono text-muted-foreground">
                 {translate('updates.installBlock.processId', 'PID {{pid}}', { pid })}

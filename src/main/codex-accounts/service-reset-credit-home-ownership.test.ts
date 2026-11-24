@@ -91,7 +91,7 @@ describe('Codex reset-credit managed-home ownership', () => {
 
   it('refuses an indeterminate host home before ledger or provider mutation', async () => {
     const fixture = await createFixture()
-    fsFaults.hold(join(realpathSync(fixture.managedHomePath), '.orca-managed-home'))
+    fsFaults.hold(join(realpathSync(fixture.managedHomePath), '.quirky-managed-home'))
     fsFaults.resetMkdirCalls()
 
     await expect(
@@ -107,7 +107,7 @@ describe('Codex reset-credit managed-home ownership', () => {
 
   it('refuses a proven-untrusted host home before ledger or provider mutation', async () => {
     const fixture = await createFixture()
-    writeFileSync(join(fixture.managedHomePath, '.orca-managed-home'), 'someone-else\n', 'utf-8')
+    writeFileSync(join(fixture.managedHomePath, '.quirky-managed-home'), 'someone-else\n', 'utf-8')
     fsFaults.resetMkdirCalls()
 
     await expect(
@@ -125,13 +125,13 @@ describe('Codex reset-credit managed-home ownership', () => {
       homeState: 'indeterminate',
       expectedError: 'temporarily locked',
       makeHomeUnsafe: (managedHomePath: string) =>
-        fsFaults.hold(join(realpathSync(managedHomePath), '.orca-managed-home'))
+        fsFaults.hold(join(realpathSync(managedHomePath), '.quirky-managed-home'))
     },
     {
       homeState: 'proven untrusted',
       expectedError: 'ownership marker does not match',
       makeHomeUnsafe: (managedHomePath: string) =>
-        writeFileSync(join(managedHomePath, '.orca-managed-home'), 'someone-else\n', 'utf-8')
+        writeFileSync(join(managedHomePath, '.quirky-managed-home'), 'someone-else\n', 'utf-8')
     }
   ])(
     'rechecks ownership for a durable providerPending retry when the home is $homeState',
@@ -152,7 +152,7 @@ describe('Codex reset-credit managed-home ownership', () => {
 
       const settingsBefore = structuredClone(fixture.store.getSettings())
       const authPath = join(fixture.managedHomePath, 'auth.json')
-      const markerPath = join(fixture.managedHomePath, '.orca-managed-home')
+      const markerPath = join(fixture.managedHomePath, '.quirky-managed-home')
       const authBefore = readFileSync(authPath, 'utf-8')
       const markerBefore = readFileSync(markerPath, 'utf-8')
       const directoryEntriesBefore = readdirSync(fixture.managedHomePath).sort()
@@ -191,7 +191,7 @@ describe('Codex reset-credit managed-home ownership', () => {
     fixture.store.updateSettings.mockClear()
     // Why: construction mirrors config into every managed home; only the replay itself is under test.
     const restarted = fixture.createService()
-    fsFaults.hold(join(realpathSync(fixture.managedHomePath), '.orca-managed-home'))
+    fsFaults.hold(join(realpathSync(fixture.managedHomePath), '.quirky-managed-home'))
     fsFaults.resetMkdirCalls()
 
     await expect(

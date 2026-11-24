@@ -1,7 +1,7 @@
 // Resolves the stable "conversation name" an agent row can show instead of the
 // live last-message preview. Sources, in the same precedence the tab bar uses
 // (tab-title-resolution.ts): manual rename → quick-command label → OpenCode's
-// semantic session title → provider session title → Orca's generated title →
+// semantic session title → provider session title → Quirky's generated title →
 // the agent-set live title.
 // Live titles are accepted only when they carry a real name — pure status,
 // identity-echo, and spinner/cwd titles yield null so callers keep the
@@ -76,7 +76,7 @@ function isCwdLikeTitle(title: string): boolean {
   if (/^(?:~|[\\/]|[A-Za-z]:[\\/])/.test(title)) {
     return true
   }
-  // A single path-ish token ("orca/workspaces") is still a cwd, not a name.
+  // A single path-ish token ("quirky/workspaces") is still a cwd, not a name.
   return !/\s/.test(title) && /[\\/]/.test(title)
 }
 

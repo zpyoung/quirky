@@ -191,7 +191,7 @@ describe('RateLimitService zcode plan credentials', () => {
     expect(state.zcode?.session?.usedPercent).toBe(10)
   })
   it('rejects an old CLI account result after sibling-provider waits', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'orca-zcode-service-v2-'))
+    const home = mkdtempSync(join(tmpdir(), 'quirky-zcode-service-v2-'))
     const fixtures = join(import.meta.dirname, '..', 'zcode', 'fixtures', 'v2-upstream')
     vi.stubEnv('ZCODE_DATA_BASE_DIR', home)
     vi.stubEnv('ZCODE_CREDENTIAL_SECRET', 'synthetic-secret')

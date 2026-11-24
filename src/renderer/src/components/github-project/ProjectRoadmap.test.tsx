@@ -78,7 +78,7 @@ function table(
       owner: 'stablyai',
       ownerType: 'organization',
       number: 3,
-      title: 'Orca',
+      title: 'Quirky',
       url: 'https://github.com/orgs/stablyai/projects/3'
     },
     selectedView: {
@@ -110,7 +110,7 @@ describe('ProjectRoadmap', () => {
     ['pt-BR', 'pt-BR'],
     ['en-US-US', DEFAULT_LOCALE]
   ])('renders date ticks and bars with plugin locale %s', async (packLocale, dateLocale) => {
-    const packId = 'plugin:stablyai.orca-portuguese/pt-BR' as const
+    const packId = 'plugin:stablyai.quirky-portuguese/pt-BR' as const
     const resourceLanguage = pluginLanguageResourceId(packId)
     // The resource tag recorded in the Windows crash report on #25021.
     expect(resourceLanguage).toBe(
@@ -120,7 +120,7 @@ describe('ProjectRoadmap', () => {
       {
         id: packId,
         resourceLanguage,
-        pluginKey: 'stablyai.orca-portuguese',
+        pluginKey: 'stablyai.quirky-portuguese',
         locale: packLocale,
         catalog: { common: { cancel: 'Cancelar' } }
       }
@@ -211,7 +211,7 @@ describe('ProjectRoadmap', () => {
       expect(scroller.scrollLeft).toBe(123)
       fireEvent.click(screen.getByRole('button', { name: 'Year' }))
       expect(scroller.scrollLeft).not.toBe(123)
-      expect(window.localStorage.getItem('orca.githubProject.roadmapZoom')).toBe('year')
+      expect(window.localStorage.getItem('quirky.githubProject.roadmapZoom')).toBe('year')
     }
   )
 
@@ -317,7 +317,7 @@ describe('ProjectRoadmap', () => {
     expect(screen.getByText('list')).toBeTruthy()
     expect(
       screen.getByText(
-        'This roadmap view has no date or iteration field to place items on, so Orca is listing them instead.'
+        'This roadmap view has no date or iteration field to place items on, so Quirky is listing them instead.'
       )
     ).toBeTruthy()
   })

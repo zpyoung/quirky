@@ -51,7 +51,7 @@ async function pendingPrompt(
   inLiveTurn = false,
   subject?: AgentJournalApprovalSubject
 ): Promise<{ journal: AgentSessionJournal; itemId: string }> {
-  root = await mkdtemp(join(tmpdir(), 'orca-prompt-cancel-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-prompt-cancel-'))
   const journal = await journals.open({ identity: IDENTITY, stateDirectory: root })
   const turn = inLiveTurn
     ? await journal.appendItem(
@@ -331,7 +331,7 @@ describe("a card's own Cancel, as its provider answers it", () => {
     return { result, routes, answerPrompt, dismissPrompt, card }
   }
 
-  describe('on an approval whose subject a newer Orca wrote, which only its Cancel answers', () => {
+  describe('on an approval whose subject a newer Quirky wrote, which only its Cancel answers', () => {
     const NEWER_SUBJECT: AgentJournalApprovalSubject = JSON.parse('{"kind":"diff","path":"a.ts"}')
 
     it('has Claude decline the request, the turn going on, and keeps the subject as it was', async () => {

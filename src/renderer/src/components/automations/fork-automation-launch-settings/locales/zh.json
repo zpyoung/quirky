@@ -3,7 +3,7 @@
     "components": {
       "automations": {
         "AutomationAgentLaunchFields": {
-          "launchSettingsUnsupported": "此自动化的主机不支持启动设置。请更新远程 Orca 服务器。",
+          "launchSettingsUnsupported": "此自动化的主机不支持启动设置。请更新远程 Quirky 服务器。",
           "launchSettingsNotSaved": "启动设置无法保存到此主机，也不会应用于运行。"
         },
         "AutomationRunLaunchDisplay": {

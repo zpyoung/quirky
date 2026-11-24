@@ -15,7 +15,7 @@ import { openAgentSessionJournal } from './journal-store-factory'
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-streamed-revision-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-streamed-revision-'))
 })
 afterEach(async () => {
   vi.restoreAllMocks()

@@ -12,7 +12,7 @@ import {
 
 export { DEFAULT_GUTTER_ROWS, MAX_GUTTER_ROWS, MIN_GUTTER_ROWS }
 
-const STORAGE_KEY = 'orca.terminalDock.paneState.v1'
+const STORAGE_KEY = 'quirky.terminalDock.paneState.v1'
 
 export const DEFAULT_TERMINAL_DOCK_PANE_STATE: TerminalDockPaneState = {
   docked: false,

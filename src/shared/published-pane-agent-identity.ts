@@ -10,7 +10,7 @@ import type { TuiAgent } from './tui-agent'
  * UI all read the same decision instead of each re-deriving it.
  *
  * Hook evidence ranks first because the agent reports its own identity regardless of how it was
- * started — Orca's launcher, a shell prompt, or a resumed session — and regardless of host.
+ * started — Quirky's launcher, a shell prompt, or a resumed session — and regardless of host.
  *
  * Title ranks LAST and is a genuine last resort, not forbidden. An earlier revision refused it
  * outright for action consumers, reasoning that a title must never authorize a write. That
@@ -18,7 +18,7 @@ import type { TuiAgent } from './tui-agent'
  * returns null on exactly the shapes that caused misdelivery — "Review the Claude session-history
  * fix" on a Codex pane yields nothing, and "Switch Claude and Codex off the load balancer… - grok"
  * yields grok from its owner suffix. Refusing it instead cost real panes their identity: an agent
- * a user started by hand inside an Orca WSL terminal has no launch record, no readable foreground
+ * a user started by hand inside an Quirky WSL terminal has no launch record, no readable foreground
  * process (the Windows host sees `wsl.exe`), and — until managed Codex hooks install there — no
  * hook either, leaving a title that names it unambiguously as the only thing left.
  *

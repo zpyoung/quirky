@@ -59,7 +59,7 @@ export function readPromotedSettingValuesFromContent(
   config: string
 ): Map<string, TopLevelSettingValue> {
   const result = new Map<string, TopLevelSettingValue>()
-  // Why: Orca's own daemon override is not a user setting, so it must never promote into ~/.codex.
+  // Why: Quirky's own daemon override is not a user setting, so it must never promote into ~/.codex.
   for (const setting of scanStructuredSettingLines(stripCodexDaemonOverride(config).split('\n'))) {
     if (PROMOTED_STRUCTURED_KEYS.includes(setting.structuredKey)) {
       result.set(setting.structuredKey, { raw: setting.raw, multiline: setting.multiline })

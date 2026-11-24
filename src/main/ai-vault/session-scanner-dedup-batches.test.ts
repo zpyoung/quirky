@@ -14,7 +14,7 @@ afterEach(async () => {
 describe('session scan batch deduplication', () => {
   it('does not rederive every retained rollout alias after each batch', async () => {
     const count = 128
-    const root = await mkdtemp(join(tmpdir(), 'orca-session-dedup-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-session-dedup-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await mkdir(roots.codexSessionsDir, { recursive: true })

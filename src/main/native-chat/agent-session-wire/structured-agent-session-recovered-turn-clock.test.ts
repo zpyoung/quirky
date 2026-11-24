@@ -42,7 +42,7 @@ const journals = createTrackedJournalOpener()
 
 beforeEach(async () => {
   _internals.resetCachesForTests()
-  root = await mkdtemp(join(tmpdir(), 'orca-recovered-turn-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-recovered-turn-'))
 })
 
 afterEach(async () => {
@@ -65,7 +65,7 @@ async function sessionWithRunningTurn() {
     stateDirectory: join(root, SESSION)
   })
   await journal.appendItem(
-    { provider: 'orca', clientMessageId: 'prompt-1' },
+    { provider: 'quirky', clientMessageId: 'prompt-1' },
     { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'long job' }] },
     { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
   )
@@ -191,7 +191,7 @@ describe('a turn recovery settled after its host went away', () => {
         settleDeadGeneration(journal, { state: 'interrupted', completedAt: EXIT_OBSERVED })
     ],
     [
-      'quitting Orca',
+      'quitting Quirky',
       // A quit evicts the child, writing no Stop event, and its adapter settles the open turn.
       (journal: AgentSessionJournal) =>
         journal.appendItem(

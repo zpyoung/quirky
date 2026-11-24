@@ -5,7 +5,7 @@ const path = require('node:path')
 const { canonicalLf, load, loadSources } = require('./sources.cjs')
 const run = require('./scenario.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 
 function checkCrlfLoader() {

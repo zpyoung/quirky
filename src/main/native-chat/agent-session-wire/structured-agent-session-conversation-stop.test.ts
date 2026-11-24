@@ -64,7 +64,7 @@ function eventually(assertion: () => void | Promise<void>): Promise<void> {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-conversation-stop-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-conversation-stop-'))
   resetHostTestOperationIds()
   events = undefined
   // Admitted, not accepted: the message is written and its turn has not opened.

@@ -1,5 +1,5 @@
 import { createClaudeStructuredLaunchResolver } from '../runtime/structured-agent-launch-composition.test-support'
-// The real Claude CLI, launched through Orca's own launch resolution with a chat's visuals: the
+// The real Claude CLI, launched through Quirky's own launch resolution with a chat's visuals: the
 // CLI must report the bundled skill and its plugin in its own init frame. Opt-in, like every
 // real-CLI suite: it spends one short turn on the signed-in account.
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
@@ -32,10 +32,10 @@ const suiteTitle = `Claude real CLI chat visuals${realClaudeCliGate.skipReason ?
 
 describe.skipIf(!realClaudeAvailable)(suiteTitle, () => {
   it.skipIf(!realClaudeAuthenticated)(
-    "loads the visuals skill through Orca's launch and grants the chat folder",
+    "loads the visuals skill through Quirky's launch and grants the chat folder",
     async () => {
       const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
-      const scratch = await mkdtemp(join(tmpdir(), 'orca-real-cli-visuals-'))
+      const scratch = await mkdtemp(join(tmpdir(), 'quirky-real-cli-visuals-'))
       const cwd = join(scratch, 'workspace')
       const stateDirectory = join(scratch, 'state')
       const record = agentSessionRecordFixture({

@@ -29,7 +29,9 @@ export function buildAskPreviewSrcDoc(preview: AskPreview): string {
           </Markdown>
         )
   const withoutScripts = stripAskPreviewScriptBlocks(rawHtml)
-  const sanitized = stripAskPreviewExecutableContent(DOMPurify.sanitize(withoutScripts, SANITIZE_CONFIG))
+  const sanitized = stripAskPreviewExecutableContent(
+    DOMPurify.sanitize(withoutScripts, SANITIZE_CONFIG)
+  )
   const themeTokenCss = buildAskPreviewThemeTokenCss(getComputedStyle(document.documentElement))
   return buildAskPreviewShellHtml(sanitized, themeTokenCss)
 }
@@ -51,7 +53,10 @@ export function AskPreviewFrame({
       sandbox=""
       referrerPolicy="no-referrer"
       loading="lazy"
-      title={translate('components.fork-ask-question-tool.askPreview.frameTitle', 'Question preview')}
+      title={translate(
+        'components.fork-ask-question-tool.askPreview.frameTitle',
+        'Question preview'
+      )}
       srcDoc={srcDoc}
       className={cn('block border-0 bg-background', className)}
     />

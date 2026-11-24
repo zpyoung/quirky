@@ -21,7 +21,7 @@ afterEach(() => {
 })
 
 function fixture(source = '{"automationRuns":[{"id":"a"},{"id":"b"}],"last":null}') {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-streamed-profile-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-streamed-profile-'))
   const { db } = openProfileStateDatabase(join(directory, 'profile-state.db'), 'stream-test')
   fixtures.push({ directory, db })
   importProfileStateJson(db, source)

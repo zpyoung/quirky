@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ORCA_INTERNAL_FILE_DRAG_TYPE } from '../../../shared/native-file-drop'
+import { QUIRKY_INTERNAL_FILE_DRAG_TYPE } from '../../../shared/native-file-drop'
 import { installOsFileDropCancellationGuard } from './os-file-drop-cancellation-guard'
 import { WORKSPACE_FILE_DRAG_SOURCE_MIME, WORKSPACE_FILE_PATHS_MIME } from './workspace-file-drag'
 
@@ -46,7 +46,7 @@ describe('OS file drop cancellation guard', () => {
     document.body.append(target)
     for (const types of [
       ['text/plain'],
-      ['Files', ORCA_INTERNAL_FILE_DRAG_TYPE],
+      ['Files', QUIRKY_INTERNAL_FILE_DRAG_TYPE],
       ['Files', WORKSPACE_FILE_PATHS_MIME],
       ['Files', WORKSPACE_FILE_DRAG_SOURCE_MIME]
     ]) {

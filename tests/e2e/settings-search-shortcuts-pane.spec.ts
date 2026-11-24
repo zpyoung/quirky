@@ -1,11 +1,13 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 test.describe('Settings sidebar search on the Shortcuts pane', () => {
-  test('pane-title-only query keeps rows visible and local search usable', async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
+  test('pane-title-only query keeps rows visible and local search usable', async ({
+    quirkyPage
+  }) => {
+    await waitForSessionReady(quirkyPage)
 
-    await orcaPage.evaluate(async () => {
+    await quirkyPage.evaluate(async () => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -16,30 +18,30 @@ test.describe('Settings sidebar search on the Shortcuts pane', () => {
       store.getState().openSettingsPage()
     })
 
-    const searchInput = orcaPage.getByPlaceholder('Search settings')
+    const searchInput = quirkyPage.getByPlaceholder('Search settings')
     await expect(searchInput).toBeVisible()
     // Why: plain Settings open should land focus in search so typing starts immediately.
     await expect(searchInput).toBeFocused()
     await searchInput.fill('shortcuts')
 
     // The query matches the pane title, so the Shortcuts pane auto-activates.
-    await expect(orcaPage.getByRole('heading', { name: 'Shortcuts', exact: true })).toBeVisible()
+    await expect(quirkyPage.getByRole('heading', { name: 'Shortcuts', exact: true })).toBeVisible()
 
     // Regression: a pane-title-only query used to blank the whole list (0/112).
-    await expect(orcaPage.getByText('Go to File', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByText('No shortcuts match those filters.')).not.toBeVisible()
+    await expect(quirkyPage.getByText('Go to File', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('No shortcuts match those filters.')).not.toBeVisible()
 
     // Regression: the pane's own search was dead while the global query was
     // active, because it intersected with an already-empty base list.
-    const localSearch = orcaPage.getByPlaceholder('Search command or keys')
+    const localSearch = quirkyPage.getByPlaceholder('Search command or keys')
     await localSearch.fill('go to')
-    await expect(orcaPage.getByText('Go to File', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByText('Force Reload', { exact: true })).not.toBeVisible()
+    await expect(quirkyPage.getByText('Go to File', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('Force Reload', { exact: true })).not.toBeVisible()
 
     // A row-matching global query still narrows the list as before.
     await localSearch.clear()
     await searchInput.fill('worktree')
-    await expect(orcaPage.getByText('Create worktree', { exact: true })).toBeVisible()
-    await expect(orcaPage.getByText('Go to File', { exact: true })).not.toBeVisible()
+    await expect(quirkyPage.getByText('Create worktree', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('Go to File', { exact: true })).not.toBeVisible()
   })
 })

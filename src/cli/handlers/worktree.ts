@@ -142,9 +142,9 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     assertWorkspaceTargetFlagsCompatible(flags)
     const reviewLinks = getReviewTargetLinkFlags(flags)
     const callerTerminalHandle =
-      typeof process.env.ORCA_TERMINAL_HANDLE === 'string' &&
-      process.env.ORCA_TERMINAL_HANDLE.length > 0
-        ? process.env.ORCA_TERMINAL_HANDLE
+      typeof process.env.QUIRKY_TERMINAL_HANDLE === 'string' &&
+      process.env.QUIRKY_TERMINAL_HANDLE.length > 0
+        ? process.env.QUIRKY_TERMINAL_HANDLE
         : undefined
     const explicitParent = await resolveCreateParentSelector(flags, cwd, client)
     const explicitParentWorktree = explicitParent.parentWorktree
@@ -167,8 +167,8 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
       needsCwdRepoInference
     ) {
       try {
-        // Why: agent shells can lose ORCA_TERMINAL_HANDLE while still running
-        // inside an Orca worktree. Cwd keeps CLI-created children nestable and
+        // Why: agent shells can lose QUIRKY_TERMINAL_HANDLE while still running
+        // inside an Quirky worktree. Cwd keeps CLI-created children nestable and
         // lets create infer the repo for the common current-workspace case.
         cwdParentWorktree = await resolveCurrentWorktreeSelection(cwd, client)
       } catch {
@@ -262,7 +262,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     if (!hostId) {
       throw new RuntimeClientError(
         'worktree_host_unresolved',
-        'Orca cannot tell which host owns this workspace. Refresh projects and try again.'
+        'Quirky cannot tell which host owns this workspace. Refresh projects and try again.'
       )
     }
     // Why (#19334): the waiver only ever applies to a hook that ran, so without --run-hooks it
@@ -288,7 +288,7 @@ export const WORKTREE_HANDLERS: Record<string, CommandHandler> = {
     printPreservedBranchWarning(result.result, json)
     printResult(result, json, (value) =>
       value.removing
-        ? `removed: ${value.removed}\nOrca is still deleting the checkout in the background.`
+        ? `removed: ${value.removed}\nQuirky is still deleting the checkout in the background.`
         : `removed: ${value.removed}`
     )
   }

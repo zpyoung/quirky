@@ -1,7 +1,7 @@
 import './unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatOrcaSessionAddress } from '../../../shared/orca-session-address'
-import { testOrcaSessionId } from '../../../shared/orca-session-address-test-fixture'
+import { formatQuirkySessionAddress } from '../../../shared/quirky-session-address'
+import { testQuirkySessionId } from '../../../shared/quirky-session-address-test-fixture'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../shared/orchestration-session-caller-codes'
 import {
   mintStructuredWorkerHandle,
@@ -32,8 +32,8 @@ vi.mock('../../native-chat/agent-session-wire/structured-agent-session-registry'
 
 type Row = Record<string, unknown>
 
-const SESSION_Z = testOrcaSessionId('3f9a1c7e-6b2d-4e85-a0c4-9d1e7b3f5a26')
-const ADDRESS_Z = formatOrcaSessionAddress(SESSION_Z)
+const SESSION_Z = testQuirkySessionId('3f9a1c7e-6b2d-4e85-a0c4-9d1e7b3f5a26')
+const ADDRESS_Z = formatQuirkySessionAddress(SESSION_Z)
 
 /** Worker Y's two spellings; a chat has only its session address. */
 const handle = mintStructuredWorkerHandle()
@@ -83,7 +83,7 @@ function assignWorker(runId: string): string {
     assigneeHandle: handle,
     assigneePaneKey: paneKey,
     processIncarnation: structuredWorkerProcessIncarnation(SESSION_Y),
-    creator: { kind: 'session', orcaSessionId: SESSION_X },
+    creator: { kind: 'session', quirkySessionId: SESSION_X },
     maxDepth: Number.MAX_SAFE_INTEGER
   }).id
 }
@@ -155,7 +155,7 @@ describe('every target param resolves both spellings of a party to one canonical
 
       expect(dispatch).toMatchObject({
         assignee_handle: handle,
-        assignee_orca_session_id: SESSION_Y
+        assignee_quirky_session_id: SESSION_Y
       })
       expect(await as(SESSION_Y, 'orchestration.check', { peek: true })).toMatchObject({
         dispatchId: idOf(dispatch)
@@ -163,7 +163,7 @@ describe('every target param resolves both spellings of a party to one canonical
     }
   )
 
-  it('dispatch: a chat named by its session address is the assignee, by its Orca session ID', async () => {
+  it('dispatch: a chat named by its session address is the assignee, by its Quirky session ID', async () => {
     const runId = await chatRun()
     const task = h.db.createTask({ runId, spec: 'work' })
 
@@ -174,7 +174,7 @@ describe('every target param resolves both spellings of a party to one canonical
 
     expect(dispatch).toMatchObject({
       assignee_handle: ADDRESS_Z,
-      assignee_orca_session_id: SESSION_Z,
+      assignee_quirky_session_id: SESSION_Z,
       assignee_pane_key: null,
       process_incarnation: null
     })
@@ -216,12 +216,12 @@ describe('every target param resolves both spellings of a party to one canonical
     expect(messages).toEqual([expect.objectContaining({ subject: 'z' })])
   })
 
-  it('sessionAddress: any session, a worker too, is its Orca session ID', async () => {
+  it('sessionAddress: any session, a worker too, is its Quirky session ID', async () => {
     expect(await as(undefined, 'orchestration.sessionAddress', { sessionId: SESSION_Z })).toEqual({
-      orcaSessionId: ADDRESS_Z
+      quirkySessionId: ADDRESS_Z
     })
     expect(await as(undefined, 'orchestration.sessionAddress', { sessionId: SESSION_Y })).toEqual({
-      orcaSessionId: ADDRESS_Y
+      quirkySessionId: ADDRESS_Y
     })
   })
 
@@ -269,7 +269,7 @@ describe('every target param resolves both spellings of a party to one canonical
   })
 })
 
-describe('a /clear-ed chat is shown the Orca session ID it had before the clear', () => {
+describe('a /clear-ed chat is shown the Quirky session ID it had before the clear', () => {
   const PROVIDER_ID_Z = 'd00dfeed-1122-4334-8556-778899aabbcc'
 
   /** Z continued X after a /clear, so X's address is Z's. */
@@ -288,7 +288,7 @@ describe('a /clear-ed chat is shown the Orca session ID it had before the clear'
     h.records.set(SESSION_Z, sessionRecord(SESSION_Z, { providerId: PROVIDER_ID_Z }))
   }
 
-  it('in a dispatch preview its own live Orca session ID would fill in', async () => {
+  it('in a dispatch preview its own live Quirky session ID would fill in', async () => {
     clearXIntoZ()
     const runId = await chatRun(SESSION_Z)
     const task = h.db.createTask({ runId, spec: 'work' })
@@ -299,7 +299,7 @@ describe('a /clear-ed chat is shown the Orca session ID it had before the clear'
       from: ADDRESS_Z
     })
 
-    expect(preamble).toContain(`Your coordinator's Orca session ID is: ${ADDRESS_X}\n`)
+    expect(preamble).toContain(`Your coordinator's Quirky session ID is: ${ADDRESS_X}\n`)
     expect(preamble).not.toContain(SESSION_Z)
   })
 
@@ -315,7 +315,7 @@ describe('a /clear-ed chat is shown the Orca session ID it had before the clear'
       ok: false,
       error: {
         code: CODES.providerId,
-        message: expect.stringContaining(`This session's Orca session ID is ${ADDRESS_X};`)
+        message: expect.stringContaining(`This session's Quirky session ID is ${ADDRESS_X};`)
       }
     })
   })
@@ -422,8 +422,8 @@ describe('no writer stores a structured worker under its session address', () =>
     const stored = h.db.db
       .prepare(
         `SELECT m.id FROM messages AS m JOIN dispatch_contexts AS d
-           ON d.assignee_orca_session_id IS NOT NULL
-          AND 'orca_session_id:' || d.assignee_orca_session_id IN (m.to_handle, m.from_handle)`
+           ON d.assignee_quirky_session_id IS NOT NULL
+          AND 'quirky_session_id:' || d.assignee_quirky_session_id IN (m.to_handle, m.from_handle)`
       )
       .all()
     expect(h.db.getInbox(100).length).toBeGreaterThanOrEqual(7)

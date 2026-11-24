@@ -42,7 +42,7 @@ beforeAll(async () => {
   if (!bundles) {
     return
   }
-  scratch = await mkdtemp(join(tmpdir(), 'orca-mobile-media-render-'))
+  scratch = await mkdtemp(join(tmpdir(), 'quirky-mobile-media-render-'))
   const built = await buildMobileWebAppBundle({ outDir: join(scratch, 'bundle') })
   policy = await readShellCsp()
   version = await readBridgeProtocolVersion()
@@ -56,7 +56,7 @@ beforeAll(async () => {
   })
   server = served.server
   origin = served.origin
-  const executablePath = process.env.ORCA_MOBILE_WEB_RENDER_BROWSER
+  const executablePath = process.env.QUIRKY_MOBILE_WEB_RENDER_BROWSER
   browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) })
 }, 120_000)
 afterAll(async () => {
@@ -159,7 +159,7 @@ describeRender('mobile media under the shipped shell policy', () => {
   it('explains the required app update when an older shell blocks Blob playback', async () => {
     const { page } = await openMedia('music.wav', wavFixture(), true)
     await page
-      .getByText('Update Orca Mobile to play media in this workspace', { exact: true })
+      .getByText('Update Quirky Mobile to play media in this workspace', { exact: true })
       .waitFor()
     await page.close()
   }, 60_000)

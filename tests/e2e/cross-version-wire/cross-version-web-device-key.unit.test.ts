@@ -70,7 +70,7 @@ type HostSocket = {
 
 /** A paired host: the real socket wiring, registry and key registration, answering two RPCs. */
 function host(capabilities: readonly string[], implementation = CURRENT_HOST) {
-  const registry = new implementation.Registry(mkdtempSync(join(tmpdir(), 'orca-web-key-')))
+  const registry = new implementation.Registry(mkdtempSync(join(tmpdir(), 'quirky-web-key-')))
   let deliver: Parameters<MobileSocketTransport['onMessage']>[0] = () => {}
   let closed: Parameters<MobileSocketTransport['onConnectionClose']>[0] = () => {}
   const requests: Record<string, unknown>[] = []
@@ -241,7 +241,7 @@ describe('a browser moving from its pairing code to a device key', () => {
 
     // Every socket the web bundle opens carries the marker hosts use to tell it from a phone.
     expect(dialedUrls.length).toBeGreaterThan(1)
-    expect(dialedUrls.every((url) => url.endsWith('?orca-client=web'))).toBe(true)
+    expect(dialedUrls.every((url) => url.endsWith('?quirky-client=web'))).toBe(true)
     const reply = await browser.transport.call('repos.list')
     expect(reply.ok).toBe(true)
     expect(currentHost.requests.at(-1)).not.toHaveProperty('deviceToken')

@@ -67,7 +67,7 @@
             "repos": [
               {
                 "id": "repo-1",
-                "name": "orca"
+                "name": "quirky"
               },
               {
                 "id": "repo-2",
@@ -121,7 +121,7 @@
       "value": [
         {
           "id": "repo-1",
-          "name": "orca"
+          "name": "quirky"
         },
         {
           "id": "repo-2",

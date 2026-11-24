@@ -29,7 +29,7 @@ import { adoptLiveWorkspacePtySurfaces } from './worktree-agent-live-surface-ado
 import { runWorktreeAgentActivationGate } from './worktree-agent-activation-gate'
 import type { LiveTerminalSurfaceOwnerIndex } from './worktree-live-terminal-surface-owners'
 
-vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+vi.mock('../../../shared/layout-owner-switch', () => ({ QUIRKY_LAYOUT_OWNER_IS_MAIN: true }))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 
 type StreamDouble = {

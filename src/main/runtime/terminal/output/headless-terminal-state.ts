@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer } from './headless-terminal-hydration'
+import { QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer } from './headless-terminal-hydration'
 import type { RuntimeHeadlessTerminal } from '../../runtime-terminal-state-records'
 import { HeadlessEmulator } from '../../../daemon/headless-emulator'
 import { shouldForwardHeadlessTerminalQueryReply } from '../../headless-terminal-query-reply-policy'
@@ -7,7 +7,7 @@ import { getTerminalViewAttributes } from '../../terminal-view-attribute-store'
 import { PtyShellOwnershipMirror } from '../../pty-shell-ownership-mirror'
 import { PROCESS_BOUNDARY_GROUND } from '../../../../shared/terminal-mode-reset-profiles'
 
-export abstract class OrcaRuntimeWithCreatePtyHeadlessTerminalState extends OrcaRuntimeWithMaybeHydrateHeadlessFromRenderer {
+export abstract class QuirkyRuntimeWithCreatePtyHeadlessTerminalState extends QuirkyRuntimeWithMaybeHydrateHeadlessFromRenderer {
   /** Shared factory for the per-PTY runtime emulators (seed, hydration, and
    *  lazy live-byte creation): wires the Phase-5 query-reply sink and the
    *  ConPTY DA1 override. The daemon emulator never goes through here. */

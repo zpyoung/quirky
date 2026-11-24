@@ -3,9 +3,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { readRuntimeMetadata } from './runtime-metadata'
-import { OrcaRuntimeRpcServer } from './runtime-rpc'
+import { QuirkyRuntimeRpcServer } from './runtime-rpc'
 import { DeviceRegistry } from './device-registry'
 import { DEVICE_REGISTRY_FILENAME } from './mobile-pairing-files'
 import { encodePairingOffer, parsePairingCode, type PairingOffer } from '../../shared/pairing'
@@ -39,10 +39,10 @@ describe('pairing.delegatedMobileDevice.sync', () => {
     }
   })
 
-  async function startServer(userDataPath = mkdtempSync(join(tmpdir(), 'orca-delegated-'))) {
+  async function startServer(userDataPath = mkdtempSync(join(tmpdir(), 'quirky-delegated-'))) {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fixture store carries the surface these RPCs read, as in the sibling WebSocket tests.
-    const runtime = new OrcaRuntimeService(makeStore() as never)
-    const server = new OrcaRuntimeRpcServer({
+    const runtime = new QuirkyRuntimeService(makeStore() as never)
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       enableWebSocket: true,
@@ -54,8 +54,8 @@ describe('pairing.delegatedMobileDevice.sync', () => {
   }
 
   function pair(
-    server: OrcaRuntimeRpcServer,
-    args: Parameters<OrcaRuntimeRpcServer['createPairingOffer']>[0]
+    server: QuirkyRuntimeRpcServer,
+    args: Parameters<QuirkyRuntimeRpcServer['createPairingOffer']>[0]
   ): PairingOffer {
     const offer = server.createPairingOffer({ address: '127.0.0.1', ...args })
     if (!offer.available) {
@@ -64,7 +64,7 @@ describe('pairing.delegatedMobileDevice.sync', () => {
     return parsePairingCode(offer.pairingUrl)!
   }
 
-  function pairDesktop(server: OrcaRuntimeRpcServer, name = 'MacBook'): PairingOffer {
+  function pairDesktop(server: QuirkyRuntimeRpcServer, name = 'MacBook'): PairingOffer {
     return pair(server, { name, scope: 'runtime' })
   }
 
@@ -312,7 +312,7 @@ describe('pairing.delegatedMobileDevice.sync', () => {
   })
 
   it('loads a registry written before delegated devices existed unchanged', () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-delegated-old-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-delegated-old-'))
     const old = [
       { deviceId: 'd1', name: 'Phone', token: 't1', scope: 'mobile', pairedAt: 1, lastSeenAt: 2 },
       { deviceId: 'd2', name: 'Mac', token: 't2', scope: 'runtime', pairedAt: 3, lastSeenAt: 4 }

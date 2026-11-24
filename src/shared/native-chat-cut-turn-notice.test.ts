@@ -84,7 +84,7 @@ function hostRow(
   body: AgentJournalItemBody,
   scope: AgentJournalTurnScope | null
 ) {
-  return item(agentJournalItemKey({ provider: 'orca', clientMessageId }), body, scope)
+  return item(agentJournalItemKey({ provider: 'quirky', clientMessageId }), body, scope)
 }
 
 /** What the crash path's exit row says, from its fact. */
@@ -349,7 +349,7 @@ describe('withNativeChatCutTurnNotices', () => {
     expect(turnKeys[notice]).toBe('u1')
   })
 
-  // A message Orca accepted and then failed to deliver after the cut is drawn in place as not sent,
+  // A message Quirky accepted and then failed to deliver after the cut is drawn in place as not sent,
   // in no turn; the cut keeps its notice in its own turn, and the exit row about that send does
   // not stand in for it.
   it('keeps the notice in its turn beside a later message drawn as not sent', () => {

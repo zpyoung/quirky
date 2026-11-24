@@ -13,13 +13,13 @@ import { parseTomlTableHeaderPath } from './config-toml-key-path'
 
 /**
  * Codex >= 0.157 auto-starts a background app-server daemon and its client
- * connects to `<CODEX_HOME>/app-server-control/app-server-control.sock`. Orca's
+ * connects to `<CODEX_HOME>/app-server-control/app-server-control.sock`. Quirky's
  * managed homes live under userData, which makes that path longer than
  * `sun_path`, so every interactive `codex` fails with "path must be shorter
- * than SUN_LEN". Only for such homes, Orca turns daemon auto-start off.
+ * than SUN_LEN". Only for such homes, Quirky turns daemon auto-start off.
  */
 const DAEMON_SOCKET_SEGMENTS = ['app-server-control', 'app-server-control.sock']
-export const CODEX_DAEMON_OVERRIDE_MARKER = '# orca: CODEX_HOME too long for the daemon socket'
+export const CODEX_DAEMON_OVERRIDE_MARKER = '# quirky: CODEX_HOME too long for the daemon socket'
 const DAEMON_OVERRIDE_RAW = `false ${CODEX_DAEMON_OVERRIDE_MARKER}`
 
 export function codexDaemonSocketPath(homePath: string, platform = process.platform): string {
@@ -51,7 +51,7 @@ export function codexDaemonSocketPathExceedsLimit(
 
 const unguardableHomesWarned = new Set<string>()
 
-/** Applies (or removes) Orca's daemon override so it tracks the home's current path. */
+/** Applies (or removes) Quirky's daemon override so it tracks the home's current path. */
 export function applyCodexDaemonSocketGuard(
   config: string,
   homePath: string,
@@ -74,13 +74,13 @@ export function applyCodexDaemonSocketGuard(
     // Why: an inline `features = {...}` or `[[features]]` blocks the upsert; say so once instead of failing silently.
     unguardableHomesWarned.add(homePath)
     console.warn(
-      `[codex-config] Could not turn off Codex daemon auto-start in ${homePath}: its config defines features in a form Orca cannot extend. Codex may fail with "path must be shorter than SUN_LEN"; add daemon_auto_start = false to features in ~/.codex/config.toml.`
+      `[codex-config] Could not turn off Codex daemon auto-start in ${homePath}: its config defines features in a form Quirky cannot extend. Codex may fail with "path must be shorter than SUN_LEN"; add daemon_auto_start = false to features in ~/.codex/config.toml.`
     )
   }
   return guarded
 }
 
-/** True when a config holds nothing but Orca's daemon override, i.e. no user settings. */
+/** True when a config holds nothing but Quirky's daemon override, i.e. no user settings. */
 export function isOnlyCodexDaemonOverride(config: string): boolean {
   return (
     config.includes(CODEX_DAEMON_OVERRIDE_MARKER) && stripCodexDaemonOverride(config).trim() === ''
@@ -88,7 +88,7 @@ export function isOnlyCodexDaemonOverride(config: string): boolean {
 }
 
 /**
- * Removes only lines Orca wrote, plus a `[features]` table left empty by that
+ * Removes only lines Quirky wrote, plus a `[features]` table left empty by that
  * removal, so the override never leaks into the user's real ~/.codex.
  */
 export function stripCodexDaemonOverride(config: string): string {

@@ -7,8 +7,8 @@ import { removeTreeSync } from '../../windows-transient-lock-removal'
 import {
   parseWindowsCmdShim,
   resolveWindowsCmdShim
-} from '@orca/process-host/windows-cmd-shim-resolution'
-import { spawnProcess } from '@orca/process-host'
+} from '@quirky/process-host/windows-cmd-shim-resolution'
+import { spawnProcess } from '@quirky/process-host'
 import {
   REAL_AGENT_BROWSER_CMD,
   REAL_CODEX_CMD,
@@ -146,7 +146,7 @@ describeOnWindows('resolveWindowsCmdShim', () => {
   let env: NodeJS.ProcessEnv
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'orca-shim-resolve-'))
+    dir = mkdtempSync(join(tmpdir(), 'quirky-shim-resolve-'))
     env = { ...process.env }
     writeFileSync(join(dir, 'cli.js'), 'process.stdout.write("hi")\n')
     writeFileSync(join(dir, 'ci2.js'), '')
@@ -172,7 +172,7 @@ describeOnWindows('resolveWindowsCmdShim', () => {
   })
 
   it('prefers a node.exe sitting beside the shim, as the shim itself does', () => {
-    const sibling = mkdtempSync(join(tmpdir(), 'orca-shim-sibling-'))
+    const sibling = mkdtempSync(join(tmpdir(), 'quirky-shim-sibling-'))
     try {
       writeFileSync(join(sibling, 'node.exe'), '')
       writeFileSync(join(sibling, 'cli.js'), '')
@@ -234,7 +234,7 @@ describeOnWindows('resolveWindowsCmdShim', () => {
     expect(
       resolveWindowsCmdShim(shim, {
         ...env,
-        ORCA_DISABLE_CMD_SHIM_RESOLUTION: '1'
+        QUIRKY_DISABLE_CMD_SHIM_RESOLUTION: '1'
       })
     ).toBeNull()
   })
@@ -258,9 +258,9 @@ describeOnWindows('resolveWindowsCmdShim', () => {
     // spawn. Proven by effect rather than by counting: `early` gains a node.exe
     // only AFTER the first resolution, so a second call that still answers
     // `late` cannot have re-walked PATH. Delete the node cache and this fails.
-    const early = mkdtempSync(join(tmpdir(), 'orca-shim-path-early-'))
-    const late = mkdtempSync(join(tmpdir(), 'orca-shim-path-late-'))
-    const shimDir = mkdtempSync(join(tmpdir(), 'orca-shim-path-'))
+    const early = mkdtempSync(join(tmpdir(), 'quirky-shim-path-early-'))
+    const late = mkdtempSync(join(tmpdir(), 'quirky-shim-path-late-'))
+    const shimDir = mkdtempSync(join(tmpdir(), 'quirky-shim-path-'))
     try {
       writeFileSync(join(late, 'node.exe'), '')
       writeFileSync(join(shimDir, 'cli.js'), '')
@@ -290,9 +290,9 @@ describeOnWindows('resolveWindowsCmdShim', () => {
     // runs. Scanning past it to `second\node.exe` would silently start a
     // different binary -- so resolution gives up and cmd.exe keeps the job.
     // Delete the PATHEXT loop and this returns the .exe instead of null.
-    const first = mkdtempSync(join(tmpdir(), 'orca-shim-ext-first-'))
-    const second = mkdtempSync(join(tmpdir(), 'orca-shim-ext-second-'))
-    const shimDir = mkdtempSync(join(tmpdir(), 'orca-shim-ext-'))
+    const first = mkdtempSync(join(tmpdir(), 'quirky-shim-ext-first-'))
+    const second = mkdtempSync(join(tmpdir(), 'quirky-shim-ext-second-'))
+    const shimDir = mkdtempSync(join(tmpdir(), 'quirky-shim-ext-'))
     try {
       writeFileSync(join(first, 'node.com'), '')
       const nodeExe = join(second, 'node.exe')
@@ -323,8 +323,8 @@ describeOnWindows('resolveWindowsCmdShim', () => {
     // which would fail the spawn with ENOENT where an uncached process falls
     // back to cmd.exe and succeeds. Delete the `statFile` on the cache hit and
     // this returns the deleted path instead of null.
-    const nodeDir = mkdtempSync(join(tmpdir(), 'orca-shim-gone-node-'))
-    const shimDir = mkdtempSync(join(tmpdir(), 'orca-shim-gone-'))
+    const nodeDir = mkdtempSync(join(tmpdir(), 'quirky-shim-gone-node-'))
+    const shimDir = mkdtempSync(join(tmpdir(), 'quirky-shim-gone-'))
     try {
       const nodeExe = join(nodeDir, 'node.exe')
       writeFileSync(nodeExe, '')

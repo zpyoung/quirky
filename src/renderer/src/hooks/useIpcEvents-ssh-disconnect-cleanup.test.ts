@@ -197,7 +197,7 @@ describe('useIpcEvents updater integration', () => {
         },
         browser: {
           onGuestLoadFailed: () => () => {},
-          onOpenLinkInOrcaTab: () => () => {},
+          onOpenLinkInQuirkyTab: () => () => {},
           onNavigationUpdate: () => () => {},
           onActivateView: () => () => {},
           onPaneFocus: () => () => {}

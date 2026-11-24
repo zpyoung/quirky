@@ -21,7 +21,9 @@ export function AskQuestionFrame({
             </span>
           )}
         </p>
-        {question.header ? <p className="text-xs text-muted-foreground">{question.question}</p> : null}
+        {question.header ? (
+          <p className="text-xs text-muted-foreground">{question.question}</p>
+        ) : null}
       </div>
       {children}
       {error ? (

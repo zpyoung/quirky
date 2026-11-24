@@ -193,7 +193,7 @@ describe('Claude structured child-work producer', () => {
       step.check?.()
     }
     await adapter.closeSession('session-1')
-    // Orca ended the session: what still ran ends unknown, as any lost contact does, and every
+    // Quirky ended the session: what still ran ends unknown, as any lost contact does, and every
     // record stays.
     const summary = records().map((record) => ({
       description: record.description,

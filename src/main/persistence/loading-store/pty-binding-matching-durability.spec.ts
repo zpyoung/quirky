@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { TEST_LEAF_1, TEST_LEAF_2 } from '../../persistence-session-fixtures'
 import * as sessionOwnerFields from '../restoring-sessions/session-owner-fields'
 import * as bindingUpdate from './pty-binding-session-update'
@@ -116,7 +116,7 @@ export function registerPtyBindingMatchingDurabilityTests(): void {
         gate.finish.reject(new ProfileStateWriterError('test-write', 'disk refused', outcome))
         await rejected
 
-        const initialHostId = ORCA_LAYOUT_OWNER_IS_MAIN ? 'local' : null
+        const initialHostId = QUIRKY_LAYOUT_OWNER_IS_MAIN ? 'local' : null
         expect(published).toEqual(
           outcome === 'known-failure'
             ? [

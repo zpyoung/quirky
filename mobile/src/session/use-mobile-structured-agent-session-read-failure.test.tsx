@@ -1,5 +1,5 @@
 // A refused read of a chat's history: the phone keeps the refusal beside its words, so a failure no
-// retry gets past (damage, a newer Orca's chat) shows no composer under it.
+// retry gets past (damage, a newer Quirky's chat) shows no composer under it.
 
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
@@ -86,7 +86,10 @@ afterEach(() => {
 
 it.each([
   ['journalCorrupt', 'Unable to load this chat.'],
-  ['journalWrittenByNewerOrca', 'This chat was saved by a newer Orca. Update Orca to open it.']
+  [
+    'journalWrittenByNewerQuirky',
+    'This chat was saved by a newer Quirky. Update Quirky to open it.'
+  ]
 ])('reads %s as a failure no retry gets past, in its words', async (reason, words) => {
   expect(await readFailedWith(reason)).toMatchObject({
     status: 'error',

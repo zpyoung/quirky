@@ -157,8 +157,8 @@ describe('composer drop on a project owned by a paired server (#16558)', () => {
     })
 
     expect(toastError).not.toHaveBeenCalled()
-    expect(attached).toEqual(['/srv/repo/.orca/drops/shot.png'])
-    expect(server.files.has('.orca/drops/shot.png')).toBe(true)
+    expect(attached).toEqual(['/srv/repo/.quirky/drops/shot.png'])
+    expect(server.files.has('.quirky/drops/shot.png')).toBe(true)
     for (const call of server.calls.filter(({ method }) => method !== 'status.get')) {
       expect(call.selector).toBe(ENVIRONMENT_ID)
       expect(call.params.worktree).toBe(WORKTREE_SELECTOR)
@@ -177,9 +177,9 @@ describe('composer drop on a project owned by a paired server (#16558)', () => {
       await result.current.applyNativeDrop(['/client/b/shot.png'], () => true)
     })
 
-    expect(server.files.has('.orca/drops/shot.png')).toBe(true)
-    expect(server.files.has('.orca/drops/shot copy.png')).toBe(true)
-    expect(attached).toContain('/srv/repo/.orca/drops/shot copy.png')
+    expect(server.files.has('.quirky/drops/shot.png')).toBe(true)
+    expect(server.files.has('.quirky/drops/shot copy.png')).toBe(true)
+    expect(attached).toContain('/srv/repo/.quirky/drops/shot copy.png')
   })
 
   it('attaches nothing and commits nothing when the server disconnects mid-drop', async () => {

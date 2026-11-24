@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RuntimeGraphStatus } from '../../../shared/runtime-session-contracts'
-import { OrcaRuntimeService } from '../orca-runtime'
+import { QuirkyRuntimeService } from '../quirky-runtime'
 
-class InventoryPublicationRuntime extends OrcaRuntimeService {
+class InventoryPublicationRuntime extends QuirkyRuntimeService {
   setGraph(status: RuntimeGraphStatus, epoch: number): void {
     this.graphStatus = status
     this.rendererGraphEpoch = epoch

@@ -107,7 +107,7 @@ export abstract class BrowserManagerState extends BrowserManagerViewportScrollSt
     error: string | null
   ): void
   protected abstract getDownloadReceivedBytes(item: Electron.DownloadItem): number
-  protected abstract openLinkInOrcaTab(
+  protected abstract openLinkInQuirkyTab(
     browserTabId: string,
     rawUrl: string,
     activate?: boolean
@@ -253,7 +253,7 @@ export abstract class BrowserManagerState extends BrowserManagerViewportScrollSt
     if (browserTabId) {
       return { browserTabId, rootGuestWebContentsId: guestWebContentsId }
     }
-    // Route popups live in an Orca-built window, so they never pass through did-create-window and
+    // Route popups live in an Quirky-built window, so they never pass through did-create-window and
     // have no inherited context; their owning page comes from the route popup registry instead.
     const routeOpenerWebContentsId = resolveBrowserRouteGuestPopupOpener(guestWebContentsId)
     if (routeOpenerWebContentsId !== null) {

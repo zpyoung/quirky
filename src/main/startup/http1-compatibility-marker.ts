@@ -11,7 +11,7 @@ import { bestEffortFsyncDirectorySync } from '../../shared/secure-file'
  * Why a standalone file (not the Store): app.commandLine.appendSwitch('disable-http2') must run
  * before the first Electron session exists, which is before the settings Store is constructed.
  * Reading it from the settings file meant a synchronous read + JSON.parse of the whole multi-MB
- * orca-data.json on the critical path of every cold start, duplicating the parse the Store does a
+ * quirky-data.json on the critical path of every cold start, duplicating the parse the Store does a
  * moment later. This marker is a few bytes, mirroring gpu-fallback-marker.ts.
  */
 

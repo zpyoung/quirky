@@ -1,4 +1,4 @@
-/** Generated extensions run on the agent host without access to Orca modules. */
+/** Generated extensions run on the agent host without access to Quirky modules. */
 export function getAgentStatusInputRedactionSourceLines(): string[] {
   return String.raw`
 function statusInputReferencesCredentialPath(value: string): boolean {

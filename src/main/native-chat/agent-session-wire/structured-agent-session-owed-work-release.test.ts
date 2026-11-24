@@ -50,7 +50,7 @@ let clock: number
 const server = new AgentHookServer()
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-owed-work-release-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-owed-work-release-'))
   _internals.resetCachesForTests()
   resetHostTestOperationIds()
   claude = fakeClaude()

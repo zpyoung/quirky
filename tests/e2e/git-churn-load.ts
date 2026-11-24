@@ -38,7 +38,7 @@ export type GitChurnStats = {
 // Matches the sibling probes (runtime-graph-publication-probe): the handle must
 // live on `window` to survive between page.evaluate calls, and `declare global`
 // would need an `interface` the lint rules forbid.
-type GitChurnWindow = Window & { __orcaGitChurnLoad?: { stop: () => GitChurnStats } }
+type GitChurnWindow = Window & { __quirkyGitChurnLoad?: { stop: () => GitChurnStats } }
 
 /**
  * Builds `repoCount` real repositories, each with `filesPerRepo` tracked files
@@ -81,7 +81,7 @@ export function createGitChurnRepos(
 }
 
 /**
- * Registers each repo with Orca. Required: main's `git:status` handler rejects
+ * Registers each repo with Quirky. Required: main's `git:status` handler rejects
  * any path that is not a known repository or worktree ("Access denied: unknown
  * repository or worktree path"), so an unregistered churn loop only measures
  * its own rejection path.
@@ -125,7 +125,7 @@ export async function startGitChurnLoad(
     ({ paths, concurrency, admissionTier }) => {
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the probe owns this property on its own renderer window; nothing else reads or writes it.
       const target = window as GitChurnWindow
-      target.__orcaGitChurnLoad?.stop()
+      target.__quirkyGitChurnLoad?.stop()
       let running = true
       const stats: GitChurnStats = {
         requested: 0,
@@ -165,7 +165,7 @@ export async function startGitChurnLoad(
       for (let lane = 0; lane < concurrency; lane++) {
         void runLoop(lane)
       }
-      target.__orcaGitChurnLoad = {
+      target.__quirkyGitChurnLoad = {
         stop: () => {
           running = false
           return { ...stats }
@@ -180,6 +180,6 @@ export async function stopGitChurnLoad(page: Page): Promise<GitChurnStats | null
   return page.evaluate(
     () =>
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: same probe-owned property as startGitChurnLoad installs.
-      (window as GitChurnWindow).__orcaGitChurnLoad?.stop() ?? null
+      (window as GitChurnWindow).__quirkyGitChurnLoad?.stop() ?? null
   )
 }

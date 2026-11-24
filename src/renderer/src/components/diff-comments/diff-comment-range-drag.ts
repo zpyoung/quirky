@@ -105,8 +105,8 @@ export function installDiffCommentRangeDrag({
         range: new monaco.Range(range.startLine, 1, range.endLine, 1),
         options: {
           isWholeLine: true,
-          className: 'orca-diff-comment-range-highlight',
-          marginClassName: 'orca-diff-comment-range-margin'
+          className: 'quirky-diff-comment-range-highlight',
+          marginClassName: 'quirky-diff-comment-range-margin'
         }
       }
     ])

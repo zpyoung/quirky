@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Store } from '../persistence'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { RuntimeListingHostScope } from '../../shared/runtime-listing-host-scope'
 import type { HostedReviewSitterDefinition } from '../../shared/fork-hosted-review-sitter/types'
 
@@ -46,7 +46,7 @@ function fakeRuntime(
     dispatchId?: string
   } = {}
 ) {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double of OrcaRuntimeService; only the members this suite exercises are stubbed.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: partial test double of QuirkyRuntimeService; only the members this suite exercises are stubbed.
   return {
     showManagedWorktree: async () => ({
       repoId: REPO_ID,
@@ -72,7 +72,7 @@ function fakeRuntime(
             }
           : undefined
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
 }
 
 describe('hosted review sitter terminal-census gate', () => {

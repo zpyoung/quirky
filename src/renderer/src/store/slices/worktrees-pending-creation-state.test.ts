@@ -79,7 +79,7 @@ describe('pending worktree creation state', () => {
           hostId: 'local',
           projectHostSetupId: 'setup-local',
           repoId: 'repo-local',
-          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'orca' }
+          providerIdentity: { provider: 'github', owner: 'stablyai', repo: 'quirky' }
         },
         workspaceRunContext: {
           kind: 'workspace-run',
@@ -87,7 +87,7 @@ describe('pending worktree creation state', () => {
           hostId: 'ssh:ssh-1',
           projectHostSetupId: 'setup-ssh',
           repoId: 'repo-ssh',
-          path: '/home/orca/orca'
+          path: '/home/quirky/quirky'
         },
         name: 'feature',
         setupDecision: 'inherit',

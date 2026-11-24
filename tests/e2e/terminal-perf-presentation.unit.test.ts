@@ -8,8 +8,8 @@ import {
 describe('terminal perf window presentation', () => {
   afterEach(() => vi.unstubAllGlobals())
   const isolatedDisplay = {
-    ORCA_E2E_TERMINAL_PERF_XVFB: '1',
-    ORCA_BACKGROUND_LAUNCH: '1',
+    QUIRKY_E2E_TERMINAL_PERF_XVFB: '1',
+    QUIRKY_BACKGROUND_LAUNCH: '1',
     GITHUB_ACTIONS: 'true',
     RUNNER_ENVIRONMENT: 'github-hosted',
     DISPLAY: ':99'
@@ -19,7 +19,7 @@ describe('terminal perf window presentation', () => {
     expect(shouldPresentTerminalPerfWindow({}, platform)).toBe(false)
     expect(
       shouldPresentTerminalPerfWindow(
-        { ...isolatedDisplay, ORCA_E2E_TERMINAL_PERF_XVFB: '0' },
+        { ...isolatedDisplay, QUIRKY_E2E_TERMINAL_PERF_XVFB: '0' },
         platform
       )
     ).toBe(false)
@@ -52,7 +52,7 @@ describe('terminal perf window presentation', () => {
   }
 
   it('does not contact Electron during an ordinary local run', async () => {
-    const { app, info } = presentationFixture({ ORCA_BACKGROUND_LAUNCH: '1' })
+    const { app, info } = presentationFixture({ QUIRKY_BACKGROUND_LAUNCH: '1' })
     await presentTerminalPerfWindow(app, info)
     expect(app.evaluate).not.toHaveBeenCalled()
     expect(info.annotations).toEqual([])

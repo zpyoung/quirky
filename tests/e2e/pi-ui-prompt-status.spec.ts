@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { readHookEndpoint } from './helpers/agent-hook-endpoint'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import {
@@ -10,26 +10,26 @@ import {
 } from './helpers/terminal'
 
 test('Pi modal hooks show the existing waiting-for-input indicator', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage, 30_000)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage, 30_000)
   const endpoint = await readHookEndpoint(electronApp)
-  const ptyId = await waitForActivePanePtyId(orcaPage)
+  const ptyId = await waitForActivePanePtyId(quirkyPage)
   const marker = '__PI_MODAL_STATUS_READY__'
-  await sendToTerminal(orcaPage, ptyId, `printf '${marker}\\n'\r`)
-  await waitForTerminalOutput(orcaPage, marker)
-  const { paneKey, worktreeId } = await waitForActivePaneHookDescriptor(orcaPage)
+  await sendToTerminal(quirkyPage, ptyId, `printf '${marker}\\n'\r`)
+  await waitForTerminalOutput(quirkyPage, marker)
+  const { paneKey, worktreeId } = await waitForActivePaneHookDescriptor(quirkyPage)
 
   async function emit(payload: Record<string, unknown>): Promise<void> {
     const response = await fetch(`http://127.0.0.1:${endpoint.port}/hook/pi`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Orca-Agent-Hook-Token': endpoint.token
+        'X-Quirky-Agent-Hook-Token': endpoint.token
       },
       body: JSON.stringify({
         paneKey,
@@ -44,29 +44,29 @@ test('Pi modal hooks show the existing waiting-for-input indicator', async ({
   }
 
   // Terminal tabs present both waiting and blocked as "Needs attention".
-  const waiting = orcaPage.locator('[aria-label="Needs attention"]')
+  const waiting = quirkyPage.locator('[aria-label="Needs attention"]')
   await emit({ hook_event_name: 'before_agent_start', prompt: 'Pi modal status check' })
-  await expect(orcaPage.locator('[aria-label="Working"]').first()).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('before-working.png') })
+  await expect(quirkyPage.locator('[aria-label="Working"]').first()).toBeVisible()
+  await quirkyPage.screenshot({ path: testInfo.outputPath('before-working.png') })
 
   await emit({ hook_event_name: 'ui_prompt_start', ui_prompt_active: true })
   await expect
     .poll(() =>
-      orcaPage.evaluate(
+      quirkyPage.evaluate(
         (key) => window.__store?.getState().agentStatusByPaneKey[key]?.state,
         paneKey
       )
     )
     .toBe('waiting')
   await expect(waiting.first()).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('after-waiting.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('after-waiting.png') })
   await emit({ hook_event_name: 'tool_execution_end', tool_name: 'bash', ui_prompt_active: true })
   await expect(waiting.first()).toBeVisible()
 
   await emit({ hook_event_name: 'ui_prompt_end', is_idle: false })
   await expect(waiting).toHaveCount(0)
-  await expect(orcaPage.locator('[aria-label="Working"]').first()).toBeVisible()
+  await expect(quirkyPage.locator('[aria-label="Working"]').first()).toBeVisible()
   await emit({ hook_event_name: 'agent_end' })
-  await expect(orcaPage.locator('[aria-label="Working"]')).toHaveCount(0)
+  await expect(quirkyPage.locator('[aria-label="Working"]')).toHaveCount(0)
   await expect(waiting).toHaveCount(0)
 })

@@ -25,7 +25,7 @@ export function sustainedLoadReadyFilePath(
   runId: string,
   paneIndex: number
 ): string {
-  return path.join(directory, `.orca-mwt-load-ready-${runId}-${paneIndex}`)
+  return path.join(directory, `.quirky-mwt-load-ready-${runId}-${paneIndex}`)
 }
 
 export function typingProbeReadyMarker(runId: string): string {
@@ -69,7 +69,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 // panes the stream scrolls a READY marker out of the buffer's serialize
 // window before the spec's sequential checks reach it.
 writeFileSync(
-  ${JSON.stringify(readyFileDirectory)} + '/.orca-mwt-load-ready-${runId}-' + paneIndex,
+  ${JSON.stringify(readyFileDirectory)} + '/.quirky-mwt-load-ready-${runId}-' + paneIndex,
   String(Date.now())
 )
 process.stdout.write('${'MWT_LOAD_READY_'}${runId}_' + paneIndex + '\\r\\n')
@@ -111,7 +111,7 @@ while (Date.now() < deadline) {
     nextStreamAt = now + TICK_MS
   }
   if (now >= nextReportAt) {
-    const statsPath = ${JSON.stringify(readyFileDirectory)} + '/.orca-mwt-load-stats-${runId}-' + paneIndex
+    const statsPath = ${JSON.stringify(readyFileDirectory)} + '/.quirky-mwt-load-stats-${runId}-' + paneIndex
     writeFileSync(statsPath + '.tmp', JSON.stringify({ startedAt, sampledAt: now, streamBytes, titleFrames, statusFrames }))
     renameSync(statsPath + '.tmp', statsPath)
     nextReportAt = now + 5000
@@ -164,7 +164,7 @@ process.stdin.on('data', (chunk) => {
  *
  * `frameRows` pads the frame body to a realistic repaint size; `splitDelayMs`
  * is the gap between body and close, i.e. how long the latch stays open at the
- * source before Orca's delivery adds any of its own.
+ * source before Quirky's delivery adds any of its own.
  */
 function codexEchoProbeScript(
   runId: string,

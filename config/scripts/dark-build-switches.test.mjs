@@ -18,7 +18,7 @@ afterEach(async () => {
 })
 
 describe('dark build switches', () => {
-  it.each(['ORCA_LAYOUT_OWNER', 'ORCA_SIDEBAR_INPUTS'])(
+  it.each(['QUIRKY_LAYOUT_OWNER', 'QUIRKY_SIDEBAR_INPUTS'])(
     'compiles the dark path in only when %s=main asks',
     (variable) => {
       expect(darkBuildDefines({ [variable]: 'main' })[variable]).toBe('"main"')
@@ -30,20 +30,20 @@ describe('dark build switches', () => {
   )
 
   it('keeps the layout-owner marker name packaging already refuses', () => {
-    expect(darkBuildMarkers({ ORCA_LAYOUT_OWNER: 'main' })).toEqual([
+    expect(darkBuildMarkers({ QUIRKY_LAYOUT_OWNER: 'main' })).toEqual([
       {
-        fileName: 'ORCA_LAYOUT_OWNER_MAIN',
-        text: 'Built with ORCA_LAYOUT_OWNER=main, for dark testing only.\n'
+        fileName: 'QUIRKY_LAYOUT_OWNER_MAIN',
+        text: 'Built with QUIRKY_LAYOUT_OWNER=main, for dark testing only.\n'
       }
     ])
     expect(darkBuildMarkers({})).toEqual([])
   })
 
-  it.each(['ORCA_LAYOUT_OWNER', 'ORCA_SIDEBAR_INPUTS'])(
+  it.each(['QUIRKY_LAYOUT_OWNER', 'QUIRKY_SIDEBAR_INPUTS'])(
     'refuses %s at packaging time, and any output its dark build marked',
     async (variable) => {
-      const clean = await mkdtemp(join(tmpdir(), 'orca-dark-build-clean-'))
-      const dark = await mkdtemp(join(tmpdir(), 'orca-dark-build-dark-'))
+      const clean = await mkdtemp(join(tmpdir(), 'quirky-dark-build-clean-'))
+      const dark = await mkdtemp(join(tmpdir(), 'quirky-dark-build-dark-'))
       scratch.push(clean, dark)
       const [marker] = darkBuildMarkers({ [variable]: 'main' })
       await writeFile(join(dark, marker.fileName), marker.text)
@@ -55,10 +55,10 @@ describe('dark build switches', () => {
   )
 
   it.each([
-    ['ORCA_LAYOUT_OWNER', 'ORCA_SIDEBAR_INPUTS'],
-    ['ORCA_SIDEBAR_INPUTS', 'ORCA_LAYOUT_OWNER']
+    ['QUIRKY_LAYOUT_OWNER', 'QUIRKY_SIDEBAR_INPUTS'],
+    ['QUIRKY_SIDEBAR_INPUTS', 'QUIRKY_LAYOUT_OWNER']
   ])('lets a dark build carry its own %s output, never one of %s', async (own, other) => {
-    const dark = await mkdtemp(join(tmpdir(), 'orca-dark-build-own-'))
+    const dark = await mkdtemp(join(tmpdir(), 'quirky-dark-build-own-'))
     scratch.push(dark)
     const [marker] = darkBuildMarkers({ [own]: 'main' })
     await writeFile(join(dark, marker.fileName), marker.text)

@@ -2,7 +2,7 @@
 // runs on it: a turn that finished (or failed) and an agent that needs input.
 //
 // WHY ONLY WITHOUT A WINDOW: a window runs its own detection and pushes this host's phones through
-// main, as it always has. A host with no window (`orca serve`, `orcad`, a desktop whose window is
+// main, as it always has. A host with no window (`quirky serve`, `quirkyd`, a desktop whose window is
 // closed) had nobody to make the call, so the phones heard nothing. Here the host makes it with the
 // window's own rules, timing and wording; while a window owns the host, it stays silent.
 //

@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 test.use({ seedTestRepo: false })
 
@@ -68,14 +68,14 @@ async function settledGeometry(page: Page, fixture: SidebarFixture) {
 }
 
 test('keeps a collapsed group visible when an idle card below it grows', async ({
-  orcaPage,
+  quirkyPage,
   registerPostElectronShutdownCleanup
 }, testInfo) => {
   // Why: the fixture's collapse slides rows in from their old position; a hidden window can freeze that mid-flight baseline.
-  await orcaPage.emulateMedia({ reducedMotion: 'reduce' })
-  await waitForSessionReady(orcaPage)
-  await orcaPage.setViewportSize({ width: 1200, height: 900 })
-  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-sidebar-measured-row-')))
+  await quirkyPage.emulateMedia({ reducedMotion: 'reduce' })
+  await waitForSessionReady(quirkyPage)
+  await quirkyPage.setViewportSize({ width: 1200, height: 900 })
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-sidebar-measured-row-')))
   registerPostElectronShutdownCleanup(async () => {
     rmSync(root, { recursive: true, force: true })
   })
@@ -103,7 +103,7 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
     }
   }
 
-  const fixture = await orcaPage.evaluate(async (repoPaths): Promise<SidebarFixture> => {
+  const fixture = await quirkyPage.evaluate(async (repoPaths): Promise<SidebarFixture> => {
     const store = window.__store!
     for (const repoPath of repoPaths) {
       await window.api.repos.add({ path: repoPath })
@@ -147,7 +147,7 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
     }
   }, paths)
 
-  const sidebar = orcaPage.locator('[data-worktree-sidebar]')
+  const sidebar = quirkyPage.locator('[data-worktree-sidebar]')
   const group = sidebar.locator(`[data-project-group-header-id="${fixture.groupId}"]`)
   const collapsedRepo = sidebar.locator(`[data-repo-header-id="${fixture.collapsedRepoId}"]`)
   const card = sidebar.locator(`[data-worktree-id=${JSON.stringify(fixture.worktreeId)}]`)
@@ -155,7 +155,7 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
   await expect(group).toHaveAttribute('aria-expanded', 'false')
   await expect(collapsedRepo).toHaveAttribute('aria-expanded', 'false')
   await expect(card).toHaveCount(1)
-  const before = await settledGeometry(orcaPage, fixture)
+  const before = await settledGeometry(quirkyPage, fixture)
   expect(before.groupUnobscured).toBe(true)
   expect(before.scrollTop).toBe(0)
   expect(before.scrollHeight).toBeLessThanOrEqual(before.clientHeight)
@@ -173,9 +173,9 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
     element.appendChild(content)
   })
   await expect
-    .poll(async () => (await readGeometry(orcaPage, fixture)).cardHeight)
+    .poll(async () => (await readGeometry(quirkyPage, fixture)).cardHeight)
     .toBeCloseTo(before.cardHeight + 50, 0)
-  const after = await settledGeometry(orcaPage, fixture)
+  const after = await settledGeometry(quirkyPage, fixture)
   const afterPath = testInfo.outputPath('after-card-growth.png')
   await sidebar.screenshot({ path: afterPath })
   await testInfo.attach('after-card-growth', { path: afterPath, contentType: 'image/png' })
@@ -187,7 +187,7 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
   expect(after.expandedGap).toBeCloseTo(before.expandedGap, 0)
   await expect(group).toHaveCount(1)
   // A pin lands in main's metadata, which the desktop-facts shadow compares against the window.
-  await orcaPage.evaluate(async (worktreeId) => {
+  await quirkyPage.evaluate(async (worktreeId) => {
     const result = await window.__store
       ?.getState()
       .updateWorktreeMeta(worktreeId, { isPinned: true })

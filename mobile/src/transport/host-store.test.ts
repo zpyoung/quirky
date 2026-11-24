@@ -56,8 +56,8 @@ import {
 import { resetMobileRelayHostOverlayStoreForTests } from './mobile-relay-host-overlay-store'
 import { writeMobileRelayCredentialBundle } from './mobile-relay-credential-bundle'
 
-const HOSTS_STORAGE_KEY = 'orca:hosts'
-const OVERLAY_STORAGE_KEY = 'orca:mobile-relay:host-overlays:v2'
+const HOSTS_STORAGE_KEY = 'quirky:hosts'
+const OVERLAY_STORAGE_KEY = 'quirky:mobile-relay:host-overlays:v2'
 const HOST_ONE = {
   id: 'host-1',
   name: 'Host 1',
@@ -346,7 +346,7 @@ describe('host-store list mutations', () => {
     const cleanup = staleCleanup(HOST_ONE.id)
     await vi.waitFor(() => {
       expect(secureStoreMock.deleteItemAsync).toHaveBeenCalledWith(
-        'orca.host-token.host-1',
+        'quirky.host-token.host-1',
         expect.anything()
       )
     })
@@ -356,7 +356,7 @@ describe('host-store list mutations', () => {
     await expect(cleanup).rejects.toThrow('credential write superseded cleanup')
 
     expect(secureStoreMock.deleteItemAsync).not.toHaveBeenCalledWith(
-      'orca.mobile-relay.credentials.host-1',
+      'quirky.mobile-relay.credentials.host-1',
       expect.anything()
     )
   })
@@ -445,7 +445,7 @@ describe('host-store list mutations', () => {
     })
 
     expect(secureStoreMock.setItemAsync).toHaveBeenCalledWith(
-      'orca.host-token.host-new',
+      'quirky.host-token.host-new',
       'new-token',
       {
         keychainAccessible: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY'
@@ -513,7 +513,7 @@ describe('host-store list mutations', () => {
     await cleanup(HOST_ONE.id)
 
     expect(secureStoreMock.deleteItemAsync).toHaveBeenCalledWith(
-      'orca.host-token.host-1',
+      'quirky.host-token.host-1',
       expect.anything()
     )
   })
@@ -826,9 +826,9 @@ describe('host-store pairing save after an Android encryption rejection', () => 
   }
   // Why: the verbatim Android rejection from #6600 — expo maps a null-message GeneralSecurityException to this.
   const ENCRYPT_REJECTION = new Error(
-    "Could not encrypt the value for key 'orca.host-token.host-1782629088232' under keychain 'key_v1'. Caused by: unknown"
+    "Could not encrypt the value for key 'quirky.host-token.host-1782629088232' under keychain 'key_v1'. Caused by: unknown"
   )
-  const GENERATION_KEY = 'orca:pairing-keychain-generation'
+  const GENERATION_KEY = 'quirky:pairing-keychain-generation'
   let storedHostsRaw: string
   let storedGenerationRaw: string | null
 
@@ -877,7 +877,7 @@ describe('host-store pairing save after an Android encryption rejection', () => 
 
     await expect(savePairedHost(NEW_HOST)).resolves.toBeUndefined()
 
-    expect(written.get('orca.pairing.v1')).toBe('device-token')
+    expect(written.get('quirky.pairing.v1')).toBe('device-token')
     expect(JSON.parse(storedHostsRaw)).toEqual([
       {
         id: NEW_HOST.id,

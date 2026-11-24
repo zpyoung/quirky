@@ -11,10 +11,10 @@ import {
 
 describe('antivirus detection report', () => {
   it('hashes an artifact with the same digest the issue reports quote', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'orca-av-scan-'))
+    const directory = await mkdtemp(join(tmpdir(), 'quirky-av-scan-'))
     try {
-      const artifact = join(directory, 'orca-windows-setup.exe')
-      await writeFile(artifact, 'orca', 'utf8')
+      const artifact = join(directory, 'quirky-windows-setup.exe')
+      await writeFile(artifact, 'quirky', 'utf8')
       // Lowercase hex sha256, so a reporter's `shasum -a 256` output and ours
       // compare directly — that comparison is what makes a submission credible.
       expect(await hashFile(artifact)).toBe(
@@ -53,7 +53,7 @@ describe('antivirus detection report', () => {
 
   it('distinguishes an unscanned build from a clean one', () => {
     const unscanned = formatArtifactReport({
-      name: 'orca-windows-setup.exe',
+      name: 'quirky-windows-setup.exe',
       sha256: 'a'.repeat(64),
       known: false,
       scanned: 0,
@@ -62,7 +62,7 @@ describe('antivirus detection report', () => {
     expect(unscanned).toContain('never been scanned')
 
     const clean = formatArtifactReport({
-      name: 'orca-windows-setup.exe',
+      name: 'quirky-windows-setup.exe',
       sha256: 'a'.repeat(64),
       known: true,
       scanned: 70,
@@ -73,7 +73,7 @@ describe('antivirus detection report', () => {
 
   it('reports every flagging engine and its detection name', () => {
     const report = formatArtifactReport({
-      name: 'orca.exe',
+      name: 'quirky.exe',
       sha256: 'b'.repeat(64),
       known: true,
       scanned: 70,

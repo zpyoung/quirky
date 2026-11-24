@@ -171,9 +171,9 @@ export function useMobileBrowserStream(args: MobileBrowserStreamArgs) {
       if (!binaryScreencastGranted) {
         // Before the desktop's answer, because this one is about the app in the user's hand and no
         // desktop update can change it.
-        setError('Update the Orca app to stream browser tabs here.')
+        setError('Update the Quirky app to stream browser tabs here.')
       } else if (screencastSupported === false) {
-        setError('Update desktop Orca to stream browser tabs on mobile.')
+        setError('Update desktop Quirky to stream browser tabs on mobile.')
       } else if (screencastSupported === null) {
         setError('Checking desktop browser streaming support.')
       } else if (!tab.browserPageId) {

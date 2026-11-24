@@ -4,7 +4,7 @@ import { runAuditTool } from './run-audit-tool.mjs'
 
 const requestedBase =
   process.argv.slice(2).find((argument) => argument !== '--') ??
-  process.env.ORCA_CODE_QUALITY_BASE ??
+  process.env.QUIRKY_CODE_QUALITY_BASE ??
   'origin/main'
 const base = resolvePullRequestDiffBase(process.cwd(), requestedBase)
 // Accept revision syntax, never shell fragments or option injection.

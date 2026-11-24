@@ -113,7 +113,7 @@ export class StructuredAgentSessionEventRecovery {
           return
         }
         // Ended in the same step as the stop, so no report of that close can end it first as a
-        // quiet rest: Orca stopped the provider because its own journal failed.
+        // quiet rest: Quirky stopped the provider because its own journal failed.
         await this.endExitedChildUnderSerialize(sessionId, child, {
           expected: false,
           heldSends: heldAtFailure,

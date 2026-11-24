@@ -55,7 +55,7 @@ function parseNulPaths(stdout: string): string[] {
 function isExcludedGitPath(path: string, caseInsensitive: boolean): boolean {
   const root = path.split('/', 1)[0]
   const normalized = caseInsensitive ? root.toLowerCase() : root
-  return normalized === '.git' || normalized === '.orca'
+  return normalized === '.git' || normalized === '.quirky'
 }
 
 type GitCommand = (args: string[]) => Promise<{ stdout: string; stderr: string }>
@@ -189,19 +189,20 @@ async function listFolderCandidates(target: ObjectiveWorkspaceTarget): Promise<F
   const files: FileCandidate[] = []
   while (directories.length > 0) {
     const directory = directories.pop()!
-    const children = await readdir(directory.absolutePath, { withFileTypes: true }).then((entries) =>
-      entries.map((entry) => ({
-        name: entry.name,
-        isDirectory: entry.isDirectory(),
-        isSymlink: entry.isSymbolicLink()
-      }))
+    const children = await readdir(directory.absolutePath, { withFileTypes: true }).then(
+      (entries) =>
+        entries.map((entry) => ({
+          name: entry.name,
+          isDirectory: entry.isDirectory(),
+          isSymlink: entry.isSymbolicLink()
+        }))
     )
     for (const child of children) {
       validateChildName(child.name, windowsPaths)
       const relativePath = directory.relativePath
         ? posix.join(directory.relativePath, child.name)
         : child.name
-      if ((windowsPaths ? relativePath.toLowerCase() : relativePath) === '.orca') {
+      if ((windowsPaths ? relativePath.toLowerCase() : relativePath) === '.quirky') {
         continue
       }
       const absolutePath = flavor.join(directory.absolutePath, child.name)

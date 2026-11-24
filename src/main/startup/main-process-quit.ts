@@ -159,7 +159,7 @@ function installWillQuitHandler(): void {
     // Why keepStatus: the chat teardown above reads each chat's background work from that store
     // after this returns; cleared, a chat whose only work was a subagent or command is not offered.
     agentHookServer.stop({ keepStatus: true })
-    // Why Windows only: POSIX hooks short-circuit on ORCA_PANE_KEY, while Windows must register a
+    // Why Windows only: POSIX hooks short-circuit on QUIRKY_PANE_KEY, while Windows must register a
     // bare script path that cannot express the guard and would otherwise keep spawning after quit.
     // Why bounded here: every other teardown member carries its own ceiling, and this one reaches
     // $GROK_HOME -- which can be a stalled network mount, where the fs calls never settle and the

@@ -44,7 +44,7 @@ for (const [inputCase, input] of [
   ['ordinary Markdown', '# Hello\n\n<p>Use `Array<string>` and <b>bold</b>.</p>'],
   ...[2048, 8192, 16384].map((length) => [
     `${length} underscore collision`,
-    `\uE000ORCA_MD_CODE_${'_'.repeat(length)}0\uE000 and \`Array<string>\``
+    `\uE000QUIRKY_MD_CODE_${'_'.repeat(length)}0\uE000 and \`Array<string>\``
   ])
 ]) {
   assert.equal(after(input), before(input))

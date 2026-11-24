@@ -133,7 +133,7 @@ describe('automation creates: main provisions setup and default tabs', () => {
       expect.objectContaining({
         worktreePath: '/workspace/improve-dashboard',
         setup: expect.objectContaining({
-          runnerScriptPath: '/workspace/repo/.git/orca/setup-runner.sh'
+          runnerScriptPath: '/workspace/repo/.git/quirky/setup-runner.sh'
         }),
         defaultTabs,
         hasStartupTerminal: false,
@@ -146,8 +146,8 @@ describe('automation creates: main provisions setup and default tabs', () => {
 
   // Same pick the window made: the runner's path decides, a bare path falls back to posix.
   it.each([
-    { runnerScriptPath: 'C:\\repo\\.git\\orca\\setup-runner.cmd', platform: 'windows' },
-    { runnerScriptPath: '/home/me/repo/.git/orca/setup-runner.sh', platform: 'posix' }
+    { runnerScriptPath: 'C:\\repo\\.git\\quirky\\setup-runner.cmd', platform: 'windows' },
+    { runnerScriptPath: '/home/me/repo/.git/quirky/setup-runner.sh', platform: 'posix' }
   ])(
     'runs a $platform runner with the $platform command',
     async ({ runnerScriptPath, platform }) => {

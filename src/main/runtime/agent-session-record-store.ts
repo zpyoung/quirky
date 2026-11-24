@@ -110,7 +110,7 @@ export class AgentSessionRecordStore {
     return this.transactions.state
   }
 
-  /** A newer Orca wrote the database: every read answers, and every write is refused. */
+  /** A newer Quirky wrote the database: every read answers, and every write is refused. */
   get readOnly(): boolean {
     return this.transactions.readOnly
   }

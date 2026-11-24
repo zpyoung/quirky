@@ -9,7 +9,7 @@ const live = {
     state: 'on' as const,
     limit: 200,
     mechanism: 'systemd-slice' as const,
-    unit: 'orca_ptys_1.slice'
+    unit: 'quirky_ptys_1.slice'
   }
 }
 
@@ -35,7 +35,7 @@ describe('terminal-daemon status', () => {
       daemon: {
         verdict: 'exited',
         pid: 4288,
-        detail: 'pid 4288 is gone; Orca starts a new daemon with the next terminal',
+        detail: 'pid 4288 is gone; Quirky starts a new daemon with the next terminal',
         processCeiling: null
       }
     })

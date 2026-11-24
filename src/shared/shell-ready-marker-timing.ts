@@ -1,5 +1,5 @@
 /**
- * When in a shell's startup Orca's OSC 777 ready marker is published.
+ * When in a shell's startup Quirky's OSC 777 ready marker is published.
  *
  * Why this is a decision of its own: it is what separates "waiting for the marker
  * is free" from "waiting for the marker costs the user real startup latency", and

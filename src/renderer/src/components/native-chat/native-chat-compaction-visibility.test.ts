@@ -91,7 +91,7 @@ describe('captured OMP compaction visibility', () => {
       submissions: []
     }))
     expect(captured.messages.some((message) => message.command)).toBe(false)
-    expect(captured.membership.turnKeys).toEqual(['orca:command-turn%3Acompact-1'])
+    expect(captured.membership.turnKeys).toEqual(['quirky:command-turn%3Acompact-1'])
     expect(slotsFor(captured)[0]).toMatchObject({
       drawsMessage: true,
       folded: false,
@@ -108,7 +108,7 @@ describe('captured OMP compaction visibility', () => {
           item.body.kind === 'status'
             ? {
                 ...item,
-                itemId: 'orca:future-outcome',
+                itemId: 'quirky:future-outcome',
                 body: { ...item.body, presentation: 'compaction-skipped' }
               }
             : item
@@ -119,7 +119,7 @@ describe('captured OMP compaction visibility', () => {
   })
 
   it.each([
-    'orca:ordinary-warning',
+    'quirky:ordinary-warning',
     'legacy:grok:runtime-session-1:item%3Ap%3Asession-1%3Acompaction%253Acompact%253Acompact-1'
   ])('continues folding an ordinary warning beside a compact command: %s', async (itemId) => {
     const captured = await capturedCompaction((journal) => ({

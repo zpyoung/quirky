@@ -1,6 +1,6 @@
 import { StructuredAgentArgumentsError } from '../native-chat/structured-agent-arguments-error'
 
-/** Flags supplied by the SDK or owned by Orca's structured transport. */
+/** Flags supplied by the SDK or owned by Quirky's structured transport. */
 const OWNED_FLAGS = new Set([
   'print',
   'input-format',

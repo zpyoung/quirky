@@ -3,13 +3,13 @@ import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
 } from '../../runtime-terminal-state-records'
-import { OrcaRuntimeWithGetUnpersistedTrackedTitleForPty } from './terminal-title-tracker'
+import { QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty } from './terminal-title-tracker'
 import type { TerminalTitleFactMeta } from '../../../../shared/terminal-output-side-effects'
 import { detectAgentStatusFromTitle } from '../../../../shared/agent-detection'
 import { terminalTitleBlocksExplicitAgentStatus } from '../../runtime-worktree-status-projection'
 import type { ClaudeTerminalEvidence } from '../../../../shared/claude-terminal-interrupt'
 
-export abstract class OrcaRuntimeWithApplyTrackedPtyTitle extends OrcaRuntimeWithGetUnpersistedTrackedTitleForPty {
+export abstract class QuirkyRuntimeWithApplyTrackedPtyTitle extends QuirkyRuntimeWithGetUnpersistedTrackedTitleForPty {
   protected abstract collectPaneKeysForPty(ptyId: string): Set<string>
   protected abstract recordAgentPromptLifecycleState(
     ptyId: string,

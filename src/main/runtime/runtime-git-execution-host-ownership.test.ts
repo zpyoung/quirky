@@ -3,7 +3,7 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import type * as GitRemoteModule from '../git/remote'
 import type * as GitStatusModule from '../git/status'
 import type { ResolvedRuntimeGitWorktree } from './runtime-git-command-target'
-import { RuntimeGitCommands } from './orca-runtime-git'
+import { RuntimeGitCommands } from './quirky-runtime-git'
 import { SSH_HOST_NOT_SERVED_MESSAGE } from '../providers/ssh-host-not-served-error'
 
 const mocks = vi.hoisted(() => ({

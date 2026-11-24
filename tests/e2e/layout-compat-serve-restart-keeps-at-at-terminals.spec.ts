@@ -1,10 +1,10 @@
 /**
  * Layout rework P3 baseline, regression #23429 (fixed by #26022): terminals whose PTY ids carry
  * `@@` (daemon-minted: the paired desktop's own tab and a CLI `terminal.create`) stay listed after
- * `orca serve` restarts, beside a serve-minted one. Records the server's tab list, live terminals
+ * `quirky serve` restarts, beside a serve-minted one. Records the server's tab list, live terminals
  * and published layout before and after the restart, and what the desktop draws once reconnected.
  */
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { launchPairedElectronClient } from './helpers/paired-electron-client'
 import {

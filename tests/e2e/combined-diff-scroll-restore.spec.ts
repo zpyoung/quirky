@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
 
 type CombinedDiffScrollRepo = {
@@ -48,7 +48,7 @@ function buildModifiedFile(fileIndex: number): string {
 }
 
 function createCombinedDiffScrollRepo(): CombinedDiffScrollRepo {
-  const repoPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'orca-combined-diff-scroll-')))
+  const repoPath = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'quirky-combined-diff-scroll-')))
   runGit(repoPath, ['init'])
   runGit(repoPath, ['config', 'user.email', 'e2e@test.local'])
   runGit(repoPath, ['config', 'user.name', 'E2E Test'])
@@ -408,19 +408,19 @@ test.describe('Combined diff scroll restore', () => {
   test.describe.configure({ mode: 'serial' })
   test.use({ seedTestRepo: false })
 
-  test('keeps the visible section anchored after switching tabs', async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
+  test('keeps the visible section anchored after switching tabs', async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
     const fixture = createCombinedDiffScrollRepo()
 
     try {
-      const worktreeId = await addAndActivateRepo(orcaPage, fixture.repoPath)
-      const diffTabId = await openCombinedDiff(orcaPage, worktreeId, fixture.repoPath)
-      await expect(orcaPage.locator('.combined-diff-scroll-container')).toBeVisible()
-      await expect(orcaPage.getByText(`${FILE_COUNT} changed files`)).toBeVisible()
+      const worktreeId = await addAndActivateRepo(quirkyPage, fixture.repoPath)
+      const diffTabId = await openCombinedDiff(quirkyPage, worktreeId, fixture.repoPath)
+      await expect(quirkyPage.locator('.combined-diff-scroll-container')).toBeVisible()
+      await expect(quirkyPage.getByText(`${FILE_COUNT} changed files`)).toBeVisible()
 
-      await scrollCombinedDiffDeep(orcaPage)
-      await waitForStableViewportAnchor(orcaPage)
-      const activeScrollSamples = await wheelCombinedDiffDown(orcaPage)
+      await scrollCombinedDiffDeep(quirkyPage)
+      await waitForStableViewportAnchor(quirkyPage)
+      const activeScrollSamples = await wheelCombinedDiffDown(quirkyPage)
       expect(activeScrollSamples.length).toBeGreaterThan(2)
       expect(
         getLargestBackwardScrollJump(activeScrollSamples),
@@ -429,27 +429,27 @@ test.describe('Combined diff scroll restore', () => {
         )}`
       ).toBeLessThan(120)
 
-      const beforeSwitch = await waitForStableViewportAnchor(orcaPage)
+      const beforeSwitch = await waitForStableViewportAnchor(quirkyPage)
       expect(beforeSwitch.index).toBeGreaterThan(0)
 
-      await orcaPage.evaluate((wId) => {
+      await quirkyPage.evaluate((wId) => {
         const store = window.__store
         if (!store) {
           throw new Error('window.__store is not available')
         }
         store.getState().createTab(wId)
       }, worktreeId)
-      await expect(orcaPage.locator('.combined-diff-scroll-container')).toHaveCount(0)
+      await expect(quirkyPage.locator('.combined-diff-scroll-container')).toHaveCount(0)
 
-      await orcaPage.locator(`[data-tab-id="${diffTabId}"]`).click({ force: true })
-      await expect(orcaPage.locator('.combined-diff-scroll-container')).toBeVisible()
-      const afterSwitch = await waitForRestoredViewportAnchor(orcaPage, beforeSwitch)
+      await quirkyPage.locator(`[data-tab-id="${diffTabId}"]`).click({ force: true })
+      await expect(quirkyPage.locator('.combined-diff-scroll-container')).toBeVisible()
+      const afterSwitch = await waitForRestoredViewportAnchor(quirkyPage, beforeSwitch)
 
       expect(afterSwitch.key).toBe(beforeSwitch.key)
       expect(Math.abs(afterSwitch.top - beforeSwitch.top)).toBeLessThan(80)
 
-      await clickVisibleDiffLine(orcaPage)
-      const afterLineClick = await waitForStableViewportAnchor(orcaPage)
+      await clickVisibleDiffLine(quirkyPage)
+      const afterLineClick = await waitForStableViewportAnchor(quirkyPage)
 
       // Assert the viewport barely moved rather than an exact anchor key: sections
       // are ~viewport-sized, so a sub-pixel focus scroll from the click can flip the

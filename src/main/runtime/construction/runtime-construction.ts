@@ -2,9 +2,9 @@ import type {
   RuntimeConstructionBindings,
   RuntimeConstructionDependencies
 } from './runtime-construction-dependencies'
-import type { OrcaRuntimeWithRuntimeId as IdentityState } from './runtime-identity-state'
-import type { OrcaRuntimeWithStopRequestedPtyIds as ServiceState } from './runtime-service-state'
-import type { OrcaRuntimeWithPreservedBranchCleanup as HostServices } from './runtime-host-services'
+import type { QuirkyRuntimeWithRuntimeId as IdentityState } from './runtime-identity-state'
+import type { QuirkyRuntimeWithStopRequestedPtyIds as ServiceState } from './runtime-service-state'
+import type { QuirkyRuntimeWithPreservedBranchCleanup as HostServices } from './runtime-host-services'
 import type { RuntimeFileCommandSurface } from '../runtime-file-command-surface'
 import type { RuntimeGitCommandSurface } from '../runtime-git-command-surface'
 import type { RuntimeRepositoryCommandSurface } from '../runtime-repository-command-surface'
@@ -12,9 +12,9 @@ import type { RuntimeReviewCommandSurface } from '../runtime-review-command-surf
 import type { RuntimeServiceCommandSurface } from '../runtime-service-command-surface'
 import type { RuntimeSkillCommandSurface } from '../runtime-skill-command-contract'
 import type { RuntimeEdgeCommandSurface } from '../runtime-edge-command-controller'
-import type { OrcaRuntimeWithListManagedWorktrees as ListManagedWorktrees } from '../workspaces/managed-workspace-operations'
+import type { QuirkyRuntimeWithListManagedWorktrees as ListManagedWorktrees } from '../workspaces/managed-workspace-operations'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
-import { OrcaRuntimeWithLinearCommands } from '../integrations/linear/linear-commands'
+import { QuirkyRuntimeWithLinearCommands } from '../integrations/linear/linear-commands'
 
 import type { RuntimeStore } from '../runtime-store-contract'
 import type { StatsCollector } from '../../stats/collector'
@@ -43,7 +43,7 @@ import { RuntimeMachineName } from '../runtime-machine-name'
 import { setPRConflictSummaryRemoteFetches } from '../../github/conflict-summary'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The constructor installs every checked canonical surface.
-export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCommands {
+export abstract class QuirkyRuntimeWithStateFields extends QuirkyRuntimeWithLinearCommands {
   // Earlier layers allocate these slots; this constructor assigns their readonly values.
   declare protected readonly getLocalProviderFn: HostServices['getLocalProviderFn']
   declare readonly onPtyStopped: HostServices['onPtyStopped']
@@ -200,7 +200,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     this.getPairedDeviceNameFn = deps?.getPairedDeviceName ?? (() => null)
     // Why: configure the shared AiVault scan cache from a serve-mode-reachable
     // seam so the aiVault.listSessions RPC includes managed-Codex + WSL sessions
-    // even on headless `orca serve` hosts where registerCoreHandlers never runs.
+    // even on headless `quirky serve` hosts where registerCoreHandlers never runs.
     if (deps?.getAdditionalAiVaultCodexHomePaths) {
       configureAiVaultSessionSources({
         getAdditionalCodexHomePaths: deps.getAdditionalAiVaultCodexHomePaths
@@ -248,7 +248,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
 }
 
 // oxlint-disable-next-line typescript/consistent-type-definitions -- SAFETY: This merge models the constructor-installed canonical methods.
-export interface OrcaRuntimeWithStateFields
+export interface QuirkyRuntimeWithStateFields
   extends
     RuntimeFileCommandSurface,
     RuntimeGitCommandSurface,

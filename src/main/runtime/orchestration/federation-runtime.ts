@@ -1,7 +1,7 @@
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 
 export type FederationRuntime = Pick<
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   | 'syncOrchestrationFederatedDispatch'
   | 'getOrchestrationDb'
   | 'resolveOrchestrationWorkerServer'

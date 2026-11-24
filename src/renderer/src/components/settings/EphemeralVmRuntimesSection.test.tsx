@@ -55,7 +55,7 @@ function makeRuntime(overrides: Partial<EphemeralVmRuntimeRecord> = {}): Ephemer
     updatedAt: 1_000,
     recipeResult: {
       schemaVersion: 1,
-      pairingCode: 'orca://pair?code=test',
+      pairingCode: 'quirky://pair?code=test',
       projectRoot: '/workspace/repo'
     },
     ...overrides

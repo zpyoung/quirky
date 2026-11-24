@@ -1,7 +1,7 @@
 import './unused-default-rpc-methods.test-fixture'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { _resetTracerForTests, setActiveSink, type TracerSink } from '../../observability/tracer'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import { RpcDispatcher } from './dispatcher'
 import type { RpcRequest } from './core'
 import { SESSION_TAB_METHODS } from './methods/session-tabs'
@@ -72,7 +72,7 @@ describe('runtime close attribution', () => {
       const runtime = {
         getRuntimeId: () => 'test-runtime',
         [call]: close
-      } as unknown as OrcaRuntimeService
+      } as unknown as QuirkyRuntimeService
       const dispatcher = new RpcDispatcher({ runtime, methods: TERMINAL_METHODS })
       const replies: string[] = []
 
@@ -134,7 +134,7 @@ describe('runtime close attribution', () => {
         getRuntimeId: () => 'test-runtime',
         listMobileSessionTabs: vi.fn(async () => visibleSessionTab('wt-1', 'tab-1')),
         closeMobileSessionTab: vi.fn().mockResolvedValue({ closed: true })
-      } as unknown as OrcaRuntimeService
+      } as unknown as QuirkyRuntimeService
       const dispatcher = new RpcDispatcher({ runtime, methods: SESSION_TAB_METHODS })
 
       await dispatcher.dispatchStreaming(request(method, params), vi.fn(), {

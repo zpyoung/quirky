@@ -3,21 +3,21 @@ import os from 'node:os'
 import { vi } from 'vitest'
 
 declare global {
-  var orcaBunNodeAccessNormalized: boolean | undefined
+  var quirkyBunNodeAccessNormalized: boolean | undefined
 }
 
 if (process.versions.bun) {
-  if (!globalThis.orcaBunNodeAccessNormalized) {
+  if (!globalThis.quirkyBunNodeAccessNormalized) {
     const access = fs.promises.access
     // Bun resolves access() with null; Node's Promise<void> resolves with undefined.
     fs.promises.access = async (...args) => {
       await access(...args)
     }
-    globalThis.orcaBunNodeAccessNormalized = true
+    globalThis.quirkyBunNodeAccessNormalized = true
   }
 
   // Child fixtures exercise the application's Node runtime, independently of Vitest's runtime.
-  const nodeExecutable = process.env.ORCA_TEST_NODE_EXECUTABLE ?? process.env.npm_node_execpath
+  const nodeExecutable = process.env.QUIRKY_TEST_NODE_EXECUTABLE ?? process.env.npm_node_execpath
   if (nodeExecutable) {
     process.execPath = nodeExecutable
   }

@@ -1,5 +1,5 @@
 // A chat's close can reach main before its create: the window cancels while its create is still on
-// the way. With ORCA_LAYOUT_OWNER=main the window keeps no cancel tombstone for this machine's host,
+// the way. With QUIRKY_LAYOUT_OWNER=main the window keeps no cancel tombstone for this machine's host,
 // so main remembers the close and refuses that create, or closes the chat as its create lands.
 
 import type { AgentSessionWireRefusal } from '../../../../shared/agent-session-wire-refusals'

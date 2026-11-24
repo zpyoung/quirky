@@ -104,7 +104,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('removes a launcher directory after partial trial setup', () => {
-    const launcherDir = mkdtempSync(path.join(tmpdir(), 'orca-owner-partial-setup-test-'))
+    const launcherDir = mkdtempSync(path.join(tmpdir(), 'quirky-owner-partial-setup-test-'))
     temporaryDirectories.add(launcherDir)
 
     const cleanup = cleanupOwnerLossTrial({
@@ -119,10 +119,12 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('kills a timed-out trial group only after validating its environment', async () => {
-    const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'orca-owner-benchmark-group-test-'))
+    const temporaryDirectory = mkdtempSync(
+      path.join(tmpdir(), 'quirky-owner-benchmark-group-test-')
+    )
     temporaryDirectories.add(temporaryDirectory)
     const childPidPath = path.join(temporaryDirectory, 'child.pid')
-    const environmentName = `ORCA_OWNER_GROUP_${process.pid}`
+    const environmentName = `QUIRKY_OWNER_GROUP_${process.pid}`
     const environmentValue = `${Date.now()}`
     const fixture = `
       const { spawn } = require('node:child_process')
@@ -177,7 +179,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('resumes the group after post-stop revalidation fails', () => {
-    const marker = 'ORCA_OWNER_GROUP=trial'
+    const marker = 'QUIRKY_OWNER_GROUP=trial'
     const members = [
       { pid: 41, pgid: 41, command: `/launcher ${marker}` },
       { pid: 42, pgid: 41, command: `/child ${marker}` }
@@ -213,7 +215,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('compensates a possible stop after group anchor replacement', () => {
-    const marker = 'ORCA_OWNER_GROUP=trial'
+    const marker = 'QUIRKY_OWNER_GROUP=trial'
     const anchor = { pid: 41, pgid: 41, command: `/launcher ${marker}` }
     const replacement = { pid: 41, pgid: 99, command: '/unrelated' }
     const signals = []
@@ -243,7 +245,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('resumes a previously frozen group when final inspection fails', () => {
-    const marker = 'ORCA_OWNER_GROUP=trial'
+    const marker = 'QUIRKY_OWNER_GROUP=trial'
     const members = [{ pid: 41, pgid: 41, command: `/launcher ${marker}` }]
     const signals = []
     let scanCount = 0
@@ -273,7 +275,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('resumes a previously frozen group when final anchor stop fails', () => {
-    const marker = 'ORCA_OWNER_GROUP=trial'
+    const marker = 'QUIRKY_OWNER_GROUP=trial'
     const members = [
       { pid: 41, pgid: 41, command: `/launcher ${marker}` },
       { pid: 42, pgid: 41, command: `/child ${marker}` }
@@ -299,7 +301,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('resumes a previously frozen group after final anchor replacement', () => {
-    const marker = 'ORCA_OWNER_GROUP=trial'
+    const marker = 'QUIRKY_OWNER_GROUP=trial'
     const anchor = { pid: 41, pgid: 41, command: `/launcher ${marker}` }
     const child = { pid: 42, pgid: 41, command: `/child ${marker}` }
     const replacement = { pid: 41, pgid: 99, command: '/unrelated' }
@@ -328,11 +330,11 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
 
   it('kills a recorded helper in a separate process group', async () => {
     const temporaryDirectory = mkdtempSync(
-      path.join(tmpdir(), 'orca-owner-benchmark-cleanup-test-')
+      path.join(tmpdir(), 'quirky-owner-benchmark-cleanup-test-')
     )
     temporaryDirectories.add(temporaryDirectory)
     const recordPath = path.join(temporaryDirectory, 'helper.json')
-    const marker = `orca-owner-cleanup-${process.pid}-${Date.now()}`
+    const marker = `quirky-owner-cleanup-${process.pid}-${Date.now()}`
     const helper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)', marker], {
       detached: true,
       stdio: 'ignore'
@@ -359,7 +361,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('kills every unrecorded helper using its unique trial command', async () => {
-    const marker = `orca-owner-unrecorded-${process.pid}-${Date.now()}`
+    const marker = `quirky-owner-unrecorded-${process.pid}-${Date.now()}`
     const helpers = Array.from({ length: 2 }, () =>
       spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)', marker], {
         detached: true,
@@ -383,7 +385,7 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
   })
 
   it('continues exact-match cleanup after an earlier match fails', () => {
-    const marker = `orca-owner-multiple-${process.pid}-${Date.now()}`
+    const marker = `quirky-owner-multiple-${process.pid}-${Date.now()}`
     const matches = [
       { pid: 41, pgid: 41, command: `/helper ${marker}` },
       { pid: 42, pgid: 42, command: `/helper ${marker}` }
@@ -516,11 +518,11 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
 
   it('runs unique-command cleanup after an invalid process record', async () => {
     const temporaryDirectory = mkdtempSync(
-      path.join(tmpdir(), 'orca-owner-benchmark-fallback-test-')
+      path.join(tmpdir(), 'quirky-owner-benchmark-fallback-test-')
     )
     temporaryDirectories.add(temporaryDirectory)
     const recordPath = path.join(temporaryDirectory, 'helper.json')
-    const marker = `orca-owner-invalid-record-${process.pid}-${Date.now()}`
+    const marker = `quirky-owner-invalid-record-${process.pid}-${Date.now()}`
     const helper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)', marker], {
       detached: true,
       stdio: 'ignore'
@@ -544,11 +546,11 @@ describeMacOS('macOS helper owner-loss benchmark process cleanup', () => {
 
   it('rejects a record that is not a detached process-group identity', () => {
     const temporaryDirectory = mkdtempSync(
-      path.join(tmpdir(), 'orca-owner-benchmark-identity-test-')
+      path.join(tmpdir(), 'quirky-owner-benchmark-identity-test-')
     )
     temporaryDirectories.add(temporaryDirectory)
     const recordPath = path.join(temporaryDirectory, 'helper.json')
-    const marker = `orca-owner-invalid-identity-${process.pid}-${Date.now()}`
+    const marker = `quirky-owner-invalid-identity-${process.pid}-${Date.now()}`
     const helper = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1_000)', marker], {
       stdio: 'ignore'
     })

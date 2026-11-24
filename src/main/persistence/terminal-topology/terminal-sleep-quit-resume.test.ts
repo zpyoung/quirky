@@ -81,7 +81,7 @@ function windowSessionWithAgentPane(store: Store): WorkspaceSessionState {
 }
 
 async function storeWithAgentPane() {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-sleep-quit-resume-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-sleep-quit-resume-'))
   directories.push(directory)
   const store = await openTopologyStore(directory, emptyTerminalSessionProfile())
   const window = windowSessionWithAgentPane(store)

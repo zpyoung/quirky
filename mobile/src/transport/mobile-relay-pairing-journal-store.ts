@@ -13,8 +13,8 @@ import {
   writePairingKeychainItem
 } from './pairing-keychain'
 
-const JOURNAL_STORAGE_KEY = 'orca:mobile-relay:pairing-journal:v1'
-const JOURNAL_SECRET_KEY = 'orca.mobile-relay.pairing-journal.v1'
+const JOURNAL_STORAGE_KEY = 'quirky:mobile-relay:pairing-journal:v1'
+const JOURNAL_SECRET_KEY = 'quirky.mobile-relay.pairing-journal.v1'
 let journalMutation: Promise<void> = Promise.resolve()
 // Journals whose pairing attempt is still running in this process. Only these
 // are protected from replacement; a journal left by an ended attempt or an
@@ -206,7 +206,7 @@ function parseSecrets(raw: string) {
 
 function requireNativeSecretStore(): void {
   if (Platform.OS === 'web') {
-    throw new Error('Orca Relay pairing requires a native secret store')
+    throw new Error('Quirky Relay pairing requires a native secret store')
   }
 }
 

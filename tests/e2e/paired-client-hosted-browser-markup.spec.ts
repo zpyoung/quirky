@@ -1,4 +1,4 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import {
   launchPairedElectronClient,
@@ -49,7 +49,7 @@ test('draws and copies a screenshot from a client-hosted browser without replaci
     const draw = client.page.getByRole('button', { name: 'Draw on screenshot', exact: true })
     await expect(draw).toBeEnabled()
     await draw.click()
-    const overlay = client.page.locator('[data-orca-markup-overlay]')
+    const overlay = client.page.locator('[data-quirky-markup-overlay]')
     await expect(overlay).toBeVisible()
     await expect(overlay.locator('img')).toHaveAttribute('src', /^data:image\/png;base64,/)
     const canvas = overlay.locator('canvas')

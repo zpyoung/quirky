@@ -1,4 +1,4 @@
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
 import {
   addRepoWithWorkspaces,
@@ -11,11 +11,11 @@ test.use({ seedTestRepo: false })
 
 for (const newCardStyle of [false, true]) {
   test(`reorders a collapsed parent with 53 children (${newCardStyle ? 'new' : 'legacy'} cards)`, async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await waitForSessionReady(orcaPage)
+    await waitForSessionReady(quirkyPage)
     // First, parent, 53 children, last; the repo's own checkout sorts below them all.
-    const repo = await addRepoWithWorkspaces(orcaPage, testInfo, 56)
+    const repo = await addRepoWithWorkspaces(quirkyPage, testInfo, 56)
     const [firstId, parentId, ...rest] = repo.ids
     const childIds = rest.slice(0, 53)
     const lastId = rest[53]!
@@ -23,7 +23,7 @@ for (const newCardStyle of [false, true]) {
       worktreeId: id,
       updates: { displayName: name, manualOrder, sortOrder: manualOrder }
     })
-    await writeWorkspaceMeta(orcaPage, [
+    await writeWorkspaceMeta(quirkyPage, [
       rank(repo.mainId, 'Main workspace', 1),
       rank(firstId!, 'First workspace', 100_000),
       rank(parentId!, 'Parent with 53 children', 90_000),
@@ -31,11 +31,11 @@ for (const newCardStyle of [false, true]) {
       rank(lastId, 'Last workspace', 10_000)
     ])
     await linkWorkspaces(
-      orcaPage,
+      quirkyPage,
       childIds.map((childId) => ({ childId, parentId: parentId! }))
     )
     await evaluatePolled(
-      orcaPage,
+      quirkyPage,
       async ({ newCardStyle, parentId }) => {
         const store = window.__store!
         const state = store.getState()
@@ -59,7 +59,7 @@ for (const newCardStyle of [false, true]) {
       { newCardStyle, parentId: parentId! }
     )
     const ids = { first: firstId!, parent: parentId!, last: lastId }
-    const sidebar = orcaPage.locator('[data-worktree-sidebar]')
+    const sidebar = quirkyPage.locator('[data-worktree-sidebar]')
     const parent = sidebar.locator(`[data-worktree-id=${JSON.stringify(ids.parent)}]`)
     const last = sidebar.locator(`[data-worktree-id=${JSON.stringify(ids.last)}]`)
     await expect(parent.getByRole('button', { name: 'Show 53 child workspaces' })).toBeVisible()
@@ -69,11 +69,11 @@ for (const newCardStyle of [false, true]) {
     if (!source || !target) {
       throw new Error('Missing card bounds')
     }
-    await orcaPage.mouse.move(source.x + source.width / 2, source.y + 12)
-    await orcaPage.mouse.down()
-    await orcaPage.mouse.move(target.x + 2, target.y + target.height - 1, { steps: 12 })
-    await expect(orcaPage.locator('[data-worktree-sidebar-drag-preview]')).toHaveCount(1)
-    await orcaPage.mouse.up()
+    await quirkyPage.mouse.move(source.x + source.width / 2, source.y + 12)
+    await quirkyPage.mouse.down()
+    await quirkyPage.mouse.move(target.x + 2, target.y + target.height - 1, { steps: 12 })
+    await expect(quirkyPage.locator('[data-worktree-sidebar-drag-preview]')).toHaveCount(1)
+    await quirkyPage.mouse.up()
     try {
       await expect
         .poll(async () => {
@@ -90,10 +90,10 @@ for (const newCardStyle of [false, true]) {
     if (!movedSource || !upwardTarget) {
       throw new Error('Missing reordered card bounds')
     }
-    await orcaPage.mouse.move(movedSource.x + movedSource.width / 2, movedSource.y + 12)
-    await orcaPage.mouse.down()
-    await orcaPage.mouse.move(upwardTarget.x + 2, upwardTarget.y + 1, { steps: 12 })
-    await orcaPage.mouse.up()
+    await quirkyPage.mouse.move(movedSource.x + movedSource.width / 2, movedSource.y + 12)
+    await quirkyPage.mouse.down()
+    await quirkyPage.mouse.move(upwardTarget.x + 2, upwardTarget.y + 1, { steps: 12 })
+    await quirkyPage.mouse.up()
     await expect
       .poll(async () => {
         const [parentBox, firstBox] = await Promise.all([parent.boundingBox(), first.boundingBox()])
@@ -101,7 +101,7 @@ for (const newCardStyle of [false, true]) {
       })
       .toBe(true)
     // Wait for the drag's click suppression before exercising the children toggle.
-    await orcaPage.waitForTimeout(550)
+    await quirkyPage.waitForTimeout(550)
     await parent.getByRole('button', { name: 'Show 53 child workspaces' }).click()
     await expect(parent.getByRole('button', { name: 'Hide 53 child workspaces' })).toBeVisible()
     await expect(parent.locator('[role="option"]')).toHaveCount(53)

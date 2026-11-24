@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { persistMirrored } from '../storage/mirrored-storage-keys'
 
-const CUSTOM_ACCESSORY_KEYS_STORAGE_KEY = 'orca:custom-accessory-keys'
+const CUSTOM_ACCESSORY_KEYS_STORAGE_KEY = 'quirky:custom-accessory-keys'
 
 export type CustomKey = {
   id: string

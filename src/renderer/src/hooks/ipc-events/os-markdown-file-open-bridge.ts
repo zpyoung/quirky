@@ -6,7 +6,7 @@ import { translate } from '@/i18n/i18n'
 import { useAppStore } from '../../store'
 
 /**
- * Opens documents the OS shell handed to Orca ("Open With" / double-click) in the
+ * Opens documents the OS shell handed to Quirky ("Open With" / double-click) in the
  * floating workspace, which is the one editor surface that needs no project.
  */
 async function openOsRequestedDocuments(documents: FileDocument[]): Promise<void> {
@@ -33,7 +33,7 @@ async function openOsRequestedDocuments(documents: FileDocument[]): Promise<void
   }
   // Why enabled here: the user asked the OS for this file, and the tabs above are already in a
   // surface a disabled floating workspace never renders. Same enable-then-reveal as the
-  // Settings "Edit keybindings in Orca" action.
+  // Settings "Edit keybindings in Quirky" action.
   if (store.settings?.floatingTerminalEnabled !== true) {
     await store.updateSettings({ floatingTerminalEnabled: true })
   }

@@ -12,7 +12,7 @@ concurrency:
   group: preflight-critical-path-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 env:
-  ORCA_BACKGROUND_LAUNCH: '1'
+  QUIRKY_BACKGROUND_LAUNCH: '1'
 jobs:
   compare:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
@@ -31,7 +31,7 @@ jobs:
         with:
           native-runtime: node
           node-version: '24'
-      # orcad refuses to build without the page phones load; only the smoke arm builds orcad.
+      # quirkyd refuses to build without the page phones load; only the smoke arm builds quirkyd.
       - uses: ./.github/actions/build-mobile-web-bundle
         if: matrix.comparison == 'smoke'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

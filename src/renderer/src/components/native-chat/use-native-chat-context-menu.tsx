@@ -27,7 +27,7 @@ import { TabWorkspaceLayoutMenuSection } from '@/components/tab-bar/TabWorkspace
 import { canMoveTabToNewPaneColumn } from '@/components/tab-bar/tab-move-to-pane-column'
 import { isEditableTarget } from '@/lib/editable-target'
 import { findNativeChatPasteField } from '@/lib/native-chat-paste-request'
-import { NativeChatCopyOrcaSessionIdMenuItem } from './NativeChatCopyOrcaSessionIdMenuItem'
+import { NativeChatCopyQuirkySessionIdMenuItem } from './NativeChatCopyQuirkySessionIdMenuItem'
 import { NativeChatSelectionQuote } from './NativeChatSelectionQuote'
 import { NativeChatPaneMenuItems } from './NativeChatPaneMenuItems'
 import type { NativeChatComposerHandle } from './native-chat-composer-types'
@@ -73,8 +73,8 @@ type UseNativeChatContextMenuArgs = {
     groupId: string
     shortcutLabels?: Partial<Record<TabSplitDirection, string>>
   }
-  /** A structured chat tab's Orca session ID; a chat in a terminal pane is that terminal's agent. */
-  resolveOrcaSessionId?: () => Promise<string | null>
+  /** A structured chat tab's Quirky session ID; a chat in a terminal pane is that terminal's agent. */
+  resolveQuirkySessionId?: () => Promise<string | null>
 } & NativeChatContextMenuTargetArgs
 
 /** What the menu needs to offer the rows for a right-clicked target. */
@@ -144,7 +144,7 @@ export function useNativeChatContextMenu({
   showTerminalPaneActions = true,
   splitShortcutLabels,
   workspaceLayout,
-  resolveOrcaSessionId,
+  resolveQuirkySessionId,
   messageListRef,
   fileLinkContext = null,
   rewind,
@@ -179,7 +179,7 @@ export function useNativeChatContextMenu({
     workspaceLayout !== undefined &&
     canMoveTabToNewPaneColumn(workspaceLayout.unifiedTabId, workspaceLayout.groupId)
   const hasItems =
-    hasEditItems || hasSessionItems || showWorkspaceLayout || resolveOrcaSessionId !== undefined
+    hasEditItems || hasSessionItems || showWorkspaceLayout || resolveQuirkySessionId !== undefined
 
   useEffect(() => {
     if (!enabled) {
@@ -324,12 +324,14 @@ export function useNativeChatContextMenu({
           ) : null}
           {showTerminalPaneActions ? (
             <NativeChatPaneMenuItems actions={actions} splitShortcutLabels={splitShortcutLabels} />
-          ) : resolveOrcaSessionId ? (
+          ) : resolveQuirkySessionId ? (
             <>
               {hasEditItems || hasSessionItems || showWorkspaceLayout ? (
                 <DropdownMenuSeparator />
               ) : null}
-              <NativeChatCopyOrcaSessionIdMenuItem resolveOrcaSessionId={resolveOrcaSessionId} />
+              <NativeChatCopyQuirkySessionIdMenuItem
+                resolveQuirkySessionId={resolveQuirkySessionId}
+              />
             </>
           ) : null}
         </DropdownMenuContent>

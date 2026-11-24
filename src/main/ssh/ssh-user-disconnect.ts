@@ -26,7 +26,7 @@ export function clearSshUserDisconnected(targetId: string): void {
 
 /** An explicit connect to a server reached over SSH is a connect of that SSH host too. */
 export function clearSshUserDisconnectedForEnvironment(
-  environment: Pick<KnownRuntimeEnvironment, 'orcadDeployment' | 'sshAccess'>
+  environment: Pick<KnownRuntimeEnvironment, 'quirkydDeployment' | 'sshAccess'>
 ): void {
   const targetId = getRuntimeSshAccess(environment)?.sshTargetId
   if (targetId) {

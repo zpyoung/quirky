@@ -27,7 +27,7 @@ export function workspaceSettingsMounts(
         tasksSupported: true,
         taskStateHydrated: true,
         runtimeTaskSettings: { disabledTuiAgents: ['claude'] },
-        trustedOrcaHooks: {},
+        trustedQuirkyHooks: {},
         workspaceDetectedAgentIds: new Set(['codex']),
         workspaceLastAutoName: '',
         ensureWorkspaceSshReady: async () => {},
@@ -95,7 +95,7 @@ export function workspaceSettingsMounts(
         setupRunPolicy: 'never',
         setupDecisionChoice: null,
         runSetup: false,
-        trustedOrcaHooks: {},
+        trustedQuirkyHooks: {},
         getWorktreeCreateCutoverSupport: async () => false,
         // False for the same reason as the cutover probe: an old host is the baseline the
         // recordings pin, so the create stays on worktree.create rather than agent.launch.

@@ -44,7 +44,7 @@ it('persists only phone-specific delivery preferences', async () => {
 
 it('ignores unrelated stored preferences', async () => {
   storage.set(
-    'orca:notificationDeliveryPreferences',
+    'quirky:notificationDeliveryPreferences',
     JSON.stringify({
       onlyWhenDesktopAway: false,
       sound: false,
@@ -81,6 +81,6 @@ it('suppresses only the workspace being viewed on this phone, and never while ba
 })
 
 it('recovers defaults from malformed stored preferences', async () => {
-  storage.set('orca:notificationDeliveryPreferences', '{broken')
+  storage.set('quirky:notificationDeliveryPreferences', '{broken')
   expect(await loadNotificationDeliveryPreferences()).toEqual(DEFAULT_NOTIFICATION_DELIVERY)
 })

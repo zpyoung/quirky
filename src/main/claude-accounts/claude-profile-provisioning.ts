@@ -161,9 +161,9 @@ function isAccountBoundState(key: string): boolean {
   )
 }
 
-// Why without Orca's hooks: the profile's own hook install owns those, so differing there alone
+// Why without Quirky's hooks: the profile's own hook install owns those, so differing there alone
 // would recopy, and the install rewrite, the file on every launch.
-function settingsWithoutOrcaHooks(value: Record<string, unknown>): string {
+function settingsWithoutQuirkyHooks(value: Record<string, unknown>): string {
   return JSON.stringify(removeManagedHooks(value, getManagedScriptFileName()).config)
 }
 
@@ -176,7 +176,7 @@ function copySettings(source: string, target: string): ClaudeProfileSurfaceOutco
     input.kind === 'present' &&
     current.kind === 'present' &&
     !lstatIfPresent(target)?.isSymbolicLink() &&
-    settingsWithoutOrcaHooks(input.value) === settingsWithoutOrcaHooks(current.value)
+    settingsWithoutQuirkyHooks(input.value) === settingsWithoutQuirkyHooks(current.value)
   ) {
     return 'unchanged'
   }
@@ -203,7 +203,7 @@ function mergeEntries(key: string, current: unknown, source: unknown): unknown {
   if (key === 'projects') {
     for (const [path, entry] of Object.entries(source)) {
       const own = current[path]
-      // Why: a folder trusted in the account, often by Orca just before launch, stays trusted.
+      // Why: a folder trusted in the account, often by Quirky just before launch, stays trusted.
       if (isPlainRecord(own) && own.hasTrustDialogAccepted === true && isPlainRecord(entry)) {
         merged[path] = { ...entry, hasTrustDialogAccepted: true }
       }

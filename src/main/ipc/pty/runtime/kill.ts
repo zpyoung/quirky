@@ -8,7 +8,7 @@ import {
 } from '../provider/registry'
 import { isPtyAlreadyGoneError, delay, verifyPtyStopped } from '../provider/liveness'
 import type { PtyRuntimeControllerDeps } from './controller-deps'
-import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../../../runtime/quirky-runtime'
 import { errorMessage } from '../../../../shared/error-message'
 import {
   PtyExitProof,
@@ -29,7 +29,7 @@ const OBSERVED_EXIT_RECORD_WAIT_MS = 10_000
  *  `finishPtyShutdown` refused) publishes nothing: the id belongs to a respawn now. */
 export function publishSyntheticExit(
   deps: Pick<PtyRuntimeControllerDeps, 'rememberSyntheticKillExit' | 'sendPtyExitToRenderer'> & {
-    runtime?: Pick<OrcaRuntimeService, 'onPtyExit' | 'markPtyLivenessUnverifiable'>
+    runtime?: Pick<QuirkyRuntimeService, 'onPtyExit' | 'markPtyLivenessUnverifiable'>
   },
   ptyId: string,
   code: number,

@@ -3,8 +3,8 @@ import {
   recordSelfInitiatedTreeKill,
   type SelfInitiatedTreeKillScope
 } from './crash-reporting/self-initiated-tree-kill-log'
-import { readOrcaChromiumProcessPids } from './orca-chromium-process-pids'
-import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gate'
+import { readQuirkyChromiumProcessPids } from './quirky-chromium-process-pids'
+import { setProcessTreeKillGate } from '@quirky/process-host/process-tree-kill-gate'
 
 /**
  * Gate every main-process tree-kill through one decision: refuse a pid-addressed
@@ -23,11 +23,11 @@ import { setProcessTreeKillGate } from '@orca/process-host/process-tree-kill-gat
  *
  * Electron main only, by construction. `terminateWindowsProcessTree` also runs
  * in the standalone daemon (the `pty-descendant-sweep` site), where
- * `readOrcaChromiumProcessPids()` is empty and this always admits. That is not
+ * `readQuirkyChromiumProcessPids()` is empty and this always admits. That is not
  * the gap it looks like: the daemon reaches that taskkill only through
  * `classifyWindowsTreeKillTarget`, whose ancestry walk ends at the daemon's own
  * pid, and no Chromium process descends from the daemon. See
- * `orca-chromium-process-pids.ts`.
+ * `quirky-chromium-process-pids.ts`.
  */
 export function admitSelfInitiatedTreeKill(target: {
   pid: number
@@ -37,11 +37,11 @@ export function admitSelfInitiatedTreeKill(target: {
   // Why: no PTY root, codex root or git child is ever one of our own Chromium
   // processes, so a pid that is means the caller is about to kill a renderer,
   // the GPU or the browser itself (#10680). Only the pid-addressed scope can
-  // land there: a POSIX group holds only what Orca put in it, so that arm is
+  // land there: a POSIX group holds only what Quirky put in it, so that arm is
   // recorded and admitted like every other group kill in main, and a stale
   // `getAppMetrics()` entry cannot orphan a macOS/Linux tree.
   const isOwnChromiumPid =
-    target.scope === 'win-taskkill-tree' && readOrcaChromiumProcessPids().has(target.pid)
+    target.scope === 'win-taskkill-tree' && readQuirkyChromiumProcessPids().has(target.pid)
   try {
     if (isOwnChromiumPid) {
       recordRefusedOwnChromiumTreeKill(target)

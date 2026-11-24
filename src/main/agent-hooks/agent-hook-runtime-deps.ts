@@ -1,11 +1,11 @@
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import type { AgentStatusObservedPaneIdentities } from '../runtime/agent-status-observed-pane-identity'
 import type { AgentHookServer } from './server'
 import { isAgentStatusHooksEnabled } from '../../shared/agent-status-hooks-setting'
 
-type RuntimeDeps = NonNullable<ConstructorParameters<typeof OrcaRuntimeService>[2]>
+type RuntimeDeps = NonNullable<ConstructorParameters<typeof QuirkyRuntimeService>[2]>
 
-/** The hook-store bindings every runtime host (desktop, `orca serve`, orcad) gives its runtime. */
+/** The hook-store bindings every runtime host (desktop, `quirky serve`, quirkyd) gives its runtime. */
 export function agentHookRuntimeDeps(
   server: AgentHookServer,
   observedPaneIdentities: Pick<AgentStatusObservedPaneIdentities, 'read'>,

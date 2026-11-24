@@ -11,7 +11,7 @@
 import { createRequire } from 'node:module'
 import { readdirSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { derivedGoldens } from '../src/test-support/rpc-recording/derived-goldens.ts'
 import { RECORDING_DRIVERS } from '../src/test-support/rpc-recording/recording-drivers.ts'
 import { readScenarios } from '../src/test-support/rpc-recording/scenario-input.ts'
@@ -71,7 +71,7 @@ try {
     ],
     cwd: resolve(root, 'mobile'),
     timeoutMs: RECORDING_TIMEOUT_MS,
-    env: { ...process.env, ORCA_BACKGROUND_LAUNCH: '1', RPC_FOUNDATION_MODE: '--record' },
+    env: { ...process.env, QUIRKY_BACKGROUND_LAUNCH: '1', RPC_FOUNDATION_MODE: '--record' },
     // Streamed, not captured: a capture holds a multi-minute run silent and clips its tail past 8 MB.
     stdio: 'inherit'
   })

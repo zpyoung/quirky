@@ -149,7 +149,7 @@ export function QuickCommandEditorForm({
             {/* Why static text in the alert: a live count would re-announce on every keystroke. */}
             <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
               {promptSize.olderHostCap
-                ? 'Too long for this host. Update Orca on the host to save longer prompts.'
+                ? 'Too long for this host. Update Quirky on the host to save longer prompts.'
                 : 'Too long to save.'}
             </Text>
             <Text style={styles.hint}>

@@ -276,7 +276,7 @@ describe('HistoryReader', () => {
       Buffer.concat([
         encodeLogHeader(7),
         encodeLogBatch(1, [
-          { kind: 'output', data: '\x1b]7;file://DESKTOP-ORCA/home/user/project\x07' }
+          { kind: 'output', data: '\x1b]7;file://DESKTOP-QUIRKY/home/user/project\x07' }
         ])
       ])
     )

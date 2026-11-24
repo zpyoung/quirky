@@ -3,13 +3,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 
 const mocks = vi.hoisted(() => ({
   runProcess: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>(),
   probeCodexSharedServer: vi.fn<(home: string) => Promise<'live' | 'absent' | 'unknown'>>()
 }))
-vi.mock('@orca/process-host', () => ({ runProcess: mocks.runProcess }))
+vi.mock('@quirky/process-host', () => ({ runProcess: mocks.runProcess }))
 vi.mock('./codex-shared-server-probe', () => ({
   probeCodexSharedServer: mocks.probeCodexSharedServer
 }))

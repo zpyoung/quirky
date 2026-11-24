@@ -12,7 +12,10 @@ export function createFixtureRepo(files = {}) {
   const root = join(dir, 'repo')
   mkdirSync(root)
   const git = (...args) =>
-    execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
   git('init', '-q')
   for (const [path, content] of Object.entries(files)) {
     const abs = join(root, path)

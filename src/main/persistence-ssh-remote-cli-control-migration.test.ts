@@ -53,10 +53,10 @@ async function reopenStore(): Promise<ReturnType<typeof createStore>> {
   return createStore()
 }
 
-// The orcad serve host persists its SSH targets through this same Store load path.
-describe("pinning existing hosts' orca CLI control switch on upgrade", () => {
+// The quirkyd serve host persists its SSH targets through this same Store load path.
+describe("pinning existing hosts' quirky CLI control switch on upgrade", () => {
   beforeEach(() => {
-    testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
+    testState.dir = mkdtempSync(join(tmpdir(), 'quirky-test-'))
   })
 
   afterEach(async () => {

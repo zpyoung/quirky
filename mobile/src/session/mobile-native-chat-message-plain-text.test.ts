@@ -33,16 +33,16 @@ describe('nativeChatMessagePlainText', () => {
     'leaves a visual line out of %s prose, but not one inside a code fence',
     (role) => {
       const text =
-        'Chart:\n::orca-visual{file="usage.html"}\nDone.\n```\n::orca-visual{file="x.html"}\n```'
+        'Chart:\n::quirky-visual{file="usage.html"}\nDone.\n```\n::quirky-visual{file="x.html"}\n```'
       expect(nativeChatMessagePlainText({ role, blocks: [{ type: 'text', text }] })).toBe(
-        'Chart:\nDone.\n```\n::orca-visual{file="x.html"}\n```'
+        'Chart:\nDone.\n```\n::quirky-visual{file="x.html"}\n```'
       )
     }
   )
 
   it('keeps literal own visual lines and surrounding whitespace exactly', () => {
     const text =
-      '  Please repair this chart:\r\n::orca-visual{file="usage.html"}\r\n\r\n  - keep this\r\n'
+      '  Please repair this chart:\r\n::quirky-visual{file="usage.html"}\r\n\r\n  - keep this\r\n'
     expect(nativeChatMessagePlainText({ role: 'user', blocks: [{ type: 'text', text }] })).toBe(
       text
     )

@@ -57,9 +57,9 @@ describe('deriveGitRemoteIdentity', () => {
       expect(
         deriveGitRemoteIdentity(
           [
-            'amoaba\thttps://github.com/AmoabaKelvin/orca.git (fetch)',
+            'amoaba\thttps://github.com/AmoabaKelvin/quirky.git (fetch)',
             `origin\thttps://github.com/stablyai/orca.git (fetch) [${filter}]`,
-            'origin\thttps://github.com/another/orca.git (push)'
+            'origin\thttps://github.com/another/quirky.git (push)'
           ].join('\r\n')
         )
       ).toEqual({

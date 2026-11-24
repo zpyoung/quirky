@@ -6,7 +6,7 @@ import type { BrowserBackend } from '../browser/browser-backend'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import type { BrowserTabInfo } from '../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type {
   LayoutApplyOutcome,
   LayoutCommand
@@ -55,7 +55,7 @@ export class ServeBrowserTabs {
 
   opened(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void {
     // Switch point: main's layout command writes the tab; the page's address is a fact saved after.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && this.deps.applyLayout) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && this.deps.applyLayout) {
       this.openThroughLayout(page, this.deps.applyLayout)
       return
     }
@@ -67,7 +67,7 @@ export class ServeBrowserTabs {
   /** A saved tab follows its page; a page whose tab was closed is not saved again. */
   navigated(page: ServeBrowserPageState): void {
     // Switch point: an open main has not answered yet saves the page's latest address.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && this.pendingOpens.has(page.pageId)) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && this.pendingOpens.has(page.pageId)) {
       this.pendingOpens.set(page.pageId, page)
       return
     }
@@ -77,7 +77,7 @@ export class ServeBrowserTabs {
   /** A closed page's tab, true when one was saved; a page destroyed with the process is not a close. */
   closed(worktreeId: string, pageId: string): boolean {
     // Switch point: main's layout command closes the tab; its page records are facts dropped first.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && this.deps.applyLayout) {
+    if (QUIRKY_LAYOUT_OWNER_IS_MAIN && this.deps.applyLayout) {
       return this.closeThroughLayout(worktreeId, pageId, this.deps.applyLayout)
     }
     return this.write(worktreeId, (hostId, session) =>

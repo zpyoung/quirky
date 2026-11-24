@@ -137,12 +137,12 @@ function lastListedTurn(
   return last
 }
 
-/** The provider's key for a journal row; an accepted message keeps Orca's own until then. */
+/** The provider's key for a journal row; an accepted message keeps Quirky's own until then. */
 export function providerItemIdOf(journal: AgentSessionJournal, itemId: string): string {
   return submissionKeys(journal.snapshot().submissions).providerKey(itemId)
 }
 
-// Accepted messages keep Orca's key in the journal; the rebuilt epoch has no submission to tie them
+// Accepted messages keep Quirky's key in the journal; the rebuilt epoch has no submission to tie them
 // to, so they take the provider's.
 function submissionKeys(submissions: readonly AgentJournalSubmission[]): {
   providerKey: (itemId: string) => string

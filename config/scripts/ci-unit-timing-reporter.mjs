@@ -80,7 +80,7 @@ export function buildUnitPhaseReport(ctx, modules, errors, reason, baseline) {
   const counters = workerCounters(ctx.state)
   return {
     metric: 'module-phase-diagnostics-v1',
-    nodeVersion: process.env.ORCA_TEST_NODE_VERSION ?? process.versions.node,
+    nodeVersion: process.env.QUIRKY_TEST_NODE_VERSION ?? process.versions.node,
     ...(process.versions.bun ? { bunVersion: process.versions.bun } : {}),
     vitestVersion: ctx.version ?? null,
     shard: ctx.config.shard ?? { index: 1, count: 1 },
@@ -128,7 +128,7 @@ export default class UnitTimingReporter {
   }
 
   onTestRunStart() {
-    if (process.env.ORCA_UNIT_PHASE_REPORT) {
+    if (process.env.QUIRKY_UNIT_PHASE_REPORT) {
       this.workerBaseline = workerCounters(this.ctx.state)
     }
   }
@@ -140,9 +140,9 @@ export default class UnitTimingReporter {
         module.state?.() ?? 'unknown'
       ])
     )
-    writeAssignment(process.env.ORCA_UNIT_TIMING_REPORT ?? 'ci-shards/unit-timings.json', {
+    writeAssignment(process.env.QUIRKY_UNIT_TIMING_REPORT ?? 'ci-shards/unit-timings.json', {
       metric: 'module-duration-v1',
-      nodeVersion: process.env.ORCA_TEST_NODE_VERSION ?? process.versions.node,
+      nodeVersion: process.env.QUIRKY_TEST_NODE_VERSION ?? process.versions.node,
       ...(process.versions.bun ? { bunVersion: process.versions.bun } : {}),
       shard: this.ctx.config.shard ?? { index: 1, count: 1 },
       status: reason,
@@ -158,7 +158,7 @@ export default class UnitTimingReporter {
     try {
       const plan = JSON.parse(
         readFileSync(
-          process.env.ORCA_UNIT_SELECTION_PLAN ?? 'ci-shards/unit-selection.json',
+          process.env.QUIRKY_UNIT_SELECTION_PLAN ?? 'ci-shards/unit-selection.json',
           'utf8'
         )
       )
@@ -173,8 +173,8 @@ export default class UnitTimingReporter {
     } catch {
       // Timing evidence remains useful when selection planning was unavailable.
     }
-    const phaseReport = process.env.ORCA_UNIT_PHASE_REPORT
-    const timingReport = process.env.ORCA_UNIT_TIMING_REPORT ?? 'ci-shards/unit-timings.json'
+    const phaseReport = process.env.QUIRKY_UNIT_PHASE_REPORT
+    const timingReport = process.env.QUIRKY_UNIT_TIMING_REPORT ?? 'ci-shards/unit-timings.json'
     if (phaseReport && resolve(phaseReport) !== resolve(timingReport)) {
       try {
         writeAssignment(

@@ -1,7 +1,7 @@
 import './rpc/unused-default-rpc-methods.test-fixture'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../shared/repo-types'
-import type { OrcaRuntimeService } from './orca-runtime'
+import type { QuirkyRuntimeService } from './quirky-runtime'
 import { RuntimeGitHubReviewQueryCommands } from './runtime-github-review-query-commands'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { GITHUB_PULL_REQUEST_METHODS } from './rpc/methods/github-pull-request-methods'
@@ -49,7 +49,7 @@ describe('handling-host check detail query command', () => {
       }
       const dispatcher = new RpcDispatcher({
         // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: This explicit registry invokes only getRuntimeId and the real query method.
-        runtime: runtime as unknown as OrcaRuntimeService,
+        runtime: runtime as unknown as QuirkyRuntimeService,
         methods: GITHUB_PULL_REQUEST_METHODS
       })
       const controller = new AbortController()

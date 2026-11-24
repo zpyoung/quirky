@@ -8,7 +8,7 @@ import { assertJsonTextStructureWithinLimits } from './json-text-structure-limit
 // parsing yields no models and callers keep their seed list.
 export const CLAUDE_MODEL_LIST_STDIN = `${JSON.stringify({
   type: 'control_request',
-  request_id: 'orca-model-discovery',
+  request_id: 'quirky-model-discovery',
   request: { subtype: 'list_models' }
 })}\n`
 

@@ -27,7 +27,7 @@ export async function openTopologyStore(directory: string, seed?: string): Promi
     inner.writeSerializedState(Buffer.from(seed))
   }
   const store = new Store({
-    dataFile: join(directory, 'orca-data.json'),
+    dataFile: join(directory, 'quirky-data.json'),
     profileStateAuthority: new DelayedAuthority(inner)
   })
   await store.flushPendingOrThrowAsync()

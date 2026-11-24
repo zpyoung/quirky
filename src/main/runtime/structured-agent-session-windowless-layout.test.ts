@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 import { withChatTabChanges } from './agent-session-tab-layout'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 
@@ -22,7 +22,7 @@ function createRuntime() {
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
-  const runtime = new OrcaRuntimeService(runtimeStore(state) as never)
+  const runtime = new QuirkyRuntimeService(runtimeStore(state) as never)
   return { runtime, state }
 }
 
@@ -128,7 +128,7 @@ describe('a chat tab on a host with no window', () => {
     expect(savedChatIds(state)).toEqual(['chat-1'])
     // A fresh runtime lists no chats, as when the close RPC or a worker stop runs before a restore.
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
-    const fresh = new OrcaRuntimeService(runtimeStore(state) as never)
+    const fresh = new QuirkyRuntimeService(runtimeStore(state) as never)
     useChatHost({ getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }) })
 
     fresh.onStructuredSessionTabHidden('chat-1')
@@ -172,7 +172,7 @@ describe('a chat tab on a host with no window', () => {
       }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only these store methods on these paths.
-    const runtime = new OrcaRuntimeService(store as never)
+    const runtime = new QuirkyRuntimeService(store as never)
     useChatHost({ getPersistedVisibleSessionTabIndex: () => ({ present: true, sessionIds: [] }) })
 
     runtime.onStructuredSessionTabHidden('chat-1')

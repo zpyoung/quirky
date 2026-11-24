@@ -111,11 +111,11 @@ vi.mock('./linux-update-package-type', () => ({
 
 // The real electron-updater DebUpdater failure text when elevation is impossible.
 const DEB_ELEVATION_ERROR =
-  'Error: Command failed: /usr/bin/pkexec --disable-internal-agent "/bin/bash" "-c" "dpkg -i \'/home/u/.cache/orca-updater/pending/orca-ide_1.4.163_amd64.deb\'"\npkexec must be setuid root'
+  'Error: Command failed: /usr/bin/pkexec --disable-internal-agent "/bin/bash" "-c" "dpkg -i \'/home/u/.cache/quirky-updater/pending/quirky-ide_1.4.163_amd64.deb\'"\npkexec must be setuid root'
 
 // electron-updater's ERR_UPDATER_INVALID_SIGNATURE text, which drives its own card in UpdateCard.
 const WINDOWS_SIGNATURE_MISMATCH_ERROR =
-  'New version 1.4.163 is not signed by the application owner: publisherNames: Orca, Inc.'
+  'New version 1.4.163 is not signed by the application owner: publisherNames: Quirky, Inc.'
 
 type CapturedSpan = {
   readonly name: string
@@ -174,7 +174,7 @@ warmUpdaterModule()
 
 /**
  * On a `.deb` Linux host electron-updater's `install()` catches the failed elevation and
- * re-dispatches it through the 'error' event *synchronously* inside `quitAndInstall()`. Orca
+ * re-dispatches it through the 'error' event *synchronously* inside `quitAndInstall()`. Quirky
  * recovers the app state, so the payload has to survive on the status and the span has to exit
  * Failure — otherwise the only record of why the install never ran is destroyed (#11906).
  */
@@ -316,7 +316,9 @@ describe('quitAndInstall failure carries the updater cause', () => {
     autoUpdaterMock.quitAndInstall.mockImplementation(() => {
       autoUpdaterMock.emit(
         'error',
-        new Error(`${escape}[31mdpkg -i '${home}/.cache/orca-updater/pending/orca.deb'${escape}[0m`)
+        new Error(
+          `${escape}[31mdpkg -i '${home}/.cache/quirky-updater/pending/quirky.deb'${escape}[0m`
+        )
       )
     })
 
@@ -330,7 +332,7 @@ describe('quitAndInstall failure carries the updater cause', () => {
     const message = status.state === 'error' ? status.message : ''
     expect(message).not.toContain(home)
     expect(message).not.toContain(escape)
-    expect(message).toContain("<home>/.cache/orca-updater/pending/orca.deb'")
+    expect(message).toContain("<home>/.cache/quirky-updater/pending/quirky.deb'")
   })
 
   it('carries the cause when quitAndInstall throws instead of dispatching an error event', async () => {

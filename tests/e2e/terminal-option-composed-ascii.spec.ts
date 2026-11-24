@@ -1,6 +1,6 @@
 // Option composition must survive kitty negotiation (#14024, #20171, #20850).
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { focusActiveTerminalInput, waitForTerminalOutput } from './helpers/terminal'
 import { clearTerminalPtyWriteLog as clearPtyWriteLog } from './helpers/terminal-pty-write-spy'
 import {
@@ -16,20 +16,20 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   test.skip(process.platform !== 'darwin', 'Option composition is a macOS-only input path (#14024)')
 
   test('the settings control enables punctuation shortcuts and keeps the other Option side as text', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 7)
-    await orcaPage.evaluate(async () => {
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 7)
+    await quirkyPage.evaluate(async () => {
       const state = window.__store?.getState()
       await state?.updateSettings({ uiLanguage: 'en' })
       state?.openSettingsTarget({ pane: 'terminal', repoId: null })
       state?.openSettingsPage()
       state?.setSettingsSearchQuery('Option as Alt')
     })
-    const control = orcaPage.getByRole('radiogroup', { name: 'Option as Alt', exact: true })
+    const control = quirkyPage.getByRole('radiogroup', { name: 'Option as Alt', exact: true })
     await expect(
-      orcaPage.getByText(/Choose Both for Option shortcuts, Off for accents and symbols/)
+      quirkyPage.getByText(/Choose Both for Option shortcuts, Off for accents and symbols/)
     ).toBeVisible()
     const keys = [
       { key: '…', code: 'Semicolon', codePoint: 59 },
@@ -44,14 +44,14 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
       await control.getByRole('radio', { name: label, exact: true }).click()
       await expect
         .poll(() =>
-          orcaPage.evaluate(() => window.__store?.getState().settings?.terminalMacOptionAsAlt)
+          quirkyPage.evaluate(() => window.__store?.getState().settings?.terminalMacOptionAsAlt)
         )
         .toBe(setting)
-      await orcaPage.evaluate(() => window.__store?.getState().closeSettingsPage())
+      await quirkyPage.evaluate(() => window.__store?.getState().closeSettingsPage())
       for (const side of ['left', 'right'] as const) {
         await clearPtyWriteLog(electronApp)
         for (const key of keys) {
-          await pressOptionComposedKey(orcaPage, { ...key, side })
+          await pressOptionComposedKey(quirkyPage, { ...key, side })
         }
         const isAlt = setting === 'true' || setting === side
         const expected = keys
@@ -61,7 +61,7 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
           .join('')
         await expect.poll(joinedWrites).toBe(expected)
       }
-      await orcaPage.evaluate(() => {
+      await quirkyPage.evaluate(() => {
         const state = window.__store?.getState()
         state?.openSettingsPage()
         state?.setSettingsSearchQuery('Option as Alt')
@@ -70,14 +70,14 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('Chromium Option punctuation produces text in compose mode and shortcuts in Both mode', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 7)
-    const cdp = await orcaPage.context().newCDPSession(orcaPage)
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 7)
+    const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
     try {
       for (const setting of ['false', 'true'] as const) {
-        await setMacOptionAsAlt(orcaPage, setting)
+        await setMacOptionAsAlt(quirkyPage, setting)
         await clearPtyWriteLog(electronApp)
         for (const key of [
           { key: '…', code: 'Semicolon', base: ';', codePoint: 59, windowsVirtualKeyCode: 186 },
@@ -99,7 +99,7 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
         await expect.poll(joinedWrites).toBe(expected)
         if (setting === 'false') {
           for (const glyph of ['…', '≥', '≤']) {
-            await waitForTerminalOutput(orcaPage, glyph)
+            await waitForTerminalOutput(quirkyPage, glyph)
           }
         }
       }
@@ -109,14 +109,14 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('Auto follows ABC and composing input sources without replacing explicit Option settings', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 7)
-    await orcaPage.evaluate(async () => {
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 7)
+    await quirkyPage.evaluate(async () => {
       await window.__store?.getState().updateSettings({ uiLanguage: 'en' })
     })
-    await setMacOptionAsAlt(orcaPage, 'auto')
+    await setMacOptionAsAlt(quirkyPage, 'auto')
     const abc = 'com.apple.keylayout.ABC'
     const international = 'com.apple.keylayout.USInternational-PC'
     const pinyin = 'com.apple.inputmethod.SCIM.ITABC'
@@ -127,7 +127,7 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
     }
     const period = { key: '≥', code: 'Period', base: '.', windowsVirtualKeyCode: 190 }
     let generation = Date.now()
-    const cdp = await orcaPage.context().newCDPSession(orcaPage)
+    const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
     try {
       for (const inputSourceId of [abc, international, abc, pinyin, abc, null, abc]) {
         await publishMacKeyboardLayout(
@@ -142,20 +142,20 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
           ++generation
         )
         const isAlt = inputSourceId === abc
-        await waitForPaneOptionAsAlt(orcaPage, isAlt)
-        await orcaPage.evaluate(() => {
+        await waitForPaneOptionAsAlt(quirkyPage, isAlt)
+        await quirkyPage.evaluate(() => {
           const state = window.__store?.getState()
           state?.openSettingsTarget({ pane: 'terminal', repoId: null })
           state?.openSettingsPage()
           state?.setSettingsSearchQuery('Option as Alt')
         })
-        const control = orcaPage.getByRole('radiogroup', { name: 'Option as Alt', exact: true })
+        const control = quirkyPage.getByRole('radiogroup', { name: 'Option as Alt', exact: true })
         await expect(control.getByRole('radio', { name: 'Auto', exact: true })).toHaveAttribute(
           'aria-checked',
           'true'
         )
         await expect(
-          orcaPage.getByText(
+          quirkyPage.getByText(
             isAlt
               ? /Auto — detected: ABC or U.S. — Option sends Alt\/Esc sequences/
               : inputSourceId
@@ -163,23 +163,23 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
                 : /Auto — detected: unknown layout — Option composes characters/
           )
         ).toBeVisible()
-        await orcaPage.evaluate(() => window.__store?.getState().closeSettingsPage())
-        await focusActiveTerminalInput(orcaPage)
+        await quirkyPage.evaluate(() => window.__store?.getState().closeSettingsPage())
+        await focusActiveTerminalInput(quirkyPage)
         await clearPtyWriteLog(electronApp)
         await pressChromiumOptionPunctuation(cdp, period)
         await expect.poll(joinedWrites).toBe(`${isAlt ? '\x1b[46;3u' : '≥'}\x1b[46;3:3u`)
         await expect
           .poll(() =>
-            orcaPage.evaluate(() => window.__store?.getState().settings?.terminalMacOptionAsAlt)
+            quirkyPage.evaluate(() => window.__store?.getState().settings?.terminalMacOptionAsAlt)
           )
           .toBe('auto')
       }
-      await setMacOptionAsAlt(orcaPage, 'false')
-      await waitForPaneOptionAsAlt(orcaPage, false)
+      await setMacOptionAsAlt(quirkyPage, 'false')
+      await waitForPaneOptionAsAlt(quirkyPage, false)
       await clearPtyWriteLog(electronApp)
       await pressChromiumOptionPunctuation(cdp, period)
       await expect.poll(joinedWrites).toBe('≥\x1b[46;3:3u')
-      await setMacOptionAsAlt(orcaPage, 'left')
+      await setMacOptionAsAlt(quirkyPage, 'left')
       for (const inputSourceId of [international, abc]) {
         await publishMacKeyboardLayout(
           electronApp,
@@ -188,13 +188,15 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
         )
         for (const side of ['left', 'right'] as const) {
           await clearPtyWriteLog(electronApp)
-          await pressOptionComposedKey(orcaPage, { ...period, side })
+          await pressOptionComposedKey(quirkyPage, { ...period, side })
           await expect
             .poll(joinedWrites)
             .toBe(`${side === 'left' ? '\x1b[46;3u' : '≥'}\x1b[46;3:3u`)
         }
         expect(
-          await orcaPage.evaluate(() => window.__store?.getState().settings?.terminalMacOptionAsAlt)
+          await quirkyPage.evaluate(
+            () => window.__store?.getState().settings?.terminalMacOptionAsAlt
+          )
         ).toBe('left')
       }
     } finally {
@@ -203,12 +205,12 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('configured Option punctuation keeps legacy Alt bytes without enhanced reporting', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 0)
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 0)
     for (const setting of ['true', 'left', 'right'] as const) {
-      await setMacOptionAsAlt(orcaPage, setting)
+      await setMacOptionAsAlt(quirkyPage, setting)
       await clearPtyWriteLog(electronApp)
       const side = setting === 'right' ? 'right' : 'left'
       for (const key of [
@@ -216,22 +218,22 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
         { key: '≥', code: 'Period' },
         { key: '≤', code: 'Comma' }
       ]) {
-        await pressOptionComposedKey(orcaPage, { ...key, side })
+        await pressOptionComposedKey(quirkyPage, { ...key, side })
       }
       await expect.poll(joinedWrites).toBe('\x1b;\x1b.\x1b,')
     }
   })
 
   test('types the composed character instead of reporting the physical Alt chord', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp)
-    await setMacOptionAsAlt(orcaPage, 'false')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp)
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
 
     // Turkish Q: the physical `q` key composes `@`.
-    const dispatch = await pressOptionComposedKey(orcaPage, { key: '@', code: 'KeyQ' })
+    const dispatch = await pressOptionComposedKey(quirkyPage, { key: '@', code: 'KeyQ' })
     expect(dispatch.keydownDefaultPrevented).toBe(true)
 
     await expect
@@ -244,14 +246,14 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
     expect(await joinedWrites()).not.toContain('\x1b[113;3u')
   })
 
-  test('types a composed character that also needs Shift', async ({ orcaPage, electronApp }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp)
-    await setMacOptionAsAlt(orcaPage, 'false')
+  test('types a composed character that also needs Shift', async ({ quirkyPage, electronApp }) => {
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp)
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
 
     // QWERTZ-class layouts put `\` on the shifted Option layer (Option+Shift+7),
     // where no other chord can reach it.
-    const dispatch = await pressOptionComposedKey(orcaPage, {
+    const dispatch = await pressOptionComposedKey(quirkyPage, {
       key: '\\',
       code: 'Digit7',
       shiftKey: true
@@ -268,14 +270,14 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('still reports the Alt chord when Option is configured as Alt', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp)
-    await setMacOptionAsAlt(orcaPage, 'true')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp)
+    await setMacOptionAsAlt(quirkyPage, 'true')
     await clearPtyWriteLog(electronApp)
 
-    const dispatch = await pressOptionComposedKey(orcaPage, { key: '@', code: 'KeyQ' })
+    const dispatch = await pressOptionComposedKey(quirkyPage, { key: '@', code: 'KeyQ' })
     expect(dispatch.keydownDefaultPrevented).toBe(true)
 
     await expect
@@ -288,15 +290,15 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('keeps non-ASCII Option glyphs as TUI hotkeys when configured as Alt', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp)
-    await setMacOptionAsAlt(orcaPage, 'true')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp)
+    await setMacOptionAsAlt(quirkyPage, 'true')
     await clearPtyWriteLog(electronApp)
 
     // #8031: OMP-class TUIs bind Option+P, which composes the non-ASCII `π`.
-    const dispatch = await pressOptionComposedKey(orcaPage, { key: 'π', code: 'KeyP' })
+    const dispatch = await pressOptionComposedKey(quirkyPage, { key: 'π', code: 'KeyP' })
     expect(dispatch.keydownDefaultPrevented).toBe(true)
 
     await expect
@@ -309,11 +311,11 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
   })
 
   test('types all Polish letters once under Claude flags and updates the mounted pane setting', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 5)
-    await setMacOptionAsAlt(orcaPage, 'false')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 5)
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
     const letters = [
       ['a', 'ą'],
@@ -327,43 +329,43 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
       ['z', 'ż']
     ]
     for (const [base, key] of letters) {
-      await pressOptionComposedKey(orcaPage, { key, code: `Key${base.toUpperCase()}` })
-      await pressOptionComposedKey(orcaPage, {
+      await pressOptionComposedKey(quirkyPage, { key, code: `Key${base.toUpperCase()}` })
+      await pressOptionComposedKey(quirkyPage, {
         key: key.toUpperCase(),
         code: `Key${base.toUpperCase()}`,
         shiftKey: true
       })
     }
     await expect.poll(joinedWrites).toBe('ąĄćĆęĘłŁńŃóÓśŚźŹżŻ')
-    await setMacOptionAsAlt(orcaPage, 'true')
+    await setMacOptionAsAlt(quirkyPage, 'true')
     await clearPtyWriteLog(electronApp)
-    await pressOptionComposedKey(orcaPage, { key: 'ą', code: 'KeyA' })
+    await pressOptionComposedKey(quirkyPage, { key: 'ą', code: 'KeyA' })
     await expect.poll(joinedWrites).toBe('\x1b[97;3u')
-    await setMacOptionAsAlt(orcaPage, 'false')
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
-    await pressOptionComposedKey(orcaPage, { key: 'ą', code: 'KeyA' })
+    await pressOptionComposedKey(quirkyPage, { key: 'ą', code: 'KeyA' })
     await expect.poll(joinedWrites).toBe('ą')
   })
 
   test('reports Polish associated text once under report-all flags', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 29)
-    await setMacOptionAsAlt(orcaPage, 'false')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 29)
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
-    await pressOptionComposedKey(orcaPage, { key: 'ą', code: 'KeyA' })
+    await pressOptionComposedKey(quirkyPage, { key: 'ą', code: 'KeyA' })
     await expect.poll(joinedWrites).toBe('\x1b[97;3;261u')
   })
 
   test('renders Polish words entered through Chromium keyboard events', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }, testInfo) => {
-    const { joinedWrites } = await setUpOptionKeyboardPane(orcaPage, electronApp, 5)
-    await setMacOptionAsAlt(orcaPage, 'false')
+    const { joinedWrites } = await setUpOptionKeyboardPane(quirkyPage, electronApp, 5)
+    await setMacOptionAsAlt(quirkyPage, 'false')
     await clearPtyWriteLog(electronApp)
-    const cdp = await orcaPage.context().newCDPSession(orcaPage)
+    const cdp = await quirkyPage.context().newCDPSession(quirkyPage)
     const bases: Record<string, string> = {
       ą: 'a',
       ć: 'c',
@@ -392,8 +394,8 @@ test.describe('Option-composed text in a kitty-keyboard pane', () => {
         await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key, code, modifiers })
       }
       await expect.poll(joinedWrites).toBe(phrase)
-      await waitForTerminalOutput(orcaPage, phrase)
-      await orcaPage.screenshot({ path: testInfo.outputPath('polish-words.png') })
+      await waitForTerminalOutput(quirkyPage, phrase)
+      await quirkyPage.screenshot({ path: testInfo.outputPath('polish-words.png') })
     } finally {
       await cdp.detach()
     }

@@ -17,7 +17,7 @@
         "createUnavailable": "No hay ningún repositorio Git disponible para crear un árbol de trabajo.",
         "createWorktree": "Crear un árbol de trabajo nuevo",
         "createdTargetUnavailable": "No se pudo resolver el árbol de trabajo nuevo.",
-        "deliveryAutomaticRetrySucceeded": "La entrega inicial falló y Orca volvió a enviar el resumen.",
+        "deliveryAutomaticRetrySucceeded": "La entrega inicial falló y Quirky volvió a enviar el resumen.",
         "deliveryFailedRetry": "Fallaron la entrega del resumen y el reintento automático.",
         "deliverySucceeded": "Se envió el resumen de transferencia.",
         "deliveryUnconfirmed": "No se pudo confirmar la entrega del resumen.",

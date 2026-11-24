@@ -23,7 +23,7 @@ export type ClaudeJournalTranslator = {
   beginCommand: (start: ClaudeCommandStart) => void
   /** The command was never sent. */
   forgetCommand: (turnId: string) => void
-  /** Orca asked Claude to stop the command `turnId` names. */
+  /** Quirky asked Claude to stop the command `turnId` names. */
   commandInterruptRequested: (turnId: string) => void
   /** True while a turn is open and the provider's current request cycle has
    *  done root work since its init — the state in which the CLI folds an

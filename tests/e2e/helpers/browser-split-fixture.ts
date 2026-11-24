@@ -129,13 +129,13 @@ export function browserOverlay(page: Page, browserTabId: string) {
 }
 
 export function browserAddressBar(page: Page, browserTabId: string) {
-  return browserOverlay(page, browserTabId).locator('[data-orca-browser-address-bar="true"]')
+  return browserOverlay(page, browserTabId).locator('[data-quirky-browser-address-bar="true"]')
 }
 
 export async function focusBrowserAddressBar(page: Page, browserTabId: string): Promise<void> {
   const addressBar = browserAddressBar(page, browserTabId)
   const addressBarForm = browserOverlay(page, browserTabId).locator(
-    'form:has(> [data-orca-browser-address-bar="true"])'
+    'form:has(> [data-quirky-browser-address-bar="true"])'
   )
   await expect(addressBarForm).toBeVisible()
   await addressBar.focus()

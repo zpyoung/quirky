@@ -30,10 +30,10 @@ export async function resolveOrchestrationTerminalHandle(
   if (explicit) {
     return explicit
   }
-  const envHandle = process.env.ORCA_TERMINAL_HANDLE
+  const envHandle = process.env.QUIRKY_TERMINAL_HANDLE
   if (envHandle && envHandle.length > 0) {
     if (flagName === 'from' && options.validateEnvHandle) {
-      // Why: long-lived shells can retain a stale ORCA_TERMINAL_HANDLE after remint; don't bake it into coordinator preambles.
+      // Why: long-lived shells can retain a stale QUIRKY_TERMINAL_HANDLE after remint; don't bake it into coordinator preambles.
       const live = await isLiveTerminalHandle(envHandle, client)
       if (!live) {
         const reminted = await resolveOrchestrationPaneTerminalHandle(client)
@@ -64,7 +64,7 @@ export async function resolveOrchestrationTerminalHandle(
  *
  * `terminal.resolveIdentity`, never `terminal.show`: `show` is a PTY verb, so it missed for a
  * structured worker and reported `terminal_handle_stale` for a handle that was perfectly live —
- * which then failed every coordinator verb, because the pane remint below needs an `ORCA_PANE_KEY`
+ * which then failed every coordinator verb, because the pane remint below needs an `QUIRKY_PANE_KEY`
  * a structured child deliberately does not carry.
  */
 async function isLiveTerminalHandle(handle: string, client: RuntimeClient): Promise<boolean> {
@@ -123,7 +123,7 @@ async function resolveOrchestrationPaneTerminalHandle(
   client: RuntimeClient,
   options: { optional?: boolean } = {}
 ): Promise<string | undefined> {
-  const paneKey = process.env.ORCA_PANE_KEY
+  const paneKey = process.env.QUIRKY_PANE_KEY
   if (!paneKey || paneKey.length === 0) {
     return undefined
   }
@@ -232,19 +232,19 @@ function structuredSessionRefusal(flagName: 'from' | 'terminal'): RuntimeClientE
 export function throwNoActiveSenderTerminal(): never {
   // Lifecycle sends refuse here before the structured guard above ever runs, so this is the only
   // place left that would tell an identity-less session to pass a handle it does not have. A stale
-  // ORCA_TERMINAL_HANDLE is a different case — that caller HAS an identity, so it keeps the advice
+  // QUIRKY_TERMINAL_HANDLE is a different case — that caller HAS an identity, so it keeps the advice
   // to re-run under a live one.
-  if (hasStructuredSessionMarker() && !process.env.ORCA_TERMINAL_HANDLE) {
+  if (hasStructuredSessionMarker() && !process.env.QUIRKY_TERMINAL_HANDLE) {
     throw structuredSessionRefusal('from')
   }
-  // Why: Codex sets CODEX_THREAD_ID after its env filter, which is what drops Orca's (#25775).
-  if (process.env.CODEX_THREAD_ID && !process.env.ORCA_TERMINAL_HANDLE) {
+  // Why: Codex sets CODEX_THREAD_ID after its env filter, which is what drops Quirky's (#25775).
+  if (process.env.CODEX_THREAD_ID && !process.env.QUIRKY_TERMINAL_HANDLE) {
     throw new RuntimeClientError(
       'no_active_sender_terminal',
-      'Codex ran this orchestration command without ORCA_TERMINAL_HANDLE. If Codex was started in ' +
-        'an Orca terminal, its shell_environment_policy removed it, and relaunching the same way ' +
-        'will not restore it. Start Codex by typing `codex` in an Orca terminal, or set ' +
-        'inherit = "all" with include_only listing the variables to keep plus "ORCA_*". ' +
+      'Codex ran this orchestration command without QUIRKY_TERMINAL_HANDLE. If Codex was started in ' +
+        'an Quirky terminal, its shell_environment_policy removed it, and relaunching the same way ' +
+        'will not restore it. Start Codex by typing `codex` in an Quirky terminal, or set ' +
+        'inherit = "all" with include_only listing the variables to keep plus "QUIRKY_*". ' +
         "Pass --from only with your own terminal's handle — another pane's handle would act on " +
         'its mailbox.'
     )
@@ -253,6 +253,6 @@ export function throwNoActiveSenderTerminal(): never {
     'no_active_sender_terminal',
     'Could not determine the sender terminal for this orchestration command. ' +
       "Pass --from with your own terminal's handle — another pane's handle would act on its mailbox — " +
-      'or run the command inside a live Orca terminal with ORCA_TERMINAL_HANDLE set.'
+      'or run the command inside a live Quirky terminal with QUIRKY_TERMINAL_HANDLE set.'
   )
 }

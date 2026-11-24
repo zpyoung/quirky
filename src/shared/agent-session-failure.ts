@@ -2,9 +2,9 @@
 //
 // The host writes both at once: `text`/`reason` stays a complete sentence because released clients
 // print it as it is, and this fact is what newer clients choose their copy and action from. A
-// provider's own words ride separately as `detail`, set only where Orca composed them from a
+// provider's own words ride separately as `detail`, set only where Quirky composed them from a
 // value the provider wrote — never recovered from a string afterwards, since by then nothing can
-// tell a provider's sentence from Orca's.
+// tell a provider's sentence from Quirky's.
 
 import type { AgentSessionAccountKind } from './agent-session-availability'
 import {
@@ -31,7 +31,7 @@ import {
 export const AGENT_SESSION_FAILURE_KINDS = [
   /** Only an observed exit: the provider stopped while starting. */
   'providerStartFailed',
-  /** A start that did not land, with no one to blame: Orca's fault, a failed spawn, a close. */
+  /** A start that did not land, with no one to blame: Quirky's fault, a failed spawn, a close. */
   'startFailed',
   'notSignedIn',
   /** The agent's CLI is not installed where the chat runs: its spawn found no such file. */
@@ -67,13 +67,13 @@ export const AGENT_SESSION_FAILURE_KINDS = [
   'cancelUnconfirmed',
   /** A Stop naming no turn reached the agent, which ended nothing while the chat read working. */
   'stopRefused',
-  /** A Stop Orca could not save: only a refusal says it. */
+  /** A Stop Quirky could not save: only a refusal says it. */
   'stopFailed',
   /** A background-task Stop the agent answered with the task still running. */
   'backgroundTaskNotStopped',
   'answerUnconfirmed',
   'hostFault',
-  /** Orca stopped an agent whose start never finished. */
+  /** Quirky stopped an agent whose start never finished. */
   'hostStopped',
   /** The provider is retrying a request its API refused; not a failure yet. */
   'providerRetrying',
@@ -131,7 +131,7 @@ export type ProviderDiagnostic = {
  *  lease record keeps, so a diagnostic never outgrows what the record may store. */
 export const MAX_PROVIDER_DIAGNOSTIC_CHARS = 512
 
-/** Which of Orca's checks an image failed. A new one needs a sentence before it compiles. */
+/** Which of Quirky's checks an image failed. A new one needs a sentence before it compiles. */
 export const AGENT_SESSION_ATTACHMENT_PROBLEM_REASONS = [
   'empty',
   'tooLarge',
@@ -167,7 +167,7 @@ export type AgentSessionProviderRetry = {
 export type AgentSessionFailureFact = {
   kind: AgentSessionFailureKind
   account?: AgentSessionAccountKind
-  /** Provider-authored only; absent whenever Orca wrote the words. */
+  /** Provider-authored only; absent whenever Quirky wrote the words. */
   detail?: ProviderDiagnostic
   /** On `restartFailed` and `startFailed`: the refusal that kept the agent from starting. On
    *  `commandRefused`: the refusal that kept the command from running. */
@@ -178,15 +178,15 @@ export type AgentSessionFailureFact = {
   retry?: AgentSessionProviderRetry
   /** On `usageLimitReached`: which limit, and when it resets. */
   usageLimit?: AgentSessionUsageLimit
-  /** A safe option name from Orca's saved Arguments parser, never an error message. */
+  /** A safe option name from Quirky's saved Arguments parser, never an error message. */
   argumentProblem?: AgentSessionArgumentProblem
-  /** Written only where Orca proves the agent never received the message: a Stop's withdrawal is
+  /** Written only where Quirky proves the agent never received the message: a Stop's withdrawal is
    *  then owed as stopped history, and a refused carrier owes its history again. Absent means
    *  unknown. Host-only; clients read the kind. */
   neverReachedAgent?: true
   /** On `backgroundTaskNotStopped`: one named task, or every task the Stop reached. */
   backgroundStop?: AgentSessionBackgroundStop
-  /** On `startFailed`: the provider request that got no answer before Orca's deadline. */
+  /** On `startFailed`: the provider request that got no answer before Quirky's deadline. */
   requestTimeout?: AgentSessionRequestTimeout
 }
 
@@ -369,7 +369,7 @@ function providerDiagnosticWithin(error: unknown, start: number): ProviderDiagno
   return undefined
 }
 
-/** Attaches the provider's words to the error Orca built around them. */
+/** Attaches the provider's words to the error Quirky built around them. */
 export function withProviderDiagnostic<TError extends Error>(
   error: TError,
   diagnostic: ProviderDiagnostic | undefined

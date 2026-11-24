@@ -29,11 +29,11 @@ describe('JSON-lines RPC peer', () => {
     const onRecord = vi.fn()
     const { peer, output, reply } = fixture({ onRecord })
     const pending = peer.request('get_state')
-    expect(JSON.parse(output.read().toString())).toEqual({ type: 'get_state', id: 'orca-1' })
+    expect(JSON.parse(output.read().toString())).toEqual({ type: 'get_state', id: 'quirky-1' })
     reply({ type: 'agent_start', future: { enabled: true } })
     reply({
       type: 'response',
-      id: 'orca-1',
+      id: 'quirky-1',
       command: 'get_state',
       success: true,
       data: { isStreaming: false }
@@ -110,7 +110,7 @@ describe('JSON-lines RPC peer', () => {
     const control = expect(peer.request('get_state')).rejects.toThrow('get_state in time')
     await vi.advanceTimersByTimeAsync(1_000)
     await control
-    reply({ type: 'response', id: 'orca-1', command: 'prompt', success: true })
+    reply({ type: 'response', id: 'quirky-1', command: 'prompt', success: true })
     await expect(prompt).resolves.toBeUndefined()
     const bounded = expect(peer.request('prompt', {}, { timeoutMs: 10 })).rejects.toThrow('in time')
     await vi.advanceTimersByTimeAsync(10)
@@ -126,7 +126,7 @@ describe('JSON-lines RPC peer', () => {
   ])('rejects malformed identified replies without stranding a prompt: %j', async (record) => {
     const { peer, reply } = fixture()
     const pending = expect(peer.request('prompt')).rejects.toThrow('Invalid agent RPC response')
-    reply({ ...record, id: 'orca-1' })
+    reply({ ...record, id: 'quirky-1' })
     await pending
   })
 
@@ -139,7 +139,7 @@ describe('JSON-lines RPC peer', () => {
     reply({ type: 'response', id: 'other', command: 'get_state', success: true })
     reply({
       type: 'response',
-      id: 'orca-1',
+      id: 'quirky-1',
       command: 'get_state',
       success: false,
       error: 'No API key found for provider'
@@ -167,7 +167,7 @@ describe('JSON-lines RPC peer', () => {
     await vi.advanceTimersByTimeAsync(10)
     await first
     const second = peer.request('get_state')
-    reply({ type: 'response', id: 'orca-2', command: 'get_state', success: true })
+    reply({ type: 'response', id: 'quirky-2', command: 'get_state', success: true })
     await second
     expect(vi.getTimerCount()).toBe(0)
   })

@@ -6,9 +6,9 @@ import {
 } from './bridge-rpc-client'
 import type { BridgeInitRoute } from './bridge-envelope'
 import {
-  createOrcaBridgePageTransport,
-  readOrcaBridgePageChannel
-} from './orca-bridge-page-channel'
+  createQuirkyBridgePageTransport,
+  readQuirkyBridgePageChannel
+} from './quirky-bridge-page-channel'
 
 /**
  * How far the page's bootstrap got, in one attribute.
@@ -21,9 +21,9 @@ import {
 export type PageMountState = 'started' | 'unbridged' | 'shell-too-old' | 'shell-ready' | 'mounted'
 
 /** `dataset` keys, so a screenshot, the render check and a device console read the same three facts. */
-export const PAGE_MOUNT_STATE_KEY = 'orcaWebEntry'
-export const PAGE_SESSION_ID_KEY = 'orcaWebSessionId'
-export const PAGE_BUILD_ID_KEY = 'orcaWebBuildId'
+export const PAGE_MOUNT_STATE_KEY = 'quirkyWebEntry'
+export const PAGE_SESSION_ID_KEY = 'quirkyWebSessionId'
+export const PAGE_BUILD_ID_KEY = 'quirkyWebBuildId'
 
 /** The document element, narrowed to the one thing the page writes on it. */
 export type PageMountTarget = { dataset: DOMStringMap }
@@ -51,12 +51,12 @@ export function createPageDiagnosticReporter(): (diagnostic: BridgeRpcClientDiag
  * one's frames; the page builds this once, at the entry, and hands the same client to the provider.
  */
 export function createShellPageClient(): BridgeRpcClient | null {
-  const channel = readOrcaBridgePageChannel()
+  const channel = readQuirkyBridgePageChannel()
   if (channel === null) {
     return null
   }
   return createBridgeRpcClient({
-    ...createOrcaBridgePageTransport(channel),
+    ...createQuirkyBridgePageTransport(channel),
     onDiagnostic: createPageDiagnosticReporter()
   })
 }

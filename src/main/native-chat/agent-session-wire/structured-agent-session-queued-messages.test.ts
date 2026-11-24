@@ -651,7 +651,7 @@ describe('/clear', () => {
   })
 
   it("preserves each card's sender and fingerprint across clear", async () => {
-    const party = { address: 'term_peer', terminalHandle: 'term_peer', orcaSessionId: null }
+    const party = { address: 'term_peer', terminalHandle: 'term_peer', quirkySessionId: null }
     const from: AgentMessageSource = {
       kind: 'agent',
       senders: [{ party, name: 'Claude' }],

@@ -1,12 +1,12 @@
 import { terminalImageViewerSupported } from '../../terminal-image-viewer-env'
 import type { z } from 'zod'
 import { resolveRuntimeNavigationTarget } from '../../../../shared/runtime-navigation'
-import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../quirky-runtime'
 import { hostQualifiedRepoSelector, type RuntimeRepoSelector } from '../../runtime-repo-selector'
 import type { WorktreeCreate } from '../../../../shared/rpc-contract/worktree-create-params'
 
 type WorktreeCreateParams = z.infer<typeof WorktreeCreate>
-type ManagedWorktreeCreateArgs = Parameters<OrcaRuntimeService['createManagedWorktree']>[0]
+type ManagedWorktreeCreateArgs = Parameters<QuirkyRuntimeService['createManagedWorktree']>[0]
 type CreateProvenance = Pick<
   ManagedWorktreeCreateArgs,
   'automationProvenance' | 'cliProvenance' | 'creatorProvenance'

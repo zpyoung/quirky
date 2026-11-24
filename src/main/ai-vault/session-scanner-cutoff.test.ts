@@ -109,7 +109,7 @@ describe('session scanner cutoff', () => {
   it('does not sort timestamps at every post-limit candidate', async () => {
     const count = 128
     const limit = count / 2
-    const root = await mkdtemp(join(tmpdir(), 'orca-session-cutoff-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-session-cutoff-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await mkdir(roots.codexSessionsDir, { recursive: true })

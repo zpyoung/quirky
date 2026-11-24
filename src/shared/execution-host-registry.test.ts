@@ -106,17 +106,17 @@ describe('execution host registry', () => {
       // A VM-backed repo carries the hidden runtime-owned target on both fields.
       repos: [
         {
-          connectionId: 'runtime-ssh-orca-instance-1',
-          executionHostId: 'ssh:runtime-ssh-orca-instance-1'
+          connectionId: 'runtime-ssh-quirky-instance-1',
+          executionHostId: 'ssh:runtime-ssh-quirky-instance-1'
         },
         { connectionId: 'repo-ssh' }
       ],
       settings: { activeRuntimeEnvironmentId: null },
       // Even if a stale label leaked in, it must still be filtered out.
-      sshTargetLabels: new Map([['runtime-ssh-orca-instance-1', 'Hidden VM']])
+      sshTargetLabels: new Map([['runtime-ssh-quirky-instance-1', 'Hidden VM']])
     })
 
-    expect(hosts.some((h) => h.id.includes('runtime-ssh-orca-instance-1'))).toBe(false)
+    expect(hosts.some((h) => h.id.includes('runtime-ssh-quirky-instance-1'))).toBe(false)
     // The ordinary repo SSH host is still present.
     expect(hosts.some((h) => h.id === 'ssh:repo-ssh')).toBe(true)
   })
@@ -229,7 +229,7 @@ describe('execution host registry', () => {
                 reconnectAttempt: 1,
                 lastConnectedAt: 123,
                 lastClose: { code: 1006, reason: '' },
-                lastError: 'Remote Orca runtime closed the connection.'
+                lastError: 'Remote Quirky runtime closed the connection.'
               }
             }
           }

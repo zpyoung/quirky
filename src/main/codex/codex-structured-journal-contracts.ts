@@ -49,7 +49,7 @@ export type CodexJournalTranslatorDeps = {
 
 export type CodexJournalTranslator = {
   handle: (event: CodexStructuredSessionEvent) => CodexJournalTranslationAdmission
-  /** Before Orca sends a conversation command: the next primary turn carries it out, and that
+  /** Before Quirky sends a conversation command: the next primary turn carries it out, and that
    *  turn's end is the command's. */
   beginCommand: (command: StructuredAgentSessionCommandRun) => void
   /** The command was never taken. */

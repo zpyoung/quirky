@@ -199,7 +199,7 @@ export class RepoRefMaintenance {
 
   /**
    * `counted` spends the give-up budget. Waiting behind another repository's
-   * pack, or yielding to work Orca asked us to yield to, does not: both end on
+   * pack, or yielding to work Quirky asked us to yield to, does not: both end on
    * their own, so charging for them would let a busy machine starve a repo
    * until its next fetch. Only app activity and failed probes are charged.
    */
@@ -344,7 +344,7 @@ export class RepoRefMaintenance {
       return this.yieldTo(key, tracked, span, signal)
     }
     // Judge by the backlog, not by the exit code. On a machine running several
-    // Orca sessions a branch moving mid-pack is the normal case, and Git's
+    // Quirky sessions a branch moving mid-pack is the normal case, and Git's
     // response -- leave that one ref loose, pack the rest -- is the correct one.
     // Measured in the field: 36,688 loose refs down to 3, reported as an error.
     const after = await countLooseRefs(refsDirectory, budget, signal)

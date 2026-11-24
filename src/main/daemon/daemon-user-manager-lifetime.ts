@@ -1,15 +1,15 @@
 /**
  * Whether a scope under the systemd `--user` manager lives at least as long as the caller.
  *
- * Without lingering, systemd stops `user@<uid>.service` — and every `orca-daemon-*.scope` in it —
+ * Without lingering, systemd stops `user@<uid>.service` — and every `quirky-daemon-*.scope` in it —
  * shortly after the user's last login session closes. A caller in a system unit or an SSH
  * session's `session-N.scope` outlives that, so moving the daemon into the user manager would
  * shorten its life (#24201). A caller already inside the user manager (a desktop app scope)
  * dies with it anyway, so the scope costs it nothing.
  */
 import { readFileSync } from 'node:fs'
-import { runProcessSync } from '@orca/process-host'
-import type { ProcessResult } from '@orca/process-host/process-spec'
+import { runProcessSync } from '@quirky/process-host'
+import type { ProcessResult } from '@quirky/process-host/process-spec'
 
 const LINGER_PROBE_TIMEOUT_MS = 2_000
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { DiscoveredSkill } from '../../../shared/skills'
 import {
   buildAgentFeatureSkillInstallCommand,
-  ORCA_LINEAR_SKILL_INSTALL_COMMAND
+  QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
 } from './agent-feature-install-commands'
 import { getLinearAgentSkillUpdateTarget } from './linear-agent-skill-update-command'
 
@@ -25,18 +25,18 @@ function skill(name: string): DiscoveredSkill {
 describe('getLinearAgentSkillUpdateTarget', () => {
   it('targets the canonical skill for missing, canonical, and dual-name installs', () => {
     expect(getLinearAgentSkillUpdateTarget([], false)).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
+      skillName: 'quirky-linear',
+      command: QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
     })
-    expect(getLinearAgentSkillUpdateTarget([skill('orca-linear')], true)).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
+    expect(getLinearAgentSkillUpdateTarget([skill('quirky-linear')], true)).toEqual({
+      skillName: 'quirky-linear',
+      command: QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
     })
     expect(
-      getLinearAgentSkillUpdateTarget([skill('orca-linear'), skill('linear-tickets')], true)
+      getLinearAgentSkillUpdateTarget([skill('quirky-linear'), skill('linear-tickets')], true)
     ).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
+      skillName: 'quirky-linear',
+      command: QUIRKY_LINEAR_SKILL_INSTALL_COMMAND
     })
   })
 

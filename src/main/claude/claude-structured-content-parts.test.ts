@@ -27,7 +27,7 @@ function providerRows(items: { body: AgentJournalItemBody }[]) {
 function userMessageWith(part: unknown) {
   return {
     type: 'message' as const,
-    sessionId: 'orca-session',
+    sessionId: 'quirky-session',
     startsTurn: true as const,
     message: {
       type: 'user',

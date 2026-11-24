@@ -34,7 +34,7 @@ type Fixture = {
 
 // `main` is checked out one commit behind `refs/remotes/origin/main`, which edits version.txt and adds added.txt.
 async function createBehindRepo(): Promise<Fixture> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-local-base-ff-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-local-base-ff-'))
   tempRoots.push(root)
   await writeFile(join(root, 'empty-gitconfig'), '')
   const env = isolatedGitEnv(root)
@@ -231,7 +231,7 @@ describe('fastForwardLocalBaseBranch against real Git', () => {
     expect(real.merges()).toBe(0)
     expect(fixture.git(['rev-parse', 'main'])).toBe(fixture.remoteOid)
     expect(fixture.git(['reflog', 'show', '--format=%gs', '-1', 'main'])).toBe(
-      'orca: fast-forward to refs/remotes/origin/main'
+      'quirky: fast-forward to refs/remotes/origin/main'
     )
     // The checked-out branch and its files are untouched.
     expect(fixture.git(['symbolic-ref', 'HEAD'])).toBe('refs/heads/develop')

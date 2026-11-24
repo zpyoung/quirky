@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { build } from 'vite'
 import { expect, it } from 'vitest'
 import { z } from 'zod'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { resolveElectronProbeLaunch } from '../../src/main/browser/electron-probe-display-launch'
 import { createElectronHomeIsolation } from './helpers/electron-home-isolation'
 
@@ -27,7 +27,7 @@ const wireSchema = z.object({
 })
 
 it('keeps Cursor account credentials independent of the native Electron cookie jar', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-cursor-wire-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-cursor-wire-'))
   try {
     const binary: unknown = createRequire(import.meta.url)('electron')
     if (typeof binary !== 'string') {
@@ -54,9 +54,9 @@ it('keeps Cursor account credentials independent of the native Electron cookie j
       launchEnv: {},
       userDataDir: join(root, 'profile'),
       extraEnv: {
-        ORCA_BACKGROUND_LAUNCH: '1',
-        ORCA_DISABLE_CODEX_TRUST_RPC: '1',
-        ORCA_CURSOR_WIRE_RESULT: resultPath
+        QUIRKY_BACKGROUND_LAUNCH: '1',
+        QUIRKY_DISABLE_CODEX_TRUST_RPC: '1',
+        QUIRKY_CURSOR_WIRE_RESULT: resultPath
       }
     })
     delete isolation.env.ELECTRON_RUN_AS_NODE

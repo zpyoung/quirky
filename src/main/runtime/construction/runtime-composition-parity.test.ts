@@ -5,18 +5,18 @@ import { RUNTIME_CAPABILITIES } from '../../../shared/protocol-version'
 import { SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY } from '../../../shared/ssh-target-management'
 
 /**
- * Electron (`main-process-*`) and orcad (`orcad-entry.ts`) each compose the same runtime, and every
+ * Electron (`main-process-*`) and quirkyd (`quirkyd-entry.ts`) each compose the same runtime, and every
  * dependency is optional, so one root can silently skip a service the other wires (#30120 never
- * gave orcad its web client root). This records what each root's source wires and fails on any
+ * gave quirkyd its web client root). This records what each root's source wires and fails on any
  * difference that is not declared below with a reason.
  *
  * It covers every way a host hands the runtime a service: constructor options, positional
  * constructor arguments, `runtime.set*` and `rpc.set*`, and the process-wide host ports installed
- * at preflight. The last two once went unrecorded, so orcad shipped without a stats collector
+ * at preflight. The last two once went unrecorded, so quirkyd shipped without a stats collector
  * (#31112) and without speech (#31174) while this test passed.
  */
 
-type Root = 'electron' | 'orcad'
+type Root = 'electron' | 'quirkyd'
 
 type DeclaredDifference = {
   wiring: string
@@ -29,68 +29,68 @@ type DeclaredDifference = {
 const DECLARED_HOST_DIFFERENCES: readonly DeclaredDifference[] = [
   {
     wiring: 'registerSshHandlers',
-    missingOn: 'orcad',
-    reason: 'orcad has no SSH stack; its SSH target methods refuse with an accurate message.',
+    missingOn: 'quirkyd',
+    reason: 'quirkyd has no SSH stack; its SSH target methods refuse with an accurate message.',
     advertisedUnserved: [SSH_TARGET_MANAGEMENT_RUNTIME_CAPABILITY]
   },
   {
     wiring: 'runtime.setAgentBrowserBridge',
-    missingOn: 'orcad',
-    reason: 'orcad installs browser automation through the runtime factory when Chromium exists.'
+    missingOn: 'quirkyd',
+    reason: 'quirkyd installs browser automation through the runtime factory when Chromium exists.'
   },
   {
     wiring: 'runtime.setEmulatorBridge',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Device emulators are desktop-only.'
   },
   {
     wiring: 'runtime.setOffscreenBrowserBackend',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Offscreen WebContents need Electron.'
   },
   {
     wiring: 'ctor:prepareClaudeAuth',
-    missingOn: 'orcad',
-    reason: 'orcad passes it to registerHeadlessPtyRuntime instead, and only off WSL.'
+    missingOn: 'quirkyd',
+    reason: 'quirkyd passes it to registerHeadlessPtyRuntime instead, and only off WSL.'
   },
   {
     wiring: 'ctor:onPtyStopped',
-    missingOn: 'orcad',
-    reason: 'It clears renderer-side provider state, and orcad has no renderer.'
+    missingOn: 'quirkyd',
+    reason: 'It clears renderer-side provider state, and quirkyd has no renderer.'
   },
   {
     wiring: 'ctor:onTerminalSideEffects',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Side effects are delivered to a desktop window only.'
   },
   {
     wiring: 'ctor:attestAgentHookCompatibilityAuthority',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Compatibility hook authority belongs to desktop-launched panes.'
   },
   {
     wiring: 'ctor:retireAgentHookCompatibilityAuthority',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Pairs with attestAgentHookCompatibilityAuthority.'
   },
   {
     wiring: 'ctor:getPairedDeviceName',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Unwired gap (follow-up): client-hosted browser rows show no paired-device name.'
   },
   {
     wiring: 'ctor:orchestrationEnvironmentTransport',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Cross-environment orchestration dials paired environments from the desktop only.'
   },
   {
     wiring: 'rpc-option:exposeNetworkByDefault',
-    missingOn: 'orcad',
-    reason: 'orcad pins its bind host instead, so exposure never widens itself.'
+    missingOn: 'quirkyd',
+    reason: 'quirkyd pins its bind host instead, so exposure never widens itself.'
   },
   {
     wiring: 'rpc.setOnUnpairedDeviceAuthFailure',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'It notifies a desktop window.'
   },
   {
@@ -100,50 +100,50 @@ const DECLARED_HOST_DIFFERENCES: readonly DeclaredDifference[] = [
   },
   {
     wiring: 'host:setMainHttpClient',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: "The port's default is Node's fetch; Chromium's network stack is desktop-only."
   },
   {
     wiring: 'host:setDefaultProxySessionResolver',
-    missingOn: 'orcad',
-    reason: 'It resolves a Chromium session; orcad reads proxy settings from the environment.'
+    missingOn: 'quirkyd',
+    reason: 'It resolves a Chromium session; quirkyd reads proxy settings from the environment.'
   },
   {
     wiring: 'host:setRuntimeDesktopSurface',
-    missingOn: 'orcad',
-    reason: 'Desktop windows and notifications; orcad has none to surface.'
+    missingOn: 'quirkyd',
+    reason: 'Desktop windows and notifications; quirkyd has none to surface.'
   },
   {
     wiring: 'host:setPtyHostBindings',
-    missingOn: 'orcad',
-    reason: "It binds Electron's ipcMain and powerMonitor; orcad serves PTYs over runtime RPC."
+    missingOn: 'quirkyd',
+    reason: "It binds Electron's ipcMain and powerMonitor; quirkyd serves PTYs over runtime RPC."
   },
   {
     wiring: 'host:setSpawnObserver',
-    missingOn: 'orcad',
+    missingOn: 'quirkyd',
     reason: 'Desktop subprocess-spawn diagnostics only.'
   },
   {
     wiring: 'host:setWorktreeWatcherRemoval',
-    missingOn: 'orcad',
-    reason: 'It closes renderer-side worktree watchers; orcad has no renderer.'
+    missingOn: 'quirkyd',
+    reason: 'It closes renderer-side worktree watchers; quirkyd has no renderer.'
   },
   {
     wiring: 'host:setBrowserHostClientProfileResolver',
-    missingOn: 'orcad',
-    reason: 'Browser profiles live in Chromium sessions; orcad pages carry profile ids only.'
+    missingOn: 'quirkyd',
+    reason: 'Browser profiles live in Chromium sessions; quirkyd pages carry profile ids only.'
   },
   {
     wiring: 'host:setDesktopBrowserBridgeHostEnabled',
     missingOn: 'electron',
-    reason: 'The desktop hosts browser pages itself; orcad enables the bridge to a desktop.'
+    reason: 'The desktop hosts browser pages itself; quirkyd enables the bridge to a desktop.'
   }
 ]
 
 /** Construction options neither root passes; each still needs a reason. */
 const UNWIRED_CONSTRUCTION_OPTIONS: Readonly<Record<string, string>> = {}
 
-/** Positional `OrcaRuntimeService` parameters after `store`, by position. */
+/** Positional `QuirkyRuntimeService` parameters after `store`, by position. */
 const POSITIONAL_CONSTRUCTOR_PARAMETERS = ['stats'] as const
 
 const ROOT_SOURCES: Record<Root, readonly string[]> = {
@@ -153,7 +153,7 @@ const ROOT_SOURCES: Record<Root, readonly string[]> = {
     'src/main/startup/main-process-runtime-launch.ts',
     'src/main/window/attach-main-window-services.ts'
   ],
-  orcad: ['src/main/orcad/orcad-entry.ts', 'src/main/orcad/orcad-account-services.ts']
+  quirkyd: ['src/main/quirkyd/quirkyd-entry.ts', 'src/main/quirkyd/quirkyd-account-services.ts']
 }
 
 /** Where each root installs process-wide host ports (`set*` calls that are not methods). */
@@ -162,10 +162,10 @@ const HOST_PORT_SOURCES: Record<Root, readonly string[]> = {
     'src/main/startup/main-process-preflight.ts',
     'src/main/host/electron-browser-commands.ts'
   ],
-  orcad: [
-    'src/main/orcad/orcad-host-adapters.ts',
-    'src/main/orcad/orcad-lifecycle.ts',
-    'src/main/orcad/orcad-browser-startup.ts'
+  quirkyd: [
+    'src/main/quirkyd/quirkyd-host-adapters.ts',
+    'src/main/quirkyd/quirkyd-lifecycle.ts',
+    'src/main/quirkyd/quirkyd-browser-startup.ts'
   ]
 }
 
@@ -182,10 +182,13 @@ const SPREAD_SOURCES: Record<string, { file: string; anchor: string }> = {
     anchor: 'codexStructuredLaunchHomeResolvers = {'
   },
   'accountLaunch?.runtimeDeps': {
-    file: 'src/main/orcad/orcad-account-services.ts',
+    file: 'src/main/quirkyd/quirkyd-account-services.ts',
     anchor: 'runtimeDeps: {'
   },
-  'orcadWsPortOptions(': { file: 'src/main/orcad/orcad-ws-port-policy.ts', anchor: 'wsPort: port' }
+  'quirkydWsPortOptions(': {
+    file: 'src/main/quirkyd/quirkyd-ws-port-policy.ts',
+    anchor: 'wsPort: port'
+  }
 }
 
 const repoRoot = join(__dirname, '../../../..')
@@ -330,8 +333,8 @@ function recordWiring(root: Root): Set<string> {
   const wired = new Set<string>()
   for (const file of ROOT_SOURCES[root]) {
     const source = read(file)
-    if (source.includes('new OrcaRuntimeService(')) {
-      const call = source.indexOf('new OrcaRuntimeService(')
+    if (source.includes('new QuirkyRuntimeService(')) {
+      const call = source.indexOf('new QuirkyRuntimeService(')
       const [, ...positional] = topLevelEntries(parenGroup(source, source.indexOf('(', call)))
       const options = positional.pop() ?? ''
       positional.forEach((argument, index) => {
@@ -343,8 +346,8 @@ function recordWiring(root: Root): Set<string> {
         wired.add(`ctor:${key}`)
       }
     }
-    if (source.includes('new OrcaRuntimeRpcServer(')) {
-      for (const key of objectKeys(objectLiteralAfter(source, 'new OrcaRuntimeRpcServer({'))) {
+    if (source.includes('new QuirkyRuntimeRpcServer(')) {
+      for (const key of objectKeys(objectLiteralAfter(source, 'new QuirkyRuntimeRpcServer({'))) {
         wired.add(`rpc-option:${key}`)
       }
     }
@@ -391,16 +394,16 @@ function declaredConstructionOptions(): string[] {
   return [...inner.matchAll(/^\s{2}([A-Za-z_$][\w$]*)\??:/gm)].map(([, key]) => key)
 }
 
-/** The positional parameters `OrcaRuntimeService`'s constructor takes after `store`. */
+/** The positional parameters `QuirkyRuntimeService`'s constructor takes after `store`. */
 function declaredPositionalParameters(): string[] {
   const source = read('src/main/runtime/construction/runtime-construction.ts')
   const params = topLevelEntries(parenGroup(source, source.indexOf('constructor(') + 11))
   return params.slice(1, -1).map((param) => /^([A-Za-z_$][\w$]*)/.exec(param)?.[1] ?? param)
 }
 
-describe('runtime composition parity (Electron vs orcad)', () => {
+describe('runtime composition parity (Electron vs quirkyd)', () => {
   const electron = recordWiring('electron')
-  const orcad = recordWiring('orcad')
+  const quirkyd = recordWiring('quirkyd')
 
   it('records the wiring both roots share', () => {
     for (const shared of [
@@ -419,14 +422,14 @@ describe('runtime composition parity (Electron vs orcad)', () => {
       'host:setSpeechServiceFactories'
     ]) {
       expect(electron, shared).toContain(shared)
-      expect(orcad, shared).toContain(shared)
+      expect(quirkyd, shared).toContain(shared)
     }
   })
 
   it('declares every wiring one root skips, and nothing it does not skip', () => {
     const actual = [
-      ...[...electron].filter((w) => !orcad.has(w)).map((w) => `orcad lacks ${w}`),
-      ...[...orcad].filter((w) => !electron.has(w)).map((w) => `electron lacks ${w}`)
+      ...[...electron].filter((w) => !quirkyd.has(w)).map((w) => `quirkyd lacks ${w}`),
+      ...[...quirkyd].filter((w) => !electron.has(w)).map((w) => `electron lacks ${w}`)
     ].sort()
     const declared = DECLARED_HOST_DIFFERENCES.map((d) => `${d.missingOn} lacks ${d.wiring}`)
     expect(actual).toEqual([...declared].sort())
@@ -434,7 +437,7 @@ describe('runtime composition parity (Electron vs orcad)', () => {
 
   it('accounts for every way the runtime takes a host service', () => {
     expect(declaredPositionalParameters()).toEqual([...POSITIONAL_CONSTRUCTOR_PARAMETERS])
-    const wiredAnywhere = new Set([...electron, ...orcad])
+    const wiredAnywhere = new Set([...electron, ...quirkyd])
     const unaccounted = declaredConstructionOptions().filter(
       (key) => !wiredAnywhere.has(`ctor:${key}`) && !(key in UNWIRED_CONSTRUCTION_OPTIONS)
     )
@@ -446,16 +449,16 @@ describe('runtime composition parity (Electron vs orcad)', () => {
 
   it('finds every host-port install in the files it reads', () => {
     const known = new Set(
-      [...electron, ...orcad].filter((w) => w.startsWith('host:')).map((w) => w.slice(5))
+      [...electron, ...quirkyd].filter((w) => w.startsWith('host:')).map((w) => w.slice(5))
     )
     const listed = new Set(Object.values(HOST_PORT_SOURCES).flat())
-    const unlisted = ['src/main/startup', 'src/main/orcad']
+    const unlisted = ['src/main/startup', 'src/main/quirkyd']
       .flatMap(sourceFilesUnder)
       .filter((file) => !listed.has(file) && hostPortCalls(read(file)).some((s) => known.has(s)))
     expect(unlisted, 'add these files to HOST_PORT_SOURCES').toEqual([])
   })
 
-  // #30731: orcad once installed a browser factory that could not place pages on a desktop.
+  // #30731: quirkyd once installed a browser factory that could not place pages on a desktop.
   it('installs a browser factory on both roots that hosts pages on a paired desktop', () => {
     const installs: Record<Root, { root: string; call: string; file: string; option: RegExp }> = {
       electron: {
@@ -464,10 +467,10 @@ describe('runtime composition parity (Electron vs orcad)', () => {
         file: 'src/main/host/electron-browser-commands.ts',
         option: /\bclientHosting: true\b/
       },
-      orcad: {
-        root: 'src/main/orcad/orcad-lifecycle.ts',
-        call: 'startOrcadBrowserProvider(',
-        file: 'src/main/orcad/orcad-browser-startup.ts',
+      quirkyd: {
+        root: 'src/main/quirkyd/quirkyd-lifecycle.ts',
+        call: 'startQuirkydBrowserProvider(',
+        file: 'src/main/quirkyd/quirkyd-browser-startup.ts',
         option: /\bclientHostingWithoutEngine: true\b/
       }
     }

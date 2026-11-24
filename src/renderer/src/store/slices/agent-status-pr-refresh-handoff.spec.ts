@@ -156,7 +156,7 @@ export function registerAgentStatusPrRefreshHandoffTests(): void {
         state: 'done',
         prompt: 'create a PR',
         agentType: 'codex',
-        lastAssistantMessage: 'Opened https://github.com/acme/orca/pull/42'
+        lastAssistantMessage: 'Opened https://github.com/acme/quirky/pull/42'
       })
 
       await flushMicrotasks()

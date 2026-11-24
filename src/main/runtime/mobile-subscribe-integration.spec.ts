@@ -3,7 +3,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { listWorktrees } from '../git/worktree'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 // Why: default the mock store to the clamp floor (5_000ms) so legacy "restore fires after delay" assertions hold; the real default is indefinite/null.
 const LEGACY_RESTORE_MS = 5_000
@@ -46,7 +46,7 @@ const store = {
 }
 
 /** Reclaim clears protected retention maps that no public reader exposes. */
-class ObservableRuntime extends OrcaRuntimeService {
+class ObservableRuntime extends QuirkyRuntimeService {
   get restoreTimers(): typeof this.pendingRestoreTimers {
     return this.pendingRestoreTimers
   }

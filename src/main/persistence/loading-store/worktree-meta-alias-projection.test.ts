@@ -29,7 +29,7 @@ import { normalizeWorktreeLinkedItemMetadata } from '../tracking-repos/worktree-
 vi.mock('electron', () => ({
   app: {
     getPath: () => tmpdir(),
-    getName: () => 'orca-test',
+    getName: () => 'quirky-test',
     getVersion: () => '0.0.0-test',
     isPackaged: false,
     on: () => {},
@@ -74,7 +74,10 @@ function openStore(dataFile: string): InstanceType<typeof Store> {
 }
 
 function tempDataFile(): string {
-  return join(realpathSync(mkdtempSync(join(tmpdir(), 'orca-alias-projection-'))), 'orca-data.json')
+  return join(
+    realpathSync(mkdtempSync(join(tmpdir(), 'quirky-alias-projection-'))),
+    'quirky-data.json'
+  )
 }
 
 function worktreeId(index: number): string {
@@ -149,7 +152,7 @@ function buildFixture(): Fixture {
   const divergentRow = meta(TWIN_ROWS, random)
   worktreeMeta[divergent] = { ...divergentRow, displayName: 'locator-only-name' }
   irreducible.push(link(divergent, LOCAL, divergentRow))
-  // 3. No identity twin at all, and no hostId — the shape of Orca's synthetic pseudo-worktrees.
+  // 3. No identity twin at all, and no hostId — the shape of Quirky's synthetic pseudo-worktrees.
   for (const pseudo of ['global-floating-terminal', 'onboarding-setup-terminal']) {
     worktreeMeta[pseudo] = meta(0, random, { hostId: undefined, displayName: pseudo })
   }

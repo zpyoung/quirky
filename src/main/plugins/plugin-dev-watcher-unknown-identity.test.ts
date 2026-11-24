@@ -36,7 +36,7 @@ let subscriptions: { callback: WatcherProcessCallback; unsubscribe: ReturnType<t
 beforeEach(async () => {
   vi.mocked(statSync).mockReset()
   vi.mocked(stat).mockReset()
-  fixture = await createAliasedWatcherRoot('orca-plugin-unknown-identity-')
+  fixture = await createAliasedWatcherRoot('quirky-plugin-unknown-identity-')
   Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
   subscribeMock.mockReset()
   subscribeMock.mockImplementation(async (_path, callback) => {

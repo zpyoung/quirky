@@ -60,10 +60,10 @@ let userDataDir: string
 let previousUserDataPath: string | undefined
 
 beforeEach(() => {
-  tmpHome = mkdtempSync(join(tmpdir(), 'orca-codex-registration-home-'))
-  userDataDir = mkdtempSync(join(tmpdir(), 'orca-codex-registration-user-data-'))
-  previousUserDataPath = process.env.ORCA_USER_DATA_PATH
-  process.env.ORCA_USER_DATA_PATH = userDataDir
+  tmpHome = mkdtempSync(join(tmpdir(), 'quirky-codex-registration-home-'))
+  userDataDir = mkdtempSync(join(tmpdir(), 'quirky-codex-registration-user-data-'))
+  previousUserDataPath = process.env.QUIRKY_USER_DATA_PATH
+  process.env.QUIRKY_USER_DATA_PATH = userDataDir
   homedirMock.mockReturnValue(tmpHome)
   registrationTestState.failAtomicWrite = false
   // Why: promotion writes into homedir()/.codex — if the mock ever fails to
@@ -77,9 +77,9 @@ afterEach(() => {
   rmSync(tmpHome, { recursive: true, force: true })
   rmSync(userDataDir, { recursive: true, force: true })
   if (previousUserDataPath === undefined) {
-    delete process.env.ORCA_USER_DATA_PATH
+    delete process.env.QUIRKY_USER_DATA_PATH
   } else {
-    process.env.ORCA_USER_DATA_PATH = previousUserDataPath
+    process.env.QUIRKY_USER_DATA_PATH = previousUserDataPath
   }
   vi.clearAllMocks()
 })
@@ -97,7 +97,7 @@ function runtimeConfigPath(): string {
 }
 
 function baselinePath(homePath = runtimeHomeDir()): string {
-  return join(homePath, '.orca-config-settings-baseline.json')
+  return join(homePath, '.quirky-config-settings-baseline.json')
 }
 
 function writeSystemConfig(content: string, homePath = systemHomeDir()): void {
@@ -205,7 +205,7 @@ describe('codex plugin registration survives the managed-home mirror', () => {
     mirrorTwice()
     expect(readSystemConfig()).toContain('[marketplaces.ponytail]')
 
-    // The user edits ~/.codex outside Orca and deletes both registrations.
+    // The user edits ~/.codex outside Quirky and deletes both registrations.
     writeSystemConfig('model = "gpt-5"\n')
     mirrorTwice()
 

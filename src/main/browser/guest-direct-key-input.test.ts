@@ -173,7 +173,7 @@ describe('dispatchPageKeyEvent', () => {
     expect(page.sendInputEvent).toHaveBeenCalledTimes(2)
   })
 
-  it('guards the user’s focus for Tab, which can leave the page for Orca’s window', async () => {
+  it('guards the user’s focus for Tab, which can leave the page for Quirky’s window', async () => {
     const { page, webContents } = fakePage('webview')
     const release = vi.fn()
     const guardFocus = vi.fn(async () => release)
@@ -252,7 +252,7 @@ describe('dispatchPageKeyEvent', () => {
     expect(release).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps CDP input for pages outside an Orca window', async () => {
+  it('keeps CDP input for pages outside an Quirky window', async () => {
     const { page, webContents } = fakePage('window')
     const send = fakeSender()
     const params = { type: 'keyDown', key: 'z', text: 'z' }

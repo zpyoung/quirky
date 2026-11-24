@@ -143,7 +143,7 @@ describe('notebook IPC', () => {
       './local-file-access-resolution'
     )
     resolveAuthorizedPathMock.mockImplementation(actual.resolveUserNamedRegularFile)
-    const folder = await mkdtemp(join(await realpath(tmpdir()), 'orca-notebook-'))
+    const folder = await mkdtemp(join(await realpath(tmpdir()), 'quirky-notebook-'))
     try {
       const notebook = join(folder, 'analysis.ipynb')
       await writeFile(notebook, '{}')

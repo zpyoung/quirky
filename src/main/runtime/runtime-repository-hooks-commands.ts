@@ -2,7 +2,7 @@ import { getStoredRepoSshConnectionId } from '../repo-execution-host'
 import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import type { Repo } from '../../shared/repo-types'
-import { getEffectiveHooks, hasHooksFile, hasUnrecognizedOrcaYamlKeys, loadHooks } from '../hooks'
+import { getEffectiveHooks, hasHooksFile, hasUnrecognizedQuirkyYamlKeys, loadHooks } from '../hooks'
 import {
   getDefaultTabCommandTrustContent,
   getEffectiveSetupRunPolicy
@@ -38,7 +38,7 @@ export class RuntimeRepositoryHooksCommands {
       hasHooksFile: hasFile,
       hooks,
       setupRunPolicy: getEffectiveSetupRunPolicy(repo),
-      source: hasFile ? ('orca.yaml' as const) : hooks ? ('legacy' as const) : null,
+      source: hasFile ? ('quirky.yaml' as const) : hooks ? ('legacy' as const) : null,
       setupTrust: setupTrust(repo, getDefaultTabCommandTrustContent(sharedHooks))
     }
   }
@@ -58,7 +58,7 @@ export class RuntimeRepositoryHooksCommands {
       status: 'ok' as const,
       hasHooks: has,
       hooks,
-      mayNeedUpdate: has && !hooks && hasUnrecognizedOrcaYamlKeys(repo.path)
+      mayNeedUpdate: has && !hooks && hasUnrecognizedQuirkyYamlKeys(repo.path)
     }
   }
 

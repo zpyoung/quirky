@@ -20,9 +20,9 @@ vi.mock('../ui/dropdown-menu', () => ({
 }))
 
 const plugin: PluginHostListEntry = {
-  pluginKey: 'stablyai.orca-skills',
+  pluginKey: 'stablyai.quirky-skills',
   consentFingerprint: 'sha256-consent',
-  name: 'Orca Skills',
+  name: 'Quirky Skills',
   version: '1.0.0',
   publisher: 'stablyai',
   status: 'disabled',
@@ -37,7 +37,7 @@ const plugin: PluginHostListEntry = {
   restarts: 0,
   source: {
     kind: 'bundled',
-    reference: 'bundled:stablyai.orca-skills',
+    reference: 'bundled:stablyai.quirky-skills',
     resolvedCommit: null,
     contentHash: 'sha256-content'
   }

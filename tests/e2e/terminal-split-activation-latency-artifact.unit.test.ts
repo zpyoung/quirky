@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('writeTerminalSplitLatencyArtifact', () => {
   it('writes the report body to the requested path', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-split-latency-artifact-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-split-latency-artifact-'))
     temporaryDirectories.push(directory)
     const outputPath = join(directory, 'report.json')
     const body = '{"status":"passed"}\n'
@@ -32,7 +32,7 @@ describe('writeTerminalSplitLatencyArtifact', () => {
   })
 
   it('throws when the report path cannot be written', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'orca-split-latency-artifact-'))
+    const directory = mkdtempSync(join(tmpdir(), 'quirky-split-latency-artifact-'))
     temporaryDirectories.push(directory)
     const outputPath = join(directory, 'missing-parent', 'report.json')
 
@@ -45,7 +45,7 @@ describe('writeTerminalSplitLatencyArtifact', () => {
 describe('sanitizeTerminalSplitLatencyReport', () => {
   it('replaces the machine-local test repo path', () => {
     expect(
-      sanitizeTerminalSplitLatencyReport({ testRepoPath: '/var/folders/ab/T/orca-seeded-repo' })
+      sanitizeTerminalSplitLatencyReport({ testRepoPath: '/var/folders/ab/T/quirky-seeded-repo' })
         .testRepoPath
     ).toBe('<test-repo>')
   })

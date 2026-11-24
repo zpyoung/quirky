@@ -5,7 +5,7 @@ import { RuntimeClient } from '../runtime-client'
 import { CORE_COMMAND_SPECS } from '../specs/core'
 
 describe('repo set worktree visibility', () => {
-  const client = new RuntimeClient('/tmp/orca-visibility-test', 60_000, null, null)
+  const client = new RuntimeClient('/tmp/quirky-visibility-test', 60_000, null, null)
   const reply = {
     id: 'repo-update',
     ok: true as const,

@@ -8,7 +8,7 @@ import {
 } from '../../../shared/wsl-move/wsl-move-cutover'
 import { wslMoveCutoverFixture as cutover } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
-import { orcadMigrationCutoverJournalDirectory } from '../../ssh/orcad-migration-cutover-journal'
+import { quirkydMigrationCutoverJournalDirectory } from '../../ssh/quirkyd-migration-cutover-journal'
 import {
   listWslMoveCutoverChain,
   listWslMoveCutovers,
@@ -37,7 +37,7 @@ describe('WSL move journal', () => {
     writeWslMoveCutover(userDataPath, cutover())
     expect(listWslMoveCutovers(userDataPath)).toEqual([cutover()])
     expect(wslMoveJournalDirectory(userDataPath)).not.toBe(
-      orcadMigrationCutoverJournalDirectory(userDataPath)
+      quirkydMigrationCutoverJournalDirectory(userDataPath)
     )
     if (process.platform !== 'win32') {
       expect(statSync(journalPath('move-1')).mode & 0o077).toBe(0)

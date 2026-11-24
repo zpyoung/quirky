@@ -7,7 +7,7 @@ export function wslClaudeProfile(
   distro: string,
   accountId: string
 ): { dataRoot: string; profile: ClaudeProfileDescriptor } {
-  const dataRoot = posix.join(guestHome, '.local/share/orca')
+  const dataRoot = posix.join(guestHome, '.local/share/quirky')
   const profile = describeClaudeProfile(dataRoot, accountId, {
     executionHostId: 'local',
     runtime: 'wsl',
@@ -23,10 +23,10 @@ export function wslClaudeProfile(
  */
 export function wslClaudeProfilePointer(hostDataRoot: string): string {
   const build = basename(hostDataRoot).replace(/[^\w.-]/g, '_')
-  return `.local/share/orca/claude-profiles/selected-wsl-${build}`
+  return `.local/share/quirky/claude-profiles/selected-wsl-${build}`
 }
 
-/** A saved WSL account's guest folder; null for an older Orca's folder, which holds no login. */
+/** A saved WSL account's guest folder; null for an older Quirky's folder, which holds no login. */
 export function savedWslClaudeAccountHome(account: {
   id: string
   wslLinuxAuthPath?: string | null

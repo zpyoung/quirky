@@ -39,7 +39,7 @@ export async function resolveJiraTarget(
   if (!runtime.result.capabilities?.includes(JIRA_AGENT_ACCESS_RUNTIME_CAPABILITY)) {
     throw new RuntimeClientError(
       'incompatible_runtime',
-      'Update Orca on the execution host to use verified Jira commands.'
+      'Update Quirky on the execution host to use verified Jira commands.'
     )
   }
   const { result: status } = await context.client.call<JiraConnectionStatus>('jira.status')
@@ -55,8 +55,8 @@ export async function resolveJiraTarget(
     throw new RuntimeClientError(
       'invalid_argument',
       candidates.length === 0
-        ? 'No matching connected Jira site. Check orca jira connection and Orca Jira settings.'
-        : `Multiple Jira sites match. Select one with --${siteFlag} using orca jira connection.`
+        ? 'No matching connected Jira site. Check quirky jira connection and Quirky Jira settings.'
+        : `Multiple Jira sites match. Select one with --${siteFlag} using quirky jira connection.`
     )
   }
   const site = candidates[0]

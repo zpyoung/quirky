@@ -65,7 +65,7 @@ export function boundJournalPromptBody(
                 : { ruleContent: boundPromptText(body.matchedAskRule.ruleContent) })
             }
           }),
-      // A newer Orca's subject is carried as it was: rebuilt as a plan, it would be a different
+      // A newer Quirky's subject is carried as it was: rebuilt as a plan, it would be a different
       // request, and its fields are not this build's to bound.
       ...(body.subject === undefined
         ? {}

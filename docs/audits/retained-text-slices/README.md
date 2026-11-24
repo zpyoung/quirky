@@ -21,7 +21,7 @@ and remote output. The main/relay recent-output buffer has a configurable cap,
 ## Reproduce
 
 ```sh
-ORCA_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/retained-text-slices/reproduce.mjs
+QUIRKY_BACKGROUND_LAUNCH=1 node --expose-gc docs/audits/retained-text-slices/reproduce.mjs
 ```
 
 The script bundles actual production functions. Its baseline removes only the

@@ -31,12 +31,12 @@ export abstract class UpdaterMacInstallPreflight extends UpdaterInstallSupport {
         version: pendingVersion,
         retryAction: 'install',
         message:
-          'Could not check for other running Orca instances. Orca remains open. Try again. If the check keeps failing, close the other Orca instances and background orca serve servers, then quit Orca to let the update install on exit. Reopen Orca afterwards.'
+          'Could not check for other running Quirky instances. Quirky remains open. Try again. If the check keeps failing, close the other Quirky instances and background quirky serve servers, then quit Quirky to let the update install on exit. Reopen Quirky afterwards.'
       })
       recordUpdaterLifecycle('macos_running_instances_check_failed')
       return false
     }
-    // Why: registered `orca serve --supervise` services can pause their server for us; anything else is refused as before.
+    // Why: registered `quirky serve --supervise` services can pause their server for us; anything else is refused as before.
     const park =
       blockers.length > 0
         ? await parkServeSupervisorsForInstall(process.execPath, blockers, {

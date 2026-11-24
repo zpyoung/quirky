@@ -65,7 +65,7 @@ describe('editor owners ignore unrelated workspace focus', () => {
         'repo-1': [makeWorktree({ id: 'wt-1', repoId: 'repo-1', path: '/repo' })]
       },
       activeWorkspaceExecutionHostId: 'runtime:mac',
-      settings: { ...getDefaultSettings('/tmp/orca-test'), activeRuntimeEnvironmentId: null }
+      settings: { ...getDefaultSettings('/tmp/quirky-test'), activeRuntimeEnvironmentId: null }
     })
 
     expect(
@@ -81,7 +81,7 @@ describe('editor owners ignore unrelated workspace focus', () => {
     const store = createEditorTabsStore()
     store.setState({
       activeWorktreeId: 'folder:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-      settings: { ...getDefaultSettings('/tmp/orca-test'), activeRuntimeEnvironmentId: null },
+      settings: { ...getDefaultSettings('/tmp/quirky-test'), activeRuntimeEnvironmentId: null },
       folderWorkspaces: [
         {
           id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',

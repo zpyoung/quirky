@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { ORCAD_LOCAL_SERVE_SELECTION_ENTRY } from '../../src/shared/orcad-local-serve-selection'
+import { QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY } from '../../src/shared/quirkyd-local-serve-selection'
 
 const require = createRequire(import.meta.url)
 const {
@@ -24,7 +24,7 @@ function packagedResources({ index, assets = [], cli = true }) {
   const webDir = join(outDir, 'renderer')
   mkdirSync(join(webDir, 'assets'), { recursive: true })
   writeFileSync(
-    join(webDir, '.orca-web-client-files.json'),
+    join(webDir, '.quirky-web-client-files.json'),
     JSON.stringify(['web-index.html', ...assets])
   )
   if (index !== undefined) {
@@ -89,7 +89,7 @@ describe('assertPackagedWebClient', () => {
       assets: ['assets/web.js', 'assets/web.css']
     })
     writeFileSync(
-      join(resourcesDir, 'app.asar.unpacked/out/renderer/.orca-web-client-files.json'),
+      join(resourcesDir, 'app.asar.unpacked/out/renderer/.quirky-web-client-files.json'),
       JSON.stringify(files)
     )
     expect(() => assertPackagedWebClient(resourcesDir)).toThrow(/invalid web file manifest/)
@@ -101,7 +101,7 @@ describe('assertPackagedWebClient', () => {
       assets: ['assets/web.js', 'assets/web.css']
     })
     writeFileSync(
-      join(resourcesDir, 'app.asar.unpacked/out/renderer/.orca-web-client-files.json'),
+      join(resourcesDir, 'app.asar.unpacked/out/renderer/.quirky-web-client-files.json'),
       JSON.stringify([
         'web-index.html',
         'assets/web.js',
@@ -134,8 +134,8 @@ describe('assertPackagedServeSelectionEntry', () => {
     return resourcesDir
   }
 
-  it('looks where orca serve runs the entry from', () => {
-    expect(SERVE_SELECTION_ENTRY).toBe(`main/${ORCAD_LOCAL_SERVE_SELECTION_ENTRY}.js`)
+  it('looks where quirky serve runs the entry from', () => {
+    expect(SERVE_SELECTION_ENTRY).toBe(`main/${QUIRKYD_LOCAL_SERVE_SELECTION_ENTRY}.js`)
   })
 
   it('passes an unpacked entry whose relative requires are all unpacked', () => {

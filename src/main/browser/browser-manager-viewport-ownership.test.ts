@@ -97,7 +97,7 @@ function pause(handle: ReturnType<typeof makeGuest>, method: string) {
 
 describe('browser viewport operation ownership', () => {
   beforeEach(() => {
-    expect(process.env.ORCA_BACKGROUND_LAUNCH).toBe('1')
+    expect(process.env.QUIRKY_BACKGROUND_LAUNCH).toBe('1')
     resetBrowserManagerMocks(mocks)
     resetBrowserManagerState()
     mocks.processUserAgentMode = 'clean'

@@ -8,7 +8,7 @@ import { BridgeInitRouteSchema, type BridgeInitRoute } from './bridge/bridge-ini
  *
  * `bridge-host.ts` parses the route against this same schema and drops it to `null` when it fails,
  * so a route that does not fit reaches the phone as an `init` naming no screen — and the page
- * answers that with "Update Orca to open this workspace", which is wrong. Deciding here instead
+ * answers that with "Update Quirky to open this workspace", which is wrong. Deciding here instead
  * lets the route file show the unavailable screen.
  *
  * A file path is the reason the files routes needed it first. Paths are params, not segments, so

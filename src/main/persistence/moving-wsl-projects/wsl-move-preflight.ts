@@ -3,7 +3,7 @@
  * host, and that the host can take a WSL move at all (mover design, D1b-4). No files move, so a
  * path that resolves to something else in the distro would silently re-point the project.
  */
-import { ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY } from '../../../shared/orcad-runtime-capabilities'
+import { QUIRKYD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY } from '../../../shared/quirkyd-runtime-capabilities'
 import { isDrvfsLinuxPath } from '../../../shared/wsl-paths'
 import { wslUncPathToLinux } from './wsl-move-path-rewriter'
 
@@ -100,7 +100,7 @@ export type WslMoveHostReadiness = 'ready' | 'update-host'
 
 /** A host without the WSL source kind runs an older template: relaunch it first (E1), never drop data. */
 export function wslMoveHostReadiness(capabilities: readonly string[]): WslMoveHostReadiness {
-  return capabilities.includes(ORCAD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY)
+  return capabilities.includes(QUIRKYD_MIGRATION_LOCAL_WSL_SOURCE_RUNTIME_CAPABILITY)
     ? 'ready'
     : 'update-host'
 }

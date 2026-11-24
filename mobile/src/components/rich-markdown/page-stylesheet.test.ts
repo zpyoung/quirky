@@ -16,7 +16,7 @@ import { richMarkdownEditorStyle } from './document-style'
  * document's own rules move onto it — the variables the whole sheet reads, the surface colour, the
  * font, the box model — and a bare `p` or `code` still reaches only what is inside it.
  */
-const PREFIX = '.orca-rich-markdown-document-host'
+const PREFIX = '.quirky-rich-markdown-document-host'
 
 /** Every selector in a sheet, one per entry, as the rewrite leaves them. */
 function selectorsOf(css: string): string[] {

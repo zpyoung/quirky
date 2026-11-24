@@ -6,7 +6,7 @@ import { readLocalFileRange } from './local-file-range-read'
 
 let folder: string
 beforeEach(async () => {
-  folder = await mkdtemp(join(tmpdir(), 'orca-file-range-'))
+  folder = await mkdtemp(join(tmpdir(), 'quirky-file-range-'))
 })
 afterEach(async () => {
   await rm(folder, { recursive: true, force: true })

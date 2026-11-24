@@ -5,15 +5,15 @@
  * expected end layout and, where the journey restarts, the layout from before the restart.
  *
  * Findings a scenario still has on main are listed in `workspace-layout-oracle-known-on-main.ts`;
- * any other finding fails. `ORCA_LAYOUT_ORACLE_RECORD=1` records without failing.
- * `ORCA_LAYOUT_ORACLE_REPEAT=<n>` repeats every scenario n times (catch-rate measurement).
+ * any other finding fails. `QUIRKY_LAYOUT_ORACLE_RECORD=1` records without failing.
+ * `QUIRKY_LAYOUT_ORACLE_REPEAT=<n>` repeats every scenario n times (catch-rate measurement).
  */
 
 import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import {
   moveTerminalPaneByLeafId,
   readTerminalPaneDomLeafOrder,
@@ -470,8 +470,8 @@ const SCENARIOS: Scenario[] = [
   }
 ]
 
-const REPEAT = Math.max(1, Number(process.env.ORCA_LAYOUT_ORACLE_REPEAT ?? 1))
-const RECORD_ONLY = process.env.ORCA_LAYOUT_ORACLE_RECORD === '1'
+const REPEAT = Math.max(1, Number(process.env.QUIRKY_LAYOUT_ORACLE_REPEAT ?? 1))
+const RECORD_ONLY = process.env.QUIRKY_LAYOUT_ORACLE_RECORD === '1'
 
 for (const scenario of SCENARIOS) {
   for (let attempt = 1; attempt <= REPEAT; attempt += 1) {

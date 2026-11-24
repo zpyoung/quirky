@@ -1,4 +1,4 @@
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { closeTerminalImePaneArena, openTerminalImePaneArena } from './terminal-ime-pane-arena'
 import { setImeComposition } from './terminal-ime-cdp-composition'
 import {
@@ -9,16 +9,16 @@ import {
 for (const dpr of [1, 1.25, 2]) {
   for (const gpu of ['on', 'off'] as const) {
     test.describe(`IME preedit grid DPR ${dpr} GPU ${gpu} @headful`, () => {
-      test.use({ orcaAppExtraArgs: [`--force-device-scale-factor=${dpr}`] })
+      test.use({ quirkyAppExtraArgs: [`--force-device-scale-factor=${dpr}`] })
 
       test('matches committed character advances across font and spacing changes', async ({
-        orcaPage,
+        quirkyPage,
         electronApp
       }, testInfo) => {
         await electronApp.evaluate(({ BrowserWindow }) => {
           BrowserWindow.getAllWindows()[0].setSize(1920, 1080)
         })
-        const arena = await openTerminalImePaneArena(orcaPage)
+        const arena = await openTerminalImePaneArena(quirkyPage)
         let completed = false
         try {
           for (const options of [
@@ -26,7 +26,7 @@ for (const dpr of [1, 1.25, 2]) {
             { fontSize: 14, letterSpacing: 0 },
             { fontSize: 13, letterSpacing: 1 }
           ]) {
-            await orcaPage.evaluate(
+            await quirkyPage.evaluate(
               ({ gpu, options }) => {
                 const state = window.__store!.getState()
                 const manager = window.__paneManagers!.get(state.activeTabId!)!
@@ -40,14 +40,14 @@ for (const dpr of [1, 1.25, 2]) {
             )
 
             for (const text of ['あ'.repeat(32), 'あｱカタカナ・コーヒー', '한글中文']) {
-              await writeToActiveTerminal(orcaPage, `\x1b[2J\x1b[H${text}\r\n`)
+              await writeToActiveTerminal(quirkyPage, `\x1b[2J\x1b[H${text}\r\n`)
               await setImeComposition(arena.session, text)
-              const preedit = orcaPage.locator(
+              const preedit = quirkyPage.locator(
                 '.composition-view.active .xterm-composition-preedit'
               )
               await expect(preedit).toHaveText(`‎${text}‎`)
 
-              const sample = await orcaPage.evaluate(() => {
+              const sample = await quirkyPage.evaluate(() => {
                 const state = window.__store!.getState()
                 const terminal = window
                   .__paneManagers!.get(state.activeTabId!)!
@@ -128,26 +128,26 @@ for (const dpr of [1, 1.25, 2]) {
               }
               if (options.fontSize === 13 && options.letterSpacing === 0 && text.startsWith('あ')) {
                 await testInfo.attach('preedit-cell-grid', {
-                  body: await orcaPage.screenshot(),
+                  body: await quirkyPage.screenshot(),
                   contentType: 'image/png'
                 })
               }
               await setImeComposition(arena.session, '')
             }
           }
-          await writeToActiveTerminal(orcaPage, '\x1b[2J\x1b[H\x1b[999G')
+          await writeToActiveTerminal(quirkyPage, '\x1b[2J\x1b[H\x1b[999G')
           await setImeComposition(arena.session, 'あ'.repeat(8))
-          await expect(orcaPage.locator('.xterm-composition-preedit')).toHaveText(
+          await expect(quirkyPage.locator('.xterm-composition-preedit')).toHaveText(
             `‎${'あ'.repeat(8)}‎`
           )
-          const edge = await sampleMidlinePreeditOcclusion(orcaPage)
+          const edge = await sampleMidlinePreeditOcclusion(quirkyPage)
           const screenRight = edge.screenRect.left + edge.screenRect.width
           expect(edge.cursorColumn).toBe(edge.terminalColumns - 1)
           expect(Math.abs(edge.caretRect!.right - screenRight)).toBeLessThan(1 / dpr)
           expect(edge.caretRect!.left).toBeGreaterThanOrEqual(edge.screenRect.left)
           expect(Math.abs(edge.textareaRect.right - screenRight)).toBeLessThan(1 / dpr)
 
-          await orcaPage.evaluate(() => {
+          await quirkyPage.evaluate(() => {
             const state = window.__store!.getState()
             const terminal = window
               .__paneManagers!.get(state.activeTabId!)!
@@ -155,11 +155,11 @@ for (const dpr of [1, 1.25, 2]) {
             terminal.options.fontSize = 16
           })
           await expect
-            .poll(async () => (await sampleMidlinePreeditOcclusion(orcaPage)).cellWidth)
+            .poll(async () => (await sampleMidlinePreeditOcclusion(quirkyPage)).cellWidth)
             .not.toBe(edge.cellWidth)
           await expect
             .poll(() =>
-              orcaPage.evaluate(() => {
+              quirkyPage.evaluate(() => {
                 const state = window.__store!.getState()
                 const terminal = window
                   .__paneManagers!.get(state.activeTabId!)!
@@ -181,12 +181,12 @@ for (const dpr of [1, 1.25, 2]) {
 }
 
 test('preserves native shaping for mixed text, complex scripts, and emoji', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
-  const arena = await openTerminalImePaneArena(orcaPage)
+  const arena = await openTerminalImePaneArena(quirkyPage)
   let completed = false
   try {
-    await orcaPage.evaluate(() => {
+    await quirkyPage.evaluate(() => {
       const state = window.__store!.getState()
       const terminal = window.__paneManagers!.get(state.activeTabId!)!.getActivePane()!.terminal
       terminal.options.fontFamily = 'FiraCode Nerd Font, monospace'
@@ -209,9 +209,9 @@ test('preserves native shaping for mixed text, complex scripts, and emoji', asyn
       'abc  XYZ',
       '\u3099a'
     ]) {
-      await writeToActiveTerminal(orcaPage, '\x1b[2J\x1b[H')
+      await writeToActiveTerminal(quirkyPage, '\x1b[2J\x1b[H')
       await setImeComposition(arena.session, text)
-      const preedit = orcaPage.locator('.composition-view.active .xterm-composition-preedit')
+      const preedit = quirkyPage.locator('.composition-view.active .xterm-composition-preedit')
       await expect(preedit).toHaveText(`‎${text}‎`)
       const actual = await preedit.screenshot()
 

@@ -32,7 +32,7 @@ afterAll(() => {
     ].map((name) => [name, sha256(readText(resolve(directory, name)))])
   )
   writeFileSync(
-    process.env.ORCA_PLUGIN_LOG_OUTPUT ??
+    process.env.QUIRKY_PLUGIN_LOG_OUTPUT ??
       resolve(
         directory,
         `${loaded.variant}-${process.versions.electron ? 'electron' : 'node'}-results.json`

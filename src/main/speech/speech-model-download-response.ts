@@ -18,7 +18,7 @@ export type SpeechDownloadRequest = {
   end(): void
 }
 
-/** Opens one GET; the host decides the network stack (Chromium on the desktop, Node on orcad). */
+/** Opens one GET; the host decides the network stack (Chromium on the desktop, Node on quirkyd). */
 export type OpenSpeechDownloadRequest = (url: string) => SpeechDownloadRequest
 export type DownloadTotals = {
   totalBytes: number

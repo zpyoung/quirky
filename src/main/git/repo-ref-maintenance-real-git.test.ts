@@ -59,7 +59,7 @@ async function createFragmentedPacks(repoPath: string): Promise<string[]> {
 
 beforeAll(async () => {
   // Each test gets its own pack files; generating the same 64 packs only needs to happen once.
-  packFixtureRoot = await mkdtemp(join(tmpdir(), 'orca-fragmented-packs-'))
+  packFixtureRoot = await mkdtemp(join(tmpdir(), 'quirky-fragmented-packs-'))
   git(packFixtureRoot, ['init', '--quiet'])
   packFixtureBlobs = await buildFragmentedPacks(packFixtureRoot)
 })
@@ -92,7 +92,7 @@ function maintainIndex(repoPath: string) {
 
 /** A repo whose only loose-ref backlog is the one the test asks for. */
 async function createRepo(looseRefs: number): Promise<{ repoPath: string; refsDir: string }> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-ref-maintenance-git-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-ref-maintenance-git-'))
   roots.push(root)
   const repoPath = join(root, 'repo')
   execFileSync('git', ['init', '--quiet', repoPath])

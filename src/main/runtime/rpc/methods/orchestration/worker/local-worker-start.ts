@@ -1,7 +1,7 @@
 import { probeWorkerOpenCodeModelLaunchSupport } from './worker-opencode-model-preflight'
 import { resolveWorkerConfiguredAgentParams } from './worker-configured-agent-preflight'
 import { waitForWorkerAgentReady } from '../../../../launched-agent-composer-readiness'
-import type { OrcaRuntimeService } from '../../../../orca-runtime'
+import type { QuirkyRuntimeService } from '../../../../quirky-runtime'
 import { describeTerminalWaitBlockedReason } from '../../../../../../shared/terminal-wait-blocked-reason-legacy-alias'
 import type { OrchestrationDb } from '../../../../orchestration/db'
 import type { RunRow, TaskRow } from '../../../../orchestration/types'
@@ -39,7 +39,7 @@ import type { WorkerStartMutation } from './worker-start-mutation'
 
 export async function startLocalWorker(args: {
   params: WorkerStartInput
-  runtime: OrcaRuntimeService
+  runtime: QuirkyRuntimeService
   db: OrchestrationDb
   run: RunRow
   coordinator: OrchestrationCallerIdentity | null
@@ -251,7 +251,7 @@ export async function startLocalWorker(args: {
         )
       }
     }
-    // A chat has no pane or process; its Dispatch names it by its Orca session ID alone.
+    // A chat has no pane or process; its Dispatch names it by its Quirky session ID alone.
     const terminalAuthority = chat
       ? CHAT_WORKER_AUTHORITY
       : requireWorkerAuthority(runtime, terminalHandle)

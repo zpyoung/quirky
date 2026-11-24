@@ -7,8 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { applyPatch, parsePatch, reversePatch } from 'diff'
 import { build } from 'esbuild'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 
 const root = fileURLToPath(new URL('../../../', import.meta.url))
@@ -42,7 +42,7 @@ for (const path of [
   }
 }
 
-const scratch = await mkdtemp(join(tmpdir(), 'orca-claude-history-window-budget-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-claude-history-window-budget-'))
 const require = createRequire(import.meta.url)
 let runnerModuleId
 try {
@@ -96,7 +96,7 @@ export default {...base, test: {...base.test, include: ${JSON.stringify(includes
       cwd: root,
       env: {
         ...process.env,
-        ORCA_HISTORY_BUDGET_PROOF_OUTPUT: observationPath,
+        QUIRKY_HISTORY_BUDGET_PROOF_OUTPUT: observationPath,
         NODE_OPTIONS: '--max-old-space-size=512'
       },
       timeoutMs: 45_000,

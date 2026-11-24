@@ -59,7 +59,9 @@ function readAskSpecFile(path: string, cwd: string): string {
 }
 
 export function formatAskValidationErrors(errors: readonly AskValidationError[]): string {
-  return errors.map((error) => (error.path ? `${error.path}: ${error.message}` : error.message)).join('; ')
+  return errors
+    .map((error) => (error.path ? `${error.path}: ${error.message}` : error.message))
+    .join('; ')
 }
 
 /** Pane/worktree attribution the server-side `resolveAskOrigin` (C3) validates before trusting. */
@@ -74,9 +76,11 @@ export type AskOriginParams = {
 export function resolveAskOriginParams(cwd: string): AskOriginParams {
   return {
     cwd,
-    ...(process.env.ORCA_PANE_KEY ? { paneKey: process.env.ORCA_PANE_KEY } : {}),
-    ...(process.env.ORCA_TERMINAL_HANDLE ? { terminalHandle: process.env.ORCA_TERMINAL_HANDLE } : {}),
-    ...(process.env.ORCA_WORKTREE_ID ? { worktreeId: process.env.ORCA_WORKTREE_ID } : {}),
-    ...(process.env.ORCA_WORKSPACE_ID ? { workspaceId: process.env.ORCA_WORKSPACE_ID } : {})
+    ...(process.env.QUIRKY_PANE_KEY ? { paneKey: process.env.QUIRKY_PANE_KEY } : {}),
+    ...(process.env.QUIRKY_TERMINAL_HANDLE
+      ? { terminalHandle: process.env.QUIRKY_TERMINAL_HANDLE }
+      : {}),
+    ...(process.env.QUIRKY_WORKTREE_ID ? { worktreeId: process.env.QUIRKY_WORKTREE_ID } : {}),
+    ...(process.env.QUIRKY_WORKSPACE_ID ? { workspaceId: process.env.QUIRKY_WORKSPACE_ID } : {})
   }
 }

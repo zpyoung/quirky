@@ -46,7 +46,7 @@ const IDLE_SESSION: NotebookKernelSession = {
   interruptStalled: false,
   setup: null
 }
-const ENVIRONMENTS_STORAGE_KEY = 'orca.notebookPythonEnvironments'
+const ENVIRONMENTS_STORAGE_KEY = 'quirky.notebookPythonEnvironments'
 
 function loadEnvironments(): Record<string, PythonEnvironment> {
   try {
@@ -73,7 +73,7 @@ function loadEnvironments(): Record<string, PythonEnvironment> {
 }
 
 export const store = createStore<{
-  /** The interpreter chosen per notebook, remembered in Orca rather than in the .ipynb. */
+  /** The interpreter chosen per notebook, remembered in Quirky rather than in the .ipynb. */
   environments: Record<string, PythonEnvironment>
   sessions: Record<string, NotebookKernelSession>
 }>(() => ({ environments: loadEnvironments(), sessions: {} }))

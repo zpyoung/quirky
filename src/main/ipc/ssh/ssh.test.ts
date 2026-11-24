@@ -75,7 +75,7 @@ describe('SSH IPC handlers', () => {
   it('fails a host the managed server does not serve, with no fallback', async () => {
     const decision = {
       route: 'unserved' as const,
-      reason: 'orcad_unavailable' as const,
+      reason: 'quirkyd_unavailable' as const,
       detail: 'unsupported_host'
     }
     const opened = { id: 'decision-transport' }

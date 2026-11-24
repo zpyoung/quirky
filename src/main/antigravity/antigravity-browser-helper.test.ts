@@ -1,13 +1,13 @@
 import { mkdtemp, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { expect, it, vi } from 'vitest'
 
 it.skipIf(process.platform === 'win32')(
   'runs the real Python BROWSER parser with a colon, space and apostrophe in the executable path',
   async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-agy-browser-parser-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-agy-browser-parser-'))
     const descriptor = Object.getOwnPropertyDescriptor(process, 'execPath')!
     const executable = join(root, "node: space 'quote")
     await symlink(process.execPath, executable)

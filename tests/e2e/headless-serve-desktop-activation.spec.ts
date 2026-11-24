@@ -4,10 +4,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import os from 'node:os'
 import path from 'node:path'
 import { _electron as electron, type ElectronApplication } from '@stablyai/playwright-test'
-import { test, expect, forwardElectronProcessLogs } from './helpers/orca-app'
+import { test, expect, forwardElectronProcessLogs } from './helpers/quirky-app'
 import { TEST_REPO_PATH_FILE } from './global-setup'
 import { getE2ECompletedOnboardingProfile } from './helpers/e2e-completed-onboarding-profile'
-import { getOrcaElectronLaunchArgs } from './helpers/electron-launch-args'
+import { getQuirkyElectronLaunchArgs } from './helpers/electron-launch-args'
 import { cleanupE2EDaemons, closeElectronAppForE2E } from './helpers/electron-process-shutdown'
 import { retryTransientMainEvaluate } from './helpers/electron-main-evaluate-retry'
 import {
@@ -48,10 +48,10 @@ function createHeadlessLaunchIsolation(userDataDir: string): ElectronHomeIsolati
     inheritedEnv: cleanEnv,
     launchEnv: {
       NODE_ENV: 'development',
-      ORCA_E2E_HEADLESS: '1',
+      QUIRKY_E2E_HEADLESS: '1',
       // Why: production builds always use the lock; this opt-in makes the dev
       // E2E bundle exercise the same second-instance ownership path.
-      ORCA_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1'
+      QUIRKY_E2E_ENFORCE_SINGLE_INSTANCE_LOCK: '1'
     },
     extraEnv: {},
     userDataDir
@@ -123,20 +123,20 @@ test('promotes the headless owner without replacing its daemon terminal', async 
   }
 
   const mainPath = path.join(process.cwd(), 'out', 'main', 'index.js')
-  const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-serve-promotion-'))
+  const userDataDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-serve-promotion-'))
   const homeIsolation = createHeadlessLaunchIsolation(userDataDir)
   const env = homeIsolation.env
   let serveApp: ElectronApplication | null = null
   let activatingProcess: ChildProcess | null = null
 
   writeFileSync(
-    path.join(userDataDir, 'orca-data.json'),
+    path.join(userDataDir, 'quirky-data.json'),
     `${JSON.stringify(getE2ECompletedOnboardingProfile(), null, 2)}\n`
   )
 
   try {
     serveApp = await electron.launch({
-      args: [...getOrcaElectronLaunchArgs(mainPath, false), '--serve', '--serve-no-pairing'],
+      args: [...getQuirkyElectronLaunchArgs(mainPath, false), '--serve', '--serve-no-pairing'],
       env
     })
     const launchedServeApp = serveApp
@@ -202,8 +202,8 @@ test('promotes the headless owner without replacing its daemon terminal', async 
       )
       .toContain(beforeMarker)
 
-    const forwardAppLogs = process.env.ORCA_E2E_FORWARD_APP_LOGS === '1'
-    activatingProcess = spawn(electronPath, getOrcaElectronLaunchArgs(mainPath, false), {
+    const forwardAppLogs = process.env.QUIRKY_E2E_FORWARD_APP_LOGS === '1'
+    activatingProcess = spawn(electronPath, getQuirkyElectronLaunchArgs(mainPath, false), {
       env,
       stdio: forwardAppLogs ? 'pipe' : 'ignore'
     })

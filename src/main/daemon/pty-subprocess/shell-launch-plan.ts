@@ -54,7 +54,7 @@ export function createPtyShellLaunchPlan(
         startupCommandDelivery: opts.startupCommandDelivery,
         shellPath
       }))
-  delete env.ORCA_SHELL_FEATURES
+  delete env.QUIRKY_SHELL_FEATURES
   const userShellArgs = !opts.command && !opts.launchAgent ? opts.terminalShellArgs : undefined
   const shellLaunch = getShellLaunchConfig(
     shellPath,

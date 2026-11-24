@@ -1,5 +1,5 @@
 /**
- * What `orca terminal-daemon status` reports about the daemon this server uses. The daemon is
+ * What `quirky terminal-daemon status` reports about the daemon this server uses. The daemon is
  * respawned lazily, so between a crash and the next terminal there is none; that window must read
  * as `exited`, not as healthy. Vocabulary per the SSH execution boundary: live / unverifiable /
  * exited, and only positive proof earns `exited`.
@@ -73,7 +73,7 @@ export async function readTerminalDaemonLiveness(
     ? {
         verdict: 'exited',
         pid,
-        detail: `pid ${record.pid} is gone; Orca starts a new daemon with the next terminal`,
+        detail: `pid ${record.pid} is gone; Quirky starts a new daemon with the next terminal`,
         processCeiling: null
       }
     : {

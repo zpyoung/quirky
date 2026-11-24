@@ -77,7 +77,7 @@ export function registerJournalEpochReplacementTests(): void {
   }
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-replace-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-replace-'))
     clock = 1_000
     database = openTestJournalHostDatabase(root)
   })

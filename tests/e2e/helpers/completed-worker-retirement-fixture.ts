@@ -20,7 +20,7 @@ import { buildFakeAgentCommandOverride } from './fake-agent-command-override'
 import { FAKE_AGENT_PASTE_END_SCANNER_SOURCE } from './fake-agent-paste-end-scanner'
 import { FAKE_CODEX_LAUNCH_PROBES_SOURCE } from './fake-codex-launch-probes'
 
-const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'orca-e2e-retired-worker-'))
+const fakeCliDir = mkdtempSync(path.join(os.tmpdir(), 'quirky-e2e-retired-worker-'))
 const recoveryConfigPath = path.join(fakeCliDir, 'recovery-config.json')
 const lifecycleLedgerPath = path.join(fakeCliDir, 'codex-lifecycle.jsonl')
 export const completedWorkerFakeCodexCommand = buildFakeAgentCommandOverride(
@@ -28,21 +28,21 @@ export const completedWorkerFakeCodexCommand = buildFakeAgentCommandOverride(
 )
 const fakeCodexSource = `
 const { appendFileSync, readFileSync } = require('node:fs')
-const ledger = process.env.ORCA_E2E_CODEX_LIFECYCLE_LEDGER
+const ledger = process.env.QUIRKY_E2E_CODEX_LIFECYCLE_LEDGER
 const append = (event) => appendFileSync(ledger, JSON.stringify({ pid: process.pid, ...event }) + '\\n')
 async function publishRecovery() {
   const config = JSON.parse(readFileSync(${JSON.stringify(recoveryConfigPath)}, 'utf8'))
   for (const hook_event_name of ['UserPromptSubmit', 'Stop']) {
-    const response = await fetch('http://127.0.0.1:' + process.env.ORCA_AGENT_HOOK_PORT + '/hook/codex', {
+    const response = await fetch('http://127.0.0.1:' + process.env.QUIRKY_AGENT_HOOK_PORT + '/hook/codex', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Orca-Agent-Hook-Token': process.env.ORCA_AGENT_HOOK_TOKEN },
+      headers: { 'Content-Type': 'application/json', 'X-Quirky-Agent-Hook-Token': process.env.QUIRKY_AGENT_HOOK_TOKEN },
       body: JSON.stringify({
-        paneKey: process.env.ORCA_PANE_KEY,
-        tabId: process.env.ORCA_TAB_ID,
-        worktreeId: process.env.ORCA_WORKTREE_ID,
-        launchToken: process.env.ORCA_AGENT_LAUNCH_TOKEN,
-        env: process.env.ORCA_AGENT_HOOK_ENV,
-        version: process.env.ORCA_AGENT_HOOK_VERSION,
+        paneKey: process.env.QUIRKY_PANE_KEY,
+        tabId: process.env.QUIRKY_TAB_ID,
+        worktreeId: process.env.QUIRKY_WORKTREE_ID,
+        launchToken: process.env.QUIRKY_AGENT_LAUNCH_TOKEN,
+        env: process.env.QUIRKY_AGENT_HOOK_ENV,
+        version: process.env.QUIRKY_AGENT_HOOK_VERSION,
         payload: { hook_event_name, prompt: 'Report completion, then exit normally', ...config }
       })
     })
@@ -62,11 +62,11 @@ process.stdin.on('data', (chunk) => {
     process.stdout.write('\\x1b[?25h')
   }
   append({ event: 'input', input })
-  if (input.includes('ORCA_E2E_PUBLISH_DONE')) {
+  if (input.includes('QUIRKY_E2E_PUBLISH_DONE')) {
     void publishRecovery().catch((error) => process.stderr.write(String(error)))
     return
   }
-  if (input.includes('ORCA_E2E_EXIT_AFTER_DONE')) {
+  if (input.includes('QUIRKY_E2E_EXIT_AFTER_DONE')) {
     append({ event: 'normal-exit' })
     process.exit(0)
   }
@@ -101,7 +101,7 @@ installCompletedWorkerFakeCodex()
 
 export const completedWorkerLaunchEnv = {
   PATH: `${fakeCliDir}${path.delimiter}${process.env.PATH ?? ''}`,
-  ORCA_E2E_CODEX_LIFECYCLE_LEDGER: lifecycleLedgerPath
+  QUIRKY_E2E_CODEX_LIFECYCLE_LEDGER: lifecycleLedgerPath
 }
 
 export type LifecycleEvent = {
@@ -151,14 +151,14 @@ export function hasCompletedWorkerReceivedPreamble(): boolean {
     .includes('--type worker_done')
 }
 
-export function runBuiltOrcaCli(
+export function runBuiltQuirkyCli(
   args: string[],
   options: { userDataDir: string; cwd: string }
 ): unknown {
   const {
-    ORCA_ENVIRONMENT: _environment,
-    ORCA_PAIRING_CODE: _pairingCode,
-    ORCA_USER_DATA_PATH: _userDataPath,
+    QUIRKY_ENVIRONMENT: _environment,
+    QUIRKY_PAIRING_CODE: _pairingCode,
+    QUIRKY_USER_DATA_PATH: _userDataPath,
     ...cleanEnv
   } = process.env
   void _environment
@@ -169,7 +169,7 @@ export function runBuiltOrcaCli(
     [path.join(process.cwd(), 'out', 'cli', 'index.js'), ...args],
     {
       cwd: options.cwd,
-      env: { ...cleanEnv, ORCA_USER_DATA_PATH: options.userDataDir },
+      env: { ...cleanEnv, QUIRKY_USER_DATA_PATH: options.userDataDir },
       encoding: 'utf8',
       timeout: 30_000
     }

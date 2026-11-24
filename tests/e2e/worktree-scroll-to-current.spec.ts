@@ -1,8 +1,8 @@
 import { mkdirSync, realpathSync } from 'node:fs'
 import path from 'node:path'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { evaluatePolled } from './helpers/page-evaluate-polled'
 import {
   addRepoWithWorkspaces,
@@ -31,14 +31,14 @@ async function prepareSidebarForScrollTest(page: Page): Promise<void> {
 }
 
 test.describe('Reveal active workspace button', () => {
-  test.beforeEach(async ({ orcaPage }) => {
+  test.beforeEach(async ({ quirkyPage }) => {
     // Why: headless Electron under xvfb never ticks a smooth-scroll animation,
     // so the reveal's `scrollTo({ behavior: 'smooth' })` would never reach its
     // target. Reduced-motion makes the reveal jump instantly (see
     // worktree-sidebar-reveal.ts) so the geometry assertions are deterministic.
-    await orcaPage.emulateMedia({ reducedMotion: 'reduce' })
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+    await quirkyPage.emulateMedia({ reducedMotion: 'reduce' })
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
   // Note: the "clipped in the production sidebar" pixel-containment test was
@@ -48,7 +48,7 @@ test.describe('Reveal active workspace button', () => {
   // the "outside the virtualized window" test below.
 
   test('adjusts sidebar filters before revealing a hidden current workspace', async ({
-    orcaPage,
+    quirkyPage,
     testRepoPath
   }, testInfo) => {
     const filterRepoPath = testInfo.outputPath('filter-repo')
@@ -71,7 +71,7 @@ test.describe('Reveal active workspace button', () => {
       const result = await runProcess({ program: 'git', args })
       expect(result.code, result.stderr).toBe(0)
     }
-    const filterRepoId = await orcaPage.evaluate(async (repoPath) => {
+    const filterRepoId = await quirkyPage.evaluate(async (repoPath) => {
       const result = await window.api.repos.add({ path: repoPath })
       if ('error' in result) {
         throw new Error(result.error)
@@ -80,7 +80,7 @@ test.describe('Reveal active workspace button', () => {
     }, filterRepoPath)
     await expect
       .poll(() =>
-        orcaPage.evaluate(async (id) => {
+        quirkyPage.evaluate(async (id) => {
           await window
             .__store!.getState()
             .fetchRepos({ runtimeEnvironmentId: null, throwOnError: true })
@@ -88,10 +88,10 @@ test.describe('Reveal active workspace button', () => {
         }, filterRepoId)
       )
       .toBe(true)
-    await prepareSidebarForScrollTest(orcaPage)
+    await prepareSidebarForScrollTest(quirkyPage)
 
     // Other specs can add worktrees to the shared repository before this test runs.
-    const targetId = await orcaPage.evaluate((repoPath) => {
+    const targetId = await quirkyPage.evaluate((repoPath) => {
       const state = window.__store!.getState()
       const repo = state.repos.find((candidate) => candidate.path === repoPath)
       return repo
@@ -103,7 +103,7 @@ test.describe('Reveal active workspace button', () => {
     if (!targetId) {
       throw new Error('Seeded secondary worktree is missing')
     }
-    const targetRepoId = await orcaPage.evaluate(
+    const targetRepoId = await quirkyPage.evaluate(
       (repoPath) => window.__store!.getState().repos.find((repo) => repo.path === repoPath)?.id,
       testRepoPath
     )
@@ -111,14 +111,14 @@ test.describe('Reveal active workspace button', () => {
       throw new Error('Seeded repository is missing')
     }
 
-    const targetRows = orcaPage.locator(
+    const targetRows = quirkyPage.locator(
       `[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(targetId)}]`
     )
     const targetRow = targetRows.first()
-    await expect(targetRows.and(orcaPage.getByRole('option'))).toHaveCount(1)
-    const revealButton = orcaPage.getByRole('button', { name: 'Reveal active workspace' })
+    await expect(targetRows.and(quirkyPage.getByRole('option'))).toHaveCount(1)
+    const revealButton = quirkyPage.getByRole('button', { name: 'Reveal active workspace' })
 
-    await orcaPage.evaluate((targetId) => {
+    await quirkyPage.evaluate((targetId) => {
       const store = window.__store
       if (!store) {
         throw new Error('window.__store is not available')
@@ -140,13 +140,13 @@ test.describe('Reveal active workspace button', () => {
     await expect(targetRow).toHaveAttribute('aria-current', 'page')
 
     // Catalog refreshes prune nonexistent IDs, so use a real repo to keep the filter applied.
-    await orcaPage.evaluate((repoId) => {
+    await quirkyPage.evaluate((repoId) => {
       window.__store!.getState().setFilterRepoIds([repoId])
     }, filterRepoId)
     await expect(targetRows).toHaveCount(0)
 
     await revealButton.click()
-    await orcaPage
+    await quirkyPage
       .getByRole('dialog', { name: 'Reveal hidden workspace?' })
       .getByRole('button', { name: 'Adjust filters and reveal' })
       .click()
@@ -156,7 +156,7 @@ test.describe('Reveal active workspace button', () => {
     await expect
       .poll(
         () =>
-          orcaPage.evaluate(() => {
+          quirkyPage.evaluate(() => {
             const store = window.__store
             if (!store) {
               throw new Error('window.__store is not available')
@@ -173,13 +173,13 @@ test.describe('Reveal active workspace button', () => {
   })
 
   test('reveals the current workspace when it starts outside the virtualized window', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await prepareSidebarForScrollTest(orcaPage)
+    await prepareSidebarForScrollTest(quirkyPage)
 
-    const repo = await addRepoWithWorkspaces(orcaPage, testInfo, 60)
+    const repo = await addRepoWithWorkspaces(quirkyPage, testInfo, 60)
     await writeWorkspaceMeta(
-      orcaPage,
+      quirkyPage,
       repo.ids.map((worktreeId, index) => ({
         worktreeId,
         updates: {
@@ -190,7 +190,7 @@ test.describe('Reveal active workspace button', () => {
       }))
     )
     const targetId = repo.ids.at(-1)!
-    await orcaPage.evaluate(
+    await quirkyPage.evaluate(
       ({ repoId, targetId }) => {
         window.__store!.setState({
           activeRepoId: repoId,
@@ -203,11 +203,11 @@ test.describe('Reveal active workspace button', () => {
       { repoId: repo.repoId, targetId }
     )
 
-    const scroller = orcaPage.locator('[data-worktree-sidebar]')
+    const scroller = quirkyPage.locator('[data-worktree-sidebar]')
     await expect
       .poll(
         () =>
-          orcaPage.evaluate(() => {
+          quirkyPage.evaluate(() => {
             const scroller = document.querySelector<HTMLElement>('[data-worktree-sidebar]')
             return scroller?.scrollTop ?? null
           }),
@@ -222,7 +222,7 @@ test.describe('Reveal active workspace button', () => {
     await expect
       .poll(
         () =>
-          orcaPage.evaluate((targetId) => {
+          quirkyPage.evaluate((targetId) => {
             const scroller = document.querySelector<HTMLElement>('[data-worktree-sidebar]')
             const target = [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
               (candidate) => candidate.dataset.worktreeId === targetId
@@ -241,12 +241,12 @@ test.describe('Reveal active workspace button', () => {
       )
       .toBe(false)
 
-    const revealButton = orcaPage.getByRole('button', { name: 'Reveal active workspace' })
+    const revealButton = quirkyPage.getByRole('button', { name: 'Reveal active workspace' })
     await expect(revealButton).toBeVisible()
     await expect(revealButton).toBeEnabled()
 
     await revealButton.click()
-    const targetRow = orcaPage
+    const targetRow = quirkyPage
       .locator(`[data-worktree-sidebar] [data-worktree-id=${JSON.stringify(targetId)}]`)
       .first()
     await expect(targetRow).toBeVisible()
@@ -254,9 +254,9 @@ test.describe('Reveal active workspace button', () => {
   })
 
   test('uses the active workspace key when the legacy active worktree id is not set', async ({
-    orcaPage
+    quirkyPage
   }, testInfo) => {
-    await prepareSidebarForScrollTest(orcaPage)
+    await prepareSidebarForScrollTest(quirkyPage)
 
     // The oldest of 36 folder workspaces sorts last under Recent.
     const groupPath = testInfo.outputPath('reveal-folder-group')
@@ -266,7 +266,7 @@ test.describe('Reveal active workspace button', () => {
       return realpathSync(folderPath)
     })
     const folderWorktreeId = await evaluatePolled(
-      orcaPage,
+      quirkyPage,
       async ({ parentPath, folderPaths }) => {
         const store = window.__store!
         const group = await window.api.projectGroups.create({
@@ -305,7 +305,7 @@ test.describe('Reveal active workspace button', () => {
       { timeout: bulkWriteTimeout(folderPaths.length) }
     )
 
-    const scroller = orcaPage.locator('[data-worktree-sidebar]')
+    const scroller = quirkyPage.locator('[data-worktree-sidebar]')
     await scroller.evaluate((element) => {
       element.scrollTop = 0
       element.dispatchEvent(new Event('scroll', { bubbles: true }))
@@ -313,7 +313,7 @@ test.describe('Reveal active workspace button', () => {
     await expect
       .poll(
         () =>
-          orcaPage.evaluate((targetId) => {
+          quirkyPage.evaluate((targetId) => {
             const scroller = document.querySelector<HTMLElement>('[data-worktree-sidebar]')
             const target = [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
               (candidate) => candidate.dataset.worktreeId === targetId
@@ -332,7 +332,7 @@ test.describe('Reveal active workspace button', () => {
       )
       .toBe(false)
 
-    const revealButton = orcaPage.getByRole('button', { name: 'Reveal active workspace' })
+    const revealButton = quirkyPage.getByRole('button', { name: 'Reveal active workspace' })
     await expect(revealButton).toBeVisible()
     await expect(revealButton).toBeEnabled()
     await revealButton.click()
@@ -340,7 +340,7 @@ test.describe('Reveal active workspace button', () => {
     await expect
       .poll(
         () =>
-          orcaPage.evaluate((targetId) => {
+          quirkyPage.evaluate((targetId) => {
             const scroller = document.querySelector<HTMLElement>('[data-worktree-sidebar]')
             const target = [...document.querySelectorAll<HTMLElement>('[data-worktree-id]')].find(
               (candidate) => candidate.dataset.worktreeId === targetId

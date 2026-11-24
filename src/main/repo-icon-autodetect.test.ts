@@ -11,7 +11,7 @@ const PNG_1X1_BASE64 =
 const tempDirs: string[] = []
 
 async function makeTempRepoDir(): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), 'orca-repo-icon-'))
+  const dir = await mkdtemp(join(tmpdir(), 'quirky-repo-icon-'))
   tempDirs.push(dir)
   return dir
 }
@@ -248,7 +248,7 @@ describe('detectRepoIcon', () => {
   it('uses the resolved fork upstream for both metadata and the GitHub avatar', async () => {
     const repoPath = await makeTempRepoDir()
     await gitExecFileAsync(['init'], { cwd: repoPath })
-    await gitExecFileAsync(['remote', 'add', 'origin', 'git@github.com:tmchow/orca.git'], {
+    await gitExecFileAsync(['remote', 'add', 'origin', 'git@github.com:tmchow/quirky.git'], {
       cwd: repoPath
     })
     await gitExecFileAsync(['remote', 'add', 'upstream', 'git@github.com:stablyai/orca.git'], {
@@ -270,7 +270,7 @@ describe('detectRepoIcon', () => {
         label: 'stablyai/orca'
       },
       // Why: fork parents resolve host-qualified so avatars/links stay on the fork's server.
-      upstream: { owner: 'stablyai', repo: 'orca', host: 'github.com' }
+      upstream: { owner: 'stablyai', repo: 'quirky', host: 'github.com' }
     })
   })
 

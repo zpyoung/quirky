@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type * as ServingModule from '../../managed-server/lifecycle/orcad-managed-serving'
-import type { ManagedOrcadStartListener } from '../../managed-server/lifecycle/orcad-managed-serving'
+import type * as ServingModule from '../../managed-server/lifecycle/quirkyd-managed-serving'
+import type { ManagedQuirkydStartListener } from '../../managed-server/lifecycle/quirkyd-managed-serving'
 import type { SshTarget } from '../../../shared/ssh-types'
 
 const mocks = vi.hoisted(() => {
-  const startListener: { current: ManagedOrcadStartListener | null } = { current: null }
+  const startListener: { current: ManagedQuirkydStartListener | null } = { current: null }
   const environments: Record<string, Record<string, unknown>> = {}
   const reads: Record<string, number> = {}
   return {
@@ -24,7 +24,7 @@ vi.mock('../../../shared/runtime-environment-store', () => ({
   resolveEnvironment: (_userData: string, id: string) => {
     const environment = mocks.environments[id]
     if (!environment) {
-      return { id, orcadDeployment: { sshTargetId: 'ssh-1' } }
+      return { id, quirkydDeployment: { sshTargetId: 'ssh-1' } }
     }
     mocks.reads[id] = (mocks.reads[id] ?? 0) + 1
     // A fresh object per read, so a test can tell the re-read after bring-up from the first.
@@ -32,16 +32,16 @@ vi.mock('../../../shared/runtime-environment-store', () => ({
   }
 }))
 vi.mock('../../ssh/managed-server-update-deps', () => ({ managedServerUpdateDeps: () => ({}) }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
-  ensureOrcadManagedTunnel: mocks.ensureTunnel,
-  rebuildOrcadManagedTunnel: mocks.rebuildTunnel
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-tunnel', () => ({
+  ensureQuirkydManagedTunnel: mocks.ensureTunnel,
+  rebuildQuirkydManagedTunnel: mocks.rebuildTunnel
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-serving-verify', () => ({
-  verifyOrcadManagedServing: mocks.verify
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-serving-verify', () => ({
+  verifyQuirkydManagedServing: mocks.verify
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-update-on-restore', () => ({
-  updateManagedOrcadOnRestore: mocks.restoreUpdate,
-  redeployStoppedManagedOrcad: mocks.redeploy
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-update-on-restore', () => ({
+  updateManagedQuirkydOnRestore: mocks.restoreUpdate,
+  redeployStoppedManagedQuirkyd: mocks.redeploy
 }))
 vi.mock('../../ssh/ssh-host-server-status', () => ({ setSshHostServerStatus: vi.fn() }))
 vi.mock('../../ssh/targets/ssh-target-registry', () => ({ getSshTargetRegistryStore: () => null }))
@@ -53,16 +53,16 @@ vi.mock('../ssh/ssh-renderer-broadcast', () => ({ broadcastSshState: vi.fn() }))
 vi.mock('../ssh/ssh-host-launch-session-note', () => ({
   forgetLaunchSessionVerdict: mocks.forgetVerdict
 }))
-vi.mock('../../managed-server/lifecycle/orcad-managed-serving', async (importOriginal) => ({
+vi.mock('../../managed-server/lifecycle/quirkyd-managed-serving', async (importOriginal) => ({
   ...(await importOriginal<typeof ServingModule>()),
-  setManagedOrcadStartListener: (listener: ManagedOrcadStartListener | null) => {
+  setManagedQuirkydStartListener: (listener: ManagedQuirkydStartListener | null) => {
     mocks.startListener.current = listener
   }
 }))
 
-import { MANAGED_ORCAD_NOT_ACTIVATED_DETAIL } from '../../managed-server/lifecycle/orcad-managed-serving'
+import { MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL } from '../../managed-server/lifecycle/quirkyd-managed-serving'
 import {
-  installManagedOrcadStartStatus,
+  installManagedQuirkydStartStatus,
   resolveManagedRuntimeEnvironment
 } from './runtime-environment-managed-tunnel'
 
@@ -72,7 +72,7 @@ describe('resolving a managed runtime for a call', () => {
   it('redeploys, before the call, a server another desktop stopped mid-session', async () => {
     mocks.verify.mockResolvedValue({
       state: 'unverifiable',
-      detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+      detail: MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
     })
     await resolveManagedRuntimeEnvironment('/u', 'env-1')
     expect(mocks.redeploy).toHaveBeenCalledWith('env-1', expect.any(Function))
@@ -85,7 +85,7 @@ describe('resolving a managed runtime for a call', () => {
   it('forgets a cached ended launch session once this client redeployed the server', async () => {
     mocks.verify.mockResolvedValue({
       state: 'unverifiable',
-      detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+      detail: MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
     })
     await resolveManagedRuntimeEnvironment('/u', 'env-1')
     expect(mocks.forgetVerdict).toHaveBeenCalledWith('ssh-1')
@@ -97,7 +97,7 @@ describe('resolving a managed runtime for a call', () => {
   it('keeps the verdict when the redeploy did not start a server', async () => {
     mocks.verify.mockResolvedValue({
       state: 'unverifiable',
-      detail: MANAGED_ORCAD_NOT_ACTIVATED_DETAIL
+      detail: MANAGED_QUIRKYD_NOT_ACTIVATED_DETAIL
     })
     mocks.redeploy.mockResolvedValueOnce(false)
     await resolveManagedRuntimeEnvironment('/u', 'env-1')
@@ -138,7 +138,7 @@ describe('a managed server start shown on the status line', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    installManagedOrcadStartStatus()
+    installManagedQuirkydStartStatus()
   })
 
   it('forgets a cached ended launch session once this client started the server', async () => {

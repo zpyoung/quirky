@@ -10,7 +10,7 @@ import {
   openWorkspacePortInBrowser,
   publishWorkspacePortScanForHost,
   refreshWorkspacePortScanAfterStop,
-  resolvePortOpenInOrcaBrowser,
+  resolvePortOpenInQuirkyBrowser,
   scanWorkspacePortsForTarget,
   workspacePortRuntimeTargetKey
 } from '@/lib/workspace-port-actions'
@@ -158,7 +158,7 @@ export function LocalWorkspacePortsPanel({
         runtimeTarget,
         createBrowserTab,
         setRemoteBrowserPageHandle,
-        openInOrcaBrowser: resolvePortOpenInOrcaBrowser({
+        openInQuirkyBrowser: resolvePortOpenInQuirkyBrowser({
           settings,
           event,
           isMac: navigator.userAgent.includes('Mac')

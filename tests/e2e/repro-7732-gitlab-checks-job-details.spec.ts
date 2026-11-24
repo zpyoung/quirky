@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from '@stablyai/playwright-test'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { openChecks } from './helpers/source-control-ai-generation'
 
@@ -12,8 +12,8 @@ const FIXTURE = {
   jobId: 987654,
   jobName: 'Purchase API Component Tests',
   stage: 'Component Tests',
-  webUrl: 'https://gitlab.example.test/acme/orca/-/jobs/987654',
-  mrUrl: 'https://gitlab.example.test/acme/orca/-/merge_requests/4242',
+  webUrl: 'https://gitlab.example.test/acme/quirky/-/jobs/987654',
+  mrUrl: 'https://gitlab.example.test/acme/quirky/-/merge_requests/4242',
   headSha: 'e2ee2ee2ee2ee2ee2ee2ee2ee2ee2ee2ee2ee2e',
   trace: [
     '$ pnpm test:component --project purchase-api',
@@ -24,7 +24,7 @@ const FIXTURE = {
 } as const
 
 const SCREENSHOT_DIR =
-  process.env.ORCA_GITLAB_CHECKS_JOB_DETAILS_SCREENSHOT_DIR ??
+  process.env.QUIRKY_GITLAB_CHECKS_JOB_DETAILS_SCREENSHOT_DIR ??
   path.join(process.cwd(), 'test-results', 'gitlab-checks-job-details')
 
 // contextIsolation makes window.api non-writable, so stub at the IPC boundary in main.
@@ -114,41 +114,41 @@ async function linkGitLabMRToWorktree(page: Page, worktreeId: string): Promise<v
 
 test.describe('#7732 GitLab Checks panel job details', () => {
   test('expanding a failed pipeline job shows its log, not "No inline details"', async ({
-    orcaPage,
+    quirkyPage,
     electronApp
   }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
     await installGitLabChecksBackend(electronApp)
 
-    const worktreeId = await orcaPage.evaluate(
+    const worktreeId = await quirkyPage.evaluate(
       () => window.__store?.getState().activeWorktreeId ?? null
     )
     if (!worktreeId) {
       throw new Error('E2E fixture did not expose an active worktree')
     }
     // Late startup UI hydration resets the active workspace + sidebar route; let it settle first.
-    await orcaPage.waitForTimeout(8_000)
+    await quirkyPage.waitForTimeout(8_000)
 
-    const jobRow = orcaPage.getByText(`${FIXTURE.stage}: ${FIXTURE.jobName}`, { exact: true })
+    const jobRow = quirkyPage.getByText(`${FIXTURE.stage}: ${FIXTURE.jobName}`, { exact: true })
     for (let attempt = 0; attempt < 40 && (await jobRow.count()) === 0; attempt++) {
-      await linkGitLabMRToWorktree(orcaPage, worktreeId)
-      await openChecks(orcaPage, worktreeId)
-      await orcaPage.waitForTimeout(500)
+      await linkGitLabMRToWorktree(quirkyPage, worktreeId)
+      await openChecks(quirkyPage, worktreeId)
+      await quirkyPage.waitForTimeout(500)
     }
     await expect(jobRow).toBeVisible({ timeout: 15_000 })
 
     mkdirSync(SCREENSHOT_DIR, { recursive: true })
     await jobRow.click()
-    const noDetails = orcaPage.getByText('No inline details are available for this check.')
-    const viewFullDetails = orcaPage.getByRole('button', { name: 'View full details' })
+    const noDetails = quirkyPage.getByText('No inline details are available for this check.')
+    const viewFullDetails = quirkyPage.getByRole('button', { name: 'View full details' })
     for (let attempt = 0; attempt < 20; attempt++) {
       if ((await noDetails.count()) > 0 || (await viewFullDetails.count()) > 0) {
         break
       }
-      await orcaPage.waitForTimeout(500)
+      await quirkyPage.waitForTimeout(500)
     }
-    await orcaPage.screenshot({
+    await quirkyPage.screenshot({
       path: path.join(SCREENSHOT_DIR, 'gitlab-checks-job-expanded.png')
     })
 

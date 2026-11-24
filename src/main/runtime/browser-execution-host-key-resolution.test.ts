@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
 import { parseBrowserNetworkExecutionHostKey } from '../browser/browser-network-execution-route'
-import { OrcaRuntimeService } from './orca-runtime'
+import { QuirkyRuntimeService } from './quirky-runtime'
 
 // Why the real service: every other suite stubs this resolver, and its two failure branches are
 // what adoption reads as "retire this page" versus "wait for its host". Stubbing the seam that
@@ -44,8 +44,8 @@ describe('browser execution host key resolution', () => {
   })
 })
 
-function createRuntime(overrides: Partial<FolderWorkspace> = {}): OrcaRuntimeService {
-  const folderPath = mkdtempSync(join(tmpdir(), 'orca-browser-host-key-'))
+function createRuntime(overrides: Partial<FolderWorkspace> = {}): QuirkyRuntimeService {
+  const folderPath = mkdtempSync(join(tmpdir(), 'quirky-browser-host-key-'))
   const folderWorkspace: FolderWorkspace = {
     id: FOLDER_WORKSPACE_ID,
     projectGroupId: 'project-group-1',
@@ -62,7 +62,7 @@ function createRuntime(overrides: Partial<FolderWorkspace> = {}): OrcaRuntimeSer
     updatedAt: 1,
     ...overrides
   }
-  return new OrcaRuntimeService({
+  return new QuirkyRuntimeService({
     getFolderWorkspaces: () => [folderWorkspace],
     getProjectGroups: () => [],
     getAllWorktreeMeta: () => ({}),

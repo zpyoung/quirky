@@ -38,7 +38,7 @@ describe('CommentMarkdown', () => {
     const markup = renderToStaticMarkup(
       <CommentMarkdown
         variant="document"
-        githubRepo={{ owner: 'stablyai', repo: 'orca' }}
+        githubRepo={{ owner: 'stablyai', repo: 'quirky' }}
         content="Automated fix-PR from pr-bug-scan for parent **#2316**."
       />
     )
@@ -51,7 +51,7 @@ describe('CommentMarkdown', () => {
     const markup = renderToStaticMarkup(
       <CommentMarkdown
         variant="document"
-        githubRepo={{ owner: 'stablyai', repo: 'orca' }}
+        githubRepo={{ owner: 'stablyai', repo: 'quirky' }}
         content="See another-org/other-repo#42."
       />
     )
@@ -63,7 +63,7 @@ describe('CommentMarkdown', () => {
     const markup = renderToStaticMarkup(
       <CommentMarkdown
         variant="document"
-        githubRepo={{ owner: 'stablyai', repo: 'orca' }}
+        githubRepo={{ owner: 'stablyai', repo: 'quirky' }}
         content="[`#2316`](https://example.com/already-linked) and `#2317`"
       />
     )
@@ -152,7 +152,7 @@ describe('CommentMarkdown', () => {
       ]
     }
 
-    const transform = remarkGitHubReferences({ owner: 'stablyai', repo: 'orca' })()
+    const transform = remarkGitHubReferences({ owner: 'stablyai', repo: 'quirky' })()
 
     expect(() => transform(tree)).not.toThrow()
     expect(tree.children[0]?.children).toHaveLength(referenceCount * 2 - 1)

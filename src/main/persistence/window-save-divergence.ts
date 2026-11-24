@@ -27,7 +27,7 @@ import { droppedTabBarEntries, terminalTabBarEntries } from './window-save-raw-s
 import { compactFieldChanges, type FieldChange } from './window-save-divergence-values'
 
 /** Set by evidence runs: each divergence is appended there as one JSON line. */
-const LOG_PATH_ENV = 'ORCA_LAYOUT_SAVE_DIVERGENCE_LOG'
+const LOG_PATH_ENV = 'QUIRKY_LAYOUT_SAVE_DIVERGENCE_LOG'
 const MAX_PATHS = 12
 /** A pane's terminal binding and resume record: main writes them on every spawn and capture. */
 const BINDING_FIELDS = new Set(['ptyId', 'incarnationId', 'sleeping'])

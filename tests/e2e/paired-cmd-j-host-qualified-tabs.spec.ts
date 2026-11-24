@@ -1,6 +1,6 @@
 import { errors } from '@stablyai/playwright-test'
 import { encodePaletteIdentity } from '../../src/renderer/src/lib/palette-match/palette-ranking'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   createRuntimeDesktopPairingOffer,
   launchPairedElectronClient,
@@ -13,12 +13,12 @@ import {
 } from './helpers/store'
 
 test('routes same-id browser and simulator Cmd-J rows to their owning paired host', async ({
-  orcaPage
+  quirkyPage
 }, testInfo) => {
   test.setTimeout(240_000)
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  const hostBrowser = await orcaPage.evaluate(() => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  const hostBrowser = await quirkyPage.evaluate(() => {
     const state = window.__store!.getState()
     const worktreeId = state.activeWorktreeId
     if (!worktreeId) {
@@ -32,13 +32,13 @@ test('routes same-id browser and simulator Cmd-J rows to their owning paired hos
     return { worktreeId, workspaceId: workspace.id }
   })
 
-  const offer = await createRuntimeDesktopPairingOffer(orcaPage)
+  const offer = await createRuntimeDesktopPairingOffer(quirkyPage)
   let client: PairedElectronClient | null = null
   try {
     client = await launchPairedElectronClient(offer, testInfo, 'Cmd-J host-qualified tabs')
     const page = client.page
     await page.evaluate(() => {
-      window.localStorage.setItem('orca.browser.markup-draw-hint-seen', 'true')
+      window.localStorage.setItem('quirky.browser.markup-draw-hint-seen', 'true')
     })
     const drawHintDismiss = page.getByRole('button', { name: 'Got it', exact: true })
     const drawHintVisible = await drawHintDismiss

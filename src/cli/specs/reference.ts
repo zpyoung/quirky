@@ -5,14 +5,14 @@ export const REFERENCE_COMMAND_SPECS: CommandSpec[] = [
   {
     path: ['reference', 'list'],
     summary: 'List the reviews and issues attached to a workspace',
-    usage: 'orca reference list --worktree <selector> [--json]',
+    usage: 'quirky reference list --worktree <selector> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree']
   },
   {
     path: ['reference', 'add'],
     summary: 'Attach reviews or issues to a workspace',
     usage:
-      'orca reference add <url-or-jira-key>... --worktree <selector> [--reference-site <id>] [--json]',
+      'quirky reference add <url-or-jira-key>... --worktree <selector> [--reference-site <id>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'url', 'reference-site'],
     positionalArgs: ['url'],
     variadicPositional: true,
@@ -22,15 +22,15 @@ export const REFERENCE_COMMAND_SPECS: CommandSpec[] = [
       'Existing links are unchanged; all inputs are validated and Jira keys resolved before writing. Full URLs do not require Jira lookup.'
     ],
     examples: [
-      'orca reference add https://github.com/acme/api/pull/5123 https://linear.app/acme/issue/STA-1234 --worktree name:api',
-      'orca reference add ENG-123 --reference-site <id> --worktree name:api'
+      'quirky reference add https://github.com/acme/api/pull/5123 https://linear.app/acme/issue/STA-1234 --worktree name:api',
+      'quirky reference add ENG-123 --reference-site <id> --worktree name:api'
     ]
   },
   {
     path: ['reference', 'remove'],
     aliases: [['reference', 'rm']],
     summary: 'Detach reviews or issues from a workspace',
-    usage: 'orca reference remove [<url>...] [--key <key>...] --worktree <selector> [--json]',
+    usage: 'quirky reference remove [<url>...] [--key <key>...] --worktree <selector> [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'worktree', 'url', 'key'],
     positionalArgs: ['url'],
     variadicPositional: true,
@@ -44,15 +44,15 @@ export const REFERENCE_COMMAND_SPECS: CommandSpec[] = [
     path: ['reference', 'find'],
     summary: 'Find workspaces and agents associated with a review or issue',
     usage:
-      'orca reference find <url-or-issue-key> [--worktree <selector>|--repo <selector>] [--include-archived] [--limit <n>] [--json]',
+      'quirky reference find <url-or-issue-key> [--worktree <selector>|--repo <selector>] [--include-archived] [--limit <n>] [--json]',
     allowedFlags: [...GLOBAL_FLAGS, 'query', 'worktree', 'repo', 'include-archived', 'limit'],
     positionalArgs: ['query'],
     notes: [
-      'Reads stored references only. Use orca search to search agent conversations.',
+      'Reads stored references only. Use quirky search to search agent conversations.',
       'Issue keys search every matching source. Bare numbers and custom shorthand are unsupported.',
       'Returns up to 50 workspaces by default; truncated is true when more match.',
       'linked means recorded evidence associates that agent with the reference; workspace membership alone does not establish ownership.'
     ],
-    examples: ['orca reference find STA-1234 --json']
+    examples: ['quirky reference find STA-1234 --json']
   }
 ]

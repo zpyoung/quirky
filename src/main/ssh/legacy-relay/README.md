@@ -2,14 +2,14 @@
 
 `COMPAT(legacy-relay-bridge)` · revisit **2027-01-15**, decided by telemetry.
 
-Orca 1.4.224 kept SSH terminals alive inside a `relay.js --detached` process on the host.
-1.4.225 runs every SSH host on orcad and has no relay client, so this folder keeps those
-terminals working in their old tabs until each one exits. New terminals open on orcad, and
+Quirky 1.4.224 kept SSH terminals alive inside a `relay.js --detached` process on the host.
+1.4.225 runs every SSH host on quirkyd and has no relay client, so this folder keeps those
+terminals working in their old tabs until each one exits. New terminals open on quirkyd, and
 nobody is prompted.
 
 **How it works**
 
-- The host converts to orcad even while relay terminals run. Converting stops nothing; the
+- The host converts to quirkyd even while relay terminals run. Converting stops nothing; the
   journal records those leases as `bridgedPtyIds`.
 - The bridge runs each of this target's relays' own `relay.js --connect` (POSIX sockets and
   Windows pipes) and takes the terminal-owner role, never from a client still attached. It never
@@ -28,8 +28,8 @@ nobody is prompted.
 
 **Touches** `ipc/ssh.ts`, `ipc/ssh-connect-flow.ts`, `ipc/ssh-host-server-on-connect-wiring.ts`,
 `ipc/ssh-session-teardown.ts`, the conversion gate's `bridged` verdict
-(`orcad-migration-terminal-gate.ts`, `-source-fence.ts`, `-source-assertions.ts`,
-`orcad-runtime-conversion.ts`, `shared/orcad-migration/orcad-migration-source-cutover.ts`), the preload
+(`quirkyd-migration-terminal-gate.ts`, `-source-fence.ts`, `-source-assertions.ts`,
+`quirkyd-runtime-conversion.ts`, `shared/quirkyd-migration/quirkyd-migration-source-cutover.ts`), the preload
 `legacy-relay-bridge-api.ts`, and the renderer's `pty-input-recovery.ts` and
 `deferred-session-attach.ts`.
 

@@ -2,7 +2,7 @@
 import { Terminal } from '@xterm/headless'[m
 import { SerializeAddon } from '@xterm/addon-serialize'[m
 import { Unicode11Addon } from '@xterm/addon-unicode11'[m
-import { activateOrcaTerminalUnicodeProvider } from '../../shared/terminal-unicode-provide[m r'[m
+import { activateQuirkyTerminalUnicodeProvider } from '../../shared/terminal-unicode-provide[m r'[m
 import {[m
   readSavedCursorRegister,[m
   serializeWithAbsoluteCursor[m
@@ -157,7 +157,7 @@ type TerminalWithSynchronousWrite = Terminal & {[m
 [HM  readSavedCursorRegister,[m
 [HMimport {[m
 [HMr'[m
-[HMimport { activateOrcaTerminalUnicodeProvider } from '../../shared/terminal-unicode-provide[m[HMimport { Unicode11Addon } from '@xterm/addon-unicode11'[m
+[HMimport { activateQuirkyTerminalUnicodeProvider } from '../../shared/terminal-unicode-provide[m[HMimport { Unicode11Addon } from '@xterm/addon-unicode11'[m
 [HMimport { SerializeAddon } from '@xterm/addon-serialize'[m
 [HMimport { Terminal } from '@xterm/headless'[m
 [HMimport './xterm-env-polyfill'[m

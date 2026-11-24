@@ -28,8 +28,8 @@ import type {
 } from '../scheduling-automations/automation-owner-projection'
 import type { ProfileStatePersistenceAuthority } from './profile-state-authority'
 import type { AutomationRun } from '../../../shared/automations-types'
-import { resolveNewPaneShellPath } from '../migrating-orcad-catalog/orcad-shell-history-installer'
-import { OrcadTerminalRestoreHintStore } from '../migrating-orcad-catalog/orcad-terminal-restore-hint-store'
+import { resolveNewPaneShellPath } from '../migrating-quirkyd-catalog/quirkyd-shell-history-installer'
+import { QuirkydTerminalRestoreHintStore } from '../migrating-quirkyd-catalog/quirkyd-terminal-restore-hint-store'
 
 export type DurableProfileStateMutation<T> = {
   value: T
@@ -60,10 +60,10 @@ export class StoreRuntimeState {
   automationListProjectionCache: AutomationListProjectionCache | null = null
   activeViewPreference!: ActiveViewPreference
   readonly terminalScrollbackSnapshotStorage: TerminalScrollbackSnapshotStorage
-  /** Staged and received migration blobs (see orcad-migration-blob-staging.ts). */
-  readonly orcadMigrationBlobRoot: string
+  /** Staged and received migration blobs (see quirkyd-migration-blob-staging.ts). */
+  readonly quirkydMigrationBlobRoot: string
   /** Shared so project removal can drop hints for panes this host no longer owns. */
-  readonly orcadTerminalRestoreHints: OrcadTerminalRestoreHintStore
+  readonly quirkydTerminalRestoreHints: QuirkydTerminalRestoreHintStore
   /** Scrollback refs each in-flight migration export still reads, keyed by migration id. */
   readonly retainedScrollbackRefsByMigrationId = new Map<string, ReadonlySet<string>>()
   writeTimer: ReturnType<typeof setTimeout> | null = null
@@ -84,7 +84,7 @@ export class StoreRuntimeState {
    * The write generation each migration committed by this process needs on disk before its
    * received blobs may be consumed; a receipt missing here was read from disk.
    */
-  readonly orcadMigrationCommitWriteGenerations = new Map<string, number>()
+  readonly quirkydMigrationCommitWriteGenerations = new Map<string, number>()
   firstPendingSaveAt: number | null = null
   /** Known dirty domains, or null when a caller requires a complete-document fallback. */
   dirtyProfileStateDomains: Set<string> | null = new Set()
@@ -143,7 +143,9 @@ export class StoreRuntimeState {
       snapshotRoot: profileSnapshotRoot,
       fallbackSnapshotRoot: legacySnapshotRoot === profileSnapshotRoot ? null : legacySnapshotRoot
     }
-    this.orcadMigrationBlobRoot = join(dirname(this.dataFile), 'orcad-migration-blobs')
-    this.orcadTerminalRestoreHints = new OrcadTerminalRestoreHintStore(this.orcadMigrationBlobRoot)
+    this.quirkydMigrationBlobRoot = join(dirname(this.dataFile), 'quirkyd-migration-blobs')
+    this.quirkydTerminalRestoreHints = new QuirkydTerminalRestoreHintStore(
+      this.quirkydMigrationBlobRoot
+    )
   }
 }

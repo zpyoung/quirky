@@ -19,13 +19,13 @@ export type WorktreeForceDeleteReason =
   | 'submodules'
 
 // Why: everything before this separator is the worktree id — a user-chosen filesystem path.
-// Only the detail after it is Orca's own wording, so verdict matchers anchor on the boundary
+// Only the detail after it is Quirky's own wording, so verdict matchers anchor on the boundary
 // rather than scanning the whole message and letting a path spell out a verdict.
 export const UNSTOPPED_PTY_DETAIL_SEPARATOR = ' — '
 
 // Why: verification distinguishes a process it watched stay alive from one it could not reach,
 // and the delete toast must not flatten the two — a user waiving "we could not confirm" is
-// making a different decision than one killing something Orca just saw running. The marker
+// making a different decision than one killing something Quirky just saw running. The marker
 // and its matcher stay together for the same reason the force hint does. Shared by the PTY
 // sweep and the structured-session sweep, which both re-observe after their stop.
 export const STILL_LIVE_DETAIL_PREFIX = 'still live:'
@@ -105,7 +105,7 @@ export function getLockedWorktreeRemovalReason(error: string): string | null {
   return reason || null
 }
 
-// Why: Orca's dirty check refuses before Git's submodule refusal can, so it says submodules itself.
+// Why: Quirky's dirty check refuses before Git's submodule refusal can, so it says submodules itself.
 // Keeps the dirty sentence so older classifiers still offer Force Delete.
 export const SUBMODULE_DIRTY_REMOVAL_DETAIL =
   'Worktree has uncommitted or untracked changes, and it contains submodules.'
@@ -130,7 +130,7 @@ export function classifyWorktreeForceDeleteReason(
 ): WorktreeForceDeleteReason | null {
   if (isLockedWorktreeRemovalError(error)) {
     // Why: a Git lock can represent an external safety contract. It must be
-    // unlocked explicitly rather than folded into Orca's dirty-file force path.
+    // unlocked explicitly rather than folded into Quirky's dirty-file force path.
     return null
   }
   // Why (#11960): this must be decided before the `force` guard below. The ordinary

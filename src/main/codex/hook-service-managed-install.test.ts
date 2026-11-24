@@ -49,7 +49,7 @@ function localManagedCodexEvents(): string[] {
 }
 
 describe('CodexHookService', () => {
-  // Why (#16441): install promotes in-Orca approvals into ~/.codex/config.toml
+  // Why (#16441): install promotes in-Quirky approvals into ~/.codex/config.toml
   // and mirrors that file into the managed home, so holding only the runtime
   // lane still lets it land inside a real-home grant's capture->restore window.
   it('waits for an in-flight mutation of the system config.toml', async () => {
@@ -100,7 +100,7 @@ describe('CodexHookService', () => {
     expect(existsSync(managedHooksJsonPath)).toBe(true)
   })
 
-  it('installs PermissionRequest with trust so Codex approval prompts reach Orca', async () => {
+  it('installs PermissionRequest with trust so Codex approval prompts reach Quirky', async () => {
     const systemCodexHome = join(homes.tmpHome, '.codex')
     mkdirSync(systemCodexHome, { recursive: true })
     writeFileSync(
@@ -138,7 +138,7 @@ describe('CodexHookService', () => {
 
     expect(status).toMatchObject({
       state: 'error',
-      detail: expect.stringContaining('defines hook approvals in a form Orca cannot add to')
+      detail: expect.stringContaining('defines hook approvals in a form Quirky cannot add to')
     })
     const managedToml = join(homes.userDataDir, 'codex-runtime-home', 'home', 'config.toml')
     expect(readFileSync(managedToml, 'utf-8')).not.toContain('[hooks.state.')
@@ -151,7 +151,7 @@ describe('CodexHookService', () => {
 
     const perAccountHome = join(homes.userDataDir, 'codex-accounts', 'account-1', 'home')
     mkdirSync(perAccountHome, { recursive: true })
-    writeFileSync(join(perAccountHome, '.orca-managed-home'), 'account-1\n', 'utf-8')
+    writeFileSync(join(perAccountHome, '.quirky-managed-home'), 'account-1\n', 'utf-8')
 
     const status = await new CodexHookService().install(perAccountHome)
     expect(status.state).toBe('installed')
@@ -203,7 +203,7 @@ describe('CodexHookService', () => {
   it.skipIf(process.platform !== 'win32')(
     'wraps the managed hook command when the profile path contains a space (#6078)',
     async () => {
-      const spaceHome = join(tmpdir(), 'orca home with spaces')
+      const spaceHome = join(tmpdir(), 'quirky home with spaces')
       mkdirSync(spaceHome, { recursive: true })
       homedirMock.mockReturnValue(spaceHome)
       try {
@@ -221,7 +221,7 @@ describe('CodexHookService', () => {
         for (const eventName of localManagedCodexEvents()) {
           const command = hooksConfig.hooks[eventName]?.[0]?.hooks?.[0]?.command
           expect(command).toBe(
-            getManagedCommand(join(homedir(), '.orca', 'agent-hooks', 'codex-hook.cmd'))
+            getManagedCommand(join(homedir(), '.quirky', 'agent-hooks', 'codex-hook.cmd'))
           )
         }
       } finally {
@@ -234,7 +234,7 @@ describe('CodexHookService', () => {
   it.skipIf(process.platform !== 'win32')(
     'quotes the script path when the profile contains cmd metacharacters',
     async () => {
-      const metacharHome = join(tmpdir(), 'orca %ORCA_TEST% ^ home')
+      const metacharHome = join(tmpdir(), 'quirky %QUIRKY_TEST% ^ home')
       mkdirSync(metacharHome, { recursive: true })
       homedirMock.mockReturnValue(metacharHome)
       try {
@@ -252,7 +252,7 @@ describe('CodexHookService', () => {
         for (const eventName of localManagedCodexEvents()) {
           const command = hooksConfig.hooks[eventName]?.[0]?.hooks?.[0]?.command
           expect(command).toBe(
-            getManagedCommand(join(homedir(), '.orca', 'agent-hooks', 'codex-hook.cmd'))
+            getManagedCommand(join(homedir(), '.quirky', 'agent-hooks', 'codex-hook.cmd'))
           )
         }
       } finally {
@@ -278,13 +278,13 @@ describe('CodexHookService', () => {
       // Why: the temp home is normally cmd-safe; guard so a runner whose tmpdir
       // holds an exotic character still asserts the correct (fallback) branch.
       const command = hooksConfig.hooks.Stop?.[0]?.hooks?.[0]?.command ?? ''
-      const cmdSafe = /^[A-Za-z0-9_.:\\~-]+$/.test(join(homes.tmpHome, '.orca', 'agent-hooks'))
+      const cmdSafe = /^[A-Za-z0-9_.:\\~-]+$/.test(join(homes.tmpHome, '.quirky', 'agent-hooks'))
       if (cmdSafe) {
         expect(command).not.toMatch(/powershell/i)
         expect(command).toMatch(/\/agent-hooks\/codex-hook\.cmd$/)
       } else {
         expect(command).toBe(
-          getManagedCommand(join(homedir(), '.orca', 'agent-hooks', 'codex-hook.cmd'))
+          getManagedCommand(join(homedir(), '.quirky', 'agent-hooks', 'codex-hook.cmd'))
         )
       }
     }
@@ -297,7 +297,7 @@ describe('CodexHookService', () => {
     'posts hook payloads via the curl-based managed script preserving UTF-8 and spaced metadata',
     async () => {
       await new CodexHookService().install()
-      const scriptPath = join(homedir(), '.orca', 'agent-hooks', 'codex-hook.cmd')
+      const scriptPath = join(homedir(), '.quirky', 'agent-hooks', 'codex-hook.cmd')
       expect(existsSync(scriptPath)).toBe(true)
 
       // Why: resolve when the listener has fully read the hook POST. spawnSync
@@ -329,25 +329,25 @@ describe('CodexHookService', () => {
           prompt: '你好世界',
           hook_event_name: 'UserPromptSubmit'
         })
-        // Why: this suite may run inside an Orca-launched terminal whose env
-        // already carries ORCA_AGENT_HOOK_ENDPOINT/PORT/TOKEN. The managed
+        // Why: this suite may run inside an Quirky-launched terminal whose env
+        // already carries QUIRKY_AGENT_HOOK_ENDPOINT/PORT/TOKEN. The managed
         // script sources that endpoint file, so leave it out or the hook posts
-        // to the live Orca instead of this test's listener.
+        // to the live Quirky instead of this test's listener.
         const cleanEnv = { ...process.env }
         for (const key of Object.keys(cleanEnv)) {
-          if (key.startsWith('ORCA_')) {
+          if (key.startsWith('QUIRKY_')) {
             delete cleanEnv[key]
           }
         }
         const child = spawn('cmd.exe', ['/d', '/c', scriptPath], {
           env: {
             ...cleanEnv,
-            ORCA_AGENT_HOOK_PORT: String(port),
-            ORCA_AGENT_HOOK_TOKEN: 'tok123',
-            ORCA_PANE_KEY: '42:leaf-abc',
-            ORCA_TAB_ID: '42',
-            ORCA_WORKTREE_ID: 'C:\\work trees\\my repo & co',
-            ORCA_AGENT_HOOK_VERSION: '1'
+            QUIRKY_AGENT_HOOK_PORT: String(port),
+            QUIRKY_AGENT_HOOK_TOKEN: 'tok123',
+            QUIRKY_PANE_KEY: '42:leaf-abc',
+            QUIRKY_TAB_ID: '42',
+            QUIRKY_WORKTREE_ID: 'C:\\work trees\\my repo & co',
+            QUIRKY_AGENT_HOOK_VERSION: '1'
           }
         })
         child.stdin.end(payload)
@@ -356,7 +356,7 @@ describe('CodexHookService', () => {
 
         const received = await receivedPromise
         const params = new URLSearchParams(received.body)
-        expect(received.headers['x-orca-agent-hook-token']).toBe('tok123')
+        expect(received.headers['x-quirky-agent-hook-token']).toBe('tok123')
         expect(params.get('paneKey')).toBe('42:leaf-abc')
         expect(params.get('worktreeId')).toBe('C:\\work trees\\my repo & co')
         expect(JSON.parse(params.get('payload') ?? '{}').prompt).toBe('你好世界')
@@ -366,15 +366,15 @@ describe('CodexHookService', () => {
     }
   )
 
-  it('keeps hooks isolated by Orca userData instead of mutating system ~/.codex', async () => {
+  it('keeps hooks isolated by Quirky userData instead of mutating system ~/.codex', async () => {
     const systemCodexHome = join(homes.tmpHome, '.codex')
     const systemHooksPath = join(systemCodexHome, 'hooks.json')
     const existingSystemHooks = '{"hooks":{"Stop":[{"hooks":[{"command":"user-hook"}]}]}}\n'
     mkdirSync(systemCodexHome, { recursive: true })
     writeFileSync(systemHooksPath, existingSystemHooks, 'utf-8')
 
-    const devUserDataDir = mkdtempSync(join(tmpdir(), 'orca-dev-codex-user-data-'))
-    const prodUserDataDir = mkdtempSync(join(tmpdir(), 'orca-prod-codex-user-data-'))
+    const devUserDataDir = mkdtempSync(join(tmpdir(), 'quirky-dev-codex-user-data-'))
+    const prodUserDataDir = mkdtempSync(join(tmpdir(), 'quirky-prod-codex-user-data-'))
     try {
       getPathMock.mockImplementation((name: string) => {
         if (name === 'userData') {
@@ -382,7 +382,7 @@ describe('CodexHookService', () => {
         }
         throw new Error(`unexpected app.getPath(${name})`)
       })
-      process.env.ORCA_USER_DATA_PATH = devUserDataDir
+      process.env.QUIRKY_USER_DATA_PATH = devUserDataDir
       expect((await new CodexHookService().install()).state).toBe('installed')
 
       getPathMock.mockImplementation((name: string) => {
@@ -391,7 +391,7 @@ describe('CodexHookService', () => {
         }
         throw new Error(`unexpected app.getPath(${name})`)
       })
-      process.env.ORCA_USER_DATA_PATH = prodUserDataDir
+      process.env.QUIRKY_USER_DATA_PATH = prodUserDataDir
       expect((await new CodexHookService().install()).state).toBe('installed')
 
       const devHooksPath = join(devUserDataDir, 'codex-runtime-home', 'home', 'hooks.json')
@@ -426,7 +426,7 @@ describe('CodexHookService', () => {
       ).toBe(true)
       expect(readFileSync(systemHooksPath, 'utf-8')).toBe(existingSystemHooks)
     } finally {
-      process.env.ORCA_USER_DATA_PATH = homes.userDataDir
+      process.env.QUIRKY_USER_DATA_PATH = homes.userDataDir
       removeTreeSync(devUserDataDir)
       removeTreeSync(prodUserDataDir)
     }

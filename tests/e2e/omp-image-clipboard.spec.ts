@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { showActivePaneAsNativeChat } from './helpers/native-chat-view'
 import { waitForActiveTerminalManager } from './helpers/terminal'
@@ -8,17 +8,17 @@ const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAYUlEQVR4nO3PIREAIBAAMFqhMWgyUYMun4QQaBQZEO92twIrZ/RUde1URUBAQEBAQEBAQEBAQEBAQEBAQEBAQEDgO9BiprrRUgkICAgICAgICAgICAgICAgICAgICAgIfHuebLmH1pKnMwAAAABJRU5ErkJggg=='
 
 test('OMP composer accepts an image clipboard event', async ({
-  orcaPage,
+  quirkyPage,
   electronApp
 }, testInfo) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
-  await ensureTerminalVisible(orcaPage)
-  await waitForActiveTerminalManager(orcaPage)
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
+  await ensureTerminalVisible(quirkyPage)
+  await waitForActiveTerminalManager(quirkyPage)
   const imagePath = testInfo.outputPath('omp-image-proof.png')
   await writeFile(imagePath, Buffer.from(PNG, 'base64'))
-  await showActivePaneAsNativeChat(orcaPage, 'omp', 'OMP')
-  const composer = orcaPage.getByRole('textbox', {
+  await showActivePaneAsNativeChat(quirkyPage, 'omp', 'OMP')
+  const composer = quirkyPage.getByRole('textbox', {
     name: 'Ask anything, @ to mention files, / for commands',
     exact: true
   })
@@ -40,7 +40,7 @@ test('OMP composer accepts an image clipboard event', async ({
     )
   }, PNG)
   await expect(
-    orcaPage.getByRole('img', { name: 'omp-image-proof.png', exact: true })
+    quirkyPage.getByRole('img', { name: 'omp-image-proof.png', exact: true })
   ).toBeVisible()
-  await orcaPage.screenshot({ path: testInfo.outputPath('omp-image-attached.png') })
+  await quirkyPage.screenshot({ path: testInfo.outputPath('omp-image-attached.png') })
 })

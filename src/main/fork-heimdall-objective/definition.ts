@@ -22,7 +22,7 @@ import { isTuiAgent } from '../../shared/tui-agent-config'
 import type { Repo } from '../../shared/repo-types'
 import type { Store } from '../persistence'
 import { getAutomationSchedulerOwnerForExecutionHost } from '../persistence/scheduling-automations/automation-context-migration'
-import type { OrcaRuntimeService } from '../runtime/orca-runtime'
+import type { QuirkyRuntimeService } from '../runtime/quirky-runtime'
 import {
   createObjectiveEnrollmentWorktree,
   objectiveEnrollmentWorktreeRollback
@@ -194,7 +194,7 @@ async function resolveCanonicalFolderWorkspace(
 
 /** Rebuilds every workspace and execution-host authority field from runtime/store state. */
 export async function authorizeObjectiveEnrollment(
-  runtime: OrcaRuntimeService,
+  runtime: QuirkyRuntimeService,
   store: Store,
   input: EnrollInput,
   storageAuthority: 'desktop' | 'runtime' = 'desktop',
@@ -241,7 +241,7 @@ export async function authorizeObjectiveEnrollment(
       | Awaited<ReturnType<typeof resolveCanonicalFolderWorkspace>>
     if (canonicalFolderWorktreeId !== null) {
       workspace = await resolveCanonicalFolderWorkspace(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeFileTarget is protected on OrcaRuntimeService; runtime satisfies this narrower resolver shape at runtime.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeFileTarget is protected on QuirkyRuntimeService; runtime satisfies this narrower resolver shape at runtime.
         runtime as unknown as ObjectiveRuntimeResolver,
         input.repoId,
         canonicalFolderWorktreeId
@@ -251,7 +251,7 @@ export async function authorizeObjectiveEnrollment(
         throw new Error('Folder objective enrollment cannot name a Git worktree')
       }
       workspace = await resolveLegacyFolderWorkspace(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeFileTarget is protected on OrcaRuntimeService; runtime satisfies this narrower resolver shape at runtime.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeFileTarget is protected on QuirkyRuntimeService; runtime satisfies this narrower resolver shape at runtime.
         runtime as unknown as ObjectiveRuntimeResolver,
         repo
       )
@@ -274,7 +274,7 @@ export async function authorizeObjectiveEnrollment(
         throw new Error('Git objective enrollment requires an explicit worktree')
       }
       workspace = await resolveGitWorkspace(
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget is protected on OrcaRuntimeService; runtime satisfies this narrower resolver shape at runtime.
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: resolveRuntimeGitTarget is protected on QuirkyRuntimeService; runtime satisfies this narrower resolver shape at runtime.
         runtime as unknown as ObjectiveRuntimeResolver,
         repo.id,
         worktreeId

@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   listWorktrees,
   listWorktreesStrict,
   listWorktreesSharedStrict
-} from './orca-runtime-test-mocks.spec'
-import { store, TEST_WORKTREE_ID } from './orca-runtime-test-fixtures.spec'
+} from './quirky-runtime-test-mocks.spec'
+import { store, TEST_WORKTREE_ID } from './quirky-runtime-test-fixtures.spec'
 import { parseWorkspaceReferenceUrl } from '../../shared/workspace-reference-identity'
 import type { RuntimeLinearCommands } from './runtime-linear-connection-commands'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
@@ -21,7 +21,7 @@ const linear = 'https://linear.app/acme/issue/STA-1234'
 
 afterEach(() => vi.restoreAllMocks())
 
-function setup(Runtime: typeof OrcaRuntimeService = OrcaRuntimeService) {
+function setup(Runtime: typeof QuirkyRuntimeService = QuirkyRuntimeService) {
   const base = store.getAllWorktreeMeta()[TEST_WORKTREE_ID]
   const linkedItems = [parseWorkspaceReferenceUrl(linear)]
   const runtimeStore = {
@@ -79,7 +79,7 @@ describe('reference find runtime integration', () => {
       isBare: false,
       isMainWorktree: false
     }
-    class ScannedRuntime extends OrcaRuntimeService {
+    class ScannedRuntime extends QuirkyRuntimeService {
       protected override async listRepoWorktreesForResolution(repo: { id: string }) {
         return { ok: true as const, worktrees: repo.id === 'repo-2' ? [] : [discovered] }
       }
@@ -90,7 +90,7 @@ describe('reference find runtime integration', () => {
   })
 })
 
-class LinearOwnerRuntime extends OrcaRuntimeService {
+class LinearOwnerRuntime extends QuirkyRuntimeService {
   override listResolvedWorktrees(): Promise<ResolvedWorktree[]> {
     return Promise.resolve([])
   }
@@ -98,7 +98,7 @@ class LinearOwnerRuntime extends OrcaRuntimeService {
 
 describe('Linear installed owner', () => {
   it('forwards the command promise unchanged', async () => {
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const result: ReturnType<RuntimeLinearCommands['linearIssueComments']> = Promise.resolve([])
     const comments = vi.spyOn(runtime.linearCommands, 'linearIssueComments').mockReturnValue(result)
     expect(runtime.linearIssueComments('issue-1', 'workspace-1')).toBe(result)
@@ -107,7 +107,7 @@ describe('Linear installed owner', () => {
   })
 
   it('keeps terminal lookup late-bound after construction', async () => {
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     const first = vi.spyOn(runtime, 'showTerminal').mockRejectedValue(new Error('first hook'))
     await expect(
       runtime.linearResolveCurrentIssue({ terminalHandle: 'pane-1', remote: true })

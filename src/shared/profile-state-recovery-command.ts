@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const PROFILE_STATE_RECOVERY_FLAG = '--profile-state-recovery'
 export const PROFILE_STATE_RECOVERY_RESULT_PREFIX = '[profile-state-recovery] '
-/** Desktop variant: applies a startup-dialog choice, then relaunches Orca normally. */
+/** Desktop variant: applies a startup-dialog choice, then relaunches Quirky normally. */
 export const PROFILE_STATE_DESKTOP_RECOVERY_FLAG = '--profile-state-desktop-recovery'
 
 const positiveInteger = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)

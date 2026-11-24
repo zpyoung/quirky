@@ -64,7 +64,7 @@ describe('removing a workspace two saved servers publish', () => {
     expect(result).toEqual({
       ok: false,
       error:
-        'Studio and Studio relay are the same server paired twice. Remove one in Settings > Remote Orca Servers.'
+        'Studio and Studio relay are the same server paired twice. Remove one in Settings > Remote Quirky Servers.'
     })
   })
 

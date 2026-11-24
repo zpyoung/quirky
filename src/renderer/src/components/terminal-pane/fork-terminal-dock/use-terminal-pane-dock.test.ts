@@ -602,12 +602,12 @@ describe('useTerminalPaneDock', () => {
         result.current.resolveDockAgent(PANE_KEY, 'claude')
       })
 
-      expect(window.localStorage.getItem('orca.terminalDock.paneState.v1')).toBeNull()
+      expect(window.localStorage.getItem('quirky.terminalDock.paneState.v1')).toBeNull()
     })
 
     it('ignores a persisted agent value outside the known TUI-agent set', () => {
       window.localStorage.setItem(
-        'orca.terminalDock.paneState.v1',
+        'quirky.terminalDock.paneState.v1',
         JSON.stringify({
           [PANE_KEY]: { docked: true, gutterRows: 5, lastAgent: 'not-a-real-agent' }
         })
@@ -721,7 +721,7 @@ describe('useTerminalPaneDock', () => {
 
     it('writes nothing to localStorage when the flag is disabled', () => {
       writeTerminalDockPaneState(PANE_KEY, { docked: true, gutterRows: 6 })
-      const before = window.localStorage.getItem('orca.terminalDock.paneState.v1')
+      const before = window.localStorage.getItem('quirky.terminalDock.paneState.v1')
       const { result } = renderDockHook(false)
 
       act(() => {
@@ -729,7 +729,7 @@ describe('useTerminalPaneDock', () => {
         result.current.prunePassthroughForRetiredPane(LEAF_ID)
       })
 
-      expect(window.localStorage.getItem('orca.terminalDock.paneState.v1')).toBe(before)
+      expect(window.localStorage.getItem('quirky.terminalDock.paneState.v1')).toBe(before)
     })
   })
 })

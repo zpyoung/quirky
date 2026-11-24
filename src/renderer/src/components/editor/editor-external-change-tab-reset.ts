@@ -47,7 +47,7 @@ export function createEditorExternalChangeTabReset({
         if (!file.isDirty) {
           continue
         }
-        // Why: skip Orca's own-save echo, which routes here bypassing the watch hook's echo verification.
+        // Why: skip Quirky's own-save echo, which routes here bypassing the watch hook's echo verification.
         if (!hasRecentSelfWrite(file.filePath, file.runtimeEnvironmentId)) {
           markFileChangedOnDisk(state, file, {
             connectionId: getConnectionIdForFile(file.worktreeId, file.filePath) ?? undefined,

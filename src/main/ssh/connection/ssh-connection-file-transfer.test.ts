@@ -59,17 +59,17 @@ describe('SshConnection', () => {
     const hostPlatform = getRemoteHostPlatform('win32-x64')
 
     await conn.connect()
-    await conn.uploadDirectory('/tmp/local-relay', 'C:/Users/me/.orca-remote/relay', {
+    await conn.uploadDirectory('/tmp/local-relay', 'C:/Users/me/.quirky-remote/relay', {
       hostPlatform
     })
-    await conn.writeFile('C:/Users/me/.orca-remote/relay/.version', '0.1.0', {
+    await conn.writeFile('C:/Users/me/.quirky-remote/relay/.version', '0.1.0', {
       hostPlatform
     })
-    await conn.writeBuffer('C:/Users/me/.orca-remote/relay/logo.png', Buffer.from('png'), {
+    await conn.writeBuffer('C:/Users/me/.quirky-remote/relay/logo.png', Buffer.from('png'), {
       hostPlatform,
       exclusive: true
     })
-    await conn.downloadFile('C:/Users/me/.orca-remote/relay/logo.png', '/tmp/logo.png', {
+    await conn.downloadFile('C:/Users/me/.quirky-remote/relay/logo.png', '/tmp/logo.png', {
       hostPlatform
     })
     const uploadSession = await conn.openFileUploadSession({ hostPlatform })
@@ -81,7 +81,7 @@ describe('SshConnection', () => {
     expect(uploadDirectoryViaSystemSsh).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'fdpass-host' }),
       '/tmp/local-relay',
-      'C:/Users/me/.orca-remote/relay',
+      'C:/Users/me/.quirky-remote/relay',
       expect.objectContaining({
         hostPlatform,
         resolvedConfig: expect.objectContaining({ proxyUseFdpass: true })
@@ -89,7 +89,7 @@ describe('SshConnection', () => {
     )
     expect(writeFileViaSystemSsh).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'C:/Users/me/.orca-remote/relay/.version',
+      'C:/Users/me/.quirky-remote/relay/.version',
       '0.1.0',
       expect.objectContaining({
         hostPlatform,
@@ -98,7 +98,7 @@ describe('SshConnection', () => {
     )
     expect(writeBufferViaSystemSsh).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'C:/Users/me/.orca-remote/relay/logo.png',
+      'C:/Users/me/.quirky-remote/relay/logo.png',
       Buffer.from('png'),
       expect.objectContaining({
         hostPlatform,
@@ -108,7 +108,7 @@ describe('SshConnection', () => {
     )
     expect(downloadFileViaSystemSsh).toHaveBeenCalledWith(
       expect.objectContaining({ configHost: 'fdpass-host' }),
-      'C:/Users/me/.orca-remote/relay/logo.png',
+      'C:/Users/me/.quirky-remote/relay/logo.png',
       '/tmp/logo.png',
       expect.objectContaining({
         hostPlatform,

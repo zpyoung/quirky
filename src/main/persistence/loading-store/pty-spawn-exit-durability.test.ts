@@ -8,7 +8,7 @@ import { createPtyIpcSession } from '../../ipc/pty/session'
 import { DaemonPtyAdapter } from '../../daemon/daemon-pty-adapter'
 import { expect, it, vi } from 'vitest'
 import { fixture, admitRuntimeSpawnPane } from './profile-state-delayed-authority-fixture'
-import { OrcaRuntimeService } from '../../runtime/orca-runtime'
+import { QuirkyRuntimeService } from '../../runtime/quirky-runtime'
 import { commitRuntimePtySpawn } from '../../ipc/pty/runtime/spawn-commit'
 import { createRuntimePtySpawnState } from '../../ipc/pty/runtime/spawn-state'
 import type { PtyRuntimeControllerDeps } from '../../ipc/pty/runtime/controller-deps'
@@ -45,7 +45,7 @@ it.each(
   async ({ controller, exitCode, stableOwner }) => {
     const connectionId = null
     const { store, authority, readState } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     const binding = {
       worktreeId: 'repo-local::/fixture/local',
       tabId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -158,7 +158,7 @@ it.each(['replacement-pty', binding.ptyId])(
   'preserves a replacement binding to %s while retirement waits',
   async (ptyId) => {
     const { store, authority, readState } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
     await store.persistPtyBinding(binding)
     await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
@@ -192,7 +192,7 @@ it.each(['replacement-pty', binding.ptyId])(
 
 it('retains the binding when loss of contact supplies no process-exit proof', async () => {
   const { store, readState } = await fixture()
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
   await store.persistPtyBinding(binding)
   await runtime.onPtyExit(binding.ptyId, -1, binding.incarnationId)
@@ -216,7 +216,7 @@ it('retains the binding when loss of contact supplies no process-exit proof', as
 
 it('does not settle rejected registration until its exit cleanup reaches SQLite', async () => {
   const { store, authority, readState } = await fixture()
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   runtime.beginPtyRegistration(binding.ptyId, binding.incarnationId)
   await store.persistPtyBinding(binding)
   await runtime.onPtyExit(binding.ptyId, 0, binding.incarnationId, { providerExitObserved: true })
@@ -257,7 +257,7 @@ it('does not settle rejected registration until its exit cleanup reaches SQLite'
 
 it('keeps successful registration synchronous through the remaining spawn publication', async () => {
   const { store } = await fixture()
-  const runtime = new OrcaRuntimeService(store)
+  const runtime = new QuirkyRuntimeService(store)
   await store.persistPtyBinding(binding)
   expect(
     registerPersistedPtySpawn(
@@ -276,7 +276,7 @@ it.each(['success', 'new-exit', 'old-exit'] as const)(
   'retains candidate authority over a disconnected old record: %s',
   async (event) => {
     const { store, authority, readState } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     await store.persistPtyBinding(binding)
     runtime.registerPty(binding.ptyId, binding.worktreeId, null, binding)
     runtime.intentionalPtyStops.mark(binding.ptyId, 'replaced', binding.incarnationId)
@@ -365,7 +365,7 @@ it.each(['joined', 'fresh'] as const)(
   'completes %s owner loss through B with final history and fenced fresh cleanup',
   async (boundary) => {
     const { store, authority, readState } = await fixture()
-    const runtime = new OrcaRuntimeService(store)
+    const runtime = new QuirkyRuntimeService(store)
     await store.persistPtyBinding(binding)
     const provider = new LocalPtyProvider()
     vi.spyOn(providerRegistry, 'getProvider').mockReturnValue(provider)

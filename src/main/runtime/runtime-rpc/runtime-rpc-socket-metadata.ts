@@ -52,7 +52,7 @@ export function createRuntimeTransportMetadata(
     return {
       kind: 'named-pipe',
       // Why: named pipes lack the chmod hardening of Unix sockets; a per-runtime suffix avoids a stable, guessable endpoint name.
-      endpoint: `\\\\.\\pipe\\orca-${pid}-${endpointSuffix}`
+      endpoint: `\\\\.\\pipe\\quirky-${pid}-${endpointSuffix}`
     }
   }
   return {

@@ -41,7 +41,7 @@ function openDatabase(path: string): OrchestrationDb {
 }
 
 function temporaryDatabasePath(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-orchestration-hot-path-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-orchestration-hot-path-'))
   temporaryDirectories.push(directory)
   return join(directory, 'orchestration.db')
 }

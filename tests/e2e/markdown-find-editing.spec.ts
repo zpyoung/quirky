@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@stablyai/playwright-test'
 import path from 'node:path'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { pressShortcut } from './helpers/shortcuts'
 import {
@@ -95,44 +95,44 @@ async function pointAtParagraph(page: Page, paragraph: Locator, drag: boolean) {
   return selection
 }
 
-test.beforeEach(async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+test.beforeEach(async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
 })
 
 for (const interaction of ['click', 'drag'] as const) {
   test(`keeps Find open while a document ${interaction} edits at the pointer position`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const context = await getActiveWorktreeContext(orcaPage)
+    const context = await getActiveWorktreeContext(quirkyPage)
     const filePath = await createMarkdownFixture(
       context,
-      '.orca-e2e-markdown-find-editing',
+      '.quirky-e2e-markdown-find-editing',
       `find-${interaction}`,
       testInfo.workerIndex,
       MARKDOWN
     )
     registerPostElectronShutdownCleanup(() => cleanupMarkdownFixture(filePath))
-    await openMarkdownFixture(orcaPage, context, filePath)
-    const editor = await waitForRichMarkdownEditor(orcaPage)
+    await openMarkdownFixture(quirkyPage, context, filePath)
+    const editor = await waitForRichMarkdownEditor(quirkyPage)
     const paragraph = editor.locator('p').filter({ hasText: 'Editing' })
-    const viewport = orcaPage.locator('.rich-markdown-editor-shell .overflow-auto')
+    const viewport = quirkyPage.locator('.rich-markdown-editor-shell .overflow-auto')
     await editor.locator('p').first().click()
-    await pressShortcut(orcaPage, 'f')
-    const search = orcaPage.getByRole('textbox', { name: 'Find in rich markdown editor' })
+    await pressShortcut(quirkyPage, 'f')
+    const search = quirkyPage.getByRole('textbox', { name: 'Find in rich markdown editor' })
     await expect(search).toBeFocused()
     await search.fill('Needle')
-    await orcaPage.getByRole('button', { name: 'Match case', exact: true }).click()
-    await orcaPage.getByRole('button', { name: 'Match whole word', exact: true }).click()
-    await expect(orcaPage.locator('.rich-markdown-search-status')).toHaveText('1/2')
+    await quirkyPage.getByRole('button', { name: 'Match case', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Match whole word', exact: true }).click()
+    await expect(quirkyPage.locator('.rich-markdown-search-status')).toHaveText('1/2')
     await centerParagraph(paragraph)
     const originalScroll = await viewport.evaluate((element) => element.scrollTop)
-    const selection = await pointAtParagraph(orcaPage, paragraph, interaction === 'drag')
+    const selection = await pointAtParagraph(quirkyPage, paragraph, interaction === 'drag')
 
     // Separate key events allow document updates to expose a caret reset between characters.
-    await orcaPage.keyboard.type('xy', { delay: 100 })
-    await orcaPage.screenshot({ path: testInfo.outputPath('find-document-edit.png') })
+    await quirkyPage.keyboard.type('xy', { delay: 100 })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('find-document-edit.png') })
     await expect(paragraph).toHaveText(
       `${TARGET_TEXT.slice(0, selection.from)}xy${TARGET_TEXT.slice(selection.to)}`
     )
@@ -149,55 +149,54 @@ for (const interaction of ['click', 'drag'] as const) {
       .toBeCloseTo(originalScroll, 0)
     await expect(search).toBeVisible()
     await expect(search).toHaveValue('Needle')
-    await expect(orcaPage.getByRole('button', { name: 'Match case', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
     await expect(
-      orcaPage.getByRole('button', { name: 'Match whole word', exact: true })
+      quirkyPage.getByRole('button', { name: 'Match case', exact: true })
     ).toHaveAttribute('aria-pressed', 'true')
-    await expect(orcaPage.locator('.rich-markdown-search-status')).toHaveText('1/2')
+    await expect(
+      quirkyPage.getByRole('button', { name: 'Match whole word', exact: true })
+    ).toHaveAttribute('aria-pressed', 'true')
+    await expect(quirkyPage.locator('.rich-markdown-search-status')).toHaveText('1/2')
   })
 
   test(`keeps the scrolled table and ${interaction} selection after switching Source to Rich`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const context = await getActiveWorktreeContext(orcaPage)
+    const context = await getActiveWorktreeContext(quirkyPage)
     const filePath = await createMarkdownFixture(
       context,
-      '.orca-e2e-markdown-find-editing',
+      '.quirky-e2e-markdown-find-editing',
       `source-${interaction}`,
       testInfo.workerIndex,
       TABLE_MARKDOWN
     )
     registerPostElectronShutdownCleanup(() => cleanupMarkdownFixture(filePath))
-    await openMarkdownFixture(orcaPage, context, filePath)
-    await waitForRichMarkdownEditor(orcaPage)
-    await orcaPage.getByRole('radio', { name: 'Source', exact: true }).click()
-    await expect(orcaPage.locator('.monaco-editor')).toBeVisible()
-    await orcaPage.getByRole('radio', { name: 'Rich Editor', exact: true }).click()
-    const editor = await waitForRichMarkdownEditor(orcaPage)
+    await openMarkdownFixture(quirkyPage, context, filePath)
+    await waitForRichMarkdownEditor(quirkyPage)
+    await quirkyPage.getByRole('radio', { name: 'Source', exact: true }).click()
+    await expect(quirkyPage.locator('.monaco-editor')).toBeVisible()
+    await quirkyPage.getByRole('radio', { name: 'Rich Editor', exact: true }).click()
+    const editor = await waitForRichMarkdownEditor(quirkyPage)
     await expect(editor).not.toBeFocused()
     const paragraph = editor.locator('td p').filter({ hasText: 'Editing' })
-    const viewport = orcaPage.locator('.rich-markdown-editor-shell .overflow-auto')
+    const viewport = quirkyPage.locator('.rich-markdown-editor-shell .overflow-auto')
     await centerParagraph(paragraph)
     const originalScroll = await viewport.evaluate((element) => element.scrollTop)
-    const selection = await pointAtParagraph(orcaPage, paragraph, interaction === 'drag')
+    const selection = await pointAtParagraph(quirkyPage, paragraph, interaction === 'drag')
     await expect(editor).toBeFocused()
     await expect(paragraph).toHaveText(TARGET_TEXT)
     await expect
       .poll(() => viewport.evaluate((element) => element.scrollTop))
       .toBeCloseTo(originalScroll, 0)
-    const tab = orcaPage
+    const tab = quirkyPage
       .locator('[data-tab-id]')
       .filter({ hasText: path.basename(filePath) })
       .last()
     await expect(tab.locator('span.rounded-full')).toHaveCount(0)
     await expect(tab.getByRole('button', { name: 'Close tab' })).toBeVisible()
-    await orcaPage.screenshot({ path: testInfo.outputPath('source-rich-table-selection.png') })
-    await orcaPage.keyboard.type('xy', { delay: 100 })
-    await orcaPage.screenshot({ path: testInfo.outputPath('source-rich-pointer-edit.png') })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('source-rich-table-selection.png') })
+    await quirkyPage.keyboard.type('xy', { delay: 100 })
+    await quirkyPage.screenshot({ path: testInfo.outputPath('source-rich-pointer-edit.png') })
     await expect(paragraph).toHaveText(
       `${TARGET_TEXT.slice(0, selection.from)}xy${TARGET_TEXT.slice(selection.to)}`
     )

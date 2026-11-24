@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 
 const { afterStat } = vi.hoisted(() => {
   const afterStat: { run: null | (() => Promise<void>) } = { run: null }
@@ -26,7 +26,7 @@ import { readLocalAntigravityHistory } from './session-scanner-antigravity-histo
 
 const roots: string[] = []
 async function filePath() {
-  const root = await mkdtemp(join(tmpdir(), 'orca-regular-index-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-regular-index-'))
   roots.push(root)
   return join(root, 'projects.json')
 }

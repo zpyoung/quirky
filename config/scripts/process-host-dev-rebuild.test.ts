@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { rolldown, watch } from 'rolldown'
 import type { Plugin, RolldownWatcher } from 'rolldown'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -29,7 +29,7 @@ afterEach(async () => {
 })
 
 function fixture(): { root: string; packageDir: string; main: string } {
-  const root = mkdtempSync(join(tmpdir(), 'orca-process-host-dev-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-process-host-dev-'))
   temporaryRoots.push(root)
   const packageDir = join(root, 'src', 'packages', 'process-host')
   const sourceDir = join(packageDir, 'src')
@@ -40,7 +40,7 @@ function fixture(): { root: string; packageDir: string; main: string } {
     join(packageDir, 'scripts', 'build-dist.mjs'),
     `import { appendFileSync } from 'node:fs'\nappendFileSync(${JSON.stringify(join(packageDir, 'builds.txt'))}, 'build\\n')\nconst { buildPackageDist } = await import(${JSON.stringify(pathToFileURL(resolve(realPackageDir, 'scripts', 'build-dist.mjs')).href)})\nawait buildPackageDist(${JSON.stringify(packageDir)})\n`
   )
-  mkdirSync(join(root, 'node_modules', '@orca'), { recursive: true })
+  mkdirSync(join(root, 'node_modules', '@quirky'), { recursive: true })
   const packageRequire = createRequire(join(realPackageDir, 'package.json'))
   for (const tool of ['typescript', 'tsx']) {
     symlinkSync(
@@ -49,14 +49,14 @@ function fixture(): { root: string; packageDir: string; main: string } {
       'junction'
     )
   }
-  symlinkSync(packageDir, join(root, 'node_modules', '@orca', 'process-host'), 'junction')
+  symlinkSync(packageDir, join(root, 'node_modules', '@quirky', 'process-host'), 'junction')
   writeFileSync(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - src/packages/*\n')
   writeFileSync(
     join(packageDir, 'package.json'),
     JSON.stringify({
-      name: '@orca/process-host',
+      name: '@quirky/process-host',
       type: 'commonjs',
-      exports: { '.': { 'orca-source': './src/entry.ts', default: './dist/entry.js' } }
+      exports: { '.': { 'quirky-source': './src/entry.ts', default: './dist/entry.js' } }
     })
   )
   writeFileSync(
@@ -84,7 +84,7 @@ function fixture(): { root: string; packageDir: string; main: string } {
   writeFileSync(join(sourceDir, 'entry.ts'), "export { version } from './internal'\n")
   writeFileSync(join(sourceDir, 'internal.ts'), '// preserved comment\nexport const version = 1\n')
   const main = join(root, 'main.cjs')
-  writeFileSync(main, "module.exports = require('@orca/process-host')\n")
+  writeFileSync(main, "module.exports = require('@quirky/process-host')\n")
   return { root, packageDir, main }
 }
 
@@ -134,7 +134,7 @@ describe('External process-host development rebuilds', () => {
     mkdirSync(fixtureDir)
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [createProcessHostDevRebuildPlugin(root)],
       output: { file: join(root, 'out', 'main.cjs'), format: 'cjs' }
     })
@@ -157,7 +157,7 @@ describe('External process-host development rebuilds', () => {
     expect(readFileSync(join(packageDir, 'builds.txt'), 'utf8')).toBe('build\n')
     expect(reloads).toBe(0)
     const rebuilt = nextEvent(watcher, 'END')
-    writeFileSync(main, "module.exports = { ...require('@orca/process-host'), changed: true }\n")
+    writeFileSync(main, "module.exports = { ...require('@quirky/process-host'), changed: true }\n")
     await rebuilt
     expect(readEmittedVersion(root)).toBe(1)
     expect(readFileSync(join(root, 'out', 'main.cjs'), 'utf8')).toContain('changed')
@@ -169,7 +169,7 @@ describe('External process-host development rebuilds', () => {
     const versions: number[] = []
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [
         createProcessHostDevRebuildPlugin(root),
         {
@@ -203,7 +203,7 @@ describe('External process-host development rebuilds', () => {
     writeFileSync(join(packageDir, 'src', 'entry.ts'), 'export const version = 1\n')
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [createProcessHostDevRebuildPlugin(root)],
       output: { file: join(root, 'out', 'main.cjs'), format: 'cjs' }
     })
@@ -235,7 +235,7 @@ describe('External process-host development rebuilds', () => {
     }
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [createProcessHostDevRebuildPlugin(root), reloadHook],
       output: { file: join(root, 'out', 'main.cjs'), format: 'cjs' }
     })
@@ -243,7 +243,7 @@ describe('External process-host development rebuilds', () => {
     closeSuccessfulBundles(watcher)
     await nextEvent(watcher, 'END')
     expect(loadedVersions).toEqual([1])
-    expect(readFileSync(join(root, 'out', 'main.cjs'), 'utf8')).toContain('@orca/process-host')
+    expect(readFileSync(join(root, 'out', 'main.cjs'), 'utf8')).toContain('@quirky/process-host')
 
     writeFileSync(join(packageDir, 'src', 'internal.ts'), 'export const version = 2\n')
     await expect.poll(() => loadedVersions.at(-1), { timeout: 15_000 }).toBe(2)
@@ -264,7 +264,7 @@ describe('External process-host development rebuilds', () => {
     const { root, packageDir, main } = fixture()
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [createProcessHostDevRebuildPlugin(root)],
       output: { file: join(root, 'out', 'main.cjs'), format: 'cjs' }
     })
@@ -288,7 +288,7 @@ describe('External process-host development rebuilds', () => {
     const loadedVersions: number[] = []
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [
         createProcessHostDevRebuildPlugin(root),
         {
@@ -339,7 +339,7 @@ describe('External process-host development rebuilds', () => {
     }
     const watcher = watch({
       input: main,
-      external: ['@orca/process-host'],
+      external: ['@quirky/process-host'],
       plugins: [
         rebuildPlugin,
         {

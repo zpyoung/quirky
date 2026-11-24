@@ -1,7 +1,7 @@
 import type { Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { workspaceRootGroupId } from '../../../../shared/workspace-layout/workspace-layout-minted-ids'
 
 export function findTabAndWorktree(
@@ -74,7 +74,9 @@ export function ensureGroup(
     return { group: existing, groupsByWorktree, activeGroupIdByWorktree }
   }
   // Switch point: the root group id main and the Loader mint for a workspace with no group.
-  const groupId = ORCA_LAYOUT_OWNER_IS_MAIN ? workspaceRootGroupId(worktreeId) : createBrowserUuid()
+  const groupId = QUIRKY_LAYOUT_OWNER_IS_MAIN
+    ? workspaceRootGroupId(worktreeId)
+    : createBrowserUuid()
   const group: TabGroup = { id: groupId, worktreeId, activeTabId: null, tabOrder: [] }
   return {
     group,

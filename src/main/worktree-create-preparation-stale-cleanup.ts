@@ -4,7 +4,7 @@ import {
   parseWorktreePreparationOwnerPid,
   parseWorktreePreparationPathOwnerPid
 } from '../shared/worktree/create-preparation'
-import { orcadDataRootIsOnLocalDisk } from './orcad/orcad-data-root-locality'
+import { quirkydDataRootIsOnLocalDisk } from './quirkyd/quirkyd-data-root-locality'
 import { profileStateAccessMachineIdentity } from './persistence/profile-state/profile-state-access-identity'
 import type { AddWorktreeOptions } from './git/worktree'
 import { listWorktreeGraph } from './git/worktree'
@@ -32,7 +32,7 @@ export type PreparationOwnerProbe = {
 
 const defaultOwnerProbe: PreparationOwnerProbe = {
   machineIdentity: profileStateAccessMachineIdentity,
-  repoIsOnLocalDisk: orcadDataRootIsOnLocalDisk,
+  repoIsOnLocalDisk: quirkydDataRootIsOnLocalDisk,
   isProcessAlive
 }
 

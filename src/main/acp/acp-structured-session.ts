@@ -1,4 +1,4 @@
-// One live ACP agent connection and what Orca keeps beside it, and how its traffic and its
+// One live ACP agent connection and what Quirky keeps beside it, and how its traffic and its
 // process's exit reach the journal and the host.
 
 import { agentSessionFailureFact, providerDiagnostic } from '../../shared/agent-session-failure'
@@ -36,7 +36,7 @@ export type AcpStructuredSession = {
   prompts: AcpStructuredPrompts
   options: AcpStructuredOptions
   turns: AcpStructuredTurns
-  /** Orca asked this child to stop; its exit is then a requested close. */
+  /** Quirky asked this child to stop; its exit is then a requested close. */
   closeRequested: boolean
   /** Why nothing this child says reaches the journal any more; null while it does. */
   journalClosed: string | null
@@ -89,7 +89,7 @@ export function asReattachHistory(params: unknown): unknown {
 
 /**
  * Nothing more this child says reaches the journal, once: on its exit, or when its connection broke
- * while it may still run. Open requests die, held sends never left Orca, the running send's fate is
+ * while it may still run. Open requests die, held sends never left Quirky, the running send's fate is
  * unknown, and the running turn ends as `verdict` says: `unverifiable` while the child may still
  * run (the host's settlement of its proven exit revises it), interrupted at a proven exit.
  */
@@ -130,12 +130,12 @@ export function endAcpStructuredSession(
   // Read at the proven exit: a crash usually ends the agent's stdout before its exit is observed,
   // so the connection's close comes first, but the agent's own last words are what explain it.
   const reason = session.closeRequested
-    ? `${session.spec.agent} ACP agent closed by Orca`
+    ? `${session.spec.agent} ACP agent closed by Quirky`
     : session.journalClosed !== null && !stderr
       ? session.journalClosed
       : `${session.spec.agent} ACP agent exited${stderr ? `: ${stderr}` : ''}`
   // A death of its own ended the running turn at the exit, as the host's exit settlement reads it
-  // (`exitedRootTurnScope`). A close Orca asked for leaves it `unverifiable`; that settlement revises it.
+  // (`exitedRootTurnScope`). A close Quirky asked for leaves it `unverifiable`; that settlement revises it.
   closeAcpSessionJournal(
     session,
     reason,

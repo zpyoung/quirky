@@ -6,8 +6,8 @@ import { pathToFileURL } from 'node:url'
 import loadSources from './sources.cjs'
 import { startVitest } from 'vitest/node'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
-  throw new Error('Run with ORCA_BACKGROUND_LAUNCH=1.')
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
+  throw new Error('Run with QUIRKY_BACKGROUND_LAUNCH=1.')
 }
 const { root, sourceRelativePath, baseline, candidate, windowCandidate } = loadSources()
 const files = [
@@ -16,7 +16,7 @@ const files = [
   'src/main/claude/claude-structured-session-recovery.test.ts',
   'src/main/claude/claude-structured-history-window.test.ts'
 ]
-const scratch = await mkdtemp(join(tmpdir(), 'orca-branch-streaming-regressions-'))
+const scratch = await mkdtemp(join(tmpdir(), 'quirky-branch-streaming-regressions-'))
 const reports = []
 try {
   for (const [phase, source] of Object.entries({ baseline, candidate, windowCandidate })) {

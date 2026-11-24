@@ -54,7 +54,7 @@ function worktree(id: string, overrides: Partial<Worktree> = {}): Worktree {
   return {
     worktreeId: `repo-1::${id}`,
     repoId: 'repo-1',
-    repo: 'orca',
+    repo: 'quirky',
     branch: `feature/${id}`,
     displayName: id,
     path: id,

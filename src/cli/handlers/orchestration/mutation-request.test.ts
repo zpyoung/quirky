@@ -53,10 +53,10 @@ function fakeClient(respond: (attempt: number, options?: CallOptions) => unknown
 function unavailable(options?: CallOptions): RuntimeClientError {
   return new RuntimeClientError(
     'runtime_unavailable',
-    'Could not connect to the running Orca app.',
+    'Could not connect to the running Quirky app.',
     {
       orchestrationRequestId: options?.orchestrationRequestId,
-      originalCommand: ['orca', 'orchestration', 'send', '--type', 'worker_done']
+      originalCommand: ['quirky', 'orchestration', 'send', '--type', 'worker_done']
     }
   )
 }
@@ -163,7 +163,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
       data: {
         recovery: {
           retryCommand: [
-            'orca',
+            'quirky',
             'orchestration',
             'send',
             '--type',
@@ -180,7 +180,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
   it.skipIf(process.platform === 'win32')(
     'reaches a runtime that comes back after the first attempt found it down',
     async () => {
-      const userDataPath = mkdtempSync(join(tmpdir(), 'orca-worker-done-retry-'))
+      const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-worker-done-retry-'))
       tempDirs.add(userDataPath)
       const endpoint = join(userDataPath, 'runtime.sock')
       const sendRequestIds: string[] = []
@@ -210,7 +210,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
         })
       })
       servers.add(server)
-      const client = new RuntimeClient(userDataPath, 5_000, null, null, 'orca')
+      const client = new RuntimeClient(userDataPath, 5_000, null, null, 'quirky')
       const call = callOrchestrationMutation(
         client,
         new Map(),
@@ -222,7 +222,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
       // The runtime is down for the first attempt: no metadata, so even the contract probe fails.
       await new Promise<void>((resolve) => server.listen(endpoint, resolve))
       writeFileSync(
-        join(userDataPath, 'orca-runtime.json'),
+        join(userDataPath, 'quirky-runtime.json'),
         JSON.stringify({
           runtimeId: 'runtime-1',
           pid: 1,

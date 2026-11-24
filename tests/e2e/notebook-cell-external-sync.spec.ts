@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { getActiveWorktreeContext } from './helpers/markdown-editor-fixture'
 import { waitForActiveWorktree, waitForSessionReady } from './helpers/store'
 import { parseIpynb } from '../../src/renderer/src/components/editor/ipynb-parse'
@@ -54,27 +54,27 @@ async function fileIsDirty(page: Page): Promise<boolean | null> {
   })
 }
 
-test.beforeEach(async ({ orcaPage }) => {
-  await waitForSessionReady(orcaPage)
-  await waitForActiveWorktree(orcaPage)
+test.beforeEach(async ({ quirkyPage }) => {
+  await waitForSessionReady(quirkyPage)
+  await waitForActiveWorktree(quirkyPage)
 })
 
 for (const reload of ['source', 'reorder'] as const) {
   test(`keeps the active cell current after an external notebook ${reload} reload`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const context = await getActiveWorktreeContext(orcaPage)
-    const directory = path.join(context.rootPath, '.orca-e2e-notebook-external-sync')
+    const context = await getActiveWorktreeContext(quirkyPage)
+    const directory = path.join(context.rootPath, '.quirky-e2e-notebook-external-sync')
     await mkdir(directory, { recursive: true })
     const filePath = path.join(directory, `${reload}-${testInfo.workerIndex}-${randomUUID()}.ipynb`)
     registerPostElectronShutdownCleanup(() => rm(filePath, { force: true }))
     await writeFile(filePath, notebookContent([FIRST, SECOND]), 'utf8')
-    await openNotebook(orcaPage, filePath)
-    const surfaces = orcaPage.locator('.ipynb-code-surface')
+    await openNotebook(quirkyPage, filePath)
+    const surfaces = quirkyPage.locator('.ipynb-code-surface')
     await surfaces.first().getByRole('button').click()
-    await expect(orcaPage.locator('.ipynb-code-surface .monaco-editor')).toBeVisible()
-    await expect.poll(() => fileIsDirty(orcaPage)).toBe(false)
+    await expect(quirkyPage.locator('.ipynb-code-surface .monaco-editor')).toBeVisible()
+    await expect.poll(() => fileIsDirty(quirkyPage)).toBe(false)
 
     const updatedFirst = reload === 'source' ? { ...FIRST, source: 'print("updated")' } : FIRST
     const updatedSecond = { ...SECOND, source: 'print("reload marker")' }
@@ -83,16 +83,16 @@ for (const reload of ['source', 'reorder'] as const) {
     await writeFile(filePath, notebookContent(externalCells), 'utf8')
     const preview = surfaces.nth(reload === 'source' ? 1 : 0)
     await expect(preview).toHaveText(updatedSecond.source, { timeout: 25_000 })
-    await expect.poll(() => fileIsDirty(orcaPage)).toBe(false)
-    await orcaPage.screenshot({ path: testInfo.outputPath('external-reload-clean.png') })
+    await expect.poll(() => fileIsDirty(quirkyPage)).toBe(false)
+    await quirkyPage.screenshot({ path: testInfo.outputPath('external-reload-clean.png') })
     const activeCell = surfaces.nth(reload === 'source' ? 0 : 1)
     await expect.soft(activeCell.locator('.view-lines')).toHaveText(updatedFirst.source)
 
-    await orcaPage.keyboard.press('End')
-    await orcaPage.keyboard.type('!', { delay: 100 })
-    await expect.poll(() => fileIsDirty(orcaPage)).toBe(true)
-    await orcaPage.screenshot({ path: testInfo.outputPath('external-reload-cell-edit.png') })
-    await orcaPage.getByRole('button', { name: 'Save notebook', exact: true }).click()
+    await quirkyPage.keyboard.press('End')
+    await quirkyPage.keyboard.type('!', { delay: 100 })
+    await expect.poll(() => fileIsDirty(quirkyPage)).toBe(true)
+    await quirkyPage.screenshot({ path: testInfo.outputPath('external-reload-cell-edit.png') })
+    await quirkyPage.getByRole('button', { name: 'Save notebook', exact: true }).click()
     const editedFirst = { ...updatedFirst, source: `${updatedFirst.source}!` }
     await expect
       .poll(async () => {
@@ -100,7 +100,7 @@ for (const reload of ['source', 'reorder'] as const) {
         return saved.cells.map(({ id, source }) => ({ id, source }))
       })
       .toEqual(reload === 'source' ? [editedFirst, updatedSecond] : [updatedSecond, editedFirst])
-    await expect.poll(() => fileIsDirty(orcaPage)).toBe(false)
-    await orcaPage.screenshot({ path: testInfo.outputPath('external-reload-cell-saved.png') })
+    await expect.poll(() => fileIsDirty(quirkyPage)).toBe(false)
+    await quirkyPage.screenshot({ path: testInfo.outputPath('external-reload-cell-saved.png') })
   })
 }

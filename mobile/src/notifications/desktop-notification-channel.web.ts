@@ -5,6 +5,6 @@
  * `typeof localStorage === 'undefined'` guard that the shell's DOM-storage-off WebView walks
  * through with `null`, raising on `.getItem`. See `push-token.web.ts` beside it.
  */
-export const DESKTOP_NOTIFICATION_CHANNEL_ID = 'orca-desktop'
+export const DESKTOP_NOTIFICATION_CHANNEL_ID = 'quirky-desktop'
 
 export const ensureDesktopNotificationChannel = (): Promise<void> => Promise.resolve()

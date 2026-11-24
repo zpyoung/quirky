@@ -130,7 +130,7 @@ function attentionPath(directory: string) {
 }
 let directory: string
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), 'orca-bounded-read-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-bounded-read-'))
   installStructuredHostStub()
   vi.clearAllMocks()
 })

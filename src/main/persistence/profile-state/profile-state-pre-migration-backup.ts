@@ -15,7 +15,7 @@ export function profileStatePreMigrationBackupPath(databaseFile: string): string
 /**
  * Copy the profile once, before the first boot-time rewrite of saved data; later boots find the
  * copy and keep it, so it stays the pre-migration state. Call from the profile's single live owner
- * (the instance lock keeps desktop and orcad apart), before any rewrite of this boot reaches disk.
+ * (the instance lock keeps desktop and quirkyd apart), before any rewrite of this boot reaches disk.
  */
 export async function ensureProfileStatePreMigrationBackup(
   databaseFile: string,

@@ -5,7 +5,7 @@ import {
   PLUGIN_MANIFEST_FILENAME,
   parsePluginManifest,
   qualifiedPluginKey,
-  satisfiesOrcaEngineRange,
+  satisfiesQuirkyEngineRange,
   type PluginManifest
 } from '../../shared/plugins/plugin-manifest'
 import { fingerprintPluginConsent } from '../../shared/plugins/plugin-consent-fingerprint'
@@ -70,10 +70,10 @@ async function readInstallManifest(
   if (!parsed.ok) {
     return { ok: false, error: `invalid manifest: ${parsed.error}` }
   }
-  if (!satisfiesOrcaEngineRange(hostVersion, parsed.manifest.engines.orca)) {
+  if (!satisfiesQuirkyEngineRange(hostVersion, parsed.manifest.engines.quirky)) {
     return {
       ok: false,
-      error: `plugin requires Orca ${parsed.manifest.engines.orca} (this is ${hostVersion})`
+      error: `plugin requires Quirky ${parsed.manifest.engines.quirky} (this is ${hostVersion})`
     }
   }
   return { ok: true, manifest: parsed.manifest }

@@ -1,15 +1,15 @@
 /**
- * Layout oracle scenarios on a headless `orca serve` (orcad and Electron serve), driven only through
+ * Layout oracle scenarios on a headless `quirky serve` (quirkyd and Electron serve), driven only through
  * runtime RPC from paired clients and the local CLI. After every step the runtime's live layout
  * (its `layout.subscribe` stream) is checked against the model rules, what each client is told,
  * the expected panes per tab and, across restarts, the layout from before; its saved profile
  * against the disk-format rules and the round trip. #12723 needs SSH and is not covered.
  *
- * `ORCA_LAYOUT_ORACLE_RECORD=1` records without failing; `ORCA_LAYOUT_ORACLE_REPEAT=<n>` repeats;
- * `ORCA_LAYOUT_ORACLE_HEADLESS_HOSTS=orcad,electron` picks the hosts (both by default).
+ * `QUIRKY_LAYOUT_ORACLE_RECORD=1` records without failing; `QUIRKY_LAYOUT_ORACLE_REPEAT=<n>` repeats;
+ * `QUIRKY_LAYOUT_ORACLE_HEADLESS_HOSTS=quirkyd,electron` picks the hosts (both by default).
  *
  * Run:
- *   ORCA_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test \
+ *   QUIRKY_BACKGROUND_LAUNCH=1 SKIP_BUILD=1 pnpm exec playwright test \
  *     tests/e2e/workspace-layout-oracle-headless.spec.ts --config tests/playwright.config.ts \
  *     --project electron-headless --workers=1
  */
@@ -24,11 +24,11 @@ import type {
   RuntimeTerminalListResult,
   RuntimeTerminalSplit
 } from '../../src/shared/runtime-terminal-contracts'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import {
   addRepoWorktree,
   cliClient,
-  orcadNodeExecutable,
+  quirkydNodeExecutable,
   pairedClient,
   startHeadlessOracleHost,
   type HeadlessHostKind,
@@ -486,10 +486,10 @@ async function runHeadlessScenario(
     writeReport(testInfo, `${kind}-${scenario.id}`, {
       durationMs: ended - started,
       findings,
-      // orcad, or Electron serve's main process.
+      // quirkyd, or Electron serve's main process.
       eventLoopDelay: summarizeEventLoopDelay(
         host.userDataDir,
-        kind === 'orcad' ? 'orcad' : 'main',
+        kind === 'quirkyd' ? 'quirkyd' : 'main',
         started,
         ended
       )
@@ -516,11 +516,11 @@ function writeReport(
   )
 }
 
-const REPEAT = Math.max(1, Number(process.env.ORCA_LAYOUT_ORACLE_REPEAT ?? 1))
-const RECORD_ONLY = process.env.ORCA_LAYOUT_ORACLE_RECORD === '1'
-const HOSTS = (process.env.ORCA_LAYOUT_ORACLE_HEADLESS_HOSTS ?? 'orcad,electron')
+const REPEAT = Math.max(1, Number(process.env.QUIRKY_LAYOUT_ORACLE_REPEAT ?? 1))
+const RECORD_ONLY = process.env.QUIRKY_LAYOUT_ORACLE_RECORD === '1'
+const HOSTS = (process.env.QUIRKY_LAYOUT_ORACLE_HEADLESS_HOSTS ?? 'quirkyd,electron')
   .split(',')
-  .filter((kind): kind is HeadlessHostKind => kind === 'orcad' || kind === 'electron')
+  .filter((kind): kind is HeadlessHostKind => kind === 'quirkyd' || kind === 'electron')
 
 for (const kind of HOSTS) {
   for (const scenario of SCENARIOS) {
@@ -528,10 +528,10 @@ for (const kind of HOSTS) {
       const suffix = REPEAT > 1 ? ` #${attempt}` : ''
       // oxlint-disable-next-line no-empty-pattern -- Each scenario owns its serve host.
       test(`headless layout oracle: ${kind} ${scenario.id}${suffix}`, async ({}, testInfo) => {
-        // CI runs this spec only in the job that builds orcad, so a missing build there is a failure.
+        // CI runs this spec only in the job that builds quirkyd, so a missing build there is a failure.
         test.skip(
-          kind === 'orcad' && !orcadNodeExecutable() && !process.env.CI,
-          'out/orcad is not built'
+          kind === 'quirkyd' && !quirkydNodeExecutable() && !process.env.CI,
+          'out/quirkyd is not built'
         )
         test.setTimeout(300_000)
         const id = `headless-${kind}-${scenario.id}`

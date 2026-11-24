@@ -76,7 +76,7 @@ async function queuedCompact(): Promise<string> {
 function prompt(state: 'pending' | 'resolved') {
   const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
   return journal.appendItem(
-    { provider: 'orca', clientMessageId: 'prompt-1' },
+    { provider: 'quirky', clientMessageId: 'prompt-1' },
     {
       kind: 'approval',
       title: 'Allow the tool?',
@@ -402,7 +402,7 @@ describe('a /compact that waits in line', () => {
     await eventually(() => expect(rig.compact).toHaveBeenCalledOnce())
   })
 
-  /** A command card consumed while the agent starts, and never handed over: then Orca crashes. */
+  /** A command card consumed while the agent starts, and never handed over: then Quirky crashes. */
   async function consumedThenCrashed(send: 'drain' | 'sendNow'): Promise<string> {
     await rig.dispose()
     rig = await createQueuedMessageTestRig({ restartable: true })

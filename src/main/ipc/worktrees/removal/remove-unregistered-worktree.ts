@@ -7,7 +7,7 @@ import type { LocalProjectWorktreeGitOptions } from '../../../project-runtime-gi
 import { preservedBranchCleanupScopeKey } from '../../../../shared/preserved-branch-cleanup'
 import {
   assertWorktreeDoesNotContainRegisteredWorktree,
-  canCleanupUnregisteredOrcaWorktreeDirectory,
+  canCleanupUnregisteredQuirkyWorktreeDirectory,
   canSafelyRemoveOrphanedWorktreeDirectory,
   isDangerousWorktreeRemovalPath,
   ORPHANED_WORKTREE_DIRECTORY_MESSAGE,
@@ -49,7 +49,7 @@ export async function removeUnregisteredWorktree(
   const removalHome = resolveWorktreeRemovalHomeForHost(removalHostId)
   let canCleanOrphanedDirectory = false
   if (
-    canCleanupUnregisteredOrcaWorktreeDirectory({
+    canCleanupUnregisteredQuirkyWorktreeDirectory({
       meta: removedMeta
     })
   ) {
@@ -106,10 +106,10 @@ export async function removeUnregisteredWorktree(
   }
   if (await isAlreadyRemovedWorktreePath(worktreePath, localWorktreeGitOptions)) {
     if (!args.force && !removedMeta) {
-      // Why: without persisted metadata, require the renderer recovery path before deleting Orca-only state for an unregistered path.
+      // Why: without persisted metadata, require the renderer recovery path before deleting Quirky-only state for an unregistered path.
       throw new Error(UNREGISTERED_MISSING_WORKTREE_MESSAGE)
     }
-    // Why: a manually deleted worktree is already gone; persisted metadata proves it was an Orca-known row, so no force is needed.
+    // Why: a manually deleted worktree is already gone; persisted metadata proves it was an Quirky-known row, so no force is needed.
     await cleanupUnusedWorktreePushTargetRemote(
       repo.path,
       args.worktreeId,

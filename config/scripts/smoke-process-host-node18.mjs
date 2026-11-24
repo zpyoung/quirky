@@ -13,7 +13,7 @@ import {
 // Qualifies the package's engines floor against the staged public output, not the checkout source.
 assert.match(process.versions.node, /^18\./, 'This smoke test must run under Node 18')
 
-const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-process-host-node18-'))
+const resourcesDir = await mkdtemp(join(tmpdir(), 'quirky-process-host-node18-'))
 try {
   await stagePackagedProcessHost(resourcesDir)
   const { entry } = await writePackagedProcessHostConsumer(resourcesDir)

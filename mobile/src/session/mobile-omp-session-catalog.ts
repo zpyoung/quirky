@@ -13,7 +13,7 @@ export function mobileOmpSessionCatalog(
     models: models ?? catalog.models,
     modelApply: {
       ...catalog.modelApply,
-      midSession: modelSwitchCommand === 'orca-model' ? catalog.modelApply.midSession : undefined
+      midSession: modelSwitchCommand === 'quirky-model' ? catalog.modelApply.midSession : undefined
     }
   }
 }

@@ -14,7 +14,7 @@ let profilePath = ''
 vi.mock('../persistence', () => ({ getCanonicalUserDataPath: () => profilePath }))
 
 vi.mock('electron', () => ({
-  app: { isPackaged: true, getPath: () => '/tmp/orca-test' }
+  app: { isPackaged: true, getPath: () => '/tmp/quirky-test' }
 }))
 vi.mock('../observability', () => ({
   initObservability: () => {

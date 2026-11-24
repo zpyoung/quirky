@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   prepareLegacySharedCodexSessionResume: vi.fn()
 }))
 
-vi.mock('electron', () => ({ app: { getPath: vi.fn(() => '/tmp/orca-user-data') } }))
+vi.mock('electron', () => ({ app: { getPath: vi.fn(() => '/tmp/quirky-user-data') } }))
 vi.mock('../codex/hook-service', () => ({
   codexHookService: {
     installForLaunchPrep: mocks.installForLaunchPrep,
@@ -35,7 +35,7 @@ vi.mock('../agent-hooks/managed-agent-hook-controls', () => ({
 vi.mock('../codex/codex-home-paths', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   getSystemCodexHomePath: () => mocks.systemHomePath,
-  getOrcaManagedCodexHomePath: () => mocks.sharedHomePath
+  getQuirkyManagedCodexHomePath: () => mocks.sharedHomePath
 }))
 vi.mock('../codex/codex-session-resume-preparation', () => ({
   prepareCodexSessionResume: mocks.prepareCodexSessionResume
@@ -66,7 +66,7 @@ describe('Codex session resume daemon socket guard', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    root = mkdtempSync(join(tmpdir(), 'orca-resume-guard-'))
+    root = mkdtempSync(join(tmpdir(), 'quirky-resume-guard-'))
     accountHome = join(root, 'codex-accounts', LONG_SEGMENT, 'home')
     mocks.systemHomePath = join(root, 'system', LONG_SEGMENT, '.codex')
     mocks.sharedHomePath = join(root, 'codex-runtime-home', 'home')

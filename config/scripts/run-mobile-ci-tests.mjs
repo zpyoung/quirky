@@ -1,4 +1,4 @@
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { mkdtempSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -12,7 +12,7 @@ const reporters = process.argv.slice(2)
 if (reporters.some((argument) => !argument.startsWith('--reporter='))) {
   throw new Error('Only additional Vitest reporters are accepted')
 }
-const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'orca-mobile-tests-')))
+const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'quirky-mobile-tests-')))
 const abort = new AbortController()
 const closed = new Set()
 let signalExitCode
@@ -52,8 +52,8 @@ async function runRole(role, program, runtimeArgs) {
         TMPDIR: owned,
         TMP: owned,
         TEMP: owned,
-        ORCA_BACKGROUND_LAUNCH: '1',
-        ORCA_MOBILE_CI_CACHE_DIR: join(owned, 'cache')
+        QUIRKY_BACKGROUND_LAUNCH: '1',
+        QUIRKY_MOBILE_CI_CACHE_DIR: join(owned, 'cache')
       },
       stdio: 'inherit',
       timeoutMs: null,

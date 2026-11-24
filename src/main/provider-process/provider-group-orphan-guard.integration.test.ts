@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { spawnProcess } from '@orca/process-host'
+import { spawnProcess } from '@quirky/process-host'
 import type { ChildProcess } from 'node:child_process'
 import { createProviderSpawnSpec } from './provider-process-supervisor'
 import {

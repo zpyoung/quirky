@@ -1,6 +1,6 @@
 // Inside a row of a known kind, what a newer build wrote is never damage. A body of a kind this
 // build does not know (or a plan subject of one) is kept and the chat stays writable; a mutation or
-// sent message of a newer kind fails the load as a newer Orca's chat with every row kept as it was,
+// sent message of a newer kind fails the load as a newer Quirky's chat with every row kept as it was,
 // even beside damage. Anything else that fails is damage: the chat fails to load, every row kept.
 
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -20,7 +20,7 @@ import {
   insertTestJournalRowJson,
   liveTestJournalRows,
   openTestJournalHostDatabase,
-  SAVED_BY_NEWER_ORCA
+  SAVED_BY_NEWER_QUIRKY
 } from './journal-host-database-test-support'
 
 export function registerJournalUnknownContentTests(): void {
@@ -37,7 +37,7 @@ export function registerJournalUnknownContentTests(): void {
   const journals = createTrackedJournalOpener()
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-journal-newer-content-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-journal-newer-content-'))
   })
 
   afterEach(async () => {
@@ -113,10 +113,10 @@ export function registerJournalUnknownContentTests(): void {
     subject: { kind: 'plan', text: 'Step one' }
   }
 
-  /** Refused as a newer Orca's chat on every open, with every row left as it was. */
+  /** Refused as a newer Quirky's chat on every open, with every row left as it was. */
   async function expectNewerAndKept(written: { seq: number; rowJson: string }[]) {
-    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
-    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_ORCA)
+    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
+    await expect(open()).rejects.toMatchObject(SAVED_BY_NEWER_QUIRKY)
     expect(stored()).toEqual(written)
   }
 

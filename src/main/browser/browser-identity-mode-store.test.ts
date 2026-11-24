@@ -31,7 +31,7 @@ import {
 } from './browser-identity-mode-store'
 
 function makeUserData(mode: 'clean' | 'native' = 'clean'): string {
-  const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-identity-store-'))
+  const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-identity-store-'))
   writeFileSync(
     join(userDataPath, BROWSER_IDENTITY_MODE_FILE),
     JSON.stringify({
@@ -121,7 +121,7 @@ describe('browser identity mode store', () => {
   })
 
   it('refuses ordinary updates while the record is unhealthy', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-identity-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-identity-store-'))
     writeFileSync(join(userDataPath, BROWSER_IDENTITY_MODE_FILE), '{bad json', 'utf8')
     initializeBrowserIdentityModeStore(userDataPath)
 
@@ -145,7 +145,7 @@ describe('browser identity mode store', () => {
       })
     }
   ])('backs $label bytes up verbatim before publishing a fresh record', async ({ bytes }) => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-identity-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-identity-store-'))
     writeFileSync(join(userDataPath, BROWSER_IDENTITY_MODE_FILE), bytes, 'utf8')
     initializeBrowserIdentityModeStore(userDataPath)
 
@@ -163,7 +163,7 @@ describe('browser identity mode store', () => {
   })
 
   it('never reuses a backup path across repeated resets', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-identity-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-identity-store-'))
     const recordPath = join(userDataPath, BROWSER_IDENTITY_MODE_FILE)
     writeFileSync(recordPath, '{bad json', 'utf8')
     initializeBrowserIdentityModeStore(userDataPath)
@@ -187,7 +187,7 @@ describe('browser identity mode store', () => {
   })
 
   it('leaves the unhealthy bytes in place when the backup cannot be written', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-browser-identity-store-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-browser-identity-store-'))
     writeFileSync(join(userDataPath, BROWSER_IDENTITY_MODE_FILE), '{bad json', 'utf8')
     initializeBrowserIdentityModeStore(userDataPath)
     mocks.failWrite = true

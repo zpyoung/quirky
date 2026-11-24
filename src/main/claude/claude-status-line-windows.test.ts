@@ -1,12 +1,12 @@
 // Why: Claude runs the statusLine under Git Bash when present, else PowerShell. The POSIX
-// runtime-home form Orca used to register is a PowerShell parse error, so a Windows box
+// runtime-home form Quirky used to register is a PowerShell parse error, so a Windows box
 // without Git Bash never posted rate_limits and the live usage feed went dark.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as osModule from 'node:os'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { removeTreeSync } from '../../shared/windows-transient-lock-removal'
 import { parseClaudeStatusLineBody } from '../../shared/claude-statusline-rate-limits'
@@ -15,7 +15,7 @@ const { homedirMock } = vi.hoisted(() => ({
   homedirMock: vi.fn<() => string>()
 }))
 
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/orca-user-data' } }))
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/quirky-user-data' } }))
 
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal<typeof osModule>()
@@ -118,8 +118,8 @@ describe.skipIf(process.platform !== 'win32')('Claude statusLine delivery on Win
     const listener = await startStatusLineListener()
     server = listener.server
     const baseEnv = Object.fromEntries(
-      // Why: never reach a live Orca, and a hosting Claude's CLAUDE_JOB_DIR would gate the script off.
-      Object.entries(process.env).filter(([key]) => !/^(ORCA|CLAUDE)_/.test(key))
+      // Why: never reach a live Quirky, and a hosting Claude's CLAUDE_JOB_DIR would gate the script off.
+      Object.entries(process.env).filter(([key]) => !/^(QUIRKY|CLAUDE)_/.test(key))
     )
     const run = (program: string, args: string[], paneId: number) =>
       runProcess({
@@ -134,21 +134,21 @@ describe.skipIf(process.platform !== 'win32')('Claude statusLine delivery on Win
           // Why: keeps the per-pane throttle stamp out of the real %TEMP%.
           TEMP: home,
           TMP: home,
-          ORCA_BACKGROUND_LAUNCH: '1',
-          ORCA_AGENT_HOOK_PORT: String(listener.port),
-          ORCA_AGENT_HOOK_TOKEN: HOOK_TOKEN,
-          ORCA_PANE_KEY: `tab-1:00000000-0000-4000-8000-00000000000${paneId}`
+          QUIRKY_BACKGROUND_LAUNCH: '1',
+          QUIRKY_AGENT_HOOK_PORT: String(listener.port),
+          QUIRKY_AGENT_HOOK_TOKEN: HOOK_TOKEN,
+          QUIRKY_PANE_KEY: `tab-1:00000000-0000-4000-8000-00000000000${paneId}`
         }
       })
     return { command, posts: listener.posts, run }
   }
 
   it('upgrades the runtime-home entry to one Windows PowerShell 5.1 and Git Bash both post through', async () => {
-    const { command, posts, run } = await installInto('orca-claude-statusline-run-', {
+    const { command, posts, run } = await installInto('quirky-claude-statusline-run-', {
       statusLine: { type: 'command', command: LEGACY_COMMAND }
     })
     expect(command).toBe(
-      join(home, '.orca', 'agent-hooks', 'claude-statusline.cmd').replaceAll('\\', '/')
+      join(home, '.quirky', 'agent-hooks', 'claude-statusline.cmd').replaceAll('\\', '/')
     )
 
     // Pinned so this suite proves the regression it guards.
@@ -178,7 +178,7 @@ describe.skipIf(process.platform !== 'win32')('Claude statusLine delivery on Win
   }, 60_000)
 
   it('starts no PowerShell per tick for a profile path with a space', async () => {
-    const { command, posts, run } = await installInto('orca claude statusline space ')
+    const { command, posts, run } = await installInto('quirky claude statusline space ')
     expect(command).toBe(LEGACY_COMMAND)
 
     // Why: the xtrace shows every command Git Bash ran, so an encoded launcher would surface here.

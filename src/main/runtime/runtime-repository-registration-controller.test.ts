@@ -1,4 +1,4 @@
-import { runProcessSync } from '@orca/process-host'
+import { runProcessSync } from '@quirky/process-host'
 import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -56,7 +56,7 @@ describe('RuntimeRepositoryRegistrationController.add through a symlink alias', 
   let root: string
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'orca-runtime-add-alias-'))
+    root = await mkdtemp(join(tmpdir(), 'quirky-runtime-add-alias-'))
   })
 
   afterEach(async () => {
@@ -145,7 +145,7 @@ describe('RuntimeRepositoryRegistrationController.add stores the checkout git li
 
   beforeEach(async () => {
     // Why realpath: macOS tmpdir is itself a symlink, and the expectations name git's resolved root.
-    root = await realpath(await mkdtemp(join(tmpdir(), 'orca-runtime-add-root-')))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'quirky-runtime-add-root-')))
   })
 
   afterEach(async () => {

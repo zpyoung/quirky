@@ -1,27 +1,27 @@
 import { mkdtempSync, mkdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from './helpers/orca-app'
+import { expect, test } from './helpers/quirky-app'
 import { waitForSessionReady } from './helpers/store'
-import { createRestartSession } from './helpers/orca-restart'
+import { createRestartSession } from './helpers/quirky-restart'
 
 test.use({ seedTestRepo: false })
 
 for (const theme of ['dark', 'light'] as const) {
   test(`Resource Manager names folder workspaces and their groups (${theme})`, async ({
-    orcaPage,
+    quirkyPage,
     registerPostElectronShutdownCleanup
   }, testInfo) => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-resource-folders-'))
+    const root = mkdtempSync(join(tmpdir(), 'quirky-resource-folders-'))
     registerPostElectronShutdownCleanup(async () => rmSync(root, { recursive: true, force: true }))
     const folders = ['Release notes', 'Customer research'].map((name) => {
       const folderPath = join(root, name)
       mkdirSync(folderPath)
       return { name, folderPath }
     })
-    await waitForSessionReady(orcaPage)
-    await orcaPage.setViewportSize({ width: 1200, height: 900 })
-    await orcaPage.evaluate(
+    await waitForSessionReady(quirkyPage)
+    await quirkyPage.setViewportSize({ width: 1200, height: 900 })
+    await quirkyPage.evaluate(
       async ({ theme, folders }) => {
         const state = window.__store!.getState()
         await state.updateSettingsOrThrow({ theme })
@@ -58,12 +58,12 @@ for (const theme of ['dark', 'light'] as const) {
       { theme, folders }
     )
 
-    await orcaPage.getByRole('button', { name: /^Resource Manager,/ }).click()
-    const popover = orcaPage.getByRole('dialog')
+    await quirkyPage.getByRole('button', { name: /^Resource Manager,/ }).click()
+    const popover = quirkyPage.getByRole('dialog')
     await expect(popover.getByText('Resource Manager', { exact: true })).toBeVisible()
     await expect(popover.getByRole('button', { name: /^Resume workspace/ })).toHaveCount(2)
     const screenshot = testInfo.outputPath(`resource-manager-folders-${theme}.png`)
-    await orcaPage.screenshot({ path: screenshot, animations: 'disabled' })
+    await quirkyPage.screenshot({ path: screenshot, animations: 'disabled' })
     await testInfo.attach(`resource-manager-folders-${theme}`, {
       path: screenshot,
       contentType: 'image/png'
@@ -82,7 +82,7 @@ for (const theme of ['dark', 'light'] as const) {
 
 test('names a folder terminal recovered from the daemon after restart without an open tab', async (// oxlint-disable-next-line no-empty-pattern -- Playwright requires destructuring to request no fixtures.
 {}, testInfo) => {
-  const root = mkdtempSync(join(tmpdir(), 'orca-recovered-folder-'))
+  const root = mkdtempSync(join(tmpdir(), 'quirky-recovered-folder-'))
   const session = createRestartSession(testInfo)
   let launched: Awaited<ReturnType<typeof session.launch>> | undefined
   try {

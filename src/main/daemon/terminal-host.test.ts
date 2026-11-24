@@ -184,7 +184,7 @@ describe('TerminalHost', () => {
       // ECHO enabled when it arrives. The flush waits for the prompt draw
       // plus a short delay so readline has switched the PTY into raw mode
       // first. Otherwise the command would be visibly double-echoed.
-      lastSubprocess._onDataCb?.('\x1b]777;orca-shell-ready\x07')
+      lastSubprocess._onDataCb?.('\x1b]777;quirky-shell-ready\x07')
       expect(lastSubprocess.write).not.toHaveBeenCalled()
 
       lastSubprocess._onDataCb?.('\r\nuser@host $ ')
@@ -204,7 +204,7 @@ describe('TerminalHost', () => {
           streamClient: { onData: vi.fn(), onExit: vi.fn() }
         })
 
-        lastSubprocess._onDataCb?.('\x1b]777;orca-shell-ready\x07\r\nuser@host $ ')
+        lastSubprocess._onDataCb?.('\x1b]777;quirky-shell-ready\x07\r\nuser@host $ ')
         vi.advanceTimersByTime(29)
         expect(lastSubprocess.write).not.toHaveBeenCalled()
 
@@ -266,7 +266,7 @@ describe('TerminalHost', () => {
 
       const written = (lastSubprocess.write as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
       // Staged: the line sources a script holding the whole command, submitted with Enter's CR.
-      const scriptPath = /^\. '(.*orca-launch-[0-9a-f]+\.sh)'\r$/.exec(written)?.[1]
+      const scriptPath = /^\. '(.*quirky-launch-[0-9a-f]+\.sh)'\r$/.exec(written)?.[1]
       expect(scriptPath).toBeDefined()
       expect(readFileSync(scriptPath!, 'utf8')).toContain('claude "line one\nline two"\n')
       rmSync(scriptPath!, { force: true })

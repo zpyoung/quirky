@@ -46,7 +46,7 @@ function enrollment(overrides: Partial<WatcherEnrollment> = {}): WatcherEnrollme
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'orca-heimdall-enrollment-'))
+  root = mkdtempSync(join(tmpdir(), 'quirky-heimdall-enrollment-'))
   database = new HeimdallDatabase(root)
   enrollments = new HeimdallEnrollmentStore(database)
 })

@@ -1,4 +1,4 @@
-import { OrcaRuntimeWithScheduleWaitBlockedCheck } from '../wait/terminal-wait-blocked-checks'
+import { QuirkyRuntimeWithScheduleWaitBlockedCheck } from '../wait/terminal-wait-blocked-checks'
 import type { PtyTransientFact } from '../../../providers/pty-provider-contract'
 import type {
   TerminalSideEffectBatch,
@@ -20,7 +20,7 @@ import type {
 } from '../../runtime-terminal-state-records'
 import type { TerminalTitleFactMeta } from '../../../../shared/terminal-output-side-effects'
 
-export abstract class OrcaRuntimeWithEmitDaemonPtyTransientFact extends OrcaRuntimeWithScheduleWaitBlockedCheck {
+export abstract class QuirkyRuntimeWithEmitDaemonPtyTransientFact extends QuirkyRuntimeWithScheduleWaitBlockedCheck {
   protected abstract retirePtyAgentLaunchAuthority(ptyId: string): void
 
   /** A transient fact the daemon detected while it held scan authority —
@@ -154,7 +154,7 @@ export abstract class OrcaRuntimeWithEmitDaemonPtyTransientFact extends OrcaRunt
     const recordTitle = this.ptysById.get(ptyId)?.lastOscTitle
     const normalizedTitle = tracker?.getLastNormalizedTitle() ?? null
     // Why: a record-fallback snapshot must not replay the bare cursor-agent literal over a
-    // tracker title Orca synthesized from hooks — but with no tracker title it is the pane's
+    // tracker title Quirky synthesized from hooks — but with no tracker title it is the pane's
     // only Cursor identity, so restored/mobile tabs keep it (#10258).
     const rawTitle =
       recordTitle && (normalizedTitle === null || !isCursorNativeAgentTitle(recordTitle))

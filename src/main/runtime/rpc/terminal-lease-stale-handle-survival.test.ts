@@ -1,6 +1,6 @@
 import './unused-default-rpc-methods.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
-import type { OrcaRuntimeService } from '../orca-runtime'
+import type { QuirkyRuntimeService } from '../quirky-runtime'
 import type { RpcRequest } from './core'
 import { RpcDispatcher } from './dispatcher'
 import { TERMINAL_METHODS } from './methods/terminal'
@@ -62,7 +62,7 @@ function createRuntime(exitListeners: ExitListener[]) {
       exitListeners.push(listener)
       return vi.fn()
     })
-  } as unknown as OrcaRuntimeService
+  } as unknown as QuirkyRuntimeService
   return { registry, runtime }
 }
 

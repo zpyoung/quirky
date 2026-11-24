@@ -29,7 +29,7 @@ beforeEach(() => {
   spawnSync.mockReset().mockReturnValue(succeeded)
   vi.spyOn(console, 'log').mockImplementation(() => {})
   vi.spyOn(console, 'error').mockImplementation(() => {})
-  directory = mkdtempSync(join(tmpdir(), 'orca-shutdown-matrix-'))
+  directory = mkdtempSync(join(tmpdir(), 'quirky-shutdown-matrix-'))
   artifact = join(directory, 'original.AppImage')
   writeFileSync(artifact, 'original package bytes')
   originalArgv = process.argv
@@ -51,7 +51,7 @@ describe('packaged shutdown matrix', () => {
       args.includes('/usr/local/bin/run-appimage-desktop-startup-case')
     )
     const extraction = commands().filter((args) =>
-      args.some((arg) => arg.includes('120s /input/orca.AppImage --appimage-extract'))
+      args.some((arg) => arg.includes('120s /input/quirky.AppImage --appimage-extract'))
     )
     expect(startup).toHaveLength(1)
     expect(extraction).toHaveLength(1)
@@ -60,15 +60,15 @@ describe('packaged shutdown matrix', () => {
     const names = new Set()
     for (const [index, args] of signalRuns().entries()) {
       const entrypoint = ['app', 'launcher', 'appimage'][Math.floor(index / 2)]
-      expect(args).toContain(`ORCA_TEST_ENTRYPOINT=${entrypoint}`)
+      expect(args).toContain(`QUIRKY_TEST_ENTRYPOINT=${entrypoint}`)
       expect(args).toContain(
-        `ORCA_SIGNAL_TARGET=${entrypoint === 'appimage' ? 'serving-electron' : 'app'}`
+        `QUIRKY_SIGNAL_TARGET=${entrypoint === 'appimage' ? 'serving-electron' : 'app'}`
       )
       expect(args).toContain(
-        `ORCA_INT_DELIVERY=${entrypoint === 'appimage' ? 'pid' : 'foreground-process-group'}`
+        `QUIRKY_INT_DELIVERY=${entrypoint === 'appimage' ? 'pid' : 'foreground-process-group'}`
       )
       expect(args.at(-1)).toBe(index % 2 === 0 ? 'INT' : 'TERM')
-      expect(args).toContain(`${artifact}:/input/orca.AppImage:ro`)
+      expect(args).toContain(`${artifact}:/input/quirky.AppImage:ro`)
       expect(args.some((arg) => arg.endsWith(':/artifacts:ro'))).toBe(true)
       expect(args).toContain('--rm')
       names.add(args[args.indexOf('--name') + 1])
@@ -108,7 +108,7 @@ describe('packaged shutdown matrix', () => {
 
   it('cleans setup resources without running cases after failed extraction', async () => {
     spawnSync.mockImplementation((_, args) =>
-      args.some((arg) => arg.includes('120s /input/orca.AppImage --appimage-extract'))
+      args.some((arg) => arg.includes('120s /input/quirky.AppImage --appimage-extract'))
         ? { ...succeeded, status: 9 }
         : succeeded
     )
@@ -127,7 +127,9 @@ describe('packaged shutdown matrix', () => {
   it('preserves individual launcher overlay invocations', async () => {
     await run('--entrypoint', 'launcher', '--launcher-exec-overlay')
     expect(signalRuns()).toHaveLength(2)
-    expect(signalRuns().every((args) => args.includes('ORCA_TEST_ENTRYPOINT=launcher'))).toBe(true)
+    expect(signalRuns().every((args) => args.includes('QUIRKY_TEST_ENTRYPOINT=launcher'))).toBe(
+      true
+    )
     expect(
       commands().some((args) =>
         args.some((arg) => arg.includes("sed -i 's/^ELECTRON_RUN_AS_NODE=1"))
@@ -136,7 +138,7 @@ describe('packaged shutdown matrix', () => {
   })
 
   it('uses a restored image only as a build cache and still runs every oracle', async () => {
-    vi.stubEnv('ORCA_SHUTDOWN_FIXTURE_CACHE_IMAGE', 'sha256:restored-fixture')
+    vi.stubEnv('QUIRKY_SHUTDOWN_FIXTURE_CACHE_IMAGE', 'sha256:restored-fixture')
     try {
       await run('--all-entrypoints')
       const builds = commands().filter((args) => args[0] === 'build')

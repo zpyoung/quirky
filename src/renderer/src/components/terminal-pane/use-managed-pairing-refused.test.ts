@@ -11,7 +11,7 @@ import { selectManagedPairingRefusedEnvironmentId } from './use-managed-pairing-
 const WORKTREE = 'box-repo::/home/me/app'
 
 function stateWith(
-  deployment: PublicKnownRuntimeEnvironment['orcadDeployment'],
+  deployment: PublicKnownRuntimeEnvironment['quirkydDeployment'],
   snapshot: Partial<RuntimeHostStatusSnapshot>
 ) {
   const store = createTestStore()
@@ -27,7 +27,7 @@ function stateWith(
         runtimeId: null,
         preferredEndpointId: 'ws',
         endpoints: [],
-        ...(deployment ? { orcadDeployment: deployment } : {})
+        ...(deployment ? { quirkydDeployment: deployment } : {})
       }
     ]
   })

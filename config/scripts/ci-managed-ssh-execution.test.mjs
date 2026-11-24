@@ -3,19 +3,22 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { parse } from 'yaml'
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import { managedSshShards, MANAGED_SSH_E2E_SPEC_PREFIX } from './ci-e2e-job-selection.mjs'
 import { compileAggregateExpression } from './pr-aggregate-gate-context.mjs'
 import { selectPrE2eSpecs } from './pr-e2e-source-routing.mjs'
 
 const workflow = parse(readFileSync('.github/workflows/e2e.yml', 'utf8'))
 const prWorkflow = parse(readFileSync('.github/workflows/pr.yml', 'utf8'))
-const lane = workflow.jobs['orcad-ssh-docker']
+const lane = workflow.jobs['quirkyd-ssh-docker']
 const command = lane.steps.find(
   (step) => step.name === 'Run managed SSH specs on a Docker host'
 ).run
 const selector = readFileSync('config/scripts/ci-e2e-job-selection.mjs', 'utf8')
-const small = ['tests/e2e/ssh-orcad-open-in-owner.spec.ts', 'tests/e2e/ssh-orcad-idle-exit.spec.ts']
+const small = [
+  'tests/e2e/ssh-quirkyd-open-in-owner.spec.ts',
+  'tests/e2e/ssh-quirkyd-idle-exit.spec.ts'
+]
 const directories = []
 afterEach(() => {
   for (const directory of directories.splice(0)) {
@@ -31,7 +34,7 @@ it('uses one PR shard for at most two selected files and preserves the full defa
     [[small[0]], ['1/1']],
     [small, ['1/1']],
     [
-      [...small, 'tests/e2e/ssh-orcad-workspace-tools.spec.ts'],
+      [...small, 'tests/e2e/ssh-quirkyd-workspace-tools.spec.ts'],
       ['1/2', '2/2']
     ],
     [[MANAGED_SSH_E2E_SPEC_PREFIX], ['1/2', '2/2']]
@@ -52,14 +55,14 @@ it('uses one PR shard for at most two selected files and preserves the full defa
 
 it('keeps shared SSH fixtures on the full suite but excludes the experimental sidebar spec', () => {
   for (const file of [
-    'tests/e2e/helpers/orcad-managed-workspace.ts',
+    'tests/e2e/helpers/quirkyd-managed-workspace.ts',
     'tests/e2e/helpers/paired-host-terminal.ts',
     '.github/workflows/e2e.yml'
   ]) {
     expect(selectPrE2eSpecs([file])).toContain(MANAGED_SSH_E2E_SPEC_PREFIX)
   }
   for (const file of [
-    'tests/e2e/ssh-orcad-phone-feed-list.spec.ts',
+    'tests/e2e/ssh-quirkyd-phone-feed-list.spec.ts',
     'tests/e2e/helpers/phone-feed-list.ts',
     'tests/e2e/helpers/sidebar-inputs-build.ts',
     'src/shared/sidebar-list/sidebar-feed-list.ts'
@@ -72,7 +75,7 @@ it('keeps shared SSH fixtures on the full suite but excludes the experimental si
 })
 
 async function execute(input, version = 'current') {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-ssh-selection-'))
+  const directory = mkdtempSync(join(tmpdir(), 'quirky-ssh-selection-'))
   directories.push(directory)
   const bin = join(directory, 'bin')
   mkdirSync(bin)
@@ -139,10 +142,12 @@ describe.skipIf(process.platform === 'win32')('managed SSH workflow command', ()
       true
     ])
     expect(
-      filters.some((filter) => new RegExp(filter).test('tests/e2e/ssh-orcad-open-in-ownerXspecYts'))
+      filters.some((filter) =>
+        new RegExp(filter).test('tests/e2e/ssh-quirkyd-open-in-ownerXspecYts')
+      )
     ).toBe(false)
     expect(
-      filters.some((filter) => new RegExp(filter).test('tests/e2e/ssh-orcad-unselected.spec.ts'))
+      filters.some((filter) => new RegExp(filter).test('tests/e2e/ssh-quirkyd-unselected.spec.ts'))
     ).toBe(false)
     expect(args).toContain('--shard=1/1')
   })
@@ -167,7 +172,7 @@ describe.skipIf(process.platform === 'win32')('managed SSH workflow command', ()
     '[]',
     '[null]',
     JSON.stringify(['tests/e2e/other.spec.ts']),
-    JSON.stringify(['tests/e2e/ssh-orcad-../../other.spec.ts'])
+    JSON.stringify(['tests/e2e/ssh-quirkyd-../../other.spec.ts'])
   ])('refuses invalid selection before starting Playwright: %s', async (input) => {
     const { result, args } = await execute(input)
     expect(result.code).not.toBe(0)

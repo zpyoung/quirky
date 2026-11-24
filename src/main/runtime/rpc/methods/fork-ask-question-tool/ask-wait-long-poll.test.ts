@@ -7,8 +7,8 @@ import { AskDb } from '../../../../fork-ask-question-tool/ask-db'
 import { AskRegistry } from '../../../../fork-ask-question-tool/ask-registry'
 import { createAskAttachedSurfaceRoster } from '../../../../fork-ask-question-tool/ask-attached-surface-roster'
 import { createAskWaitConcurrencyGate } from '../../../../fork-ask-question-tool/ask-wait-concurrency-gate'
-import { OrcaRuntimeService } from '../../../orca-runtime'
-import { OrcaRuntimeRpcServer } from '../../../runtime-rpc'
+import { QuirkyRuntimeService } from '../../../quirky-runtime'
+import { QuirkyRuntimeRpcServer } from '../../../runtime-rpc'
 import { readRuntimeMetadata } from '../../../runtime-metadata'
 import { openFramedSession, sendRequest, sleep, waitFor } from '../../../runtime-rpc-test-harness'
 import { classifyRuntimeLongPoll } from '../../../runtime-rpc/runtime-rpc-long-poll'
@@ -43,11 +43,11 @@ async function waitUntilAdmitted(
 
 describe('ask.wait long-poll transport', () => {
   it('keeps an unanswered wait alive and releases its ask slot when the socket closes', async () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-ask-wait-long-poll-'))
+    const userDataPath = mkdtempSync(join(tmpdir(), 'quirky-ask-wait-long-poll-'))
     const db = new AskDb(':memory:')
     const registry = new AskRegistry(db)
     const roster = createAskAttachedSurfaceRoster({ hasLocalRendererWindow: () => true })
-    const runtime = new OrcaRuntimeService()
+    const runtime = new QuirkyRuntimeService()
     const getAskServicesSpy = vi
       .spyOn(runtime, 'getAskServices')
       .mockReturnValue({ db, registry, roster, waitGate: createAskWaitConcurrencyGate() })
@@ -56,7 +56,7 @@ describe('ask.wait long-poll transport', () => {
       { paneKey: 'tab_wait:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', worktreeId: null },
       { requestId: 'req_register_wait' }
     )
-    const server = new OrcaRuntimeRpcServer({
+    const server = new QuirkyRuntimeRpcServer({
       runtime,
       userDataPath,
       keepaliveIntervalMs: 30,

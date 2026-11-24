@@ -10,7 +10,7 @@ const {
 } = require('./spawn-source.cjs')
 const { subprocess, collect } = require('./spawn-fixture.cjs')
 
-assert.equal(process.env.ORCA_BACKGROUND_LAUNCH, '1')
+assert.equal(process.env.QUIRKY_BACKGROUND_LAUNCH, '1')
 assert.equal(typeof global.gc, 'function')
 const root = path.resolve(__dirname, '../../..')
 

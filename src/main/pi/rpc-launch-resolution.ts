@@ -114,7 +114,7 @@ export function resolvePiRpcInvocation(deps: {
   commandSettings?: StructuredAgentCommandSettings
   resolveCommand?: typeof resolveCliCommand
   refreshEnvironmentAfterMiss?: (askedAt: number) => Promise<void>
-  /** Where the program starts, for a PATH entry relative to it; Orca's own when absent. */
+  /** Where the program starts, for a PATH entry relative to it; Quirky's own when absent. */
   resolveWorkingDirectory?: () => Promise<string> | string
 }): Promise<{ command: string; env: Record<string, string> }> {
   return resolveAgainAfterRefreshOnMissingProgram(

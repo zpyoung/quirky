@@ -11,7 +11,7 @@ let dir: string
 let server: AgentHookServer
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'orca-program-status-'))
+  dir = mkdtempSync(join(tmpdir(), 'quirky-program-status-'))
   server = new AgentHookServer()
   await server.start({ env: 'production', userDataPath: dir })
 })

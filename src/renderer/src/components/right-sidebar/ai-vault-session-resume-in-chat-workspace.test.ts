@@ -22,14 +22,14 @@ vi.mock('@/lib/agent-session-launch-plan', () => ({
 
 import { resolveAiVaultSessionResumeInChatForWorkspace } from './ai-vault-session-resume-in-chat-workspace'
 
-const PAIRED_WORKSPACE = 'repo-1::/srv/orca'
+const PAIRED_WORKSPACE = 'repo-1::/srv/quirky'
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the fields eligibility reads are staged.
 const codexSession = {
   id: 'codex-1',
   agent: 'codex',
   executionHostId: 'local',
-  cwd: '/Users/me/orca',
+  cwd: '/Users/me/quirky',
   filePath: '/Users/me/.codex/sessions/rollout-1.jsonl',
   messageCount: 4,
   previewMessages: []

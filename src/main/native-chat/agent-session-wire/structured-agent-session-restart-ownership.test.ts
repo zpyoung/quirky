@@ -100,7 +100,7 @@ it.each(['turn', 'submission'] as const)(
 )
 
 // Teardown judged the chat working. A send the provider proves it never received is still the chat
-// Orca stopped; the continuation asks the agent
+// Quirky stopped; the continuation asks the agent
 // to check what finished rather than refusing.
 it('still continues a chat whose last send acquisition proves was never delivered', async () => {
   const { host, acquire, dispatch } = await interruptedRestart('submission')
@@ -146,7 +146,7 @@ it('replays the same logical continuation through the durable send ledger', asyn
   expect(dispatch).toHaveBeenCalledTimes(1)
 })
 
-// A send that throws after Orca may have taken it is not proof it was not delivered.
+// A send that throws after Quirky may have taken it is not proof it was not delivered.
 it('keeps a continuation unconfirmed when its accepted message cannot be read back', async () => {
   const { host, store } = await interruptedRestart()
   vi.spyOn(console, 'warn').mockImplementation(() => {})

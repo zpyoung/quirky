@@ -8,7 +8,7 @@ import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
-// Mirrors OrcaRuntime.getAccountsSnapshot() / the accounts.subscribe payload.
+// Mirrors QuirkyRuntime.getAccountsSnapshot() / the accounts.subscribe payload.
 export type ProviderAccountsSnapshot = {
   claude: ClaudeRateLimitAccountsState
   codex: CodexRateLimitAccountsState

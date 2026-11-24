@@ -6,8 +6,8 @@ import {
 } from '../../../src/shared/native-chat-visual-directive'
 import { mobileMarkdownCodeLines } from './mobile-markdown-tree'
 // Private-use delimiters, as the preview normalizer's own code placeholders use.
-const PLACEHOLDER_PREFIX = '\uE000ORCA_VISUAL_'
-const PLACEHOLDER = /^\uE000ORCA_VISUAL_(\d+)\uE000$/
+const PLACEHOLDER_PREFIX = '\uE000QUIRKY_VISUAL_'
+const PLACEHOLDER = /^\uE000QUIRKY_VISUAL_(\d+)\uE000$/
 
 export type MobileMarkdownVisualLines = {
   /** The content with each recognized directive line replaced by a placeholder line. */

@@ -47,8 +47,8 @@ type Removal = {
 const ROOTS = ['/repo', '/other']
 const OUTCOMES: SubscribeOutcome[] = ['ok', 'ok', 'ok', 'capacity']
 const DELAYS: SubscribeDelay[] = ['none', 'none', 'abortable', 'abortable', 'abortable', 'wedged']
-// Why: CI keeps this quick; raise ORCA_WATCH_MODEL_RUNS locally for deeper searches.
-const RUNS = Number(process.env.ORCA_WATCH_MODEL_RUNS ?? 1000)
+// Why: CI keeps this quick; raise QUIRKY_WATCH_MODEL_RUNS locally for deeper searches.
+const RUNS = Number(process.env.QUIRKY_WATCH_MODEL_RUNS ?? 1000)
 const MIN_STEPS = 20
 const MAX_STEPS = 60
 const GRACE_PLUS_MS = 31_000

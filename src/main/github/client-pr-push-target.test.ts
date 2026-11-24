@@ -45,17 +45,17 @@ describe('getPRForBranch', () => {
   })
 
   it('resolves fork PR push target using the origin URL protocol', async () => {
-    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         head: {
           ref: 'prateek/fix-sidebar-agents-toggle',
           repo: {
-            full_name: 'prateek/orca',
-            name: 'orca',
-            clone_url: 'https://github.com/prateek/orca.git',
-            ssh_url: 'git@github.com:prateek/orca.git',
+            full_name: 'prateek/quirky',
+            name: 'quirky',
+            clone_url: 'https://github.com/prateek/quirky.git',
+            ssh_url: 'git@github.com:prateek/quirky.git',
             owner: { login: 'prateek' }
           }
         }
@@ -70,64 +70,64 @@ describe('getPRForBranch', () => {
     })
     expect(target).toEqual({
       pushTarget: {
-        remoteName: 'pr-prateek-orca',
+        remoteName: 'pr-prateek-quirky',
         branchName: 'prateek/fix-sidebar-agents-toggle',
-        remoteUrl: 'git@github.com:prateek/orca.git'
+        remoteUrl: 'git@github.com:prateek/quirky.git'
       }
     })
   })
 
   it('pins explicit origin push-target lookup when upstream has the same PR number', async () => {
-    getOwnerRepoMock.mockResolvedValue({ owner: 'fork', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValue({ owner: 'fork', repo: 'quirky' })
     resolvePRRepositoryCandidatesMock.mockResolvedValue({
       candidates: [
-        { owner: 'upstream', repo: 'orca' },
-        { owner: 'fork', repo: 'orca' }
+        { owner: 'upstream', repo: 'quirky' },
+        { owner: 'fork', repo: 'quirky' }
       ],
-      headRepo: { owner: 'fork', repo: 'orca' }
+      headRepo: { owner: 'fork', repo: 'quirky' }
     })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         head: {
           ref: 'contributor/fix',
           repo: {
-            full_name: 'contributor/orca',
-            name: 'orca',
-            clone_url: 'https://github.com/contributor/orca.git',
-            ssh_url: 'git@github.com:contributor/orca.git',
+            full_name: 'contributor/quirky',
+            name: 'quirky',
+            clone_url: 'https://github.com/contributor/quirky.git',
+            ssh_url: 'git@github.com:contributor/quirky.git',
             owner: { login: 'contributor' }
           }
         }
       })
     })
-    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:fork/orca.git')
+    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:fork/quirky.git')
 
     await getPullRequestPushTarget('/repo-root', 1738, null, {}, 'origin')
 
     expect(resolvePRRepositoryCandidatesMock).not.toHaveBeenCalled()
-    expect(ghExecFileAsyncMock).toHaveBeenCalledWith(['api', 'repos/fork/orca/pulls/1738'], {
+    expect(ghExecFileAsyncMock).toHaveBeenCalledWith(['api', 'repos/fork/quirky/pulls/1738'], {
       cwd: '/repo-root',
       host: 'github.com'
     })
     expect(ghExecFileAsyncMock).not.toHaveBeenCalledWith(
-      ['api', 'repos/upstream/orca/pulls/1738'],
+      ['api', 'repos/upstream/quirky/pulls/1738'],
       expect.anything()
     )
   })
 
   it('surfaces maintainer_can_modify=false alongside a fork PR push target', async () => {
-    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         maintainer_can_modify: false,
         head: {
           ref: 'prateek/fix-sidebar-agents-toggle',
           repo: {
-            full_name: 'prateek/orca',
-            name: 'orca',
-            clone_url: 'https://github.com/prateek/orca.git',
-            ssh_url: 'git@github.com:prateek/orca.git',
+            full_name: 'prateek/quirky',
+            name: 'quirky',
+            clone_url: 'https://github.com/prateek/quirky.git',
+            ssh_url: 'git@github.com:prateek/quirky.git',
             owner: { login: 'prateek' }
           }
         }
@@ -137,24 +137,24 @@ describe('getPRForBranch', () => {
 
     await expect(getPullRequestPushTarget('/repo-root', 1738)).resolves.toEqual({
       pushTarget: {
-        remoteName: 'pr-prateek-orca',
+        remoteName: 'pr-prateek-quirky',
         branchName: 'prateek/fix-sidebar-agents-toggle',
-        remoteUrl: 'git@github.com:prateek/orca.git'
+        remoteUrl: 'git@github.com:prateek/quirky.git'
       },
       maintainerCanModify: false
     })
   })
 
   it('uses origin for same-repository PR push targets', async () => {
-    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'stablyai', repo: 'quirky' })
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         head: {
           ref: 'fix-sidebar',
           repo: {
             full_name: 'stablyai/orca',
-            name: 'orca',
+            name: 'quirky',
             clone_url: 'https://github.com/stablyai/orca.git',
             ssh_url: 'git@github.com:stablyai/orca.git',
             owner: { login: 'stablyai' }
@@ -177,44 +177,44 @@ describe('getPRForBranch', () => {
     // autodetect); it must not flip to the upstream parent.
     getOwnerRepoForRemoteMock.mockImplementation(async (_repoPath: string, remoteName: string) =>
       remoteName === 'origin'
-        ? { owner: 'fsdwen', repo: 'orca' }
-        : { owner: 'stablyai', repo: 'orca' }
+        ? { owner: 'fsdwen', repo: 'quirky' }
+        : { owner: 'stablyai', repo: 'quirky' }
     )
     // Why: getRepoSlug imports getOriginGitHubApiRepository; the suite bridge
     // prefers getOwnerRepoForRemote for origin, so set both seams.
-    getOwnerRepoMock.mockResolvedValue({ owner: 'fsdwen', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValue({ owner: 'fsdwen', repo: 'quirky' })
 
     await expect(getRepoSlug('/repo-root')).resolves.toEqual({
       owner: 'fsdwen',
-      repo: 'orca',
+      repo: 'quirky',
       host: 'github.com'
     })
   })
 
   it('resolves a distinct upstream remote as the repo upstream', async () => {
     // getRepoUpstream probes origin then upstream via getOwnerRepoForRemote (#7331).
-    getOwnerRepoMock.mockResolvedValue({ owner: 'tmchow', repo: 'orca' })
+    getOwnerRepoMock.mockResolvedValue({ owner: 'tmchow', repo: 'quirky' })
     getOwnerRepoForRemoteMock.mockImplementation(async (_repoPath: string, remoteName: string) =>
       remoteName === 'origin'
-        ? { owner: 'tmchow', repo: 'orca' }
-        : { owner: 'stablyai', repo: 'orca' }
+        ? { owner: 'tmchow', repo: 'quirky' }
+        : { owner: 'stablyai', repo: 'quirky' }
     )
 
     // Why: the suite bridge returns getOwnerRepoForRemote fixtures as-is (no host pin).
     await expect(getRepoUpstream('/repo-root')).resolves.toEqual({
       owner: 'stablyai',
-      repo: 'orca'
+      repo: 'quirky'
     })
 
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
   })
 
   it('does not treat a same-repository upstream remote as a fork', async () => {
-    getOwnerRepoMock.mockResolvedValue({ owner: 'StablyAI', repo: 'Orca' })
+    getOwnerRepoMock.mockResolvedValue({ owner: 'StablyAI', repo: 'Quirky' })
     getOwnerRepoForRemoteMock.mockImplementation(async (_repoPath: string, remoteName: string) =>
       remoteName === 'origin'
-        ? { owner: 'StablyAI', repo: 'Orca' }
-        : { owner: 'stablyai', repo: 'orca' }
+        ? { owner: 'StablyAI', repo: 'Quirky' }
+        : { owner: 'stablyai', repo: 'quirky' }
     )
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({ isFork: false, parent: null })
@@ -225,7 +225,7 @@ describe('getPRForBranch', () => {
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
       // Why: positional slugs are explicit about github.com too, so GH_HOST
       // cannot redirect them.
-      ['repo', 'view', 'github.com/StablyAI/Orca', '--json', 'isFork,parent'],
+      ['repo', 'view', 'github.com/StablyAI/Quirky', '--json', 'isFork,parent'],
       { cwd: '/repo-root', host: 'github.com', timeout: 10_000 }
     )
   })
@@ -243,25 +243,25 @@ describe('getPRForBranch', () => {
 
   it('falls back to the GitHub parent when no upstream remote is configured', async () => {
     getOwnerRepoForRemoteMock
-      .mockResolvedValueOnce({ owner: 'tmchow', repo: 'orca' })
+      .mockResolvedValueOnce({ owner: 'tmchow', repo: 'quirky' })
       .mockResolvedValueOnce(null)
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         isFork: true,
-        parent: { name: 'orca', owner: { login: 'stablyai' } }
+        parent: { name: 'quirky', owner: { login: 'stablyai' } }
       })
     })
 
     await expect(getRepoUpstream('/repo-root')).resolves.toEqual({
       owner: 'stablyai',
-      repo: 'orca',
+      repo: 'quirky',
       // Why: fork parents live on the same server as the fork's origin.
       host: 'github.com'
     })
   })
 
   it('routes GHES push-target probes through the Enterprise host', async () => {
-    const ghes = { owner: 'team', repo: 'orca', host: 'github.acme-corp.com' }
+    const ghes = { owner: 'team', repo: 'quirky', host: 'github.acme-corp.com' }
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [ghes],
       headRepo: ghes
@@ -272,10 +272,10 @@ describe('getPRForBranch', () => {
         head: {
           ref: 'feature',
           repo: {
-            full_name: 'team/orca',
-            name: 'orca',
-            clone_url: 'https://github.acme-corp.com/team/orca.git',
-            ssh_url: 'git@github.acme-corp.com:team/orca.git',
+            full_name: 'team/quirky',
+            name: 'quirky',
+            clone_url: 'https://github.acme-corp.com/team/quirky.git',
+            ssh_url: 'git@github.acme-corp.com:team/quirky.git',
             owner: { login: 'team' }
           }
         }
@@ -288,29 +288,29 @@ describe('getPRForBranch', () => {
     // Why: the candidate probe must pin options.host so the runner targets the
     // Enterprise server instead of gh's default host.
     expect(ghExecFileAsyncMock).toHaveBeenCalledWith(
-      ['api', 'repos/team/orca/pulls/7'],
+      ['api', 'repos/team/quirky/pulls/7'],
       expect.objectContaining({ host: 'github.acme-corp.com' })
     )
   })
 
   it('does not confuse same-slug PR repositories across GitHub hosts', async () => {
-    const enterprise = { owner: 'team', repo: 'orca', host: 'github.acme-corp.com' }
-    const dotCom = { owner: 'team', repo: 'orca', host: 'github.com' }
+    const enterprise = { owner: 'team', repo: 'quirky', host: 'github.acme-corp.com' }
+    const dotCom = { owner: 'team', repo: 'quirky', host: 'github.com' }
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [enterprise, dotCom],
       headRepo: dotCom
     })
     getOwnerRepoForRemoteMock.mockResolvedValueOnce(dotCom)
-    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:team/orca.git')
+    getRemoteUrlForRepoMock.mockResolvedValueOnce('git@github.com:team/quirky.git')
     ghExecFileAsyncMock.mockResolvedValueOnce({
       stdout: JSON.stringify({
         head: {
           ref: 'feature',
           repo: {
-            full_name: 'team/orca',
-            name: 'orca',
-            clone_url: 'https://github.acme-corp.com/team/orca.git',
-            ssh_url: 'git@github.acme-corp.com:team/orca.git',
+            full_name: 'team/quirky',
+            name: 'quirky',
+            clone_url: 'https://github.acme-corp.com/team/quirky.git',
+            ssh_url: 'git@github.acme-corp.com:team/quirky.git',
             owner: { login: 'team' }
           }
         }
@@ -319,9 +319,9 @@ describe('getPRForBranch', () => {
 
     await expect(getPullRequestPushTarget('/repo-root', 7)).resolves.toEqual({
       pushTarget: {
-        remoteName: 'pr-team-orca',
+        remoteName: 'pr-team-quirky',
         branchName: 'feature',
-        remoteUrl: 'git@github.acme-corp.com:team/orca.git'
+        remoteUrl: 'git@github.acme-corp.com:team/quirky.git'
       }
     })
   })
@@ -329,12 +329,12 @@ describe('getPRForBranch', () => {
   it('probes additional PR repo candidates when the first lookup is not found', async () => {
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [
-        { owner: 'fork', repo: 'orca' },
-        { owner: 'stablyai', repo: 'orca' }
+        { owner: 'fork', repo: 'quirky' },
+        { owner: 'stablyai', repo: 'quirky' }
       ],
-      headRepo: { owner: 'fork', repo: 'orca' }
+      headRepo: { owner: 'fork', repo: 'quirky' }
     })
-    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork', repo: 'orca' })
+    getOwnerRepoForRemoteMock.mockResolvedValueOnce({ owner: 'fork', repo: 'quirky' })
     ghExecFileAsyncMock
       .mockRejectedValueOnce(new Error('HTTP 404: Not Found'))
       .mockResolvedValueOnce({
@@ -342,10 +342,10 @@ describe('getPRForBranch', () => {
           head: {
             ref: 'feature/test',
             repo: {
-              full_name: 'fork/orca',
-              name: 'orca',
-              clone_url: 'https://github.com/fork/orca.git',
-              ssh_url: 'git@github.com:fork/orca.git',
+              full_name: 'fork/quirky',
+              name: 'quirky',
+              clone_url: 'https://github.com/fork/quirky.git',
+              ssh_url: 'git@github.com:fork/quirky.git',
               owner: { login: 'fork' }
             }
           }
@@ -358,9 +358,13 @@ describe('getPRForBranch', () => {
         branchName: 'feature/test'
       }
     })
-    expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(1, ['api', 'repos/fork/orca/pulls/1849'], {
-      cwd: '/repo-root'
-    })
+    expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
+      1,
+      ['api', 'repos/fork/quirky/pulls/1849'],
+      {
+        cwd: '/repo-root'
+      }
+    )
     expect(ghExecFileAsyncMock).toHaveBeenNthCalledWith(
       2,
       ['api', 'repos/stablyai/orca/pulls/1849'],
@@ -369,8 +373,8 @@ describe('getPRForBranch', () => {
   })
 
   it('probes the next PR work-item candidate after a permission denial', async () => {
-    const upstream = { owner: 'upstream', repo: 'orca', host: 'github.com' }
-    const origin = { owner: 'fork', repo: 'orca', host: 'github.com' }
+    const upstream = { owner: 'upstream', repo: 'quirky', host: 'github.com' }
+    const origin = { owner: 'fork', repo: 'quirky', host: 'github.com' }
     resolvePRRepositoryCandidatesMock.mockResolvedValueOnce({
       candidates: [upstream, origin],
       headRepo: origin
@@ -383,7 +387,7 @@ describe('getPRForBranch', () => {
           number: 42,
           title: 'Origin PR',
           state: 'OPEN',
-          url: 'https://github.com/fork/orca/pull/42',
+          url: 'https://github.com/fork/quirky/pull/42',
           labels: [],
           updatedAt: '2026-07-16T00:00:00Z',
           author: { login: 'octo' },
@@ -399,11 +403,11 @@ describe('getPRForBranch', () => {
     })
 
     expect(ghExecFileAsyncMock.mock.calls[0][0]).toEqual(
-      expect.arrayContaining(['pr', 'view', '--repo', 'upstream/orca'])
+      expect.arrayContaining(['pr', 'view', '--repo', 'upstream/quirky'])
     )
-    expect(ghExecFileAsyncMock.mock.calls[1][0]).toEqual(['api', 'repos/upstream/orca/pulls/42'])
+    expect(ghExecFileAsyncMock.mock.calls[1][0]).toEqual(['api', 'repos/upstream/quirky/pulls/42'])
     expect(ghExecFileAsyncMock.mock.calls[2][0]).toEqual(
-      expect.arrayContaining(['pr', 'view', '--repo', 'fork/orca'])
+      expect.arrayContaining(['pr', 'view', '--repo', 'fork/quirky'])
     )
   })
 

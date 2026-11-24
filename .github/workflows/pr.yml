@@ -1,5 +1,5 @@
 name: PR Checks
-run-name: "PR ${{ github.event.pull_request.number }} | source ${{ github.sha }} | workflow ${{ github.workflow_sha }} | unit ${{ github.event.pull_request.draft && vars.ORCA_UNIT_SELECTION_MODE == 'selected' && 'selected' || 'full' }}"
+run-name: "PR ${{ github.event.pull_request.number }} | source ${{ github.sha }} | workflow ${{ github.workflow_sha }} | unit ${{ github.event.pull_request.draft && vars.QUIRKY_UNIT_SELECTION_MODE == 'selected' && 'selected' || 'full' }}"
 
 on:
   pull_request:
@@ -231,10 +231,10 @@ jobs:
         env:
           PREFLIGHT_PHASE_SELECTED: ${{ needs.code_paths.outputs.typecheck == 'true' }}
           PREFLIGHT_PRIOR_SUCCESS: ${{ job.status == 'success' }}
-          ORCA_UNIT_SELECTION_MODE: ${{ vars.ORCA_UNIT_SELECTION_MODE || 'shadow' }}
-          ORCA_PULL_REQUEST_DRAFT: ${{ github.event.pull_request.draft }}
+          QUIRKY_UNIT_SELECTION_MODE: ${{ vars.QUIRKY_UNIT_SELECTION_MODE || 'shadow' }}
+          QUIRKY_PULL_REQUEST_DRAFT: ${{ github.event.pull_request.draft }}
           # Five shards use fewer runner minutes; the repository variable can still request ten.
-          ORCA_UNIT_FULL_SHARD_COUNT: ${{ vars.ORCA_UNIT_FULL_SHARD_COUNT || '5' }}
+          QUIRKY_UNIT_FULL_SHARD_COUNT: ${{ vars.QUIRKY_UNIT_FULL_SHARD_COUNT || '5' }}
         run: |
           if [ "$PREFLIGHT_PHASE_SELECTED" != true ] || [ "$PREFLIGHT_PRIOR_SUCCESS" != true ]; then exit 0; fi
           node config/scripts/ci-unit-plan.mjs
@@ -253,8 +253,8 @@ jobs:
       - name: Test Mobile CI tools and runtime routing
         if: needs.code_paths.outputs.mobile_ci_tools == 'true'
         env:
-          ORCA_BACKGROUND_LAUNCH: '1'
-          ORCA_BALANCE_UNIT_SHARDS: '1'
+          QUIRKY_BACKGROUND_LAUNCH: '1'
+          QUIRKY_BALANCE_UNIT_SHARDS: '1'
         run: >-
           node config/scripts/run-vitest.mjs run --config config/vitest.config.ts
           --maxWorkers=4 --isolate --retry=0 --bail=0
@@ -335,7 +335,7 @@ jobs:
       - name: Runtime launcher change does not bump daemon protocol
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          ORCA_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'allow-runtime-launcher-protocol-bump') }}
+          QUIRKY_ALLOW_RUNTIME_LAUNCHER_PROTOCOL_BUMP: ${{ contains(github.event.pull_request.labels.*.name, 'allow-runtime-launcher-protocol-bump') }}
         run: |
           DIFF_BASE="$(node config/scripts/git-pull-request-diff-base.mjs "$BASE_SHA")"
           pnpm run check:runtime-launcher-protocol-ratchet -- --base "$DIFF_BASE"

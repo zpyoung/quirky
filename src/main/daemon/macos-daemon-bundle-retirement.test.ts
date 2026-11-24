@@ -2,12 +2,12 @@ import { access, mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec'
+import type { ProcessResult, ProcessSpec } from '@quirky/process-host/process-spec'
 
 const { run } = vi.hoisted(() => ({
   run: vi.fn<(spec: ProcessSpec) => Promise<ProcessResult>>()
 }))
-vi.mock('@orca/process-host', () => ({ runProcess: run }))
+vi.mock('@quirky/process-host', () => ({ runProcess: run }))
 import {
   retireOtherMacDaemonCopies,
   retireUnusedMacDaemonCopy
@@ -22,7 +22,7 @@ const LSREGISTER =
 let root: string
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-runtime-retire-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-runtime-retire-'))
   run.mockReset().mockResolvedValue(unused)
 })
 afterEach(async () => {
@@ -31,7 +31,7 @@ afterEach(async () => {
 
 async function copy(name: string): Promise<string> {
   const directory = join(root, name)
-  await mkdir(join(directory, 'app.noindex', 'Orca Terminal Host.app'), { recursive: true })
+  await mkdir(join(directory, 'app.noindex', 'Quirky Terminal Host.app'), { recursive: true })
   return directory
 }
 
@@ -70,7 +70,7 @@ it.each([
 
 it('unregisters an unused copy from LaunchServices, then deletes it', async () => {
   const directory = await copy('terminal-host-old')
-  const bundle = join(directory, 'app.noindex', 'Orca Terminal Host.app')
+  const bundle = join(directory, 'app.noindex', 'Quirky Terminal Host.app')
   let bundleExistedAtUnregister = false
   run.mockImplementation(async (spec) => {
     if (spec.program === LSREGISTER) {

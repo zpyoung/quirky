@@ -46,10 +46,10 @@ async function writePiSession(args: {
 
 describe('scanAiVaultSessions — Pi scope discovery', () => {
   it('lists an older in-scope Pi session the recency cap would drop', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-pi-scope-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-pi-scope-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
-    const workspace = '/home/ada/orca/workspaces/orca/feature'
+    const workspace = '/home/ada/quirky/workspaces/quirky/feature'
 
     await writePiSession({
       sessionsDir: roots.piSessionsDir,
@@ -88,7 +88,7 @@ describe('scanAiVaultSessions — Pi scope discovery', () => {
   })
 
   it('finds an older session when another cwd shares its encoded bucket', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-pi-collision-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-pi-collision-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     for (const [cwd, id, timestamp] of [
@@ -109,7 +109,7 @@ describe('scanAiVaultSessions — Pi scope discovery', () => {
   })
 
   it('adds nothing when no scope is requested', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-ai-vault-pi-noscope-'))
+    const root = await mkdtemp(join(tmpdir(), 'quirky-ai-vault-pi-noscope-'))
     tempRoots.push(root)
     const roots = isolatedScanRoots(root)
     await writePiSession({

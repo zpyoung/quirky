@@ -40,7 +40,7 @@ describe('provider diagnostics', () => {
   })
 
   it('is never inferred from an error that did not carry one', () => {
-    // Orca's own wording, even when it quotes something that looks like a provider message.
+    // Quirky's own wording, even when it quotes something that looks like a provider message.
     expect(
       providerDiagnosticOf(new Error('claude stream-json exited (code 1): not signed in'))
     ).toBe(undefined)

@@ -38,7 +38,7 @@ function laneState(args?: {
       ? [
           {
             id: args.wslHost.environmentId,
-            orcadDeployment: {
+            quirkydDeployment: {
               kind: 'wsl',
               distro: args.wslHost.distro,
               localPort: 41000,
@@ -67,7 +67,7 @@ function laneState(args?: {
         ]
       : [],
     worktreesByRepo: {
-      repo1: [{ id: 'wt1', repoId: 'repo1', path: args?.worktreePath ?? '/Users/dev/code/orca' }]
+      repo1: [{ id: 'wt1', repoId: 'repo1', path: args?.worktreePath ?? '/Users/dev/code/quirky' }]
     }
   } as unknown as LaneState
 }
@@ -101,7 +101,7 @@ describe('resolveCodexPaneSelectionLaneKey', () => {
   it('keys a pane in a WSL UNC worktree to that distro lane', () => {
     expect(
       resolveCodexPaneSelectionLaneKey({
-        state: laneState({ worktreePath: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\orca' }),
+        state: laneState({ worktreePath: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\quirky' }),
         tab: HOST_TAB,
         ptyId: 'pty-1'
       })

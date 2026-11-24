@@ -51,7 +51,7 @@ export function pointerDownInTab(
   screenOf(store).input()
 }
 
-/** Orca's window gains or loses visibility+focus. */
+/** Quirky's window gains or loses visibility+focus. */
 export function setWindowOnScreen(store: AttentionStore, onScreen: boolean): void {
   screenOf(store).setWindowOnScreen(onScreen)
 }

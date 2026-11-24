@@ -122,7 +122,7 @@ export function clearDaemonFolderAccessMismatch(
 }
 
 /**
- * Re-runs the probe so step 1 of the fix dialog can complete itself: the user allows Orca in System
+ * Re-runs the probe so step 1 of the fix dialog can complete itself: the user allows Quirky in System
  * Settings, returns to the app, and the focus-time poll is the only thing that can notice. A
  * settled `allowed` is final, and a probe younger than the interval is reused.
  */

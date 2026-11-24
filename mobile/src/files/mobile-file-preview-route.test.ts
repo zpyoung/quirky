@@ -14,7 +14,7 @@ describe('mobile-file-preview-route', () => {
       worktreeId: 'wt-1',
       relativePath,
       name: 'note.md',
-      worktreeName: 'Orca'
+      worktreeName: 'Quirky'
     })
 
     expect(route).toEqual({
@@ -27,7 +27,7 @@ describe('mobile-file-preview-route', () => {
         line: undefined,
         column: undefined,
         name: 'note.md',
-        worktreeName: 'Orca'
+        worktreeName: 'Quirky'
       }
     })
   })

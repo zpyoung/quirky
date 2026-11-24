@@ -51,16 +51,16 @@ async function echoOf(reply: string, discipline: 'readline' | 'cooked'): Promise
     name: 'xterm-256color',
     cols: 80,
     rows: 24,
-    env: { ...process.env, PS1: 'ORCA16542> ', TERM: 'xterm-256color' }
+    env: { ...process.env, PS1: 'QUIRKY16542> ', TERM: 'xterm-256color' }
   })
   live = { write: (data) => pty.write(data), kill: () => pty.kill() }
   pty.onData((data) => {
     output += data
   })
 
-  await waitFor(() => output.includes('ORCA16542> '), 10_000)
+  await waitFor(() => output.includes('QUIRKY16542> '), 10_000)
   if (discipline === 'cooked') {
-    pty.write('read -r ORCA_LINE\r')
+    pty.write('read -r QUIRKY_LINE\r')
     await sleep(400)
   }
   output = ''

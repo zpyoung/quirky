@@ -1,5 +1,5 @@
 import type { Session, WebContents } from 'electron'
-import { ORCA_BROWSER_BLANK_URL } from '../../shared/constants'
+import { QUIRKY_BROWSER_BLANK_URL } from '../../shared/constants'
 import { isBlankBrowserPopupUrl, normalizeBrowserPopupUrl } from './browser-popup-new-tab-intent'
 import { enforceBrowserRouteWebRtcPolicy } from './browser-route-webrtc-policy'
 import {
@@ -68,7 +68,7 @@ export function createBrowserRouteGuestPopupController(input: {
   let disposed = false
 
   const navigationAllowed = (url: string): boolean =>
-    input.isNavigationAllowed(isBlankBrowserPopupUrl(url) ? ORCA_BROWSER_BLANK_URL : url)
+    input.isNavigationAllowed(isBlankBrowserPopupUrl(url) ? QUIRKY_BROWSER_BLANK_URL : url)
 
   const onPopupNavigate = (event: Electron.Event, url: string): void => {
     if (disposed || !normalizeBrowserPopupUrl(url) || !navigationAllowed(url)) {
@@ -88,7 +88,7 @@ export function createBrowserRouteGuestPopupController(input: {
     if (
       disposed ||
       contentsPartition !== input.partition ||
-      !navigationAllowed(ORCA_BROWSER_BLANK_URL)
+      !navigationAllowed(QUIRKY_BROWSER_BLANK_URL)
     ) {
       return false
     }
@@ -110,7 +110,7 @@ export function createBrowserRouteGuestPopupController(input: {
       // an unowned route popup fails closed instead of routing to the opener's remote workspace.
       // Descendants register against the root opener, so a chain never needs walking.
       registerPopupOwnership(popupWebContentsId)
-      if (disposed || !navigationAllowed(ORCA_BROWSER_BLANK_URL)) {
+      if (disposed || !navigationAllowed(QUIRKY_BROWSER_BLANK_URL)) {
         releasePopupOwnership(popupWebContentsId)
         gestures.delete(gesture)
         gesture.dispose()
@@ -205,7 +205,7 @@ export function createBrowserRouteGuestPopupController(input: {
           opener: source,
           options,
           background: details?.disposition === 'background-tab',
-          canPresent: () => !disposed && navigationAllowed(ORCA_BROWSER_BLANK_URL),
+          canPresent: () => !disposed && navigationAllowed(QUIRKY_BROWSER_BLANK_URL),
           onCreated: (nativeOptions) => openPopup(nativeOptions, details?.url ?? normalized)
         })
       }

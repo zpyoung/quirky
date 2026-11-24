@@ -5,7 +5,7 @@
  * source controls and close affordance are present.
  */
 
-import { test, expect } from './helpers/orca-app'
+import { test, expect } from './helpers/quirky-app'
 import { waitForSessionReady, waitForActiveWorktree, getStoreState } from './helpers/store'
 import { GITHUB_TASK_SEARCH_IDLE_MS } from '../../src/renderer/src/components/use-github-task-search-commit'
 
@@ -143,10 +143,10 @@ async function openInstrumentedGitHubTasksPage(
       number: 999,
       title: 'Existing GitHub issue',
       state: 'open' as const,
-      url: 'https://github.com/orca/e2e/issues/999',
+      url: 'https://github.com/quirky/e2e/issues/999',
       labels: [],
       updatedAt: '2026-08-08T00:00:00Z',
-      author: 'orca-e2e',
+      author: 'quirky-e2e',
       repoId: repo.id,
       assignees: [],
       reviewRequests: []
@@ -155,7 +155,7 @@ async function openInstrumentedGitHubTasksPage(
     store.setState({
       repos: state.repos.map((candidate) =>
         candidate.id === repo.id
-          ? { ...candidate, upstream: { owner: 'orca', repo: 'e2e' } }
+          ? { ...candidate, upstream: { owner: 'quirky', repo: 'e2e' } }
           : candidate
       ),
       settings: {
@@ -217,19 +217,19 @@ async function resetTaskSearchRequestProbe(
 }
 
 test.describe('Tasks page', () => {
-  test.beforeEach(async ({ orcaPage }) => {
-    await waitForSessionReady(orcaPage)
-    await waitForActiveWorktree(orcaPage)
+  test.beforeEach(async ({ quirkyPage }) => {
+    await waitForSessionReady(quirkyPage)
+    await waitForActiveWorktree(quirkyPage)
   })
 
-  test('opening the tasks view renders the tasks UI', async ({ orcaPage }) => {
-    await openTasksPage(orcaPage)
+  test('opening the tasks view renders the tasks UI', async ({ quirkyPage }) => {
+    await openTasksPage(quirkyPage)
 
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe('tasks')
 
-    await expect(orcaPage.getByRole('button', { name: 'Close tasks' })).toBeVisible({
+    await expect(quirkyPage.getByRole('button', { name: 'Close tasks' })).toBeVisible({
       timeout: 10_000
     })
 
@@ -239,7 +239,7 @@ test.describe('Tasks page', () => {
     await expect
       .poll(
         async () => {
-          renderedSources = await getRenderedTaskSources(orcaPage)
+          renderedSources = await getRenderedTaskSources(quirkyPage)
           return renderedSources.length
         },
         {
@@ -252,7 +252,7 @@ test.describe('Tasks page', () => {
     await expect
       .poll(
         async () => {
-          renderedSources = await getRenderedTaskSources(orcaPage)
+          renderedSources = await getRenderedTaskSources(quirkyPage)
           return renderedSources.some((source) => source.active)
         },
         {
@@ -262,27 +262,27 @@ test.describe('Tasks page', () => {
       )
       .toBe(true)
     if (renderedSources.some((source) => source.source === 'github' && source.active)) {
-      await expect(orcaPage.getByRole('button', { name: 'Issues', exact: true })).toBeVisible()
-      await expect(orcaPage.getByRole('button', { name: 'PRs', exact: true })).toBeVisible()
-      await expect(orcaPage.getByRole('button', { name: 'Projects', exact: true })).toBeVisible()
-      await expect(orcaPage.getByPlaceholder(/Search GitHub (issues|PRs)/i)).toBeVisible()
+      await expect(quirkyPage.getByRole('button', { name: 'Issues', exact: true })).toBeVisible()
+      await expect(quirkyPage.getByRole('button', { name: 'PRs', exact: true })).toBeVisible()
+      await expect(quirkyPage.getByRole('button', { name: 'Projects', exact: true })).toBeVisible()
+      await expect(quirkyPage.getByPlaceholder(/Search GitHub (issues|PRs)/i)).toBeVisible()
     }
   })
 
-  test('closing the tasks page returns to the previous view', async ({ orcaPage }) => {
-    const previousView = await getStoreState<string>(orcaPage, 'activeView')
+  test('closing the tasks page returns to the previous view', async ({ quirkyPage }) => {
+    const previousView = await getStoreState<string>(quirkyPage, 'activeView')
 
-    await openTasksPage(orcaPage)
+    await openTasksPage(quirkyPage)
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe('tasks')
     // Sanity: the tasks UI actually painted before we close it.
-    await expect(orcaPage.getByRole('button', { name: 'Close tasks' })).toBeVisible()
+    await expect(quirkyPage.getByRole('button', { name: 'Close tasks' })).toBeVisible()
 
-    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    await quirkyPage.getByRole('button', { name: 'Close tasks' }).click()
 
     await expect
-      .poll(async () => getStoreState<string>(orcaPage, 'activeView'), { timeout: 5_000 })
+      .poll(async () => getStoreState<string>(quirkyPage, 'activeView'), { timeout: 5_000 })
       .toBe(previousView)
     // Why: the load-bearing check is that the previous view's DOM actually
     // re-rendered — a store-only `activeView` assertion would pass even if the
@@ -291,85 +291,85 @@ test.describe('Tasks page', () => {
     // previous view was terminal (by far the common case in E2E setup), that
     // element must be visible. Tasks-close also hides the "Close tasks"
     // button regardless of previous view, so we assert that too.
-    await expect(orcaPage.getByRole('button', { name: 'Close tasks' })).toHaveCount(0)
+    await expect(quirkyPage.getByRole('button', { name: 'Close tasks' })).toHaveCount(0)
     if (previousView === 'terminal') {
-      await expect(orcaPage.locator('.xterm').first()).toBeVisible({ timeout: 5_000 })
+      await expect(quirkyPage.locator('.xterm').first()).toBeVisible({ timeout: 5_000 })
     }
   })
 
-  test('reopening restores the GitHub page and scroll position', async ({ orcaPage }) => {
-    await openMockedPaginatedGitHubTasks(orcaPage)
+  test('reopening restores the GitHub page and scroll position', async ({ quirkyPage }) => {
+    await openMockedPaginatedGitHubTasks(quirkyPage)
 
-    await orcaPage.getByRole('button', { name: 'Page 28', exact: true }).click()
-    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    await quirkyPage.getByRole('button', { name: 'Page 28', exact: true }).click()
+    await expect(quirkyPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
 
-    const list = orcaPage.locator('[data-task-list-scroll="github"]')
+    const list = quirkyPage.locator('[data-task-list-scroll="github"]')
     await list.evaluate((element) => {
       element.scrollTop = 360
       element.dispatchEvent(new Event('scroll'))
     })
     await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(300)
 
-    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    await quirkyPage.getByRole('button', { name: 'Close tasks' }).click()
     await expect(list).toHaveCount(0)
-    const clampedRowsStyle = await orcaPage.addStyleTag({
+    const clampedRowsStyle = await quirkyPage.addStyleTag({
       content:
         '[data-task-list-scroll="github"] > .divide-y { max-height: 0 !important; overflow: hidden !important; }'
     })
-    await openTasksPage(orcaPage)
+    await openTasksPage(quirkyPage)
 
-    await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
+    await expect(quirkyPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
-    const restoredList = orcaPage.locator('[data-task-list-scroll="github"]')
+    const restoredList = quirkyPage.locator('[data-task-list-scroll="github"]')
     await expect.poll(() => restoredList.evaluate((element) => element.scrollTop)).toBe(0)
     await clampedRowsStyle.evaluate((element) => element.remove())
-    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    await expect(quirkyPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
     await expect
       .poll(() => restoredList.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(300)
 
-    await orcaPage.getByText('Issue page 28 item 12', { exact: true }).click()
+    await quirkyPage.getByText('Issue page 28 item 12', { exact: true }).click()
     await expect(restoredList).toHaveCount(0)
     await expect
       .poll(async () => {
-        const position = await getStoreState<{ scrollTop: number }>(orcaPage, 'taskListPosition')
+        const position = await getStoreState<{ scrollTop: number }>(quirkyPage, 'taskListPosition')
         return position.scrollTop
       })
       .toBeGreaterThan(300)
-    await orcaPage.getByRole('button', { name: 'GitHub list', exact: true }).click()
-    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    await quirkyPage.getByRole('button', { name: 'GitHub list', exact: true }).click()
+    await expect(quirkyPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
     await expect
       .poll(() => restoredList.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(300)
 
-    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
-    const pendingRestoreStyle = await orcaPage.addStyleTag({
+    await quirkyPage.getByRole('button', { name: 'Close tasks' }).click()
+    const pendingRestoreStyle = await quirkyPage.addStyleTag({
       content:
         '[data-task-list-scroll="github"] > .divide-y { max-height: 0 !important; overflow: hidden !important; }'
     })
-    await openTasksPage(orcaPage)
-    await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
+    await openTasksPage(quirkyPage)
+    await expect(quirkyPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
-    await orcaPage.getByRole('button', { name: 'Page 1', exact: true }).click()
+    await quirkyPage.getByRole('button', { name: 'Page 1', exact: true }).click()
     await pendingRestoreStyle.evaluate((element) => element.remove())
-    await expect(orcaPage.getByRole('button', { name: 'Page 1', exact: true })).toHaveAttribute(
+    await expect(quirkyPage.getByRole('button', { name: 'Page 1', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
     await expect
       .poll(() =>
-        orcaPage
+        quirkyPage
           .locator('[data-task-list-scroll="github"]')
           .evaluate((element) => element.scrollTop)
       )
       .toBe(0)
 
-    await orcaPage.getByRole('button', { name: 'Page 28', exact: true }).click()
-    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    await quirkyPage.getByRole('button', { name: 'Page 28', exact: true }).click()
+    await expect(quirkyPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
     await restoredList.evaluate((element) => {
       element.scrollTop = 360
       element.dispatchEvent(new Event('scroll'))
@@ -377,25 +377,25 @@ test.describe('Tasks page', () => {
     await expect
       .poll(() => restoredList.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(300)
-    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    await quirkyPage.getByRole('button', { name: 'Close tasks' }).click()
 
-    const permanentlyClampedRowsStyle = await orcaPage.addStyleTag({
+    const permanentlyClampedRowsStyle = await quirkyPage.addStyleTag({
       content:
         '[data-task-list-scroll="github"] > .divide-y { max-height: 0 !important; overflow: hidden !important; }'
     })
-    await openTasksPage(orcaPage)
-    await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
+    await openTasksPage(quirkyPage)
+    await expect(quirkyPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
     // Why the wait: outlives the 5s give-up that used to abandon the restore and
     // overwrite the remembered offset with the committed 0. A list that never paints
     // must defer the restore, never destroy the position.
-    await orcaPage.waitForTimeout(5_500)
-    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    await quirkyPage.waitForTimeout(5_500)
+    await quirkyPage.getByRole('button', { name: 'Close tasks' }).click()
     await expect
       .poll(async () => {
-        const position = await getStoreState<{ scrollTop: number }>(orcaPage, 'taskListPosition')
+        const position = await getStoreState<{ scrollTop: number }>(quirkyPage, 'taskListPosition')
         return position.scrollTop
       })
       .toBeGreaterThan(300)
@@ -403,22 +403,22 @@ test.describe('Tasks page', () => {
   })
 
   test('GitHub search waits for idle, keeps rows visible, and Enter does not double-fetch', async ({
-    orcaPage
+    quirkyPage
   }) => {
-    await openInstrumentedGitHubTasksPage(orcaPage)
+    await openInstrumentedGitHubTasksPage(quirkyPage)
 
-    const input = orcaPage.getByPlaceholder('Search GitHub issues...')
-    const existingIssue = orcaPage.getByText('Existing GitHub issue', { exact: true })
+    const input = quirkyPage.getByPlaceholder('Search GitHub issues...')
+    const existingIssue = quirkyPage.getByText('Existing GitHub issue', { exact: true })
     await expect(input).toBeVisible()
     await expect(existingIssue).toBeVisible()
 
     await input.fill('')
     await expect
-      .poll(async () => readTaskSearchRequestProbe(orcaPage), {
+      .poll(async () => readTaskSearchRequestProbe(quirkyPage), {
         timeout: TASK_SEARCH_PROBE_TIMEOUT_MS
       })
       .toEqual({ countQueries: ['is:issue is:open'], fetchQueries: ['is:issue is:open'] })
-    await resetTaskSearchRequestProbe(orcaPage)
+    await resetTaskSearchRequestProbe(quirkyPage)
 
     await input.pressSequentially('rate', { delay: TASK_SEARCH_TYPING_DELAY_MS })
 
@@ -427,22 +427,22 @@ test.describe('Tasks page', () => {
     // The contract is that no prefix of the typed query is ever queried, not that the
     // probe is empty at one instant: exactly one request per surface, for the final value.
     await expect
-      .poll(async () => readTaskSearchRequestProbe(orcaPage), {
+      .poll(async () => readTaskSearchRequestProbe(quirkyPage), {
         timeout: TASK_SEARCH_PROBE_TIMEOUT_MS
       })
       .toEqual({ countQueries: ['is:issue rate'], fetchQueries: ['is:issue rate'] })
 
-    await resetTaskSearchRequestProbe(orcaPage)
+    await resetTaskSearchRequestProbe(quirkyPage)
     await input.pressSequentially('x')
     await input.press('Enter')
 
     await expect
-      .poll(async () => readTaskSearchRequestProbe(orcaPage), {
+      .poll(async () => readTaskSearchRequestProbe(quirkyPage), {
         timeout: TASK_SEARCH_PROBE_TIMEOUT_MS
       })
       .toEqual({ countQueries: ['is:issue ratex'], fetchQueries: ['is:issue ratex'] })
-    await orcaPage.waitForTimeout(TASK_SEARCH_SETTLE_MS)
-    expect(await readTaskSearchRequestProbe(orcaPage)).toEqual({
+    await quirkyPage.waitForTimeout(TASK_SEARCH_SETTLE_MS)
+    expect(await readTaskSearchRequestProbe(quirkyPage)).toEqual({
       countQueries: ['is:issue ratex'],
       fetchQueries: ['is:issue ratex']
     })

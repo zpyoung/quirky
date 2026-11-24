@@ -1,7 +1,7 @@
 // Adapted from David Bebawy's PR #21826: `codesign --display +<pid>` is the probe that answers
 // where a running pid's executable lives now. An unresolved image alone does not prove denial.
 
-import { runProcess } from '@orca/process-host'
+import { runProcess } from '@quirky/process-host'
 import type { DaemonCodeIdentity } from '../../shared/daemon-folder-access-class'
 
 const CODESIGN_TIMEOUT_MS = 3_000

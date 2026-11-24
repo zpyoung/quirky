@@ -19,7 +19,7 @@ export function validGrants(value: unknown, scope: DeviceScope): RuntimeDeviceGr
 }
 
 export function normalizeLoadedDeviceRow(device: DeviceEntry): DeviceEntry {
-  // Why: rows imported from an Orca build can still carry hosted-relay fields; drop them.
+  // Why: rows imported from an Quirky build can still carry hosted-relay fields; drop them.
   const {
     relayBinding: _relayBinding,
     mobilePairingConnectionMode: _connectionMode,

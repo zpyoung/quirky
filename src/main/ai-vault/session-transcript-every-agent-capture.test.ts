@@ -81,7 +81,7 @@ afterEach(async () => {
 type CapturedRead = { agent: AiVaultAgent; path: string; messages: TranscriptMessage[] }
 
 async function readEveryAgentVault(): Promise<CapturedRead[]> {
-  const root = await mkdtemp(join(tmpdir(), 'orca-transcript-every-agent-'))
+  const root = await mkdtemp(join(tmpdir(), 'quirky-transcript-every-agent-'))
   tempRoots.push(root)
   const { roots } = await writeEveryAgentVault(root)
   const dbPath = join(root, 'opencode-db', 'opencode.db')

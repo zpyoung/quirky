@@ -72,7 +72,7 @@ const vmServer: PublicKnownRuntimeEnvironment = {
     { id: 'ws', kind: 'websocket', label: 'WebSocket', endpoint: 'ws://127.0.0.1:41000' }
   ],
   preferredEndpointId: 'ws',
-  orcadDeployment: {
+  quirkydDeployment: {
     sshTargetId: 'runtime-ssh-runtime-1',
     sshTargetGeneration: 1,
     localPort: 41_000,
@@ -124,7 +124,7 @@ it("retains a recipe VM's managed-server project when VM cleanup fails", async (
 })
 
 it('never destroys another VM whose server publishes the same workspace id', async () => {
-  const sharedWorkspaceId = `${vmServerRepo.id}::/home/orca/project`
+  const sharedWorkspaceId = `${vmServerRepo.id}::/home/quirky/project`
   ephemeralVmListRuntimes.mockResolvedValue([
     {
       id: 'runtime-1',
@@ -152,7 +152,7 @@ it('never destroys another VM whose server publishes the same workspace id', asy
         {
           id: sharedWorkspaceId,
           repoId: vmServerRepo.id,
-          path: '/home/orca/project',
+          path: '/home/quirky/project',
           hostId: 'runtime:env-vm'
         }
       ]
@@ -182,7 +182,7 @@ it("destroys the VM when the renderer's catalog predates the VM's server", async
     worktreesByRepo: {
       [vmServerRepo.id]: [
         {
-          id: `${vmServerRepo.id}::/home/orca/project`,
+          id: `${vmServerRepo.id}::/home/quirky/project`,
           hostId: 'runtime:env-vm',
           ephemeralVmCheckoutMode: 'provisioned-root'
         }

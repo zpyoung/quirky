@@ -1,5 +1,5 @@
-import type { OrcaRuntimeWithGetTerminalInteractiveWait as GetTerminalInteractiveWaitMethods } from '../terminal/wait/terminal-interactive-wait'
-import { OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal } from './pty-backed-session-publication'
+import type { QuirkyRuntimeWithGetTerminalInteractiveWait as GetTerminalInteractiveWaitMethods } from '../terminal/wait/terminal-interactive-wait'
+import { QuirkyRuntimeWithPublishPtyBackedMobileSessionTerminal } from './pty-backed-session-publication'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { hasHostAuthoritativeTerminalMembership } from '../../persistence/terminal-topology/terminal-topology-membership'
@@ -8,10 +8,10 @@ import type {
   RuntimeSyncedLeaf
 } from '../../../shared/runtime-types'
 import { retireTerminalSurfacesFromSnapshot } from '../mobile-session-terminal-retirement'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { QUIRKY_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 
-export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal {
+export abstract class QuirkyRuntimeWithTouchMobileSessionTabsForWorktree extends QuirkyRuntimeWithPublishPtyBackedMobileSessionTerminal {
   abstract getTerminalWorktreeIdForPaneKey(
     ...args: Parameters<GetTerminalInteractiveWaitMethods['getTerminalWorktreeIdForPaneKey']>
   ): ReturnType<GetTerminalInteractiveWaitMethods['getTerminalWorktreeIdForPaneKey']>
@@ -111,7 +111,7 @@ export abstract class OrcaRuntimeWithTouchMobileSessionTabsForWorktree extends O
     leaves: readonly RuntimeSyncedLeaf[]
   ): RuntimeSyncedLeaf[] {
     // Switch point: main's own panes are the membership record; the window-era fence is not asked.
-    const mainOwns = ORCA_LAYOUT_OWNER_IS_MAIN
+    const mainOwns = QUIRKY_LAYOUT_OWNER_IS_MAIN
       ? startedMainTerminalSurfaces(this)?.ownedWorkspaces()
       : null
     return leaves.filter(

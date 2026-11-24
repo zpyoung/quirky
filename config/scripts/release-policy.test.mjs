@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { enforceReleasePolicy, restoreLatestStable } from './release-policy.mjs'
 
 const BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com'
-const repoRef = { owner: 'stablyai', repo: 'orca' }
+const repoRef = { owner: 'stablyai', repo: 'quirky' }
 
 function notFound() {
   return Object.assign(new Error('Not Found'), { status: 404 })

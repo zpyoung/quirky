@@ -1,6 +1,6 @@
 /**
  * Keeps this desktop attached to exactly the managed SSH hosts that should drive its browser: those
- * with "Allow this host's orca CLI to control Orca" on, connected now, and whose server advertises
+ * with "Allow this host's quirky CLI to control Quirky" on, connected now, and whose server advertises
  * the bridge. Anything else is detached at once, so turning the setting off or losing the host
  * revokes the host's reach immediately.
  */

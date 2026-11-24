@@ -41,7 +41,7 @@ export function useTabBarQuickCommandsShortcut({
 }: UseTabBarQuickCommandsShortcutParams): void {
   const keybindings = useAppStore((s) => s.keybindings)
   const terminalShortcutPolicy = useAppStore(
-    (s) => s.settings?.terminalShortcutPolicy ?? 'orca-first'
+    (s) => s.settings?.terminalShortcutPolicy ?? 'quirky-first'
   )
   const activeView = useAppStore((s) => s.activeView)
 

@@ -76,7 +76,7 @@ export type AcpStructuredLaunchPartDeps = {
   /** The environment the child process inherits at spawn; this process's own by default. */
   inheritedEnv?: NodeJS.ProcessEnv
   probeVersion?: typeof probeAgentCliVersion
-  /** Orca's data folder on this host, which holds the spec's managed runtime. */
+  /** Quirky's data folder on this host, which holds the spec's managed runtime. */
   dataDirectory: string
 } & Pick<AcpLaunchVisualsDeps, 'logger'>
 
@@ -90,7 +90,7 @@ export type AcpLaunchInvocationDeps = {
   resolveCommandSettings?: () => StructuredAgentCommandSettings
   /** Rereads that env when the agent's program is not found in it; absent never retries. */
   refreshEnvironmentAfterMiss?: (askedAt: number) => Promise<void>
-  /** Where the program starts, for a PATH entry relative to it; Orca's own when absent. */
+  /** Where the program starts, for a PATH entry relative to it; Quirky's own when absent. */
   resolveWorkingDirectory?: () => Promise<string> | string
 } & Pick<
   AcpStructuredLaunchPartDeps,
@@ -280,7 +280,7 @@ export function acpStructuredLaunchPart(
       inheritedEnvToDelete: [
         ...STRUCTURED_CHILD_ENV_TO_DELETE,
         ...envToDelete,
-        // Without visuals, a folder Orca itself inherited (started from a chat) names another chat's.
+        // Without visuals, a folder Quirky itself inherited (started from a chat) names another chat's.
         ...(skill ? [] : [NATIVE_CHAT_SCRATCH_DIR_ENV]),
         LEGACY_NATIVE_CHAT_VISUALS_DIR_ENV
       ]

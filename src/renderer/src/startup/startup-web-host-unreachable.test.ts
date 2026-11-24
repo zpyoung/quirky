@@ -6,7 +6,7 @@ vi.mock('sonner', () => ({ toast: vi.fn() }))
 
 function stubWindow(webClient: boolean, snapshots: unknown[]): void {
   vi.stubGlobal('window', {
-    __ORCA_WEB_CLIENT__: webClient,
+    __QUIRKY_WEB_CLIENT__: webClient,
     api: { runtimeEnvironments: { getStatusSnapshots: vi.fn(async () => snapshots) } }
   })
 }
@@ -36,9 +36,9 @@ describe('isWebHostUnreachableAtStartup', () => {
   })
 
   it.each([
-    'Timed out while connecting to the remote Orca runtime.',
-    'Remote Orca runtime connection interrupted.',
-    'Could not connect to the remote Orca runtime.'
+    'Timed out while connecting to the remote Quirky runtime.',
+    'Remote Quirky runtime connection interrupted.',
+    'Could not connect to the remote Quirky runtime.'
   ])('treats the code-less message "%s" as unreachable', async (message) => {
     await expect(isWebHostUnreachableAtStartup(new Error(message))).resolves.toBe(true)
   })

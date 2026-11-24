@@ -159,7 +159,7 @@ export function isObjectiveConcreteWorkspacePath(value: string): boolean {
     return false
   }
   const root = value.split('/', 1)[0]
-  return root !== '.git' && root !== '.orca'
+  return root !== '.git' && root !== '.quirky'
 }
 
 export const ObjectiveWorkspacePathSchema = z
@@ -176,7 +176,7 @@ export function isAllowedObjectiveTerritoryGlob(value: string): boolean {
   }
   const slash = value.indexOf('/')
   const root = slash === -1 ? value : value.slice(0, slash)
-  return !wildcardMatches('.git', root) && !wildcardMatches('.orca', root)
+  return !wildcardMatches('.git', root) && !wildcardMatches('.quirky', root)
 }
 
 export const ObjectiveTerritoryGlobSchema = z
@@ -184,7 +184,7 @@ export const ObjectiveTerritoryGlobSchema = z
   .max(OBJECTIVE_PATH_MAX_LENGTH)
   .refine(
     isAllowedObjectiveTerritoryGlob,
-    'Territory must be ** or a bounded workspace-relative glob that excludes .git and .orca'
+    'Territory must be ** or a bounded workspace-relative glob that excludes .git and .quirky'
   )
 
 export const ObjectiveGateSchema = z

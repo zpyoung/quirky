@@ -9,8 +9,8 @@ vi.mock('../../shared/app-environment', () => ({
 
 const stored = new Map<string, SshTarget>()
 // Like the real store: reads hand out copies, writes land on the stored entry only.
-vi.mock('../managed-server/lifecycle/orcad-managed-runtime-context', () => ({
-  requireManagedOrcadTargetStore: () => ({
+vi.mock('../managed-server/lifecycle/quirkyd-managed-runtime-context', () => ({
+  requireManagedQuirkydTargetStore: () => ({
     getTarget: (id: string) => {
       const entry = stored.get(id)
       return entry ? { ...entry } : undefined
@@ -24,8 +24,8 @@ vi.mock('../managed-server/lifecycle/orcad-managed-runtime-context', () => ({
     }
   })
 }))
-vi.mock('../managed-server/lifecycle/orcad-managed-auto-update', () => ({
-  autoUpdateManagedOrcadEnvironment: vi.fn()
+vi.mock('../managed-server/lifecycle/quirkyd-managed-auto-update', () => ({
+  autoUpdateManagedQuirkydEnvironment: vi.fn()
 }))
 
 const target = (id: string): SshTarget => ({ id, label: id, host: id, port: 22, username: 'me' })

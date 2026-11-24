@@ -2,12 +2,12 @@ import { app, BrowserWindow, ipcMain, session, webContents } from 'electron'
 import { join } from 'node:path'
 import { applyBackgroundActivationPolicy } from '../window/foreground-activation-policy'
 
-if (process.env.ORCA_BACKGROUND_LAUNCH !== '1') {
+if (process.env.QUIRKY_BACKGROUND_LAUNCH !== '1') {
   throw new Error('Popup identity probes require a background launch')
 }
 applyBackgroundActivationPolicy()
 
-const root = process.env.ORCA_POPUP_IDENTITY_ROOT
+const root = process.env.QUIRKY_POPUP_IDENTITY_ROOT
 if (!root) {
   throw new Error('Missing probe root')
 }
@@ -27,7 +27,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('browser:setGrabMode', () => undefined)
   ipcMain.handle('link-probe:open', (_event, event) =>
-    window.webContents.send('browser:open-link-in-orca-tab', event)
+    window.webContents.send('browser:open-link-in-quirky-tab', event)
   )
   ipcMain.handle('link-probe:register', (_event, args) => {
     const guest = webContents.fromId(args.webContentsId)

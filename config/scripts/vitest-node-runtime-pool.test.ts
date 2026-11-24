@@ -2,8 +2,8 @@ import { once } from 'node:events'
 import { resolve } from 'node:path'
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { createVitest, type PoolOptions, type Vitest } from 'vitest/node'
-import * as processes from '@orca/process-host'
-import type { ChildProcessHandle } from '@orca/process-host/process-spec'
+import * as processes from '@quirky/process-host'
+import type { ChildProcessHandle } from '@quirky/process-host/process-spec'
 import { nodeRuntimePool } from './vitest-node-runtime-pool'
 
 let context: Vitest
@@ -37,7 +37,7 @@ function options(executable = process.execPath): PoolOptions {
     method: 'run',
     environment: { name: 'node', options: null },
     execArgv: [],
-    env: { ...process.env, ORCA_TEST_NODE_EXECUTABLE: executable }
+    env: { ...process.env, QUIRKY_TEST_NODE_EXECUTABLE: executable }
   }
 }
 

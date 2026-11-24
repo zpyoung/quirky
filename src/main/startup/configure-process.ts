@@ -17,7 +17,7 @@ import {
 } from './http1-compatibility-profile-state'
 
 const DEV_PARENT_SHUTDOWN_GRACE_MS = 3000
-const HTTP1_COMPATIBILITY_ENV_VAR = 'ORCA_DISABLE_HTTP2'
+const HTTP1_COMPATIBILITY_ENV_VAR = 'QUIRKY_DISABLE_HTTP2'
 const TRUE_ENV_VALUES = new Set(['1', 'true', 'yes', 'on'])
 const FALSE_ENV_VALUES = new Set(['0', 'false', 'no', 'off'])
 let devParentShutdownRequested = false
@@ -198,7 +198,7 @@ export function configureDevUserDataPath(isDev: boolean): void {
     // dedicated userData path per launch prevents persisted repos, worktrees,
     // and session state from leaking between tests through the shared dev
     // profile while still leaving the user's real packaged profile untouched.
-    const e2eHomeDir = process.env.ORCA_E2E_HOME_DIR ?? join(e2eConfig.userDataDir, 'home')
+    const e2eHomeDir = process.env.QUIRKY_E2E_HOME_DIR ?? join(e2eConfig.userDataDir, 'home')
     // Why: E2E imports can resolve os.homedir() before Electron is ready. Abort
     // startup if a direct launch skipped the disposable Node-home contract.
     if (!areSameE2EHomePath(homedir(), e2eHomeDir)) {
@@ -215,14 +215,14 @@ export function configureDevUserDataPath(isDev: boolean): void {
   if (!isDev) {
     return
   }
-  const overrideUserDataPath = process.env.ORCA_DEV_USER_DATA_PATH
+  const overrideUserDataPath = process.env.QUIRKY_DEV_USER_DATA_PATH
   if (overrideUserDataPath) {
     // Why: automated repros need an isolated profile so the dev's persisted tabs/worktrees don't skew startup and hide window bugs.
     app.setPath('userData', overrideUserDataPath)
     return
   }
-  // Why: without a dev-only path, pnpm dev overwrites the packaged app's runtime pointer under userData and breaks the orca CLI.
-  app.setPath('userData', join(app.getPath('appData'), 'orca-dev'))
+  // Why: without a dev-only path, pnpm dev overwrites the packaged app's runtime pointer under userData and breaks the quirky CLI.
+  app.setPath('userData', join(app.getPath('appData'), 'quirky-dev'))
 }
 
 function areSameE2EHomePath(left: string, right: string): boolean {
@@ -233,7 +233,7 @@ function areSameE2EHomePath(left: string, right: string): boolean {
     : normalizedLeft === normalizedRight
 }
 
-export function configureOrcaUserDataPathEnv(): void {
+export function configureQuirkyUserDataPathEnv(): void {
   const userDataPath = app.getPath('userData')
   // Why here: userData is final now and the instance lock is still ahead; preflight's catch exits serve.
   const serveProfileRefusal = checkServeUserDataPath({
@@ -243,15 +243,15 @@ export function configureOrcaUserDataPathEnv(): void {
   if (serveProfileRefusal) {
     throw new Error(serveProfileRefusal)
   }
-  // Why: relaunches can inherit a stale ORCA_USER_DATA_PATH; canonicalize before CLI-shared modules build runtime-home paths.
-  process.env.ORCA_USER_DATA_PATH = userDataPath
-  // Why: an Orca started from another Orca's terminal must not fence its own CLI children to the parent.
+  // Why: relaunches can inherit a stale QUIRKY_USER_DATA_PATH; canonicalize before CLI-shared modules build runtime-home paths.
+  process.env.QUIRKY_USER_DATA_PATH = userDataPath
+  // Why: an Quirky started from another Quirky's terminal must not fence its own CLI children to the parent.
   stampRuntimeSourceEnv(process.env, null)
 }
 
 export function shouldInstallManagedHooks(isDev: boolean): boolean {
   void isDev
-  // Why: managed hooks now target Orca-owned Codex homes, not ~/.codex, so keep install on for all agents until each gets its own seam.
+  // Why: managed hooks now target Quirky-owned Codex homes, not ~/.codex, so keep install on for all agents until each gets its own seam.
   return true
 }
 
@@ -297,7 +297,7 @@ export function installDevParentWatchdog(isDev: boolean): void {
 
     if (parentPidChanged || parentMissing) {
       clearInterval(timer)
-      // Why: the dev runner spawns Electron without IPC, so on macOS Ctrl+C leaves Orca open; watch the parent PID to couple shutdown.
+      // Why: the dev runner spawns Electron without IPC, so on macOS Ctrl+C leaves Quirky open; watch the parent PID to couple shutdown.
       requestDevParentShutdown()
     }
   }, 1000)

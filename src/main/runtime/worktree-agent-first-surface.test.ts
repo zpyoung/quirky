@@ -15,17 +15,17 @@ vi.mock('./rpc/methods/structured-agent-session-create', () => ({
 }))
 
 const {
-  OrcaRuntimeService,
+  QuirkyRuntimeService,
   computeWorktreePathMock,
   ensurePathWithinWorkspaceMock,
   getEffectiveHooks,
   getDefaultTabsLaunch,
   createSetupRunnerScript,
   listWorktrees
-} = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
+} = await import('./quirky-runtime-test-mocks.spec')
+await import('./quirky-runtime-test-lifecycle.spec')
 const { makeRuntimeStoreWithWorkspaceSession, store } =
-  await import('./orca-runtime-test-fixtures.spec')
+  await import('./quirky-runtime-test-fixtures.spec')
 
 const DEFAULTS = {
   runCommands: true,
@@ -58,7 +58,7 @@ function chatCreateRuntime(args: {
     }
   }
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
-  const runtime = new OrcaRuntimeService({
+  const runtime = new QuirkyRuntimeService({
     ...runtimeStore,
     getRepo: (id) => (id === repo.id ? repo : undefined),
     getRepos: () => [repo],

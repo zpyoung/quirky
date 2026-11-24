@@ -22,7 +22,7 @@ const editFile = (overrides: Partial<NativeChatEditFile>): NativeChatEditFile =>
 })
 
 describe('tool row file targets', () => {
-  it('opens a read file in Orca without toggling the row', () => {
+  it('opens a read file in Quirky without toggling the row', () => {
     const onLinkClick = vi.fn()
     render(
       <NativeChatToolLine

@@ -41,7 +41,7 @@ import {
 import { resettleOpenStructuredAgentSessionConversation } from './structured-agent-session-conversation-open'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import { withNativeChatCutTurnNotices } from '../../../shared/native-chat-cut-turn-notice'
-import { latestNativeChatOrcaStopCut } from '../../../shared/native-chat-orca-stop-cut'
+import { latestNativeChatQuirkyStopCut } from '../../../shared/native-chat-quirky-stop-cut'
 import { beginAgentSessionRuntimeRecord } from '../../runtime/agent-session-runtime-end-record'
 import { STRUCTURED_AGENT_SESSION_IDLE_MS } from './structured-agent-session-idle-sweep'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
@@ -60,7 +60,7 @@ const PROVIDER_SESSION = 'provider-session-alpha-1'
 const TOOL_STARTED_AT = 1_800_000_000_000
 /** The last renewal before the crash, while the command was still running. */
 const LAST_RENEWED_AT = TOOL_STARTED_AT + 25_000
-/** Orca comes back an hour later. */
+/** Quirky comes back an hour later. */
 const RELAUNCHED_AT = TOOL_STARTED_AT + 60 * 60 * 1000
 
 let root: string
@@ -196,7 +196,7 @@ async function settledTurn() {
 }
 
 beforeEach(async () => {
-  root = await mkdtemp(join(tmpdir(), 'orca-crash-turn-end-'))
+  root = await mkdtemp(join(tmpdir(), 'quirky-crash-turn-end-'))
   await seedCrashedStore()
   await seedClaudeToolTurn()
 })
@@ -258,7 +258,7 @@ describe('a turn a crash cut short mid-tool', () => {
     ).toEqual({ key: 'workedFor', duration: '27s' })
   })
 
-  it('ends at the pre-crash renewal when the child outlived Orca and recovery stopped it', async () => {
+  it('ends at the pre-crash renewal when the child outlived Quirky and recovery stopped it', async () => {
     // The orphan is alive at relaunch, but its output went nowhere: none of that is work shown.
     let alive = true
     const probeOwner = async (): Promise<AgentSessionOwnerProbe> =>
@@ -311,7 +311,7 @@ function drainSession(): Promise<void> {
 }
 
 // On desktop the chat on screen at relaunch opens before the startup reconcile has probed its owner.
-// The Orca that held the owner is gone (this one replaced it), so the open itself ends the turn; the
+// The Quirky that held the owner is gone (this one replaced it), so the open itself ends the turn; the
 // probe's later proof has nothing left to revise.
 describe('a turn a read reached before the reconcile proved its owner dead', () => {
   it('reads interrupted at the last renewal from the first open, and a subscriber is sent it once', async () => {
@@ -366,7 +366,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
   })
 
   it('explains the turn it cut, so the cut reads once and offers Continue', async () => {
-    // The Orca that crashed recorded that it started, and never that it ended.
+    // The Quirky that crashed recorded that it started, and never that it ended.
     const crashed = crashedClaudeRecord()
     const ownerProcess = crashed.lease.ownerProcess
     if (!ownerProcess) {
@@ -393,7 +393,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     expect(items.flatMap((item) => (item.body.kind === 'status' ? [item.turnScope] : []))).toEqual([
       { kind: 'turn', turnItemId }
     ])
-    expect(latestNativeChatOrcaStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
+    expect(latestNativeChatQuirkyStopCut(items, [])).toEqual({ turnItemId, cause: 'crash' })
     const readerRows = withNativeChatCutTurnNotices(items, { agentName: 'Claude' }).filter(
       (item) => item.body.kind === 'status'
     )
@@ -421,7 +421,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
     expect(await host.journalSnapshot(SESSION)).toEqual(settled)
   })
 
-  it('ends it at the last renewal although recovery stops a child that outlived Orca later', async () => {
+  it('ends it at the last renewal although recovery stops a child that outlived Quirky later', async () => {
     let alive = true
     const probeOwner = async (): Promise<AgentSessionOwnerProbe> =>
       alive

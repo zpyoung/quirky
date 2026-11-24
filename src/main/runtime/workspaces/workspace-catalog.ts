@@ -1,10 +1,10 @@
-import { OrcaRuntimeWithReadKittyFile } from '../orca-runtime-read-kitty-file'
+import { QuirkyRuntimeWithReadKittyFile } from '../quirky-runtime-read-kitty-file'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
 import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
-import { RESOLVED_WORKTREE_CACHE_TTL_MS } from '../orca-runtime-postlude'
+import { RESOLVED_WORKTREE_CACHE_TTL_MS } from '../quirky-runtime-postlude'
 import { getWorktreeScanMutationRevision } from '../../local-worktree-scan-generation'
 import {
   resolveLocalProjectRuntimeForRepo,
@@ -30,10 +30,10 @@ import {
 import { withUnregisteredRemovalCheckouts } from '../../worktree-removal-listing'
 import { withoutInFlightWorktreeCreates } from '../../worktree-create-in-flight'
 import { preserveFolderUpgradeWorktreePath } from '../../folder-upgrade-worktree-path'
-import type { RuntimeWorktreeScanCache } from '../orca-runtime-core'
+import type { RuntimeWorktreeScanCache } from '../quirky-runtime-core'
 import { resolveWorktreeScanCacheTtlMs } from '../runtime-worktree-scan-cache'
 
-export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFile {
+export abstract class RuntimeWorkspaceCatalog extends QuirkyRuntimeWithReadKittyFile {
   protected abstract refreshRepoWorktreeScan(
     ...args: Parameters<RuntimeWorkspaceRepoScanRefresh['refreshRepoWorktreeScan']>
   ): ReturnType<RuntimeWorkspaceRepoScanRefresh['refreshRepoWorktreeScan']>

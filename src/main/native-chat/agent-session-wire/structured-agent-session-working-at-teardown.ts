@@ -56,7 +56,7 @@ import { StructuredAgentSessionCurrentWork } from './structured-agent-session-cu
 import type { StructuredAgentSessionWorkScope } from '../../../shared/structured-agent-session-main-agent-working'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 
-/** A send Orca journaled that the provider has neither opened a turn for nor refused. Mirrors the
+/** A send Quirky journaled that the provider has neither opened a turn for nor refused. Mirrors the
  *  projection's own unanswered-dispatch rule, which is what makes that window read as `working`. */
 function pendingSubmissionInFlight(
   submissions: readonly AgentJournalSubmission[]
