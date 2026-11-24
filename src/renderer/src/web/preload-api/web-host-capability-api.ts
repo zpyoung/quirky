@@ -164,23 +164,6 @@ export function createSkillsApi(): NonNullable<Partial<PreloadApi>['skills']> {
     cancelUpdateRun: () => Promise.resolve(),
     acknowledgeUpdateRun: () => Promise.resolve(),
     getUpdateRun: () => Promise.resolve({ state: 'idle' as const }),
-    prepareShare: () => Promise.reject(new Error('Skill publishing requires the desktop app.')),
-    publishShare: () => Promise.reject(new Error('Skill publishing requires the desktop app.')),
-    cancelShare: () => Promise.resolve(),
-    releaseShare: () => Promise.resolve(),
-    resolveShare: () => Promise.reject(new Error('Skill share links require the desktop app.')),
-    installShare: () => Promise.reject(new Error('Skill installation requires the desktop app.')),
-    installBundleShare: () =>
-      Promise.reject(new Error('Skill installation requires the desktop app.')),
-    installPackageVersion: () =>
-      Promise.reject(new Error('Skill installation requires the desktop app.')),
-    installBundlePackageVersion: () =>
-      Promise.reject(new Error('Skill installation requires the desktop app.')),
-    cancelInstall: () => Promise.resolve({ cancelled: false }),
-    previewInstall: () => Promise.reject(new Error('Skill installation requires the desktop app.')),
-    previewBundleInstall: () =>
-      Promise.reject(new Error('Skill installation requires the desktop app.')),
-    removeInstall: () => Promise.reject(new Error('Skill installation requires the desktop app.')),
     // Disable deletion when the paired host predates the capability.
     deleteSupported: async () => {
       const status = await getRemoteRuntimeStatus().catch(() => null)
@@ -189,20 +172,6 @@ export function createSkillsApi(): NonNullable<Partial<PreloadApi>['skills']> {
     previewDelete: (request) =>
       callRuntimeResult<SkillDeletePlan>('skills.previewDelete', request, 60_000),
     delete: (request) => callRuntimeResult<SkillDeleteResult>('skills.delete', request, 5 * 60_000),
-    listManagedInstalls: () =>
-      Promise.reject(new Error('Skill installation requires the desktop app.')),
-    getPackage: () => Promise.reject(new Error('Skill installation requires the desktop app.')),
-    listOwnedShares: () =>
-      Promise.reject(new Error('Skill package management requires the desktop app.')),
-    revokeShare: () =>
-      Promise.reject(new Error('Skill package management requires the desktop app.')),
-    deletePackageVersion: () =>
-      Promise.reject(new Error('Skill package management requires the desktop app.')),
-    deletePackage: () =>
-      Promise.reject(new Error('Skill package management requires the desktop app.')),
-    listWslDistros: () => Promise.resolve([]),
-    onInstallProgress: () => () => {},
-    onShareProgress: () => () => {},
     onUpdateRun: () => () => {}
   }
 }

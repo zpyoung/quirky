@@ -2,8 +2,7 @@ import type { LinkedWorkItemContext } from '@/lib/linked-work-item-context'
 import type { AgentLaunchOptionSelection } from '../../../shared/fork-automation-launch-settings/agent-launch-overrides'
 import type { TaskProvider } from '../../../shared/task-providers'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
-import type { LaunchSource } from '../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../shared/agent-kind'
 
 export type LaunchableWorkItem = {
   provider?: TaskProvider
@@ -28,7 +27,6 @@ export type LaunchWorkItemDirectArgs = {
   openModalFallback: () => void
   baseBranch?: string
   launchSource: LaunchSource
-  telemetrySource?: WorkspaceCreateTelemetrySource
   agentOverride?: TuiAgent
   agentArgs?: string | null
   launchOptions?: AgentLaunchOptionSelection | null

@@ -1,5 +1,4 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { ArtifactPublishButton } from '@/components/artifacts/fork-artifact-passwords/ArtifactPublishButton'
 import { translate } from '@/i18n/i18n'
 import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { useAppStore } from '@/store'
@@ -11,10 +10,7 @@ import { BrowserReloadControl } from './browser-reload-control'
 import { BrowserToolbarMenu } from './BrowserToolbarMenu'
 import { SshEgressIndicator } from './browser-egress-indicator'
 import { destroyPersistentWebview } from '../host-guest/webview-registry'
-import {
-  getShareableBrowserArtifactFile,
-  readBrowserHtmlArtifactRequest
-} from '../describe-page/browser-artifact-upload'
+import { getLocalBrowserHtmlFile } from '../describe-page/browser-file-url'
 import {
   canOpenBrowserFileInWorkspaceEditor,
   openBrowserFileSource
@@ -67,7 +63,6 @@ export function BrowserPageToolbar({
   markupCancel,
   grabElementShortcut,
   browserAnnotationsLength,
-  shareableArtifactFile,
   currentBrowserUrl,
   externalUrl
 }: {
@@ -107,7 +102,6 @@ export function BrowserPageToolbar({
   markupCancel: () => void
   grabElementShortcut: string
   browserAnnotationsLength: number
-  shareableArtifactFile: { filePath: string } | null
   currentBrowserUrl: string
   externalUrl: string | null
 }): React.JSX.Element {
@@ -121,7 +115,7 @@ export function BrowserPageToolbar({
       : browserTourStep === 1
         ? ('annotate' as const)
         : undefined
-  const localHtmlFilePath = getShareableBrowserArtifactFile(currentBrowserUrl)?.filePath ?? null
+  const localHtmlFilePath = getLocalBrowserHtmlFile(currentBrowserUrl)?.filePath ?? null
   // Why the URL check first: every other page skips the workspace-owner lookup on each store write.
   const canOpenSourceFile = useAppStore(
     (state) => localHtmlFilePath !== null && canOpenBrowserFileInWorkspaceEditor(state, worktreeId)
@@ -208,18 +202,6 @@ export function BrowserPageToolbar({
         onToggle: () => (markupIsActive ? markupCancel() : void markupStart()),
         canShowDiscoveryHint: isActive
       }}
-      shareControl={
-        shareableArtifactFile
-          ? (control) => {
-              const props = {
-                sourceKey: shareableArtifactFile.filePath,
-                className: 'h-7 w-7',
-                createRequest: () => readBrowserHtmlArtifactRequest(currentBrowserUrl)
-              }
-              return <ArtifactPublishButton {...props} {...control} />
-            }
-          : undefined
-      }
       viewSource={{
         onSelect: () => void window.api.browser.openDevTools({ browserPageId }),
         label: translate(

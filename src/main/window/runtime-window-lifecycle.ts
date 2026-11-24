@@ -138,9 +138,6 @@ export function registerRuntimeWindowLifecycle(
           ...(opts.leafId !== undefined ? { leafId: opts.leafId } : {}),
           ...(opts.splitFromLeafId !== undefined ? { splitFromLeafId: opts.splitFromLeafId } : {}),
           ...(opts.splitDirection !== undefined ? { splitDirection: opts.splitDirection } : {}),
-          ...(opts.splitTelemetrySource !== undefined
-            ? { splitTelemetrySource: opts.splitTelemetrySource }
-            : {}),
           ...(opts.focus !== undefined ? { focus: opts.focus } : {})
         })
         if (!sent) {
@@ -166,7 +163,6 @@ export function registerRuntimeWindowLifecycle(
         command: opts.command,
         worktreeId: opts.worktreeId,
         sourceLeafId: opts.sourceLeafId,
-        telemetrySource: opts.telemetrySource,
         newLeafId: opts.newLeafId
       })
     },

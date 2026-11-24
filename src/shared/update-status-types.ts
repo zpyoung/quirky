@@ -1,4 +1,4 @@
-import type { DedicatedRepoChannel, ReleaseBuild, ReleaseChannel } from './release-channel'
+import type { ReleaseBuild, ReleaseChannel } from './release-channel'
 
 // ─── Updater ─────────────────────────────────────────────────────────
 
@@ -20,14 +20,13 @@ export type UpdateCheckOptions = {
   includePrerelease?: boolean
   includePerfPrerelease?: boolean
   localBuild?: boolean
-  /** Dev channel switching; `targetTag` pins an exact build, including older ones. */
+  /** Channel switching; `targetTag` pins an exact build, including older ones. */
   channel?: ReleaseChannel
   targetTag?: string
 }
 
-/** Non-release origins for an update. Derived from the dev-channel list so a new
- *  channel with its own repo cannot be reported as an ordinary release. */
-export type UpdateSource = 'local' | DedicatedRepoChannel
+/** Non-release origins for an update. */
+export type UpdateSource = 'local'
 
 /** Root-package Linux install formats whose update installs need privilege escalation. */
 export type LinuxRootPackageType = 'deb' | 'rpm'
@@ -72,7 +71,6 @@ export type UpdateStatus = (
   | {
       state: 'available'
       version: string
-      activeNudgeId?: string
       // Why: releaseUrl is not currently populated by the update-available handler
       // (it always sends undefined). Kept on the type for the Settings page's
       // release-notes link fallback and for potential future use if the main
@@ -89,12 +87,11 @@ export type UpdateStatus = (
       externallyManaged?: boolean
     }
   | { state: 'not-available'; userInitiated?: boolean }
-  | { state: 'downloading'; percent: number; version: string; activeNudgeId?: string }
+  | { state: 'downloading'; percent: number; version: string }
   | {
       state: 'downloaded'
       version: string
       releaseUrl?: string
-      activeNudgeId?: string
       /** Install preparation is in progress; older clients can still render downloaded. */
       installing?: boolean
     }
@@ -108,7 +105,6 @@ export type UpdateStatus = (
       /** A staged update can retry installation without downloading again; older hosts omit this. */
       retryAction?: 'install'
       userInitiated?: boolean
-      activeNudgeId?: string
       recovery?: LinuxPackageInstallRecovery
       /** Optional so older paired clients retain the diagnostic and install retry. */
       installBlock?: UpdateInstallBlock

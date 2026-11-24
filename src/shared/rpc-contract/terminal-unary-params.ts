@@ -8,7 +8,6 @@ import {
   isSupportedWindowsShellOverride,
   listSupportedWindowsShellOverrides
 } from '../windows-terminal-shell'
-import { TERMINAL_PANE_SPLIT_SOURCES } from '../feature-education-telemetry'
 import { OptionalExecutionHostId } from './worktree-params'
 
 // Why refused at the boundary rather than at spawn: only the host knows the allowlist, and a
@@ -251,7 +250,6 @@ export const TerminalSplit = z
       .optional(),
     command: OptionalString,
     env: z.record(z.string(), z.string()).optional(),
-    telemetrySource: z.enum(TERMINAL_PANE_SPLIT_SOURCES).optional(),
     // Layout-owner build: a window names its own pane; main writes the split and starts it.
     pane: z
       .object({

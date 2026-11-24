@@ -106,11 +106,6 @@ vi.mock('@electron-toolkit/utils', () => ({
 
 vi.mock('./ipc/pty/kill-all', () => ({ killAllPty: killAllPtyMock }))
 
-vi.mock('./updater-nudge', () => ({
-  fetchNudge: vi.fn().mockResolvedValue(null),
-  shouldApplyNudge: vi.fn().mockReturnValue(false)
-}))
-
 const ONE_HOUR_MS = 60 * 60 * 1000
 const THIRTY_SECONDS_MS = 30 * 1000
 const FRIENDLY_MESSAGE = "Couldn't reach the update server. Try again in a few minutes."
@@ -132,11 +127,11 @@ function respondWithNotReadyRelease({
   const atom = `<feed>${publishingIncident.atomTags
     .map(
       (tag) =>
-        `<entry><link rel="alternate" type="text/html" href="https://github.com/zpyoung/orca/releases/tag/${tag}"/><title>${tag}</title></entry>`
+        `<entry><link rel="alternate" type="text/html" href="https://github.com/zpyoung/quirky/releases/tag/${tag}"/><title>${tag}</title></entry>`
     )
     .join('')}</feed>`
   netFetchMock.mockImplementation((url: string, init?: { method?: string }) => {
-    if (url === 'https://github.com/zpyoung/orca/releases.atom') {
+    if (url === 'https://github.com/zpyoung/quirky/releases.atom') {
       return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(atom) })
     }
     if (init?.method === 'HEAD' && assetStatus !== undefined) {

@@ -9,8 +9,6 @@ export const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
 export const AUTO_UPDATE_RETRY_INTERVAL_MS = 60 * 60 * 1000
 // Why: a persistently-failing feed used to re-arm the retry at a fixed 1h cadence forever (issue #7576); backoff doubles per failure up to this cap, any completed check resets.
 export const MAX_AUTO_UPDATE_RETRY_INTERVAL_MS = 6 * 60 * 60 * 1000
-export const NUDGE_POLL_INTERVAL_MS = 30 * 60 * 1000
-export const NUDGE_ACTIVATION_COOLDOWN_MS = 5 * 60 * 1000
 export const QUIT_AND_INSTALL_DELAY_MS = 100
 export const PRE_QUIT_CLEANUP_TIMEOUT_MS = 2_500
 // Required profile exports may each wait for a bounded writer request.
@@ -56,7 +54,6 @@ export abstract class UpdaterState {
   protected pendingCheckFailureKey: string | null = null
   protected pendingCheckFailurePromise: Promise<void> | null = null
   protected autoUpdateCheckTimer: ReturnType<typeof setTimeout> | null = null
-  protected nudgeCheckTimer: ReturnType<typeof setTimeout> | null = null
   protected pendingQuitAndInstallTimer: ReturnType<typeof setTimeout> | null = null
   protected macDeferredStagingTimer: ReturnType<typeof setTimeout> | null = null
   protected quitAndInstallInProgress = false
@@ -82,10 +79,6 @@ export abstract class UpdaterState {
   protected activeUpdateCheckEventAttemptId: number | null = null
   protected updateAvailableEventPendingAttemptId: number | null = null
   protected pendingUserInitiatedCheckAfterInFlight: UpdateCheckVariant | null = null
-  protected activeUpdateNudgeId: string | null = null
-  protected awaitingNudgeCheckOutcome = false
-  protected nudgeCheckInFlight = false
-  protected lastNudgeCheckAt = 0
   protected publishingWindowLastGoodCheck: { lastGoodTag: string } | null = null
   protected pendingPrereleaseFallback: {
     primaryTag: string
@@ -101,10 +94,6 @@ export abstract class UpdaterState {
     retryLaunched: boolean
   } | null = null
 
-  protected _getPendingUpdateNudgeId: (() => string | null) | null = null
-  protected _getDismissedUpdateNudgeId: (() => string | null) | null = null
-  protected _setPendingUpdateNudgeId: ((id: string | null) => void) | null = null
-  protected _setDismissedUpdateNudgeId: ((id: string | null) => void) | null = null
   // Why: guards against duplicate download() calls while an accepted request transitions status to 'downloading'.
   protected downloadInFlight = false
   /** Guards the macOS `activate` handler from reopening the old version while ShipIt replaces the .app bundle. */

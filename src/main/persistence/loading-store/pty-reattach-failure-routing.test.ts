@@ -9,10 +9,6 @@ import { createPtySpawnCommitDependencies } from './pty-spawn-commit-dependencie
 import { clearProviderPtyState } from '../../ipc/pty/provider/state-cleanup'
 import { ptyIncarnationById, ptyOwnership } from '../../ipc/pty/provider/ownership-state'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

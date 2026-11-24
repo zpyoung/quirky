@@ -29,11 +29,6 @@ vi.mock('./native-chat-runtime-send', () => ({
 vi.mock('./native-chat-runtime-image-send', () => ({
   sendNativeChatMessageWithImageAttachments: mocks.sendNativeChatMessageWithImageAttachments
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({
-  emitNativeChatMessageSent: vi.fn(),
-  emitNativeChatPickerItemAccepted: vi.fn(),
-  emitNativeChatSendClassified: vi.fn()
-}))
 
 // `omp models --json` rows as OMP 17.0.5 prints them, reduced to what discovery keeps.
 const DISCOVERED: CatalogModel[] = [

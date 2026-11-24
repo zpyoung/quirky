@@ -18,8 +18,6 @@ let userDataDir: string
 vi.mock('electron', () => ({
   app: { getPath: () => userDataDir }
 }))
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 
 const T = 1_700_000_000_000
 const PANE = 'tab-1:pane-1'

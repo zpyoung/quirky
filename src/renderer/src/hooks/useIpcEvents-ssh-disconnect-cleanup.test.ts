@@ -193,8 +193,7 @@ describe('useIpcEvents updater integration', () => {
         },
         updater: {
           getStatus: () => Promise.resolve({ state: 'idle' }),
-          onStatus: () => () => {},
-          onClearDismissal: () => () => {}
+          onStatus: () => () => {}
         },
         browser: {
           onGuestLoadFailed: () => () => {},

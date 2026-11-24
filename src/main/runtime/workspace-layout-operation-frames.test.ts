@@ -35,7 +35,6 @@ vi.mock('../../shared/layout-owner-switch', () => ({
     return layoutOwner.isMain
   }
 }))
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

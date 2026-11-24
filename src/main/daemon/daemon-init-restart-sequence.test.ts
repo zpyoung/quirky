@@ -32,8 +32,6 @@ const {
   setLocalPtyProviderMock,
   unbindLocalProviderListenersMock,
   rebindLocalProviderListenersMock,
-  trackDaemonReplacedMock,
-  trackDaemonRetiredMock,
   importFresh,
   mockOnlyDaemonSocketAlive,
   installDefaultNetConnectStub,
@@ -55,7 +53,6 @@ vi.mock('./daemon-stale-kill', () => moduleFactories.daemonStaleKill())
 vi.mock('./daemon-process-start-time', () => moduleFactories.daemonProcessStartTime())
 vi.mock('./daemon-pid-file-parse', () => moduleFactories.daemonPidFileParse())
 vi.mock('./client', () => moduleFactories.client())
-vi.mock('./daemon-lifecycle-event', () => moduleFactories.daemonLifecycleEvent())
 vi.mock('./daemon-spawner', () => moduleFactories.daemonSpawner())
 vi.mock('./daemon-pty-adapter', () => moduleFactories.daemonPtyAdapter())
 vi.mock('../ipc/pty/provider/registry', () => moduleFactories.ptyProviderRegistry())
@@ -291,16 +288,6 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     await replacementAdapter.options.respawn?.('daemon_died')
     expect(originalSpawner.resetHandle).toHaveBeenCalledTimes(1)
     expect(originalSpawner.ensureRunning).toHaveBeenCalledTimes(1)
-    // STA-2376: death → respawn retires, exactly once.
-    expect(trackDaemonRetiredMock).toHaveBeenCalledTimes(1)
-    expect(trackDaemonRetiredMock).toHaveBeenCalledWith('died_respawn')
-    trackDaemonRetiredMock.mockClear()
-    trackDaemonReplacedMock.mockClear()
-    // STA-2376: the resolver respawn attributes rather than emits — the launch it triggers reports it.
-    // Emitting here too would double-count, and would fire before the outcome is known.
-    await replacementAdapter.options.respawn?.('unhealthy_resolver')
-    expect(trackDaemonRetiredMock).not.toHaveBeenCalled()
-    expect(trackDaemonReplacedMock).not.toHaveBeenCalled()
     // Still only one spawner in the whole test — nobody new was constructed.
     expect(spawnerInstances).toHaveLength(1)
   })
@@ -327,56 +314,6 @@ describe('daemon-init: runRestartDaemon (7-step sequence)', () => {
     const rebindOrder = rebindLocalProviderListenersMock.mock.invocationCallOrder.at(-1) ?? -1
     const swapOrder = setLocalPtyProviderMock.mock.invocationCallOrder.at(-1) ?? -1
     expect(rebindOrder).toBeGreaterThan(swapOrder)
-  })
-
-  // STA-2376: a manual restart kills the daemon while the outgoing adapter is still live, so a pane
-  // respawning on its synthetic exit reaches the death path for a user action. That must not land in
-  // the crash bucket. Driven from inside the restart's ensureRunning so restartInFlight is genuinely
-  // set, rather than asserting the guard against a flag the test poked itself.
-  it('does not report a retirement for a death observed during a manual restart', async () => {
-    const mod = await importFresh()
-    await mod.initDaemonPtyProvider()
-    const outgoingRespawn = adapterInstances[0].options.respawn
-    trackDaemonRetiredMock.mockClear()
-
-    let respawnedMidRestart = false
-    ensureRunningOverrides.push(async () => {
-      await outgoingRespawn?.('daemon_died')
-      respawnedMidRestart = true
-      return {
-        socketPath: '/fake/restarted-socket',
-        tokenPath: '/fake/restarted-token'
-      }
-    })
-
-    await mod.restartDaemon()
-
-    expect(respawnedMidRestart).toBe(true)
-    expect(trackDaemonRetiredMock).not.toHaveBeenCalled()
-
-    // The same closure still retires once the restart has settled, so the guard is scoped, not permanent.
-    await outgoingRespawn?.('daemon_died')
-    expect(trackDaemonRetiredMock).toHaveBeenCalledTimes(1)
-    expect(trackDaemonRetiredMock).toHaveBeenCalledWith('died_respawn')
-
-    // The restart installs its own adapter, whose closure is a second copy of the guard — and the one
-    // that actually runs in the field from the second restart onward, since the first adapter is gone.
-    const restartedRespawn = adapterInstances[1].options.respawn
-    trackDaemonRetiredMock.mockClear()
-    let respawnedMidSecondRestart = false
-    ensureRunningOverrides.push(async () => {
-      await restartedRespawn?.('daemon_died')
-      respawnedMidSecondRestart = true
-      return {
-        socketPath: '/fake/restarted-socket-2',
-        tokenPath: '/fake/restarted-token-2'
-      }
-    })
-
-    await mod.restartDaemon()
-
-    expect(respawnedMidSecondRestart).toBe(true)
-    expect(trackDaemonRetiredMock).not.toHaveBeenCalled()
   })
 
   it('preserves legacy adapter instances by identity, drains outgoing router via disposeRouterOnly, and re-discovers legacy sessions on the new router', async () => {

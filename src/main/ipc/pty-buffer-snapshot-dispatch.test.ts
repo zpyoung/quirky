@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { onMock, spawnMock, trackMock, classifyErrorMock } from './pty-ipc-mock-registry'
+import { onMock, spawnMock, classifyErrorMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { setLocalPtyProvider } from './pty/provider/registry'
@@ -25,12 +25,6 @@ vi.mock('../pi/titlebar-extension-service', () =>
 vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshModuleMock()))
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
-)
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
 )
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
@@ -60,44 +54,6 @@ describe('registerPtyHandlers', () => {
   describe('agent_started telemetry', () => {
     // Why: telemetry-plan.md§Agent launch semantics — agent_started fires only after provider.spawn resolves; a malformed payload must not emit a silent event.
     // Why: telemetry-plan.md§Agent launch semantics — agent_started fires only after provider.spawn resolves; a malformed payload must not emit a silent event.
-    it('emits agent_started after a successful spawn when telemetry is supplied', async () => {
-      handlers.clear()
-      registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
-        cols: 80,
-        rows: 24,
-        telemetry: {
-          agent_kind: 'claude-code',
-          launch_source: 'new_workspace_composer',
-          request_kind: 'new'
-        }
-      })
-      expect(trackMock).toHaveBeenCalledWith('agent_started', {
-        agent_kind: 'claude-code',
-        launch_source: 'new_workspace_composer',
-        request_kind: 'new'
-      })
-    })
-    it('does not emit agent_started when telemetry is omitted (bare-shell tab)', async () => {
-      handlers.clear()
-      registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, { cols: 80, rows: 24 })
-      expect(trackMock).not.toHaveBeenCalled()
-    })
-    it('drops the event when any telemetry field is outside its closed enum', async () => {
-      handlers.clear()
-      registerPtyHandlers(mainWindow as never)
-      await handlers.get('pty:spawn')!(null, {
-        cols: 80,
-        rows: 24,
-        telemetry: {
-          agent_kind: 'claude-code',
-          launch_source: 'not_a_real_surface',
-          request_kind: 'new'
-        }
-      })
-      expect(trackMock).not.toHaveBeenCalledWith('agent_started', expect.anything())
-    })
     it('does not emit agent_started when provider.spawn throws', async () => {
       // Why: agent_started fires only on confirmed launch — inject a throwing provider to hit the catch path with no race against the real LocalPtyProvider.
       setLocalPtyProvider({
@@ -128,7 +84,6 @@ describe('registerPtyHandlers', () => {
           }
         })
       ).rejects.toThrow(/spawn boom/)
-      expect(trackMock).not.toHaveBeenCalledWith('agent_started', expect.anything())
     })
   })
   describe('serializeBuffer dispatch', () => {

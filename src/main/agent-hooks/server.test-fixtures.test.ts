@@ -10,9 +10,6 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp') }
 }))
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 class SocketTrackingHookServer extends AgentHookServer {
   readonly requestSockets = new Set<Socket>()
 

@@ -3,7 +3,6 @@ import { CircleAlert, Loader2 } from 'lucide-react'
 import { Button } from '../ui/button'
 import { translate } from '@/i18n/i18n'
 import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
-import { useAppStore } from '@/store'
 import { cn } from '@/lib/utils'
 
 export function MobileRelayMintFailureNotice({
@@ -24,10 +23,7 @@ export function MobileRelayMintFailureNotice({
   busy?: boolean
 }): React.JSX.Element {
   const providerMissing = failure.stage === 'provider_missing'
-  // Why: a revoked cloud session fails every mint; "retry or use LAN" hides the one action that works.
-  const reconnectRequired =
-    useAppStore((state) => state.orcaProfileAuthStatus?.state === 'reconnect-required') ||
-    failure.code === 'relay_signed_out'
+  const reconnectRequired = failure.code === 'relay_signed_out'
   const notEntitled = failure.code === 'relay_not_entitled'
   const [showBusyFeedback, setShowBusyFeedback] = useState(false)
   useEffect(() => {

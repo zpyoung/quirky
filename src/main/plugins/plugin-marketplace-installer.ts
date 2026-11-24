@@ -30,7 +30,6 @@ export type PluginMarketplaceInstallPreview = {
   manifest: PluginManifest
   official: boolean
   bundled: boolean
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
 }
 
 export type PluginMarketplacePreviewIdentity = Pick<
@@ -42,18 +41,15 @@ export class PluginMarketplaceInstaller {
   private readonly marketplace: PluginMarketplaceService
   private readonly userDataPath: string
   private readonly hostVersion: string
-  private readonly blockedPluginReason: (pluginKey: string) => string | null
 
   constructor(options: {
     marketplace: PluginMarketplaceService
     userDataPath: string
     hostVersion: string
-    blockedPluginReason?: (pluginKey: string) => string | null
   }) {
     this.marketplace = options.marketplace
     this.userDataPath = options.userDataPath
     this.hostVersion = options.hostVersion
-    this.blockedPluginReason = options.blockedPluginReason ?? (() => null)
   }
 
   async preview(
@@ -89,8 +85,7 @@ export class PluginMarketplaceInstaller {
         consentFingerprint: inspection.consentFingerprint,
         manifest: inspection.manifest,
         official: listing.official,
-        bundled: listing.bundled,
-        ...(listing.blockedByKillList ? { blockedByKillList: listing.blockedByKillList } : {})
+        bundled: listing.bundled
       }
     } finally {
       await rm(stagingDirectory, { recursive: true, force: true })
@@ -99,11 +94,6 @@ export class PluginMarketplaceInstaller {
 
   async install(preview: PluginMarketplacePreviewIdentity): Promise<PluginInstallResult> {
     const listing = await this.requireListing(preview.marketplaceSourceId, preview.pluginKey)
-    const blockedReason =
-      listing.blockedByKillList?.reason ?? this.blockedPluginReason(preview.pluginKey)
-    if (blockedReason) {
-      return { ok: false, error: `plugin is blocked by Orca's safety list: ${blockedReason}` }
-    }
     if (listing.marketplaceCommit !== preview.marketplaceCommit) {
       return { ok: false, error: 'marketplace changed after preview; review the plugin again' }
     }
@@ -123,8 +113,7 @@ export class PluginMarketplaceInstaller {
         ref: sourceState.source.ref,
         resolvedCommit: preview.marketplaceCommit
       },
-      plugin: { url: listing.source.url, ref: listing.source.ref },
-      blockedPluginReason: this.blockedPluginReason
+      plugin: { url: listing.source.url, ref: listing.source.ref }
     })
   }
 
@@ -146,8 +135,7 @@ export class PluginMarketplaceInstaller {
     return rollbackInstalledPlugin({
       pluginsDir: getUserPluginsDir(this.userDataPath),
       pluginKey,
-      hostVersion: this.hostVersion,
-      blockedPluginReason: this.blockedPluginReason
+      hostVersion: this.hostVersion
     })
   }
 

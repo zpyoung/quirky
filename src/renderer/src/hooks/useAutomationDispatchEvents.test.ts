@@ -289,7 +289,7 @@ describe('useAutomationDispatchEvents setup launch', () => {
   it('does not stamp the created workspace with an empty agent-launch fallback', async () => {
     await registerAndDispatch()
 
-    expect(mockCreateWorktree.mock.calls[0][10]).toBeUndefined()
+    expect(mockCreateWorktree.mock.calls[0][9]).toBeUndefined()
     expect(mockLaunchAgentBackgroundSession).toHaveBeenCalledWith(
       expect.objectContaining({
         agent: 'claude',

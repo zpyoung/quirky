@@ -24,12 +24,7 @@ export class PluginContentPackRegistry {
   readonly commands: PluginCommandRegistry
   private readonly activationErrors = new Map<string, string>()
 
-  constructor(
-    contentVerifier: PluginContentVerifier,
-    /** Revocation chokepoint: no caller-supplied predicate can readmit a
-     *  killed plugin's language packs, VM recipes, or commands. */
-    private readonly isKilled: (pluginKey: string) => boolean
-  ) {
+  constructor(contentVerifier: PluginContentVerifier) {
     this.languagePacks = new PluginLanguagePackRegistry(contentVerifier)
     this.vmRecipes = new PluginVmRecipeRegistry()
     this.commands = new PluginCommandRegistry()
@@ -43,7 +38,7 @@ export class PluginContentPackRegistry {
     const approvedKeys = new Set(
       discovered
         .filter((plugin): plugin is ValidDiscoveredPlugin => !isInvalidDiscoveredPlugin(plugin))
-        .filter((plugin) => isApproved(plugin) && !this.isKilled(plugin.pluginKey))
+        .filter((plugin) => isApproved(plugin))
         .map((plugin) => plugin.pluginKey)
     )
     const excluded = new Set<string>()
@@ -71,13 +66,8 @@ export class PluginContentPackRegistry {
     )
 
     while (true) {
-      // `approvedKeys` is a snapshot from before the awaited verification
-      // above, so a kill list arriving during that wait would otherwise still
-      // publish. Re-read revocation here, the last gate before publication.
       const approveAtomically = (plugin: ValidDiscoveredPlugin): boolean =>
-        approvedKeys.has(plugin.pluginKey) &&
-        !excluded.has(plugin.pluginKey) &&
-        !this.isKilled(plugin.pluginKey)
+        approvedKeys.has(plugin.pluginKey) && !excluded.has(plugin.pluginKey)
       await Promise.all(
         this.families(keybindings).map((family) => family.reconcile(discovered, approveAtomically))
       )

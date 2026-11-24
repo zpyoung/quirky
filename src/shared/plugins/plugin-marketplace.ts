@@ -127,12 +127,6 @@ export type PluginMarketplaceEntry = z.infer<typeof pluginMarketplaceEntrySchema
 export type PluginMarketplaceGitSource = z.infer<typeof pluginMarketplaceGitSourceSchema>
 export type PluginMarketplaceTrustMetadata = z.infer<typeof pluginMarketplaceTrustMetadataSchema>
 
-export const OFFICIAL_MARKETPLACE_GIT_SOURCE: PluginMarketplaceGitSource = {
-  kind: 'git',
-  url: 'https://github.com/stablyai/orca-plugins.git',
-  ref: 'main'
-}
-
 export function splitQualifiedPluginKey(pluginKey: string): {
   publisher: string
   id: string

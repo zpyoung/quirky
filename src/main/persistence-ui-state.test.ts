@@ -28,11 +28,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -70,21 +65,10 @@ async function createStore() {
   return createSqliteTestStore(Store, { dataFile: join(testState.dir, 'orca-data.json') })
 }
 
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 describe('Store', () => {
   beforeEach(() => {
     hasCreatedStoreInCase = false
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
-    trackMock.mockReset()
-    getCohortAtEmitMock.mockReset()
-    getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   })
 
   afterEach(async () => {
@@ -591,179 +575,6 @@ describe('Store', () => {
       firstInteractedAt: 100,
       interactionCount: 3
     })
-  })
-
-  it('emits feature interaction telemetry only when a higher bucket is reached', async () => {
-    const store = await createStore()
-
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    store.flush()
-
-    expect(trackMock).toHaveBeenCalledTimes(3)
-    expect(trackMock).toHaveBeenNthCalledWith(1, 'feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_1',
-      bucket_source: 'crossed_now',
-      nth_repo_added: 2
-    })
-    expect(trackMock).toHaveBeenNthCalledWith(2, 'feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_2',
-      bucket_source: 'crossed_now',
-      nth_repo_added: 2
-    })
-    expect(trackMock).toHaveBeenNthCalledWith(3, 'feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_3_4',
-      bucket_source: 'crossed_now',
-      nth_repo_added: 2
-    })
-    expect((readDataFile() as PersistedState).featureInteractionTelemetryBuckets).toEqual({
-      tasks: 'count_3_4'
-    })
-  })
-
-  it('emits one observed-existing bucket for pre-rollout interaction counts', async () => {
-    const store = await createStore()
-    store.updateUI({
-      featureInteractions: {
-        tasks: { firstInteractedAt: 100, interactionCount: 137 }
-      }
-    })
-    trackMock.mockClear()
-
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    store.flush()
-
-    expect(trackMock).toHaveBeenCalledTimes(1)
-    expect(trackMock).toHaveBeenCalledWith('feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_100_199',
-      bucket_source: 'observed_existing',
-      nth_repo_added: 2
-    })
-    expect((readDataFile() as PersistedState).featureInteractionTelemetryBuckets).toEqual({
-      tasks: 'count_100_199'
-    })
-  })
-
-  it('emits only the top-coded observed-existing bucket for pre-rollout power users', async () => {
-    const store = await createStore()
-    store.updateUI({
-      featureInteractions: {
-        tasks: { firstInteractedAt: 100, interactionCount: 1200 }
-      }
-    })
-    trackMock.mockClear()
-
-    store.recordFeatureInteraction('tasks')
-
-    expect(trackMock).toHaveBeenCalledTimes(1)
-    expect(trackMock).toHaveBeenCalledWith('feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_1000_plus',
-      bucket_source: 'observed_existing',
-      nth_repo_added: 2
-    })
-  })
-
-  it('emits high bucket crossings once and ignores same-range increments', async () => {
-    writeDataFile({
-      schemaVersion: 1,
-      repos: [],
-      worktreeMeta: {},
-      settings: {},
-      ui: {
-        featureInteractions: {
-          tasks: { firstInteractedAt: 100, interactionCount: 198 }
-        }
-      },
-      githubCache: { pr: {}, issue: {} },
-      workspaceSession: {},
-      featureInteractionTelemetryBuckets: { tasks: 'count_100_199' }
-    })
-    const store = await createStore()
-
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-
-    expect(trackMock).toHaveBeenCalledTimes(1)
-    expect(trackMock).toHaveBeenCalledWith('feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_200_499',
-      bucket_source: 'crossed_now',
-      nth_repo_added: 2
-    })
-  })
-
-  it('does not emit for count 4 but emits the count_1000_plus crossing', async () => {
-    const store = await createStore()
-
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    store.recordFeatureInteraction('tasks')
-    trackMock.mockClear()
-
-    store.recordFeatureInteraction('tasks')
-    expect(trackMock).not.toHaveBeenCalled()
-
-    writeDataFile({
-      schemaVersion: 1,
-      repos: [],
-      worktreeMeta: {},
-      settings: {},
-      ui: {
-        featureInteractions: {
-          tasks: { firstInteractedAt: 100, interactionCount: 999 }
-        }
-      },
-      githubCache: { pr: {}, issue: {} },
-      workspaceSession: {},
-      featureInteractionTelemetryBuckets: { tasks: 'count_500_999' }
-    })
-    const reloaded = await createStore()
-
-    reloaded.recordFeatureInteraction('tasks')
-    expect(trackMock).toHaveBeenCalledTimes(1)
-    expect(trackMock).toHaveBeenCalledWith('feature_interaction_usage_bucket_reached', {
-      feature_id: 'tasks',
-      feature_category: 'task_management',
-      count_bucket: 'count_1000_plus',
-      bucket_source: 'crossed_now',
-      nth_repo_added: 2
-    })
-  })
-
-  it('dedupes against the persisted bucket marker', async () => {
-    writeDataFile({
-      schemaVersion: 1,
-      repos: [],
-      worktreeMeta: {},
-      settings: {},
-      ui: {
-        featureInteractions: {
-          tasks: { firstInteractedAt: 100, interactionCount: 100 }
-        }
-      },
-      githubCache: { pr: {}, issue: {} },
-      workspaceSession: {},
-      featureInteractionTelemetryBuckets: { tasks: 'count_100_199' }
-    })
-    const store = await createStore()
-
-    store.recordFeatureInteraction('tasks')
-
-    expect(trackMock).not.toHaveBeenCalled()
   })
 
   it('updateUI preserves selected card properties from direct UI writes', async () => {

@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { Tab, TabContentType, TabGroup } from '../../../../shared/tab-types'
 import { useTabGroupCloseScopeCommands } from './useTabGroupCloseScopeCommands'
 
@@ -10,10 +9,9 @@ const mocks = vi.hoisted(() => {
     groupsByWorktree: Record<string, TabGroup[]>
     unifiedTabsByWorktree: Record<string, Tab[]>
   } = { groupsByWorktree: {}, unifiedTabsByWorktree: {} }
-  return { track: vi.fn(), closeEmptyGroup: vi.fn(), state }
+  return { closeEmptyGroup: vi.fn(), state }
 })
 
-vi.mock('@/lib/telemetry', () => ({ track: mocks.track }))
 vi.mock('../../store', () => ({
   useAppStore: Object.assign(
     (selector: (state: { closeEmptyGroup: () => void }) => unknown) => selector(mocks),
@@ -84,18 +82,12 @@ function commands({
 
 beforeEach(() => vi.clearAllMocks())
 
-describe('directional tab close telemetry', () => {
+describe('directional tab close', () => {
   it.each(['left', 'right'] as const)(
-    'counts one %s request before asking to close tabs',
+    'closes the tabs on the %s side of the selected tab',
     async (direction) => {
       const expectedIds = direction === 'left' ? ['left'] : ['right', 'last']
       const closeMany = vi.fn((ids: string[]) => {
-        expect(mocks.track).toHaveBeenCalledExactlyOnceWith('tabs_directional_close_requested', {
-          direction,
-          tab_type: 'terminal',
-          surface: 'workspace',
-          eligible_tab_count: expectedIds.length
-        })
         expect(ids).toEqual(expectedIds)
         // The close flow can leave these tabs open after a cancelled save prompt.
       })
@@ -113,46 +105,18 @@ describe('directional tab close telemetry', () => {
     }
   )
 
-  it.each([
-    ['terminal', 'terminal'],
-    ['editor', 'editor'],
-    ['diff', 'editor'],
-    ['conflict-review', 'editor'],
-    ['check-details', 'editor'],
-    ['agent-session', 'agent-session'],
-    ['browser', 'browser'],
-    ['simulator', 'simulator']
-  ] as const)('reports %s tabs as %s in the floating panel', (contentType, tabType) => {
-    commands({ worktreeId: FLOATING_TERMINAL_WORKTREE_ID, contentType }).closeToLeft('selected')
-
-    expect(mocks.track).toHaveBeenCalledExactlyOnceWith('tabs_directional_close_requested', {
-      direction: 'left',
-      tab_type: tabType,
-      surface: 'floating',
-      eligible_tab_count: 1
-    })
-  })
-
-  it('records an empty selection as a request with no eligible tabs', () => {
+  it('does not close anything when no tabs are eligible', () => {
     const scope = commands()
     scope.closeToLeft('left')
 
-    expect(mocks.track).toHaveBeenCalledExactlyOnceWith('tabs_directional_close_requested', {
-      direction: 'left',
-      tab_type: 'terminal',
-      surface: 'workspace',
-      eligible_tab_count: 0
-    })
     expect(scope.closeMany).not.toHaveBeenCalled()
   })
 
-  it('does not count stale tab ids or unrelated close commands', () => {
+  it('ignores stale tab ids', () => {
     const scope = commands()
     scope.closeToLeft('stale')
     scope.closeToRight('stale')
-    scope.closeOthers('selected')
-    scope.closeAllEditorTabsInGroup()
 
-    expect(mocks.track).not.toHaveBeenCalled()
+    expect(scope.closeMany).not.toHaveBeenCalled()
   })
 })

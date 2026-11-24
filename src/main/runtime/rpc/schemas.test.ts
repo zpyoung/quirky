@@ -68,14 +68,6 @@ describe('RPC optional pipe schemas', () => {
 
   it('accepts omitted terminal and worktree optional fields while required fields are present', () => {
     expectParses(methodParams(TERMINAL_METHODS, 'terminal.split'), { terminal: 'terminal-1' })
-    expectParses(methodParams(TERMINAL_METHODS, 'terminal.split'), {
-      terminal: 'terminal-1',
-      telemetrySource: 'contextual_tour'
-    })
-    expectRejects(methodParams(TERMINAL_METHODS, 'terminal.split'), {
-      terminal: 'terminal-1',
-      telemetrySource: 'raw-source'
-    })
     expectParses(methodParams(WORKTREE_METHODS, 'worktree.create'), { repo: 'repo-1' })
     expectParses(methodParams(WORKTREE_METHODS, 'worktree.set'), {
       worktree: 'id:wt-1',

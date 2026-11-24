@@ -2,8 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from './server'
 import { PANE } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 const ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const hook = {
   paneKey: PANE,

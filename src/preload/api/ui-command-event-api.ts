@@ -37,7 +37,6 @@ import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
 } from '../../shared/agent-session-resume'
-import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
 import type {
   RuntimeMobileSessionTabMove,
   RuntimeTerminalCreateRequestPayload,
@@ -79,8 +78,6 @@ export type UiCommandEventApi = {
   onOpenSettings: (callback: () => void) => () => void
   /** Consumes a one-shot tray/menu-bar "open settings" intent queued before mount. */
   consumePendingOpenSettings: () => Promise<boolean>
-  onOpenSkillShare: (callback: (shareId: string) => void) => () => void
-  consumePendingSkillShare: () => Promise<string | null>
   /** OS "Open With" Markdown/CSV/TSV documents; the local IPC name is retained. */
   onOpenMarkdownFiles: (callback: (documents: MarkdownDocument[]) => void) => () => void
   /** Drains the "Open With" paths queued before this renderer's listener attached. */
@@ -206,7 +203,6 @@ export type UiCommandEventApi = {
       leafId?: string
       splitFromLeafId?: string
       splitDirection?: 'horizontal' | 'vertical'
-      splitTelemetrySource?: TerminalPaneSplitSource
     }) => void
   ) => () => void
   onRequestTerminalCreate: (
@@ -229,7 +225,6 @@ export type UiCommandEventApi = {
       command?: string
       worktreeId?: string
       sourceLeafId?: string
-      telemetrySource?: TerminalPaneSplitSource
       newLeafId?: string
     }) => void
   ) => () => void

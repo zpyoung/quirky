@@ -26,8 +26,7 @@ import {
 import { isTuiAgentEnabled } from '../../../shared/tui-agent-selection'
 import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
-import type { LaunchSource } from '../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../shared/agent-kind'
 import { translate } from '@/i18n/i18n'
 
 type StartFixChecksAgentArgs = {
@@ -37,7 +36,6 @@ type StartFixChecksAgentArgs = {
   worktreeId?: string | null
   groupId?: string | null
   launchSource: LaunchSource
-  telemetrySource?: WorkspaceCreateTelemetrySource
   openModalFallback?: () => void
 }
 
@@ -248,7 +246,6 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     item: { ...args.item, pasteContent: commandInput },
     repoId: args.repoId,
     launchSource: args.launchSource,
-    telemetrySource: args.telemetrySource,
     promptDelivery: 'submit-after-ready',
     agentArgs: recipe.agentArgs,
     launchOptions: recipe.launchOptions,

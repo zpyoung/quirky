@@ -155,8 +155,6 @@ async function startOrcadRuntime(
   })
   // Watcher children outlive a disposal that does not wait for them.
   registerCleanup(() => disposeWatcherProcessAndWait())
-  const { DesktopPushService } = await import('../runtime/push/desktop-push-service')
-  const { resolvePushGatewayOrigin } = await import('../runtime/push/push-gateway-origin')
 
   const runtimeUserDataPath = getAppEnvironment().getPath('userData')
   const { startEventLoopDelayProbe } = await import('../diagnostics/event-loop-delay-probe')
@@ -269,10 +267,10 @@ async function startOrcadRuntime(
   })
   getAppEnvironment().onWillQuit(() => sessionSearch?.dispose())
 
-  // Why: this host evaluates its own panes, so it keeps its own rules current.
-  const { startAgentStateRulesLiveUpdates } =
-    await import('../runtime/agent-state-rules/agent-state-rules-live-update')
-  startAgentStateRulesLiveUpdates(profileStore, (rules) =>
+  // Why: this host evaluates its own panes, so it applies its own rules override.
+  const { startAgentStateRulesOverride } =
+    await import('../runtime/agent-state-rules/agent-state-rules-override')
+  startAgentStateRulesOverride(profileStore, (rules) =>
     console.info(`[orcad] agent state rules ${rules.version} (${rules.source})`)
   )
   // Switch point: main's load repair, here too, now that this runtime can move pane owners.
@@ -355,13 +353,6 @@ async function startOrcadRuntime(
   registerCleanup(() => rpc.stop())
   await rpc.start()
   startOrcadAutomations(runtime, profileStore, registerCleanup)
-  const pushService = DesktopPushService.create({
-    runtime,
-    runtimeRpc: rpc,
-    gatewayUrl: resolvePushGatewayOrigin(process.env, getAppEnvironment().isPackaged())
-  })
-  pushService?.start()
-  getAppEnvironment().onWillQuit(() => pushService?.stop())
   console.error(`[orcad] ${describeOrcadBindExposure(bindHost)}`)
 
   const readiness = await buildOrcadServeReadiness({

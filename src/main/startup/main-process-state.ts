@@ -15,15 +15,12 @@ import type { RateLimitService } from '../rate-limits/service'
 import type { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import type { DesktopRelayService } from '../runtime/mobile-cloud-relay/desktop-relay-service'
 import type { DesktopRelayServiceInstaller } from '../runtime/mobile-cloud-relay/desktop-relay-service-installer'
-import type { DesktopPushService } from '../runtime/push/desktop-push-service'
-import type { StarNagService } from '../star-nag/service'
 import type { AgentAwakeService } from '../agent-awake-service'
 import type { CrashReportStore } from '../crash-reporting/crash-report-store'
 import type { AutomationService } from '../automations/service'
 import type { HeimdallKernelService } from '../fork-heimdall/kernel-service'
 import type { LoopService } from '../fork-loops/loop-service'
 import type { PluginService } from '../plugins/plugin-service'
-import type { PluginKillListService } from '../plugins/plugin-kill-list-service'
 import type { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
 import type { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
 import type { KeybindingService } from '../keybindings/keybinding-service'
@@ -39,7 +36,6 @@ import type { createWindowsShellPathHydration } from './windows-shell-path-hydra
 import type { ServeOptions } from './main-process-serve'
 import type { HangDetectionMarker } from '../hang-watchdog/hang-detection-marker'
 import { ServeReadinessPublisher } from '../server/serve-readiness'
-import { SkillShareDeepLinkState } from './skill-share-deep-link-state'
 import { OsOpenedDocumentState } from './os-opened-documents'
 import {
   DEFAULT_GPU_CRASH_FALLBACK_THRESHOLD,
@@ -92,13 +88,11 @@ export const mainProcessState = {
   desktopRelayService: null as DesktopRelayService | null,
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null slot to the installer assigned by main-process-relay-startup.
   desktopRelayInstaller: null as DesktopRelayServiceInstaller | null,
-  desktopPushService: null as DesktopPushService | null,
   desktopRelayStatus: 'offline' as RelayBrokerStatus,
   desktopRelayCellUrl: undefined as string | undefined,
   pendingUnpairedDeviceAuthFailure: false,
   // Why: gates whether headless serve installs the offscreen browser backend (and advertises browser pane support).
   headlessBrowserDisplayAvailable: false,
-  starNag: null as StarNagService | null,
   agentAwakeService: null as AgentAwakeService | null,
   uninstallRepoMaintenanceIdleGate: null as (() => Promise<void>) | null,
   repoMaintenanceShutdown: Promise.resolve() as Promise<void>,
@@ -113,7 +107,6 @@ export const mainProcessState = {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: widens the null initializer to the slot's type, the idiom every sibling field uses.
   loops: null as LoopService | null,
   pluginService: null as PluginService | null,
-  pluginKillListService: null as PluginKillListService | null,
   pluginMarketplaceService: null as PluginMarketplaceService | null,
   pluginMarketplaceInstaller: null as PluginMarketplaceInstaller | null,
   keybindings: null as KeybindingService | null,
@@ -122,7 +115,6 @@ export const mainProcessState = {
   recoveryReloadInFlight: createWebContentsTimedFlag(),
   // Why: a tray "Settings…" click can precede the renderer's ui:openSettings listener; it pulls this one-shot on mount.
   pendingOpenSettings: createWebContentsTimedFlag(),
-  skillShareDeepLinks: new SkillShareDeepLinkState(),
   // Why: a Finder/Explorer "Open With" can land before any window exists; the renderer pulls this buffer on mount.
   osOpenedDocuments: new OsOpenedDocumentState(),
   // Why a latch and not just "a window exists": a window can be up while its renderer has not
@@ -160,7 +152,6 @@ export const mainProcessState = {
   windowsShellPathHydration: null as ReturnType<typeof createWindowsShellPathHydration> | null,
   shellPathReady: Promise.resolve(),
   hangDetection: null as HangDetectionMarker | null,
-  skillTransactionRecovery: Promise.resolve() as Promise<unknown>,
   serveOptions: null as ServeOptions | null,
   desktopWindow: null as BrowserWindow | null,
   agentBrowserBridge: null as AgentBrowserBridge | null,

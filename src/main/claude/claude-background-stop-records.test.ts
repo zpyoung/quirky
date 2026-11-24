@@ -15,8 +15,6 @@ import type { CapturedFrame } from './claude-captured-frame-builders.test-fixtur
 import { RESUMED_BY_MESSAGE } from './claude-captured-task-frames.test-fixture'
 import { hostWithParent, parent, producer } from './claude-child-work-producer-harness.test-fixture'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 afterEach(() => vi.restoreAllMocks())
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: admission reads only the lease and the command/rewind records, all absent here.

@@ -38,9 +38,6 @@ import { createStructuredAgentSessionLogger } from '../native-chat/agent-session
 import { scriptedCodexTransport } from './scripted-codex-transport.test-fixture'
 import { createScriptedClaudeRuntime } from './structured-claude-scripted-runtime-test-support'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
-
 const THREAD = 'thread-switch'
 const REVIEWER = 'thread-reviewer'
 const ROUTES: Record<string, unknown> = {

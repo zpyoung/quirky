@@ -53,7 +53,6 @@ vi.mock('../updater', () => ({
   downloadUpdate: vi.fn(),
   getUpdateStatus: vi.fn(),
   quitAndInstall: vi.fn(),
-  dismissNudge: vi.fn(),
   dismissAvailableUpdate: vi.fn(),
   setupAutoUpdater: vi.fn(),
   getLinuxPackageInstallInstructions: getLinuxPackageInstallInstructionsMock,

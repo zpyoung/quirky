@@ -4,9 +4,6 @@ import { buildBody, PANE, postHookEvent, RUNNING_SHELL } from './server.test-fix
 import { loadClaudeInterruptCapture } from './claude-terminal-interrupt-capture.test-fixture'
 import { createTerminalTitleTracker } from '../../shared/terminal-output-side-effects'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
-
 let server: AgentHookServer
 
 beforeEach(async () => {

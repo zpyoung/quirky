@@ -15,8 +15,6 @@ concurrency:
 
 env:
   ORCA_BACKGROUND_LAUNCH: '1'
-  ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
-  ORCA_POSTHOG_WRITE_KEY: ci-build-comparison
   NODE_OPTIONS: --max-old-space-size=4096
 
 jobs:
@@ -25,8 +23,6 @@ jobs:
     uses: ./.github/workflows/release-javascript.yml
     with:
       ref: ${{ github.sha }}
-    secrets:
-      ORCA_POSTHOG_WRITE_KEY: ci-build-comparison
 
   measure:
     needs: bundle

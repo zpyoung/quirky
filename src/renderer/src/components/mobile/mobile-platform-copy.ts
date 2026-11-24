@@ -7,7 +7,7 @@ export type IosChannel = 'stable' | 'preview'
 
 export type InstallCopy = { ctaLabel: string; url: string }
 
-export const ANDROID_INSTALL_GUIDE_URL = 'https://www.onorca.dev/docs/android-apk'
+export const ANDROID_INSTALL_GUIDE_URL = 'https://github.com/zpyoung/quirky'
 
 const IOS_CHANNEL_COPY: Record<IosChannel, InstallCopy> = {
   stable: {
@@ -22,7 +22,7 @@ const IOS_CHANNEL_COPY: Record<IosChannel, InstallCopy> = {
 
 const ANDROID_COPY: InstallCopy = {
   ctaLabel: 'Download APK',
-  url: 'https://www.onorca.dev/download/android'
+  url: 'https://github.com/zpyoung/quirky'
 }
 
 export function getInstallCopy(platform: Platform, iosChannel: IosChannel): InstallCopy {

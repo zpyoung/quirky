@@ -3,7 +3,6 @@ import { loadUpdaterModule, warmUpdaterModule } from './updater-test-module-load
 
 const {
   autoUpdaterMock,
-  fetchChangelogMock,
   fetchNewerReleaseTagsMock,
   closeLocalBuildFeedMock,
   moduleFactories,
@@ -17,8 +16,6 @@ vi.mock('@electron-toolkit/utils', () => moduleFactories.electronToolkitUtils())
 vi.mock('./ipc/pty/kill-all', () => moduleFactories.ptyKillAll())
 vi.mock('./linux-update-package-type', () => moduleFactories.linuxUpdatePackageType())
 vi.mock('./updater-lifecycle-diagnostics', () => moduleFactories.updaterLifecycleDiagnostics())
-vi.mock('./updater-changelog', () => moduleFactories.updaterChangelog())
-vi.mock('./updater-nudge', () => moduleFactories.updaterNudge())
 vi.mock('./update-install-exit-watchdog', () => moduleFactories.updateInstallExitWatchdog())
 vi.mock('./updater-prerelease-feed', () => moduleFactories.updaterPrereleaseFeed())
 vi.mock('./local-builds/local-build-switch', () => moduleFactories.localBuildSwitch())
@@ -326,7 +323,6 @@ describe('updater', () => {
     autoUpdaterMock.emit('update-available', { version: '1.0.61' })
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(fetchChangelogMock).not.toHaveBeenCalled()
     expect(sendMock).not.toHaveBeenCalledWith(
       'updater:status',
       expect.objectContaining({ state: 'available', version: '1.0.61' })

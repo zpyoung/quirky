@@ -88,10 +88,6 @@ export abstract class UpdaterCheckFailure extends UpdaterReleaseFeed {
             userInitiated: true
           })
         } else {
-          if (this.isRetryableReleaseFeedPreflightFailure(sourceError)) {
-            // Why: release probes can fail transiently; keep the campaign pending so the short retry can still show it.
-            this.deferPendingUpdateNudgeUntilRetry()
-          }
           this.sendSettledCheckStatus({ state: 'idle' })
         }
         return

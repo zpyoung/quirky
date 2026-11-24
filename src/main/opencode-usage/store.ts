@@ -1,4 +1,3 @@
-import { codexOpenCodeTokenSessions } from '../usage/agent-token-usage'
 import { app } from 'electron'
 import { join } from 'node:path'
 import type {
@@ -52,10 +51,6 @@ export class OpenCodeUsageStore extends UsageProviderStoreLifecycle<
 > {
   constructor(store: Pick<Store, 'getRepos' | 'getAllWorktreeMeta'>) {
     super(store, {
-      tokenUsage: {
-        provider: 'opencode',
-        selectSessions: (state) => codexOpenCodeTokenSessions(state.sessions)
-      },
       logTag: '[opencode-usage]',
       resolveCacheFile: getOpenCodeUsageFile,
       createDefaultState: getDefaultState,

@@ -8,6 +8,10 @@
 // The driver cancelled with Esc. Orca treats a bare Esc on a Claude pane as navigation (it also
 // closes the /btw composer) and infers a cancel only from Ctrl+C, so each `cancel` record is
 // replayed as the Ctrl+C inference the renderer would have sent.
+beforeEach(() => {
+  _internals.resetCachesForTests()
+})
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CLAUDE_OWED_TASK_NOTIFICATION_LEASE_MS } from '../../shared/claude-owed-task-notifications'
 import { AgentHookServer, _internals } from './server'
@@ -19,26 +23,6 @@ import {
   loadCapture,
   type CapturedHook
 } from './claude-cancel-capture.test-fixture'
-
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
-beforeEach(() => {
-  _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
-})
 
 afterEach(() => {
   vi.restoreAllMocks()

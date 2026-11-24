@@ -1,6 +1,6 @@
 // Layout-owner build: the window's splits are written and started by main under the window's pane
 // id. Main's frame draws the pane, which attaches to main's terminal (frame reconciliation).
-import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
+import type { TerminalPaneSplitSource } from '../../../../shared/terminal-pane-split-source'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { mintStablePaneId } from '@/lib/pane-manager/mint-stable-pane-id'
 import { refusalActsAsToday } from '@/runtime/layout-apply-send'

@@ -8,7 +8,6 @@ import { logStartupMilestone } from '../startup/startup-diagnostics'
 import {
   checkForUpdatesFromMenu,
   dismissAvailableUpdate,
-  dismissNudge,
   downloadUpdate,
   getLinuxPackageInstallInstructions,
   getUpdateStatus,
@@ -48,19 +47,6 @@ function buildUpdaterSetupOptions(store: Store, options?: UpdaterSetupHooks): Up
     },
     setLastUpdateCheckAt: (timestamp) => {
       store.updateUI({ lastUpdateCheckAt: timestamp })
-    },
-    getPendingUpdateNudgeId: () => store.getUI().pendingUpdateNudgeId ?? null,
-    getDismissedUpdateNudgeId: () => store.getUI().dismissedUpdateNudgeId ?? null,
-    setPendingUpdateNudgeId: (id) => {
-      // Why: only the apply branch also nulls dismissedUpdateVersion so relaunch can't resurrect the old hidden card; clearing must not, or it un-dismisses.
-      if (id) {
-        store.updateUI({ pendingUpdateNudgeId: id, dismissedUpdateVersion: null })
-      } else {
-        store.updateUI({ pendingUpdateNudgeId: null })
-      }
-    },
-    setDismissedUpdateNudgeId: (id) => {
-      store.updateUI({ dismissedUpdateNudgeId: id })
     },
     getReleaseChannelOverride: () => store.getUI().releaseChannelOverride ?? null,
     onBeforeQuitFailure: options?.onBeforeUpdateQuitFailure,
@@ -133,7 +119,6 @@ export function registerUpdaterHandlers(_store: Store): void {
   ipcMain.removeHandler('updater:check')
   ipcMain.removeHandler('updater:download')
   ipcMain.removeHandler('updater:quitAndInstall')
-  ipcMain.removeHandler('updater:dismissNudge')
   ipcMain.removeHandler('updater:dismissAvailableUpdate')
   ipcMain.removeHandler('updater:getLinuxPackageInstallInstructions')
   ipcMain.removeHandler('updater:showLinuxPackage')
@@ -147,7 +132,6 @@ export function registerUpdaterHandlers(_store: Store): void {
   })
   ipcMain.handle('updater:download', () => downloadUpdate())
   ipcMain.handle('updater:quitAndInstall', () => quitAndInstall())
-  ipcMain.handle('updater:dismissNudge', () => dismissNudge())
   ipcMain.handle('updater:dismissAvailableUpdate', () => dismissAvailableUpdate())
   // Why: the response carries a local package path and the reveal touches the native desktop, so
   // neither may be reached from a guest, dashboard popout, stale window, or utility renderer.

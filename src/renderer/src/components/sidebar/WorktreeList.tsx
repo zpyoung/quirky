@@ -172,7 +172,7 @@ const WorktreeList = React.memo(function WorktreeList({
 
   const handleCreateForRepo = useCallback(
     (projectId: string) => {
-      openModal('new-workspace-composer', { initialRepoId: projectId, telemetrySource: 'sidebar' })
+      openModal('new-workspace-composer', { initialRepoId: projectId })
     },
     [openModal]
   )
@@ -227,8 +227,7 @@ const WorktreeList = React.memo(function WorktreeList({
         return
       }
       openModal('new-workspace-composer', {
-        initialProjectGroupId: projectGroup.id,
-        telemetrySource: 'sidebar'
+        initialProjectGroupId: projectGroup.id
       })
     },
     [openModal]

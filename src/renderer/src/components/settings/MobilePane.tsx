@@ -43,12 +43,11 @@ export function MobilePane(): React.JSX.Element {
   const [refreshingNetworkInterfaces, setRefreshingNetworkInterfaces] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [deviceCountAtQr, setDeviceCountAtQr] = useState<number | null>(null)
-  const signedIn = useAppStore((state) => state.orcaProfileAuthStatus?.state === 'connected')
+  const signedIn = false
   const settingsSearchQuery = useAppStore((state) => state.settingsSearchQuery)
   const [connectionMode, setConnectionMode] = useMobilePairingConnectionMode()
   const [rotateNextQr, setRotateNextQr] = useState(false)
   const codeCopiedResetTimerRef = useRef<number | null>(null)
-  const wasSignedInRef = useRef(signedIn)
   // Why: monotonically bumped per pairing request so a late getPairingQR
   // response cannot paint a stale QR after sign-out, a mode switch, or an
   // address change invalidated the request that produced it.
@@ -114,18 +113,6 @@ export function MobilePane(): React.JSX.Element {
     networkInterfaces,
     onSelectionInvalidated: invalidatePairingAddress
   })
-
-  // Why: a Relay QR minted while signed in must not linger on a now-signed-out
-  // desktop — Generate is disabled in that state. Invalidate any pending relay
-  // mint too, not just a displayed QR, so a late response can't paint a Relay
-  // code after sign-out. Anywhere stays selected.
-  useEffect(() => {
-    const wasSignedIn = wasSignedInRef.current
-    wasSignedInRef.current = signedIn
-    if (wasSignedIn && !signedIn && connectionMode === 'automatic') {
-      invalidatePairing()
-    }
-  }, [signedIn, connectionMode, invalidatePairing])
 
   const clearCodeCopiedResetTimer = useCallback((): void => {
     if (codeCopiedResetTimerRef.current !== null) {
@@ -220,9 +207,6 @@ export function MobilePane(): React.JSX.Element {
           setEndpoint(null)
           if (result.reason === 'relay_mint_failed' && result.relayFailure) {
             setRelayMintFailure(result.relayFailure)
-            // Why: a revoked session is the likeliest cause; re-read it so the
-            // notice can offer sign-in instead of a retry that cannot succeed.
-            void useAppStore.getState().fetchOrcaProfileAuthStatus()
           } else {
             setRelayMintFailure(null)
             // Why: IPC now forwards reason/guidance for all unavailability paths;
@@ -372,14 +356,7 @@ export function MobilePane(): React.JSX.Element {
         canGenerate={canMintMobilePairingOffer({ connectionMode, signedIn })}
         addressDisclosureForcedOpen={shouldOpenMobilePairingAddress(settingsSearchQuery)}
         connectionPathControl={
-          <MobilePairingConnectionOptions
-            value={connectionMode}
-            onChange={changeConnectionMode}
-            relayMintFailed={relayMintFailure != null && connectionMode === 'automatic'}
-            relayMintRetrying={
-              relayMintFailure != null && connectionMode === 'automatic' && loading
-            }
-          />
+          <MobilePairingConnectionOptions value={connectionMode} onChange={changeConnectionMode} />
         }
         networkInterfaces={networkInterfaces}
         customAddresses={customAddresses}

@@ -463,7 +463,7 @@ describe('createDraftRelease', () => {
       .mockResolvedValueOnce(jsonResponse({ tag_name: 'v1.4.151-rc.1.zy01', draft: true }))
 
     await createDraftRelease({
-      repo: 'zpyoung/orca',
+      repo: 'zpyoung/quirky',
       tag: 'v1.4.151-rc.1.zy01',
       token: 'token',
       targetCommitish: 'abc123',
@@ -485,7 +485,7 @@ describe('createDraftRelease', () => {
       .mockResolvedValueOnce(jsonResponse({ tag_name: 'v1.4.151-rc.1.zy01', draft: true }))
 
     await createDraftRelease({
-      repo: 'zpyoung/orca',
+      repo: 'zpyoung/quirky',
       tag: 'v1.4.151-rc.1.zy01',
       token: 'token',
       targetCommitish: 'abc123',
@@ -508,7 +508,7 @@ describe('createDraftRelease', () => {
       .mockResolvedValueOnce(jsonResponse({ tag_name: 'v1.4.151-rc.1.zy01', draft: true }))
 
     await createDraftRelease({
-      repo: 'zpyoung/orca',
+      repo: 'zpyoung/quirky',
       tag: 'v1.4.151-rc.1.zy01',
       token: 'token',
       targetCommitish: 'abc123',

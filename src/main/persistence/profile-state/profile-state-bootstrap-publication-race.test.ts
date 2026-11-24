@@ -10,10 +10,6 @@ import type { ProfileStateAuthority } from '../loading-store/profile-state-autho
 import { formatProfileStateStartupFailure } from './profile-state-startup-failure'
 
 vi.mock('node:fs', async (original) => ({ ...(await original<typeof fs>()) }))
-vi.mock('../../telemetry/client', () => ({ track: () => {} }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

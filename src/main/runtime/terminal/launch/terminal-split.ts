@@ -2,7 +2,6 @@ import type { TerminalSplitOptions } from './terminal-split-surface'
 import type { SplitPaneInMainOptions, SplitPaneSource } from './terminal-split-in-main'
 import type { RuntimePtyWorktreeRecord } from '../../runtime-terminal-state-records'
 import { OrcaRuntimeWithStopExplicitlyClosedTabPtys } from '../../session-tabs/explicit-terminal-close-stops'
-import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
 import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -39,7 +38,6 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       // Why: same split as createTerminal — adopt the pane without revealing its
       // workspace, for splits the user never asked to see.
       surfaceOwner?: false
-      telemetrySource?: TerminalPaneSplitSource
     } = {},
     // Internal creation evidence; RPC and preload callers never supply it.
     createdWorktree?: Worktree
@@ -76,7 +74,6 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       command: opts.command,
       worktreeId: leaf.worktreeId,
       sourceLeafId: leaf.leafId,
-      telemetrySource: opts.telemetrySource,
       newLeafId
     })
 

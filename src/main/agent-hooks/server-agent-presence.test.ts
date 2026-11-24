@@ -6,9 +6,6 @@ import { AgentHookServer } from './server'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { buildBody, LEAF_1, PANE, postHookEvent } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
-
 const probe = vi.hoisted(() =>
   vi.fn(async (): Promise<'live' | 'unverifiable' | 'exited'> => 'unverifiable')
 )

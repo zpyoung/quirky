@@ -22,7 +22,6 @@ import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
-import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { runWithClonePathLock } from './clone-path-lock'
 import { resolveClonedFolderConversion } from '../../folder-repo-git-conversion'
@@ -146,7 +145,6 @@ export function registerRepoCloneHandlers(mainWindow: BrowserWindow, store: Stor
           )
           if (reused) {
             // Why: clone_url always produces a git repo.
-            emitRepoAdded('clone_url', true, true)
             return reused
           }
           // Why: gitSpawn cwd is args.destination, so it must exist before spawn (fresh installs may lack the defaulted parent).
@@ -273,8 +271,6 @@ export function registerRepoCloneHandlers(mainWindow: BrowserWindow, store: Stor
                 await prepareLocalWorktreeRootForRepo(store, updated)
                 invalidateAuthorizedRootsCache()
                 notifyReposChanged(mainWindow)
-                // Why: folder→git upgrade is a real new git repo provisioning event.
-                emitRepoAdded('clone_url', false, true)
                 return updated
               }
             }
@@ -284,7 +280,6 @@ export function registerRepoCloneHandlers(mainWindow: BrowserWindow, store: Stor
               await prepareLocalWorktreeRootForRepo(store, current)
               invalidateAuthorizedRootsCache()
               notifyReposChanged(mainWindow)
-              emitRepoAdded('clone_url', true, true)
               return current
             }
           }
@@ -310,7 +305,6 @@ export function registerRepoCloneHandlers(mainWindow: BrowserWindow, store: Stor
           await prepareLocalWorktreeRootForRepo(store, repo)
           invalidateAuthorizedRootsCache()
           notifyReposChanged(mainWindow)
-          emitRepoAdded('clone_url', false, true)
           return repo
         } finally {
           const metadata = cloneMetadataRef.current

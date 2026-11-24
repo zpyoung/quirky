@@ -18,7 +18,6 @@ import {
   FIXTURE_GIT_WORKTREE_ID
 } from './terminal-topology-profile-fixture'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

@@ -30,8 +30,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-
 type Store = ReturnType<typeof createStore>
 
 const HINTED_PANE = `tab-dormant:${DORMANT_LEAF_ID}`

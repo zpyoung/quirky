@@ -16,7 +16,7 @@ import { awaitAgentLaunchPaneStart } from '@/lib/agent-launch-pane-start'
 import { seedNativeChatAppliedSessionOptions } from '@/components/native-chat/native-chat-session-option-cache'
 import { isNativeChatEnabled } from '../../../shared/structured-native-chat-launch-route'
 import type { TuiAgent } from '../../../shared/tui-agent'
-import type { LaunchSource } from '../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../shared/agent-kind'
 import type { Tab } from '../../../shared/tab-types'
 import type { SessionOptionValue } from '../../../shared/native-chat-session-options'
 

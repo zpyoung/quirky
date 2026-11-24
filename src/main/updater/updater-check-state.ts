@@ -224,14 +224,7 @@ export abstract class UpdaterCheckState extends UpdaterStatus {
         this.clearBackgroundCheckLaunchPending()
         this.backgroundCheckPromotedToUserInitiated = false
         this.userInitiatedCheck = false
-        const shouldRetrySoon = this.completeSilentUpdateCheck(userInitiated)
-        if (this.awaitingNudgeCheckOutcome) {
-          if (shouldRetrySoon) {
-            this.deferPendingUpdateNudgeUntilRetry()
-            return
-          }
-          this.sendSettledCheckStatus({ state: 'not-available', userInitiated })
-        }
+        this.completeSilentUpdateCheck(userInitiated)
       }
       return
     }

@@ -25,7 +25,6 @@ export type QuickCreationRequestInput = {
   setupDecision: SetupDecision
   sparseDirectories: string[] | null
   sparsePresetId: string | null
-  telemetrySource: WorktreeCreationRequest['telemetrySource']
   linkedIssue: number | null
   linkedPR: number | null
   pushTarget: GitPushTarget | undefined
@@ -86,7 +85,6 @@ export function buildQuickCreationRequest(
           }
         }
       : {}),
-    ...(input.telemetrySource ? { telemetrySource: input.telemetrySource } : {}),
     ...(input.linkedIssue != null ? { linkedIssue: input.linkedIssue } : {}),
     ...(input.linkedPR != null ? { linkedPR: input.linkedPR } : {}),
     ...(input.pushTarget ? { pushTarget: input.pushTarget } : {}),

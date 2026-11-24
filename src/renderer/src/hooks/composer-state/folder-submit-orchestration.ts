@@ -23,7 +23,6 @@ type FolderSubmitOrchestrationInput = Pick<
   | 'setCreating'
   | 'settings'
   | 'taskSourceContext'
-  | 'telemetrySource'
 >
 
 import { useCallback } from 'react'
@@ -64,8 +63,7 @@ export function useFolderSubmitOrchestration(input: FolderSubmitOrchestrationInp
     setCreateError,
     setCreating,
     settings,
-    taskSourceContext,
-    telemetrySource
+    taskSourceContext
   } = input
   const { canResolveFolderSmartGitHubSubmit } = decisions
 
@@ -116,7 +114,7 @@ export function useFolderSubmitOrchestration(input: FolderSubmitOrchestrationInp
           agentEnv: agent ? resolveTuiAgentLaunchEnv(agent, settings?.agentDefaultEnv) : undefined,
           terminalWindowsShell: settings?.terminalWindowsShell,
           isRemote: folderTargetIsRemote,
-          launchSource: telemetrySource === 'onboarding' ? 'onboarding' : 'new_workspace_composer',
+          launchSource: 'new_workspace_composer',
           runtimeEnvironmentId: folderTargetRuntimeEnvironmentId,
           createFolderWorkspace: (input) =>
             createFolderWorkspace(input, {
@@ -173,7 +171,6 @@ export function useFolderSubmitOrchestration(input: FolderSubmitOrchestrationInp
       selectedProjectGroup,
       settings,
       taskSourceContext,
-      telemetrySource,
       lastAutoNameRef,
       setCreateError,
       setCreating

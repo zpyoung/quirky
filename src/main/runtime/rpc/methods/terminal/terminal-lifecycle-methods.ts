@@ -120,8 +120,7 @@ export const TERMINAL_LIFECYCLE_METHODS = [
             await runtime.splitTerminal(params.terminal ?? '', {
               direction: params.direction,
               command: params.command,
-              env: params.env,
-              telemetrySource: params.telemetrySource
+              env: params.env
             })
     })
   }),

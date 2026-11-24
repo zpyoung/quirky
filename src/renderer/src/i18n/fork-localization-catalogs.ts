@@ -54,11 +54,6 @@ import sessionInfoES from '../components/right-sidebar/fork-session-info/locales
 import sessionInfoJA from '../components/right-sidebar/fork-session-info/locales/ja.json'
 import sessionInfoKO from '../components/right-sidebar/fork-session-info/locales/ko.json'
 import sessionInfoZH from '../components/right-sidebar/fork-session-info/locales/zh.json'
-import artifactPasswordsEN from '../components/artifacts/fork-artifact-passwords/locales/en.json'
-import artifactPasswordsES from '../components/artifacts/fork-artifact-passwords/locales/es.json'
-import artifactPasswordsJA from '../components/artifacts/fork-artifact-passwords/locales/ja.json'
-import artifactPasswordsKO from '../components/artifacts/fork-artifact-passwords/locales/ko.json'
-import artifactPasswordsZH from '../components/artifacts/fork-artifact-passwords/locales/zh.json'
 import activityWindowEN from '../components/sidebar/fork-workspace-activity-window/locales/en.json'
 import activityWindowES from '../components/sidebar/fork-workspace-activity-window/locales/es.json'
 import activityWindowJA from '../components/sidebar/fork-workspace-activity-window/locales/ja.json'
@@ -123,7 +118,6 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     handoffEN,
     dirtyBranchEN,
     sessionInfoEN,
-    artifactPasswordsEN,
     activityWindowEN,
     reviewFiltersEN,
     heimdallCatalogs.en,
@@ -147,7 +141,6 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     handoffES,
     dirtyBranchES,
     sessionInfoES,
-    artifactPasswordsES,
     activityWindowES,
     reviewFiltersES,
     heimdallCatalogs.es,
@@ -172,7 +165,6 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     handoffJA,
     dirtyBranchJA,
     sessionInfoJA,
-    artifactPasswordsJA,
     activityWindowJA,
     reviewFiltersJA,
     heimdallCatalogs.ja,
@@ -196,7 +188,6 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     handoffKO,
     dirtyBranchKO,
     sessionInfoKO,
-    artifactPasswordsKO,
     activityWindowKO,
     reviewFiltersKO,
     heimdallCatalogs.ko,
@@ -220,7 +211,6 @@ const FORK_CATALOGS: Record<ForkLocale, ForkCatalog[]> = {
     handoffZH,
     dirtyBranchZH,
     sessionInfoZH,
-    artifactPasswordsZH,
     activityWindowZH,
     reviewFiltersZH,
     heimdallCatalogs.zh,

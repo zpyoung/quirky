@@ -57,7 +57,6 @@ export async function startWorkspaceAgent(
       },
       repoId: 'repo-1',
       launchSource: 'task_page',
-      telemetrySource: 'sidebar',
       agentOverride: producer.agent,
       promptDelivery: producer.delivery,
       openModalFallback: () => {

@@ -8,9 +8,6 @@
   "auto.App.98d4ea2823": {
     "ko": "이 워크스페이스에서 Terminal, 브라우저 또는 편집기 렌더링에 실패했습니다. 다시 시도해 보세요."
   },
-  "auto.components.FirstLaunchBanner.958d2cc31b": {
-    "ko": "어떤 기능을 사용하는지에 대한 익명 집계는 무엇을 우선 개발할지 정하는 데 도움이 됩니다. 파일 내용, 프롬프트, terminal 출력 등 사용자를 식별할 수 있는 정보는 수집하지 않습니다. 설정 -> 개인 정보 보호 및 텔레메트리에서 언제든지 변경할 수 있습니다."
-  },
   "auto.components.GitHubItemDialog.03e542fcfe": {
     "ko": "실패한 체크를 수정하기 위해 AI agent를 시작하지 못했습니다: {{value0}}"
   },
@@ -779,17 +776,8 @@
   "auto.components.contextual.tours.contextual.tour.overlay.measurement.automations.results.title": {
     "ko": "결과 확인"
   },
-  "auto.components.crash.report.CrashReportDialog.88fea8e84e": {
-    "ko": "보내지 않음"
-  },
-  "auto.components.crash.report.CrashReportDialog.b082f27490": {
-    "ko": "최근 진단 로그 첨부"
-  },
   "auto.components.crash.report.CrashReportDialog.b2e36f53a1": {
     "ko": "크래시 보고서를 보내지 못했습니다. 진단 티켓 {{value0}}이 업로드되었지만 연결되지 않았습니다."
-  },
-  "auto.components.crash.report.CrashReportDialog.e59f0b9427": {
-    "ko": "보고서와 함께 크기가 제한되고 민감 정보가 제거된 로그 묶음을 보냅니다."
   },
   "auto.components.crash.report.CrashReportDialog.ead6fc0510": {
     "ko": "자동 크래시 보고서가 캡처되지 않았습니다. 그래도 세부 정보를 보내고, 가능한 경우 최근 진단 로그를 포함할 수 있습니다."
@@ -2210,9 +2198,6 @@
   "auto.components.settings.DefaultWindowsProjectRuntimeSetting.wslUnavailable": {
     "ko": "WSL을 사용할 수 없습니다. WSL을 상속하는 프로젝트는 복구가 필요합니다."
   },
-  "auto.components.settings.DevToolsPane.orcaCloudDescription": {
-    "ko": "자사 클라우드 로그인의 개발자 전용 미리보기. 프로덕션에서는 숨겨집니다. 개발 환경에서는 ORCA_CLOUD_API_URL과 ORCA_CLOUD_CLIENT_ID가 설정되면 사이드바 계정 전환기에도 표시됩니다."
-  },
   "auto.components.settings.DeveloperPermissionsPane.16381e040a": {
     "ko": "마이크"
   },
@@ -2260,12 +2245,6 @@
   },
   "auto.components.settings.GeneralPane.projectRuntimeDescription": {
     "ko": "별도로 재정의하지 않은 로컬 Windows 프로젝트의 기본 런타임입니다."
-  },
-  "auto.components.settings.GeneralSupportSection.6922c1fa2b": {
-    "ko": "GitHub에서 Orca 스타 누르기"
-  },
-  "auto.components.settings.GeneralSupportSection.964acc6bb4": {
-    "ko": "스타"
   },
   "auto.components.settings.GeneralUpdateSettingsSection.90eb7309d7": {
     "ko": "사용 불가"
@@ -2353,12 +2332,6 @@
   },
   "auto.components.settings.OpenAiTranscriptionKeyDialog.07b26f2742": {
     "ko": "키 지우기"
-  },
-  "auto.components.settings.PrivacyPane.79a0f3c16c": {
-    "ko": "텔레메트리는 다음에 의해 비활성화됩니다."
-  },
-  "auto.components.settings.PrivacyPane.e3970bbbf5": {
-    "ko": "CI 환경 변수가 설정되었기 때문에 텔레메트리가 비활성화되었습니다. 설정을 해제하고 다시 시작하세요."
   },
   "auto.components.settings.ProjectWindowsRuntimeSetting.applyRuntimeChange": {
     "ko": "런타임 변경 적용"
@@ -3254,9 +3227,6 @@
   "auto.components.settings.general.search.2f42852568": {
     "ko": "트리"
   },
-  "auto.components.settings.general.search.36a72f0d9e": {
-    "ko": "GitHub에서 Orca에 스타 주기"
-  },
   "auto.components.settings.general.search.3a73054565": {
     "ko": "우회"
   },
@@ -3290,9 +3260,6 @@
   "auto.components.settings.general.search.aea7d2cccb": {
     "ko": "OpenClaude"
   },
-  "auto.components.settings.general.search.bdfb6dc21b": {
-    "ko": "좋아요"
-  },
   "auto.components.settings.general.search.c56cb6f1c2": {
     "ko": "네트워크"
   },
@@ -3304,9 +3271,6 @@
   },
   "auto.components.settings.general.search.e1ee631696": {
     "ko": "편집기"
-  },
-  "auto.components.settings.general.search.e4fb4516d0": {
-    "ko": "스타"
   },
   "auto.components.settings.general.search.e55d62dfa4": {
     "ko": "런치패드"
@@ -3502,18 +3466,6 @@
   },
   "auto.components.settings.notifications.search.fa60d8e4ab": {
     "ko": "억제"
-  },
-  "auto.components.settings.privacy.search.10124159f1": {
-    "ko": "개인정보"
-  },
-  "auto.components.settings.privacy.search.4104f6f0f3": {
-    "ko": "분석"
-  },
-  "auto.components.settings.privacy.search.4d4bb76bf4": {
-    "ko": "수신 동의"
-  },
-  "auto.components.settings.privacy.search.79c319948b": {
-    "ko": "사용량"
   },
   "auto.components.settings.providerAccountScope.localCredentials": {
     "ko": "이 제공자의 자격 증명과 계정 확인은 이 데스크톱 클라이언트가 소유합니다. 서버 소유 자격 증명은 설정 > 원격 Orca 서버 > 고급에서 편집하세요."
@@ -4235,9 +4187,6 @@
   "auto.components.sidebar.SetupScriptPromptCardViews.bb879db364": {
     "ko": "이 repo는 공유를 무시합니다"
   },
-  "auto.components.sidebar.SidebarFeedbackDialog.3460258a54": {
-    "ko": "X에서 팔로우"
-  },
   "auto.components.sidebar.SidebarHostScopeStrip.backToAll": {
     "ko": "모든 호스트"
   },
@@ -4426,30 +4375,6 @@
   },
   "auto.components.sparse.SparseCheckoutPresetSelect.ddbcaef7be": {
     "ko": "src/renderer packages/ui"
-  },
-  "auto.components.star.nag.StarNagToastHost.body": {
-    "ko": "Orca가 마음에 드신다면 GitHub 별표가 다른 개발자가 Orca를 발견하는 데 도움이 됩니다."
-  },
-  "auto.components.star.nag.StarNagToastHost.githubOpened": {
-    "ko": "GitHub 열림"
-  },
-  "auto.components.star.nag.StarNagToastHost.onboardingCompleted": {
-    "ko": "온보딩 완료!"
-  },
-  "auto.components.star.nag.StarNagToastHost.openGithub": {
-    "ko": "GitHub 열기"
-  },
-  "auto.components.star.nag.StarNagToastHost.opening": {
-    "ko": "여는 중…"
-  },
-  "auto.components.star.nag.StarNagToastHost.starOnGithub": {
-    "ko": "GitHub에서 별표 누르기"
-  },
-  "auto.components.star.nag.StarNagToastHost.starredThanks": {
-    "ko": "별표를 눌러주셔서 감사합니다!"
-  },
-  "auto.components.star.nag.StarNagToastHost.starring": {
-    "ko": "별표 누르는 중…"
   },
   "auto.components.stats.ClaudeUsagePane.cfe2282ffa": {
     "ko": "알 수 없음"
@@ -4906,9 +4831,6 @@
   },
   "auto.hooks.useSettingsNavigationMetadata.3d65d3f1b9": {
     "ko": "Orca 및 코딩 agents의 모바일 에뮬레이터 지원을 구성합니다."
-  },
-  "auto.hooks.useSettingsNavigationMetadata.40d80bad8a": {
-    "ko": "베타"
   },
   "auto.hooks.useSettingsNavigationMetadata.7682607591": {
     "ko": "agent 및 terminal 이벤트에 대한 네이티브 데스크톱 알림입니다."
@@ -5395,9 +5317,6 @@
   },
   "auto.components.settings.GeneralUpdateSettingsSection.e3b9d21c07": {
     "ko": "업데이트가 준비되었습니다. 시스템 패키지 관리자를 통해 Orca를 업데이트하세요. Orca 자체적으로는 이번 릴리스를 설치할 수 없습니다."
-  },
-  "auto.components.settings.GeneralWorkspaceSettingsSection.bf46474e33": {
-    "ko": "공유 아티팩트를 삭제하기 전에 확인창을 표시합니다. 삭제하면 공개 링크가 있는 사람도 더 이상 접근할 수 없습니다."
   },
   "auto.components.settings.OpenInMenuSetting.ba1422ee07": {
     "ko": "터미널 명령"
@@ -6080,42 +5999,6 @@
   "auto.components.settings.BrowserTerminalLinkActionsSetting.leaveToTerminalLabel": {
     "ko": "터미널에 맡기기"
   },
-  "auto.components.settings.shareSkills.description": {
-    "ko": "공개 목록에 표시되지 않는 링크로 스킬을 공유하세요. 링크가 있는 사람은 누구나 설치할 수 있습니다."
-  },
-  "auto.components.settings.shareSkills.allowAgentPublishing": {
-    "ko": "에이전트와 Orca CLI의 스킬 링크 게시 허용"
-  },
-  "auto.components.settings.shareSkills.allowAgentPublishingDescription": {
-    "ko": "설치된 스킬 중 명령어에 이름을 명시한 스킬을 게시하도록 허용합니다. 스킬 폴더에는 스크립트, 설정 또는 비밀정보가 포함될 수 있으므로 기본적으로 꺼져 있습니다."
-  },
-  "auto.components.settings.shareSkills.selectTitle": {
-    "ko": "스킬을 하나 이상 선택하세요."
-  },
-  "auto.components.settings.shareSkills.copyTitle": {
-    "ko": "공개 목록에 표시되지 않는 링크 복사"
-  },
-  "auto.components.settings.shareSkills.copyDescription": {
-    "ko": "링크가 있는 사람은 누구나 로그인하지 않고 전체 또는 선택한 스킬을 살펴보고 설치할 수 있습니다."
-  },
-  "auto.components.settings.shareSkills.signInTitle": {
-    "ko": "스킬을 공유하려면 로그인하세요."
-  },
-  "auto.components.settings.shareSkills.howToTitle": {
-    "ko": "스킬 공유 방법"
-  },
-  "auto.components.settings.shareSkills.openSkills": {
-    "ko": "스킬 열기"
-  },
-  "auto.components.settings.shareSkills.searchDescription": {
-    "ko": "공개 목록에 표시되지 않는 링크로 스킬을 공유하세요. 링크가 있는 사람은 누구나 설치할 수 있습니다."
-  },
-  "auto.components.settings.shareSkills.showButton": {
-    "ko": "스킬 버튼 표시"
-  },
-  "auto.components.settings.shareSkills.manageInSkills": {
-    "ko": "스킬에서 관리"
-  },
   "auto.components.settings.ShortcutTerminalPolicyControl.0762983d13": {
     "ko": "터미널 우선"
   },
@@ -6293,12 +6176,6 @@
   "auto.components.settings.UnsealedCredentialNotice.body": {
     "ko": "{{credential}}이(가) 암호화되지 않은 상태로 저장되어 있습니다. 이 시스템에는 Orca가 사용할 수 있는 OS 키링이 없습니다. 디스크나 디스크 백업을 읽을 수 있는 사람은 이 자격 증명도 읽을 수 있습니다. gnome-keyring 또는 kwallet을 설치하고 잠금 해제한 뒤 다시 저장해 암호화하세요."
   },
-  "auto.components.settings.artifacts.openArtifacts": {
-    "ko": "아티팩트 열기"
-  },
-  "auto.components.settings.artifacts.showButton": {
-    "ko": "아티팩트 버튼 표시"
-  },
   "auto.components.settings.Settings.6855b0f77d": {
     "ko": "Orca를 병렬 에이전트 작업에 유용하게 만드는 핵심 워크플로를 완료합니다."
   },
@@ -6326,18 +6203,6 @@
   "auto.components.settings.terminal.search.e989914ad6": {
     "ko": "글꼴 패밀리"
   },
-  "auto.components.settings.PrivacyDiagnosticBundleControls.19ec5e29b3": {
-    "ko": "최근 앱 활동과 오류를 민감 정보가 가려진 파일로 모아, 보내기 전에 검토할 수 있게 합니다. 보내기를 선택하기 전까지는 아무것도 업로드되지 않습니다."
-  },
-  "auto.components.settings.privacy.search.2b5a5c312f": {
-    "ko": "PostHog"
-  },
-  "auto.components.settings.orcaAccount.keywordRelay": {
-    "ko": "릴레이"
-  },
-  "auto.components.settings.orcaAccount.keywordCloud": {
-    "ko": "클라우드"
-  },
   "auto.components.skills.SkillFreshnessStatusPill.needsAttention": {
     "ko": "스킬 검토"
   },
@@ -6352,9 +6217,6 @@
   },
   "auto.components.settings.MobileRelayBetaNotice.notice": {
     "ko": "Orca Relay는 베타 버전입니다."
-  },
-  "auto.components.settings.MobilePairingConnectionOptions.relaySignInDetail": {
-    "ko": "이 데스크톱에서 Orca에 로그인하고 휴대폰 연결을 Orca 서버를 통해 전달합니다. LAN 연결에는 계정이 필요하지 않습니다."
   },
   "auto.components.settings.SshPassphraseDialog.ce4fdf7914": {
     "ko": "다음 연결 대상에 사용할 SSH 키의 암호 문구를 입력하세요:"

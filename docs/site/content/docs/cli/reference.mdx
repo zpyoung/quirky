@@ -363,27 +363,6 @@ orca account add --agent codex
 
 `account add` runs `claude login` / `codex login` in **this** terminal on the host, then registers the captured credentials with the local runtime. Codex uses device authorization so the browser can finish on another machine. Run these on the machine that owns the accounts — not through a client-only remote session.
 
-## Artifacts
-
-Publish HTML or Markdown through the signed-in Orca account. Viewing a public link does not require sign-in; create/list/update/delete do. **Publishing is off by default** — a human must enable **Settings → Artifacts → Allow publishing public artifact links** on the device. There is no CLI flag that grants the gate. `list`, `unshare`, and `delete` stay available so you can audit or revoke links after turning publishing off.
-
-```bash
-orca artifacts share ./report.html --json
-orca artifacts share ./notes.md --json
-orca artifacts update ./notes.md --json
-orca artifacts unshare ./notes.md --json
-orca artifacts list --json
-orca artifacts list --cursor <cursor> --json
-orca artifacts delete <id> --json
-```
-
-- Accepted files: `.html`, `.htm`, `.md`, `.markdown`.
-- `share` stores the edit token in the active Orca profile and does not print it. `update` / `unshare` resolve by the same local path and profile that originally shared the file.
-- `list` is paged (`nextCursor` → `--cursor`). `delete` takes the artifact id from `list` and does not need the original file.
-- Relative HTML assets are not uploaded — share self-contained HTML or absolute asset URLs.
-- Denied publish/update fails with `artifact_sharing_disabled`; fix Settings instead of retrying.
-- Desktop: open a local HTML or Markdown file and use **Share as artifact**, or manage links from the sidebar **Artifacts** page.
-
 ## Automations, environments, and hooks
 
 Scheduled prompts:

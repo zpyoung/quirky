@@ -18,9 +18,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 const NOW = 1_800_000_000_000
 
 // Relay-era builds record undelivered stops on the lease; this build writes them only for the

@@ -8,11 +8,7 @@ import { CrashReportDialog } from '../components/crash-report/CrashReportDialog'
 import { MarkdownTemplatePicker } from '../components/editor/MarkdownTemplatePicker'
 import RecentTabSwitcher from '../components/tab-bar/RecentTabSwitcher'
 import { SkillFreshnessUpdateDialog } from '../components/skills/SkillFreshnessUpdateDialog'
-import { StarNagCard } from '../components/StarNagCard'
 import { NativeChatResumeOnRestartModal } from '../components/NativeChatResumeOnRestartModal'
-import { StarNagAgentValueMomentObserver } from '../components/star-nag/StarNagAgentValueMomentObserver'
-import { StarNagToastHost } from '../components/star-nag/StarNagToastHost'
-import { TelemetryFirstLaunchSurface } from '../components/TelemetryFirstLaunchSurface'
 import { ZoomOverlay } from '../components/ZoomOverlay'
 import { shouldRenderPetOverlay } from '../components/pet/pet-overlay-visibility'
 import { useAppStore } from '../store'
@@ -21,7 +17,6 @@ import { useLazyModalMounts } from './use-lazy-modal-mounts'
 import { usePreloadWorktreeJumpPalette, WorktreeJumpPalette } from './worktree-jump-palette-preload'
 import {
   selectAppRootSurfacePetEnabled,
-  selectAppRootSurfaceTelemetryOptedIn,
   selectAppRootSurfaceVoiceEnabled
 } from './app-root-surface-settings'
 import type { FloatingWorkspacePanelState } from './use-floating-workspace-panel'
@@ -65,22 +60,12 @@ const SshPassphraseDialog = lazy(() =>
 const UpdateCard = lazy(() =>
   import('../components/UpdateCard').then((module) => ({ default: module.UpdateCard }))
 )
-const UnexpectedSignoutCard = lazy(() =>
-  import('../components/UnexpectedSignoutCard').then((module) => ({
-    default: module.UnexpectedSignoutCard
-  }))
-)
 const RemoteServerUpdateDialog = lazy(
   () => import('../components/settings/RemoteServerUpdateDialog')
 )
 const ContextualTourOverlay = lazy(() =>
   import('../components/contextual-tours/ContextualTourOverlay').then((module) => ({
     default: module.ContextualTourOverlay
-  }))
-)
-const SetupGuideTelemetryObserver = lazy(() =>
-  import('../components/setup-guide/SetupGuideTelemetryObserver').then((module) => ({
-    default: module.SetupGuideTelemetryObserver
   }))
 )
 const FloatingTerminalPanel = lazy(() =>
@@ -144,7 +129,6 @@ export function AppRootSurfaces(props: {
   // settings object replacement for an unrelated preference should not rerender every overlay.
   const voiceEnabled = useAppStore(selectAppRootSurfaceVoiceEnabled)
   const petEnabled = useAppStore(selectAppRootSurfacePetEnabled)
-  const telemetryOptedIn = useAppStore(selectAppRootSurfaceTelemetryOptedIn)
   const statusBarVisible = useAppStore((s) => s.statusBarVisible)
   const persistedUIReady = useAppStore((s) => s.persistedUIReady)
   const petVisible = useAppStore((s) => s.petVisible)
@@ -153,7 +137,6 @@ export function AppRootSurfaces(props: {
   const activeContextualTourId = useAppStore((s) => s.activeContextualTourId)
   const hasSshCredentialRequest = useAppStore((s) => s.sshCredentialQueue.length > 0)
 
-  const shouldMountSetupGuideTelemetryObserver = persistedUIReady
   const shouldMountUpdateCard = shouldMountUpdateCardForStatus(updateStatus)
   const shouldMountDictationController = voiceEnabled || dictationState !== 'idle'
   const renderPetOverlay = shouldRenderPetOverlay({ persistedUIReady, petEnabled, petVisible })
@@ -286,11 +269,6 @@ export function AppRootSurfaces(props: {
           </ModalBoundary>
         ) : null}
       </Suspense>
-      {shouldMountSetupGuideTelemetryObserver ? (
-        <Suspense fallback={null}>
-          <SetupGuideTelemetryObserver />
-        </Suspense>
-      ) : null}
       {activeContextualTourId !== null ? (
         <Suspense fallback={null}>
           <ContextualTourOverlay />
@@ -312,25 +290,9 @@ export function AppRootSurfaces(props: {
             </OverlayBoundary>
           </Suspense>
         ) : null}
-        <Suspense fallback={null}>
-          <OverlayBoundary boundaryId="overlay.unexpected-signout" resetKey={activeView}>
-            <UnexpectedSignoutCard />
-          </OverlayBoundary>
-        </Suspense>
-        <OverlayBoundary boundaryId="overlay.star-nag" resetKey={activeView}>
-          <StarNagCard />
-        </OverlayBoundary>
       </NotificationCardStack>
       <OverlayBoundary boundaryId="overlay.native-chat-resume-on-restart" resetKey={activeView}>
         <NativeChatResumeOnRestartModal />
-      </OverlayBoundary>
-      <OverlayBoundary boundaryId="overlay.star-nag-toast" resetKey={activeView}>
-        <StarNagToastHost />
-      </OverlayBoundary>
-      <StarNagAgentValueMomentObserver />
-      {/* Why: mount at App root to render once per session; internal cohort gate limits it to pre-telemetry users — see telemetry-plan.md §First-launch experience. */}
-      <OverlayBoundary boundaryId="overlay.telemetry-first-launch" resetKey={telemetryOptedIn}>
-        <TelemetryFirstLaunchSurface />
       </OverlayBoundary>
       <OverlayBoundary boundaryId="overlay.zoom" resetKey={activeView}>
         <ZoomOverlay />

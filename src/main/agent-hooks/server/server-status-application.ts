@@ -1,8 +1,6 @@
 import { deriveCliWriterTopology } from './cli-writer-observation'
 import { createHash } from 'node:crypto'
 
-import { getCohortAtEmit } from '../../telemetry/cohort-classifier'
-import { track } from '../../telemetry/client'
 import { isCommandCodeNewTurnWhileWorking } from '../../../shared/command-code-turn-boundary'
 import { isNewTurnEvent } from '../../../shared/agent-hook-listener/provider-event-routing'
 import { reduceHostTurnEnd } from '../../../shared/agent-hook-turn-end-timing'
@@ -269,17 +267,6 @@ export abstract class AgentHookServerStatusApplication extends AgentHookServerSt
       promptHash,
       promptInteractionKey
     })
-    try {
-      // Why: hooks prove a turn was submitted but not which UI launched the terminal; keep attribution low-cardinality.
-      track('agent_prompt_sent', {
-        agent_kind: agentKind,
-        launch_source: 'unknown',
-        request_kind: 'followup',
-        ...getCohortAtEmit()
-      })
-    } catch (err) {
-      console.error('[agent-hooks] prompt-sent telemetry failed', err)
-    }
   }
 
   /** Stamp who observed this event, in what order, on main's clock. Nothing reads it yet

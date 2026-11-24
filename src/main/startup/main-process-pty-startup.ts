@@ -1,7 +1,5 @@
 import { app } from 'electron'
 import { isLocalExecutionHost } from '../../shared/execution-host'
-import { classifyError } from '../telemetry/classify-error'
-import { track } from '../telemetry/client'
 import { getPtyIdForPaneKey } from '../ipc/pty/pane/key-state'
 import { getDaemonProvider, listLiveDaemonPtyIds } from '../daemon/daemon-provider-state'
 import { initDaemonPtyProvider } from '../daemon/daemon-provider-init'
@@ -164,12 +162,6 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
     startAgentHookServer: async () => {
       const settings = state.store?.getSettings()
       logStartupMilestone('startup-service-start', { service: 'agent-hook-server' })
-      // Why (#11217): the hook listener fails open on every request error, so an IDS resetting
-      // loopback POSTs mid-body stops agent status for every runtime with no symptom but staleness.
-      // Log + telemetry (the daemon_start_failed pattern) so it is diagnosable without a packet capture.
-      agentHookServer.setTransportInterferenceListener((report) => {
-        track('agent_hook_transport_blocked', { count: report.count })
-      })
       await agentHookServer.start({
         statusHooksEnabled: isAgentStatusHooksEnabled(settings),
         env: app.isPackaged ? 'production' : 'development',
@@ -185,7 +177,6 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
       console.error(
         `[daemon] STARTUP FAILED — falling back to local PTYs; terminals will not persist across quit. Reason: ${reason}`
       )
-      track('daemon_start_failed', classifyError(error))
     },
     onAgentHookServerError: (error) => {
       // Why: hook callbacks are sidebar enrichment only; Orca must still boot if the loopback receiver fails.

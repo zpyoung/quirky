@@ -573,20 +573,9 @@
         "orca": {
           "profiles": {
             "612f7f6861": "创建配置文件失败",
-            "319d7cf39b": "已创建云配置文件",
-            "d6e764e7db": "请重新连接此配置文件",
-            "f0c9e11a6d": "创建云配置文件失败",
-            "8b8fa73174": "未配置 Orca Cloud 登录",
-            "33290e88ed": "连接配置文件失败",
-            "9fcb07a796": "配置文件已连接",
-            "2f6c78a039": "刷新配置文件身份验证失败",
-            "a37b5e6d37": "已退出配置文件",
-            "83600521e7": "退出登录失败",
-            "76deec8f58": "切换组织失败",
             "7d4bc516ee": "切换配置文件失败",
             "f518e89aa5": "该项目已存在于那个配置文件中",
-            "f03ae7f27b": "转移项目失败",
-            "signInTimedOut": "登录超时"
+            "f03ae7f27b": "转移项目失败"
           }
         },
         "runtime": {
@@ -1013,22 +1002,6 @@
       "pluginCommandKeybindings": {
         "group": "Plugins"
       },
-      "feedback": {
-        "image": {
-          "attachments": {
-            "fallbackName": "图片附件",
-            "unsupportedType": "{{fileName}} 不是受支持的图片类型。",
-            "empty": "{{fileName}} 为空。",
-            "tooLarge": "{{fileName}} 大于 {{maxSize}}。",
-            "tooMany": "最多可附加 {{maxCount}} 张图片。",
-            "dimensionsTooLarge": "{{fileName}} 的尺寸过大，无法安全预览。",
-            "invalidImage": "{{fileName}} 不是有效的受支持图片。",
-            "additionalErrors": "还有 {{count}} 张图片无法附加。",
-            "totalTooLarge": "{{fileName}} 将使附件总大小超过 {{maxSize}}。",
-            "compressed": "已将 {{fileName}} 从 {{originalSize}} 压缩到 {{size}}，以符合附件大小限制。"
-          }
-        }
-      },
       "activateAiVaultStructuredSession": {
         "unavailable": "结构化智能体会话尚不可用。稍后重试。",
         "gone": "此聊天不再在此主机上，因此无法在此处重新打开。",
@@ -1147,15 +1120,12 @@
         "225071c560": "实验性",
         "e338c507c1": "用于故障排除的低级兼容性设置。",
         "580a04cd81": "高级",
-        "8400cfe1c1": "匿名使用数据和遥测控制。",
-        "3618579df6": "隐私与遥测",
         "65ec7d1968": "终端启动的开发者工具的 macOS 隐私访问。",
         "d91ae31fbd": "macOS 权限",
         "95a1886d94": "通过手机控制终端和智能体。",
         "1cd25673df": "移动端",
         "31e57d1c70": "通过 SSH 使用已有机器处理文件、终端、Git 和工作区。",
         "94a5afe910": "SSH 主机",
-        "40d80bad8a": "测试版",
         "de0c2907a1": "远程 Orca 服务器",
         "b351014180": "Orca 统计，以及 Claude、Codex、OpenCode、Muse Token 分析和 Grok 订阅使用量。",
         "d72a58b5b9": "统计和使用情况",
@@ -1218,12 +1188,8 @@
         "pluginsTitle": "插件",
         "pluginsDescription": "安装和管理实验性 Orca 插件。",
         "tasksDescription": "连接提供商、安装 Linear 技能并选择要在任务中显示的内容。",
-        "artifactsTitle": "工件",
-        "artifactsDescription": "与您的团队共享 HTML 和 Markdown 文件并管理他们的公共链接。",
         "automationsTitle": "自动化",
         "automationsDescription": "安排智能体工作并选择自动化是否显示在侧栏中。",
-        "shareSkillsTitle": "分享技能",
-        "shareSkillsDescription": "通过未列出的链接分享您的技能。任何拥有它的人都可以安装它们。",
         "floatingWorkspaceWebDescription": "全局终端和 Markdown 选项卡。"
       },
       "useAppMenuPaste": {
@@ -1288,15 +1254,6 @@
         "d3e8a1f4b2": "账户已切换",
         "9375620cc3": "重启此会话以使用 {{value0}}。在重启之前，它将继续使用旧账户。",
         "6133594b12": "保留旧账户"
-      },
-      "FirstLaunchBanner": {
-        "b9e1b966c7": "关闭通知",
-        "94cc673726": "知道了",
-        "fc5cc29955": "退出",
-        "d1deebb050": "隐私政策",
-        "958d2cc31b": "您使用的功能的匿名计数有助于我们确定要构建的内容的优先级。没有文件内容、提示、终端输出或任何可以识别您身份的内容。随时在“设置”->“隐私和遥测”中进行更改。",
-        "9784b4d7bc": "帮助我们决定下一步要构建什么",
-        "fcbee32f08": "遥测通知"
       },
       "GitHubItemDialog": {
         "3ab6ac0fc8": "预览并编辑选定的 GitHub 议题或拉取请求。",
@@ -1610,7 +1567,6 @@
         "6ca6ff404e": "ORCA",
         "520304a067": "Orca 标志",
         "ce44fad849": "缺少依赖项",
-        "c1cf168479": "隐藏",
         "00cee697c1": "在终端中运行“gh auth login”以连接您的 GitHub 账户。",
         "9f96d018b7": "GitHub CLI 未经过身份验证",
         "73e1ad4282": "Orca 使用 GitHub CLI (gh) 来显示PR、议题和检查。",
@@ -1620,9 +1576,6 @@
         "cd21242762": "添加一个项目即可开始。",
         "9c00bd4adf": "从侧边栏中选择一个工作区开始。",
         "16e9e3df89": "已加星标",
-        "0d0ace8861": "在 GitHub 上加星标",
-        "ec43b38ba7": "已在 GitHub 上加星标",
-        "157bb5ecbb": "打开 GitHub",
         "preflightDismiss": "关闭"
       },
       "LinearIssueMarkdownDescriptionEditor": {
@@ -2029,16 +1982,8 @@
         "92b0f9d921": "已通过身份验证并重试。",
         "cd8c34aac1": "gh",
         "cf82170065": "无法为该仓库加注星标。确保",
-        "30c36231c1": "Orca 是开源项目。如果它今天帮到了你，GitHub 星标会帮助其他开发者找到它。",
-        "b5e685e4d9": "关闭",
-        "5f6df21046": "喜欢 Orca 吗？",
-        "2d67b6c849": "在 GitHub 上加星标",
-        "af3c9bbb37": "正在加星标...",
         "68a41bc3aa": "无法使用以下方式加星:",
         "996bf76e46": "在浏览器中打开 GitHub 以完成操作。",
-        "d32015fec7": "正在打开...",
-        "157bb5ecbb": "打开 GitHub",
-        "8c967b4d15": "稍后",
         "73dfd4eb8d": "不再询问"
       },
       "TaskPage": {
@@ -4631,8 +4576,6 @@
           "08a321a984": "没有技能匹配当前搜索和筛选条件。",
           "cd7893fbc1": "正在扫描技能",
           "35b9a724a0": "可用",
-          "c13b82793c": "管理安装",
-          "aee7b99cc6": "从链接安装",
           "filterProvider": "按智能体筛选",
           "filterSource": "按来源筛选",
           "allSources": "全部",
@@ -4640,12 +4583,7 @@
           "closeSkills": "关闭技能",
           "closeTooltip": "关闭 · Esc",
           "moreActions": "更多操作",
-          "sharedLinks": "共享链接",
-          "emptyCopy": "扫描的技能文件夹为空。请安装共享包，或添加技能后刷新。",
           "retry": "重试",
-          "remoteShareNotice": "这些技能位于 {{host}}。请在该机器上打开“技能”以进行共享。",
-          "viewSwitch": "显示",
-          "searchLinks": "搜索链接",
           "deleteSkills": "删除技能…",
           "984405683f": "插件",
           "4d177feabd": "内置",
@@ -4663,15 +4601,10 @@
           "0c74e7ff34": "已安装"
         },
         "SkillShareSelectionControls": {
-          "01c5a15e02": "共享技能",
           "01c5a15e05": "分享 {{value0}} 技能",
           "01c5a15e01": "取消共享",
           "01c5a15e03": "已选择 {{value0}}",
-          "01c5a15e04": "选择所有结果",
-          "01c5a15e06": "在自己的机器上打开该技能即可分享。",
-          "01c5a15e07": "在分享之前先安装此技能。",
-          "01c5a15e08": "只能共享家庭和工作场所技能。",
-          "01c5a15e09": "已从其他来源选择了具有此名称的技能。"
+          "01c5a15e04": "选择所有结果"
         },
         "SkillRow": {
           "updatedUnknown": "无日期",
@@ -4681,7 +4614,6 @@
           "skillActions": "{{value0}} 的操作",
           "viewDetails": "查看详情",
           "deleteSkill": "删除…",
-          "notShareable": "不可共享",
           "detailSource": "来源",
           "detailContents": "内容",
           "notDeletable": "不可删除"
@@ -4713,10 +4645,6 @@
           "resultOne": "{{count}} 个结果",
           "resultOther": "{{count}} 个结果",
           "selected": "已选择 {{count}} 个",
-          "shareOne": "共享 {{count}} 个技能",
-          "shareOther": "共享 {{count}} 个技能",
-          "linkOne": "{{count}} 个链接",
-          "linkOther": "{{count}} 个链接",
           "deleteOne": "删除 {{count}} 个技能",
           "deleteOther": "删除 {{count}} 个技能",
           "deletedOne": "已删除 {{count}} 个技能",
@@ -4724,11 +4652,7 @@
           "deleteFolderOne": "{{count}} 个文件夹",
           "deleteFolderOther": "{{count}} 个文件夹",
           "deleteLinkOne": "{{count}} 个链接",
-          "deleteLinkOther": "{{count}} 个链接",
-          "installOne": "安装 {{count}} 技能",
-          "installOther": "安装 {{count}} 技能",
-          "retryOne": "重试 {{count}} 技能",
-          "retryOther": "重试 {{count}} 技能"
+          "deleteLinkOther": "{{count}} 个链接"
         },
         "filter": {
           "allAgents": "所有智能体",
@@ -4737,7 +4661,6 @@
         "SkillsSelectionHeader": {
           "exit": "退出选择",
           "exitTooltip": "退出选择 · Esc",
-          "title": "选择要共享的技能",
           "selectAll": "选择全部 {{count}} 个符合条件的项目",
           "clear": "清除",
           "deleteTitle": "选择要删除的技能"
@@ -4876,33 +4799,14 @@
           "hostUnavailable": "无法到达所选机器。刷新并重试。"
         },
         "SkillShareDialog": {
-          "reconnect": "共享前重新连接您的 Orca 帐户。",
-          "unconfigured": "共享前连接 Orca Cloud 帐户。",
-          "prepareFailed": "无法准备此技能以供共享。",
           "peopleRequired": "选择至少一名队友。",
-          "publishCancelled": "上传已取消。准备好的副本仍然可以重试。",
-          "publishFailed": "无法发布该技能。准备好的副本仍然可以重试。",
-          "nameTaken": "技能名称“{{name}}”已被使用。请重命名您的技能后再共享。",
-          "copied": "分享链接已复制",
-          "preparing": "正在准备预览...",
-          "ready": "技能链接已准备好",
-          "title": "分享技能",
           "readyDescription": "收件人先通过 Orca 进行身份验证，然后才能检查或安装它。",
           "newVersionDescription": "查看确切的文件，然后将不可变版本发布到现有云包。",
           "description": "查看确切的文件，选择谁可以访问它们，然后发布不可变的版本。",
-          "0f07fa2a79": "发布技能",
-          "7aa4ba0dba": "发布新版本",
-          "3a51d0f34f": "取消上传",
-          "e9d652ae3d": "取消…",
-          "30985d4fc0": "取消",
-          "3af85f6add": "完成",
           "readyDescriptionV2": "任何拥有此未列出链接的人都可以检查并安装技能。",
-          "descriptionV2": "查看确切的文件，然后在未列出的链接后面发布不可变的版本。",
-          "publishBundle": "发布捆绑包",
-          "cancelRequestFailed": "Orca 无法发送取消请求。上传可能仍会完成。"
+          "descriptionV2": "查看确切的文件，然后在未列出的链接后面发布不可变的版本。"
         },
         "SkillCard": {
-          "d25a1b8ae6": "分享技能",
           "01c5a16e01": "选择{{value0}}"
         },
         "SkillCloudManagementActions": {
@@ -4927,17 +4831,9 @@
         },
         "SkillInstallDialog": {
           "39acb9e8f4": "安装技能",
-          "59c3b76cdd": "重试安装",
-          "241e72f9d6": "正在安装...",
-          "05588076a9": "取消安装",
-          "d198ec91e5": "关闭",
-          "4a00d133c5": "Orca 在更改所选计算机之前验证访问权限和程序包身份。",
-          "fcbec627cc": "安装共享技能",
-          "01c5a14e01": "安装共享技能",
-          "opening": "打开这个链接..."
+          "4a00d133c5": "Orca 在更改所选计算机之前验证访问权限和程序包身份。"
         },
         "SkillInstallManagementDialog": {
-          "8095927ff3": "关闭",
           "e91af0079f": "移除",
           "470d8d2476": "确认删除",
           "c1d03ee50d": "取消安装",
@@ -4949,71 +4845,24 @@
           "74b70892ea": "本地文件被修改",
           "86ed219b55": "选择版本",
           "9c04bd0120": "安装版本",
-          "64c71cf7b9": "在此计算机上未找到 Orca 管理的技能安装。",
-          "0900db719a": "— 已断开连接",
-          "176fef9516": "· SSH",
-          "6cb1fbe039": "这台电脑",
-          "3677ae58e7": "更新、回滚或安全删除 Orca 安装的版本。",
-          "44d118a8f7": "管理已安装的技能",
           "1c9e7f420a": "安装内置技能",
           "34c2ef9e71": "安装 {{count}} 技能",
           "a0cab67c2f": "删除 {{count}} 技能",
           "f970d8088d": "确认删除 {{count}} 技能",
-          "dab29e4b54": "{{installed}} 已安装 · {{updated}} 已更新 · {{keptLocal}} 保留在本地",
           "installAnotherMachine": "安装在另一台机器上"
         },
         "SkillInstallReviewContent": {
-          "89e2601162": "丢弃并更换",
-          "a5675fb371": "内容并保持原样。保留它，或者明确丢弃并用此版本替换它。",
-          "37d990b94c": "改变了",
-          "2a31912f14": "Orca 被发现",
-          "651b7d8a57": "本地副本需要做出决定",
           "98ed90e523": "技能包含指令并且可能包括脚本。将其视为来自其作者的代码。",
           "f72ee4022a": "SHA-256",
           "3d8421ca2f": "可执行文件",
           "87137bcb8d": "脚本",
           "fab8fce842": "文件",
           "8f9833d509": "不可变版本",
-          "66270286ac": "· 您可以安全地重试。",
-          "1b6ad2ca5c": "检查过。",
-          "3fc62a61eb": "放置",
-          "157de228b4": "检验技能",
-          "69236de8d6": "检查…",
-          "27672470d9": "打开链接不会安装任何东西。首先查看不可变版本。",
-          "66cff7a804": "https://app.orca.dev/skills/share/…",
-          "93eb0fe8c7": "Orca 技能链接",
-          "releaseNotes": "发行说明：",
-          "targetHeader": "安装目标"
-        },
-        "SkillInstallTargetFields": {
-          "8e6a972229": "这台机器上没有已知的工作区。",
-          "7a366323e7": "文件夹",
-          "d628c416a2": "Git 工作树",
-          "5845cfe543": "选择工作树或文件夹",
-          "0e5b43a9e3": "工作区",
-          "0c10a406fb": "威斯尔·",
-          "e5b0d15e64": "主机操作系统",
-          "cb47652227": "执行环境",
-          "a4dfd33095": "一个工作区",
-          "c779621aa0": "全球技能",
-          "63cc9e31fe": "目的地",
-          "85d85880df": "· SSH",
-          "71eefd7660": "— 已断开连接",
-          "0785d0a503": "— 需要更新",
-          "8562dd1e6e": "这台电脑",
-          "b8a0b706ad": "机器"
-        },
-        "SkillInstallWorkspaceCombobox": {
-          "search": "搜索工作区...",
-          "empty": "未找到工作区。"
+          "27672470d9": "打开链接不会安装任何东西。首先查看不可变版本。"
         },
         "SkillShareReviewContent": {
           "e3caf6baeb": "撤销此链接会阻止将来的访问。它不会删除收件人计算机上已安装的副本。",
-          "6d6233a3a4": "复制链接",
-          "0142581727": "正在上传...",
           "ad940367a5": "验证并发布...",
-          "bf02d6ed9e": "这个版本有什么变化？",
-          "f0c0411549": "发行说明",
           "4895d3e0ee": "没有队友可用。",
           "8188f5d765": "可以访问链接。",
           "fe204e06f0": "组织",
@@ -5021,44 +4870,25 @@
           "f25429e266": "选定的人",
           "0a49d901ab": "组织",
           "6817a7f6f8": "技能获取",
-          "c15d90c10b": "需要连接的 Orca 云帐户。",
           "266527d295": "发布为 {{value0}}{{value1}}。",
           "78d863235c": "使用权",
-          "b3b1d4b911": "SHA-256",
           "77f636eac3": "可执行文件",
           "8edd32622f": "脚本",
           "3121f44358": "文件",
-          "2dca0b720b": "发布新技能版本",
           "01c5a17e01": "{{value0}} 技能",
           "01c5a17e02": "审查包含的技能",
           "01c5a17e03": "{{value0}} 文件 · {{value1}}",
           "unlistedLinkTitle": "未列出的链接",
           "unlistedPublishingAs": "发布为 {{value0}}。知道链接的任何人都可以检查并安装这些技能。",
-          "unlistedLinkDetails": "该链接不可搜索或公开列出。撤销它以阻止将来的访问；保留已安装的副本。",
-          "bundleReady": "技能包链接已准备好",
-          "publishBundleVersion": "发布新的技能包版本",
-          "shareBundle": "分享技能包",
-          "publishingLink": "发布链接...",
-          "verifyingPackage": "正在验证包..."
+          "unlistedLinkDetails": "该链接不可搜索或公开列出。撤销它以阻止将来的访问；保留已安装的副本。"
         },
         "SkillBundleInstallFlow": {
-          "01c5a13e01": "关闭",
-          "01c5a13e02": "取消安装",
-          "01c5a13e03": "正在安装...",
           "01c5a13e04": "重试 {{value0}} 技能",
           "01c5a13e05": "安装 {{value0}} 技能"
         },
         "SkillBundleInstallOutcome": {
-          "01c5a12e01": "已安装",
-          "01c5a12e02": "已更新",
-          "01c5a12e03": "不变",
-          "01c5a12e04": "保持本地化",
           "01c5a12e05": "失败的",
-          "01c5a12e06": "取消",
-          "01c5a12e07": "捆绑安装需要注意。",
-          "01c5a12e08": "安装并验证了技能。",
-          "01c5a12e09": "{{value0}} 已检查选定的技能。",
-          "01c5a12e10": "需要重试"
+          "01c5a12e06": "取消"
         },
         "SkillBundleInstallReview": {
           "01c5a11e01": "不可变版本",
@@ -5067,17 +4897,12 @@
           "01c5a11e04": "{{value0}} 脚本",
           "01c5a11e05": "{{value0}} 可执行文件",
           "01c5a11e06": "SHA-256",
-          "01c5a11e09": "发行说明：",
           "01c5a11e0a": "技能包含说明，并且可能包括脚本。将它们视为作者的代码。",
           "01c5a11e0b": "安装技能",
           "01c5a11e0c": "从该捆绑包中选择任何子集。",
-          "01c5a11e0d": "选择全部",
           "01c5a11e0e": "无描述",
           "01c5a11e0f": "{{value0}} 文件 · {{value1}} 脚本",
           "01c5a11e10": "{{value0}} 可执行文件",
-          "01c5a11e11": "本地副本需要做出决定",
-          "01c5a11e12": "默认情况下，Orca 将保留这些本地副本。仅选择要丢弃和替换的副本。",
-          "01c5a11e13": "替换 {{value0}} ({{value1}})",
           "01c5a11e14": "{{value0}} 新",
           "01c5a11e15": "{{value0}} 不变",
           "01c5a11e16": "{{value0}} 更新",
@@ -5086,104 +4911,25 @@
         "SkillManagedInstallList": {
           "86c76cb262": "{{count}} 技能包"
         },
-        "skill-install-progress-state": {
-          "currentSkill": "安装 {{value1}} 的 {{value0}}: {{value2}}..."
-        },
         "SkillSelectionBar": {
           "selectAll": "选择所有符合条件的 {{count}}",
           "clear": "清除"
         },
         "share": {
-          "fileExecutable": "可执行文件",
-          "fileScript": "脚本",
-          "reviewFiles": "查看可以运行的文件",
-          "reviewSkills": "审查包含的技能",
-          "releaseNotesVersion": "发行说明",
-          "releaseNotesOptional": "添加发行说明（可选）",
-          "releaseNotesFirst": "描述此版本",
           "readyDescription": "复制链接以进行分享。",
           "newVersionDescription": "将不可变版本发布到现有包。",
           "description": "在未列出的链接后面发布不可变版本。",
           "accessSummary": "任何知道该链接的人都可以安装它。它没有在任何地方列出，撤销它会阻止新的安装——而不是已经安装的副本。发布为 {{value0}}。",
-          "manageLinks": "在“设置”中管理或撤销此链接",
-          "scriptOne": "{{count}} 脚本",
-          "scriptOther": "{{count}} 脚本",
-          "executableOne": "{{count}} 可执行文件",
-          "executableOther": "{{count}} 可执行文件",
-          "noExecutableContent": "没有脚本或可执行文件",
-          "newVersionDescriptionPlain": "将新版本添加到现有链接。",
-          "accessSummaryShort": "未列出的链接 - 任何拥有它的人都可以安装它。发布为 {{value0}}。",
-          "accessSummaryPlain": "未列出的链接 - 任何拥有它的人都可以安装它。"
-        },
-        "description": {
-          "showLess": "显示较少",
-          "showMore": "显示更多"
+          "accessSummaryShort": "未列出的链接 - 任何拥有它的人都可以安装它。发布为 {{value0}}。"
         },
         "install": {
-          "authorizing": "授权包访问...",
-          "installing": "下载、验证和安装...",
-          "selectSkill": "至少选择一项技能。",
-          "chooseWorkspace": "选择一个工作区。",
-          "reconnectBeforeInstalling": "安装前重新连接您的 Orca 帐户。",
-          "bundleVerificationFailed": "在 Orca 验证请求的捆绑包之前安装失败。",
-          "destinationAlreadyFinished": "目的地已经完成此安装。",
-          "enterShareLink": "输入 Orca 技能共享链接。",
-          "shareUnavailable": "此共享不可用。该链接可能无效、过期或已撤销。",
-          "requestedVersionVerificationFailed": "在 Orca 验证请求的版本之前安装失败。",
-          "versionVerificationFailed": "Orca 无法验证请求的版本。",
-          "inspectManagedFailed": "Orca 无法检查此计算机上的托管安装。",
-          "reconnectForVersionHistory": "重新连接您的 Orca 帐户以加载版本历史记录。",
-          "versionHistoryUnavailable": "该技能的版本历史记录不可用。",
-          "bundleSkillsMissing": "此版本不包含任何已安装的内置技能。",
-          "reconnectBeforeVersionChange": "在更改版本之前重新连接您的 Orca 帐户。",
-          "removeFailed": "Orca 无法安全地移除该技能。",
-          "agentsLabel": "智能体",
           "agentsCanonical": "始终为 {{value0}} 安装，读取为 {{value1}}。",
           "agentsNoneChosen": "无需额外智能体",
           "agentsSummary": "另：{{value0}}",
-          "agentNotInstalled": "未安装",
           "bundleDestinationSummary": "{{value0}} 新的 · {{value1}} 已安装 · {{value2}} 需要决定",
           "trustNote": "技能是来自其作者的指令和代码。安装您信任的内容。",
-          "agentsNone": "没有选择智能体",
-          "agentsSelected": "安装：{{value0}}",
           "agentAlways": "总是",
-          "agentsCanonicalNote": "{{value0}} 读取 {{value1}}，每个安装都会写入。",
-          "linkHint": "打开链接永远不会安装任何东西——你首先要检查它。",
-          "rowNeedsDecision": "需要一个决定",
-          "rowInstalled": "已安装",
-          "rowUpdate": "更新",
-          "rowNew": "新建",
-          "chooseSkills": "从此链接选择要安装的内容。",
-          "singleRunnableWarning": "该技能包括脚本或二进制文件。",
-          "runnableWarning": "{{selectedCount}} 所选技能中的 {{affectedCount}} 包括脚本或二进制文件：{{affected}}。",
-          "reviewRunnableFiles": "包括脚本或二进制文件",
-          "reviewSupportingFiles": "包括支持文件",
-          "reviewInstructions": "关于这个技能",
-          "supportingFileWarning": "所选技能包括 SKILL.md 之外的 {{fileCount}}。",
-          "agentAccessWarning": "技能包含您的智能体可能遵循的说明。仅当您信任此共享链接的来源时才继续。",
-          "fileBinary": "二进制",
-          "fileRunnable": "可运行",
-          "agentsCountBadge": "已选择 {{count}}",
-          "agentsCountLabel": "{{count}} {{label}}",
-          "targetAgentsHeader": "目标智能体",
-          "deselectAll": "取消选择可选",
-          "selectAll": "选择全部",
-          "canonicalHeader": "标准智能体（始终包含）",
-          "canonicalExplanation": "这些智能体本机读取 {{root}}，Orca 默认安装到该位置：",
-          "additionalAgentsHeader": "其他智能体目录"
-        },
-        "SkillSharedLinkRow": {
-          "contentsUnavailable": "无法加载此链接包含的内容。",
-          "loading": "正在加载内容...",
-          "deleteFailed": "Orca 无法从云端删除此内容。",
-          "deleted": "已从云端删除",
-          "confirmDelete": "确认删除",
-          "moreActions": "{{name}} 的更多操作",
-          "deletePackage": "从云端删除"
-        },
-        "SkillSharedLinksView": {
-          "loading": "正在加载共享链接...",
-          "noMatches": "没有与此搜索匹配的链接。"
+          "agentsCanonicalNote": "{{value0}} 读取 {{value1}}，每个安装都会写入。"
         },
         "SkillsSharedLinksHeader": {
           "back": "回到技能",
@@ -5191,34 +4937,7 @@
           "unlisted": "不公开 - 只有知道链接的人才能打开它。"
         },
         "managedInstall": {
-          "versionLabel": "版本",
-          "editedWarning": "您的编辑将被保留，除非您选择放弃它们。",
-          "finishInstall": "完成安装",
-          "useVersion": "使用这个版本",
-          "reinstall": "重新安装",
-          "cancel": "取消",
-          "sendToMachine": "发送到另一台机器",
-          "confirmRemove": "确认删除",
-          "remove": "移除",
-          "discardEditsRemove": "放弃我的编辑并删除",
-          "discardEdits": "放弃我的编辑并重新安装",
-          "titleMore": "{{name}} +{{count}}",
-          "scopeWorkspace": "这个工作区",
-          "scopeGlobal": "到处",
-          "installedOn": "已安装 {{date}}",
-          "stateEdited": "安装后编辑",
-          "stateMissing": "文件丢失",
-          "skillEdited": "已编辑",
-          "skillMissing": "缺失",
-          "versionCurrent": "{{date}}（已安装）",
-          "installElsewhere": "安装在其他地方..."
-        },
-        "skillWarningPreview": {
-          "bundleDescription": "涵盖每个警告级别的预览包。",
-          "instructionsOnlyDescription": "说明完全包含在 SKILL.md 中。",
-          "supportingFilesDescription": "包括主要说明之外的可读参考文件。",
-          "runnableFilesDescription": "包括智能体可以使用您的访问权限运行的脚本。",
-          "binaryFilesDescription": "包括不透明资产和可执行二进制文件。"
+          "sendToMachine": "发送到另一台机器"
         }
       },
       "sidebar": {
@@ -5503,30 +5222,6 @@
           "822ff300ad": "关闭",
           "5bfd5c8779": "关闭安装脚本"
         },
-        "SidebarFeedbackDialog": {
-          "8bf619e4cf": "取消",
-          "8de03e23c5": "仅提交您输入的反馈，或连接“gh”以包含 GitHub 身份。",
-          "d20439c560": "检查 GitHub 身份...",
-          "5b120b9634": "匿名提交",
-          "c9e5ea0791": "GitHub：",
-          "d46ddd66fc": "我们可以改进什么？",
-          "3460258a54": "关注 X",
-          "26108d3699": "加入 Discord",
-          "d245c4ef6c": "GitHub 议题",
-          "9b33530b3d": "其他联系我们的方式",
-          "a828fa4aee": "分享什么是有效的、什么是有问题的，或者 Orca 接下来应该做什么。",
-          "0eb643f07f": "发送反馈",
-          "60b721e857": "提交反馈失败。请再试一次。",
-          "7a46c228b8": "感谢您的反馈。",
-          "a2fd890d9e": "请在提交前输入反馈。",
-          "f2e42e1307": "发送",
-          "69969ba364": "正在发送...",
-          "imageReadFailed": "无法读取附加的图片。请重新附加。",
-          "attachWhileSending": "请等待当前反馈发送完成，再附加更多图片。",
-          "imagesNotDelivered": "反馈已发送，但无法确认图片已送达。",
-          "imagesNotIncluded": "反馈已发送。您的截图无法上传，未包含在内。",
-          "imagesRejected": "反馈已发送。您的截图过大，无法上传，未包含在内。"
-        },
         "SidebarFilter": {
           "e3b3898218": "添加项目",
           "92a23e6d07": "重置筛选条件",
@@ -5570,7 +5265,6 @@
           "0ccba862b8": "打开 GitHub 任务",
           "fee535205b": "任务",
           "d599269755": "从侧边栏隐藏",
-          "artifacts": "工件",
           "skills": "技能"
         },
         "SidebarRepositoryFilterSection": {
@@ -5588,20 +5282,15 @@
         "SidebarSettingsHelpMenu": {
           "ad3d3ed7f1": "重启 Orca",
           "29c56f30ee": "检查更新",
-          "eb9884e55b": "Discord",
           "5687ab246a": "GitHub",
-          "5f83d86d92": "变更日志",
-          "cdc87f897e": "文档",
           "e565171a7c": "键盘快捷键",
-          "4cf5b868d7": "发送反馈",
           "a428c25998": "设置",
           "2991a0106c": "帮助",
           "4e8f5710d3": "无法重新启动 Orca。",
           "5161eef55d": "正在重启 Orca…",
           "d396773ef0": "检查中",
           "f8a2c91d4e": "里程碑",
-          "b7e4d2a19c": "入门引导",
-          "c4f8e1b72a": "X"
+          "b7e4d2a19c": "入门引导"
         },
         "SidebarToolbar": {
           "19e32d0e5f": "打开文件夹选择器以添加项目",
@@ -6493,12 +6182,6 @@
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
           "parkTerminal": "Park terminal"
-        },
-        "SidebarFeedbackImageAttachments": {
-          "preparing": "正在准备附件…",
-          "attachImages": "Attach",
-          "removeImage": "Remove {{fileName}}",
-          "screenshotsHint": "最多附加 {{count}} 张截图，总计 {{maxSize}}"
         },
         "WorkspaceKanbanSearchField": {
           "bdb753c78d": "没有匹配的工作区",
@@ -7514,20 +7197,12 @@
           "confirm_running_terminal_close_description": "关闭终端时，在停止正在运行的智能体或命令之前询问。"
         },
         "GeneralSupportSection": {
-          "af7d9f4396": "感谢您的支持！",
-          "6922c1fa2b": "GitHub 上的 Star Orca",
-          "511782265b": "通过 gh CLI 通过 GitHub star 支持该项目。",
-          "55a87e5fd1": "支持 Orca",
-          "964acc6bb4": "加星标",
           "73b327e793": "重试",
           "c9f96d4234": "错误",
-          "397719bee5": "正在加星标...",
           "1e29570462": "正在加星标",
           "9d181300e3": "已加星标",
           "5c49f02662": "隐",
-          "b3f0584f5d": "加载中",
-          "cb65c75b11": "正在打开...",
-          "f2d4f877b2": "打开 GitHub"
+          "b3f0584f5d": "加载中"
         },
         "GeneralUpdateSettingsSection": {
           "8a52ca1d02": "发行说明",
@@ -7575,10 +7250,7 @@
           "externalWorktrees": "外部工作树",
           "externalWorktreesDescription": "选择是否默认显示在 Orca 外部创建的工作树。",
           "show": "显示",
-          "hide": "隐藏",
-          "31e300af1c": "删除工件之前询问",
-          "fb29a73a17": "在删除共享工件并断开其公共链接之前显示确认对话框。",
-          "bf46474e33": "在删除共享工件之前显示确认信息。任何持有其公共链接的人都会失去访问权限。"
+          "hide": "隐藏"
         },
         "GhosttyImportModal": {
           "9d3e56ca36": "应用更改",
@@ -7998,37 +7670,7 @@
           "d3dc559225": "无法复制安装命令。",
           "239bf9132b": "复制安装命令。"
         },
-        "PrivacyDiagnosticBundleControls": {
-          "dc8404a930": "创建诊断文件",
-          "a5acaffdb6": "放弃",
-          "aca2c8a367": "发送给支持团队",
-          "798b6f0be5": "打开查看文件",
-          "2ae9a6b63e": "完成",
-          "7f14a1733c": "删除已发送文件",
-          "2801d4ce22": "复制参考 ID",
-          "d8be621237": "请先打开查看文件。",
-          "61676df223": "诊断信息已发送。请将此参考 ID 分享给支持团队：{{value0}}。",
-          "fd7b3891af": "你已打开查看文件（{{value0}}）。可以将此文件发送给支持团队，或将其丢弃。",
-          "62340d4439": "查看文件已准备好（{{value0}}）。打开它查看将发送的内容，然后选择是否发送给支持团队。",
-          "19ec5e29b3": "将最近的应用活动和错误收集到一个已编辑的文件中，供你在发送前查看。只有在你选择发送后才会上传。"
-        },
-        "PrivacyDiagnosticsSection": {
-          "af2fc82cde": "将应用诊断信息发送给支持团队",
-          "c18cbe45df": "已删除发送的诊断信息",
-          "7a4944595b": "无法复制参考 ID",
-          "13eb2c65a1": "已复制参考 ID",
-          "860bca9ec9": "已丢弃查看文件",
-          "49fc6c80e8": "诊断信息已发送",
-          "db3228e01a": "已打开查看文件",
-          "a2b3505c77": "已创建查看文件"
-        },
         "PrivacyPane": {
-          "36e0e2e63b": "环境变量。取消设置并重新启动以重新启用。",
-          "79a0f3c16c": "遥测被禁用",
-          "e3970bbbf5": "由于设置了 CI 环境变量，遥测被禁用。取消设置并重新启动。",
-          "fe904ac984": "共享匿名使用数据",
-          "77410e0566": "隐私政策",
-          "8bfdd23a88": "帮助我们弄清楚下一步要构建什么。 Orca 会发送匿名计数，记录您使用的功能以及出现故障的位置。",
           "afec8b03be": "CI"
         },
         "QuickCommandsPane": {
@@ -8503,8 +8145,6 @@
           "8b017f2506": "实验性",
           "499c1cd7f9": "用于故障排除的低级兼容性设置。",
           "1c87f8d024": "高级",
-          "c1b43dc4e2": "匿名使用数据和遥测控制。",
-          "d7e3f62d70": "隐私与遥测",
           "9b83cc62c2": "终端启动的开发者工具的 macOS 隐私访问。",
           "65660d4548": "macOS 权限",
           "c6c01ac209": "通过手机控制终端和智能体。",
@@ -9921,13 +9561,6 @@
         },
         "general": {
           "search": {
-            "bdfb6dc21b": "喜欢",
-            "e6b01c8e30": "反馈",
-            "b65665703a": "支持",
-            "06ea5a69a6": "GitHub",
-            "e4fb4516d0": "星星",
-            "e0b8c8bc25": "点赞 GitHub star 支持该项目（通过 gh CLI ",
-            "36a72f0d9e": "GitHub 上的 Star Orca",
             "c61b14be7c": "grok",
             "5d9ba08673": "copilot",
             "f472e97440": "助手",
@@ -10453,38 +10086,6 @@
             "a7f76b4ca7": "编排",
             "e05ff36753": "通过消息传递、任务 DAG、调度和决策门来协调多个编码智能体。",
             "c34045764e": "智能体编排"
-          }
-        },
-        "privacy": {
-          "search": {
-            "3922051573": "数据",
-            "e8bc614a18": "禁用",
-            "d8191ae5ca": "环境变量",
-            "94e04427f6": "环境",
-            "664f1a8984": "持续集成",
-            "5854a5c752": "ci",
-            "69637f4dc4": "orca_telemetry_disabled",
-            "058550f6bc": "不跟踪",
-            "83a6cd79b3": "不跟踪",
-            "f7a2d9f137": "禁用遥测传输的环境变量。",
-            "e058a3c98d": "遥测环境变量",
-            "1686c07fee": "支持",
-            "c0494ff48a": "诊断",
-            "8b08f32366": "应用诊断和支持共享控件。",
-            "6d258d2ed6": "诊断",
-            "ead1deded2": "分享",
-            "27a27b2f63": "选择退出",
-            "4d4bb76bf4": "选择加入",
-            "b021b9cb81": "匿名的",
-            "79c319948b": "用量",
-            "77d3180def": "遥测",
-            "b707cc3981": "通过发送匿名功能使用事件来帮助改进 Orca。",
-            "57b283461a": "共享匿名使用数据",
-            "2b5a5c312f": "邮差",
-            "4104f6f0f3": "分析",
-            "10124159f1": "隐私",
-            "aa3b794c17": "匿名产品使用数据、诊断和遥测控制。",
-            "5c508bad41": "隐私与遥测"
           }
         },
         "quick": {
@@ -11429,13 +11030,6 @@
           "cancel": "取消",
           "applyRuntimeChange": "应用运行时更改"
         },
-        "PrivacyDiagnosticsRows": {
-          "5a7cbe069a": "已设置 DO_NOT_TRACK=1，创建和发送诊断文件已停用。",
-          "63d03261d1": "已设置 ORCA_TELEMETRY_DISABLED=1，创建和发送诊断文件已停用。",
-          "d37e92a06b": "已设置 ORCA_DIAGNOSTICS_DISABLED=1，应用诊断已关闭。",
-          "5ebb31e1fb": "正在 CI 中运行，诊断已关闭。",
-          "e27c8d45bf": "诊断已被环境变量停用。"
-        },
         "ShortcutCommandBlock": {
           "eb72c52c28": "按下快捷键，或双击修饰键（例如 {{value0}}）。Esc 取消。",
           "70b5d25583": "{{value0}} 快捷键",
@@ -11527,13 +11121,6 @@
           "notificationPlayground": "通知测试面板",
           "notificationPlaygroundDescription": "用于检查提示布局、恢复操作和长文案换行的开发触发器。",
           "devOnly": "仅开发",
-          "orcaCloud": "Orca Cloud",
-          "orcaCloudDescription": "仅限开发环境的第一方云登录预览。在生产环境中隐藏；在开发环境中，设置 ORCA_CLOUD_API_URL 和 ORCA_CLOUD_CLIENT_ID 后也会出现在侧边栏账户切换器中。",
-          "orcaCloudStatus": "状态",
-          "orcaCloudSignOut": "退出登录",
-          "orcaCloudConnect": "连接配置文件",
-          "orcaCloudRefresh": "刷新状态",
-          "orcaCloudNotConfigured": "设置 ORCA_CLOUD_API_URL 和 ORCA_CLOUD_CLIENT_ID 以在此开发版本中预览 Orca Cloud 登录。",
           "deleteAnywayClicked": "仍然删除点击"
         },
         "EphemeralVmRecipeRow": {
@@ -11694,22 +11281,12 @@
           "standby": "待机 — 无 Relay 设备"
         },
         "MobilePairingConnectionOptions": {
-          "ready": "已就绪",
-          "connecting": "正在连接",
-          "available": "可用",
-          "reconnecting": "正在重新连接",
           "unavailable": "不可用",
-          "signIn": "登录以使用 Relay",
           "localDescription": "手机必须连接此 Wi‑Fi 或通过 Tailscale。无需账号。",
           "pathGroup": "手机访问此电脑的方式",
           "anywhereTitle": "Orca Relay",
-          "anywhereDescription": "手机可通过蜂窝网络或任意 Wi‑Fi 连接。仅 Relay 需要登录。",
           "relayUnavailable": "此版本不支持 Orca Relay。请使用局域网。",
-          "signInAgain": "重新登录以使用 Relay",
-          "localTitle": "局域网",
-          "retrying": "重试",
-          "relayCell": "中继单元",
-          "relaySignInDetail": "将此桌面登录到 Orca，并通过 Orca 的服务器路由手机。LAN 无需账户。"
+          "localTitle": "局域网"
         },
         "MobilePairingSetupSection": {
           "title": "配对手机",
@@ -11929,8 +11506,6 @@
           "official": "官方",
           "installed": "已安装",
           "noDescription": "未提供描述。",
-          "blocked": "已被 Orca 安全列表阻止：{{value0}}",
-          "blockedAction": "已阻止",
           "checkUpdate": "检查更新",
           "install": "Install"
         },
@@ -11953,7 +11528,6 @@
           "noContributions": "仅清单元数据",
           "capabilities": "请求的访问权限",
           "workerWarning": "能力限制了此插件如何使用 Orca 的 API。其工作进程仍作为普通进程在此计算机上运行，可以完全访问您的文件、网络和其他进程。",
-          "blocked": "Orca 的安全列表阻止了此插件：{{value0}}",
           "current": "此插件内容已安装。",
           "close": "关闭",
           "cancel": "取消",
@@ -12014,7 +11588,6 @@
           "rollbackFailed": "无法回滚此插件。之前的不可变版本可能不可用。"
         },
         "PluginSettingsRow": {
-          "blocked": "已阻止",
           "needsReview": "需要审查",
           "restarting": "正在重启",
           "invalid": "无效",
@@ -12030,8 +11603,6 @@
           "dev": "开发",
           "bundled": "内置",
           "noDescription": "未提供描述。",
-          "killListMessage": "Orca 的安全列表禁用了此插件：{{value0}}",
-          "viewAdvisory": "查看公告",
           "runtimeError": "插件在激活或工作进程错误后停止。",
           "restartCount": " · {{value0}} 次重启",
           "moreActions": "{{value0}} 的更多操作",
@@ -12253,11 +11824,7 @@
           "switchTo": "切换到此版本",
           "alreadyRunning": "您当前正在使用此版本。",
           "willSwitch": "{{value0}} → {{value1}}",
-          "webUnavailable": "仅桌面应用支持切换版本。",
-          "devChannelUnsupportedAria": "{{value0}}（仅 {{value1}}）",
-          "devChannelUnsupported": "{{value0}} 版本仅适用于 {{value1}}。Linux 仅支持 Stable 或 RC 版本。",
-          "downloadInstaller": "下载安装程序",
-          "manualInstallHint": "{{value0}} 版本在 Windows 上未签名，应用内更新程序无法将其安装到已签名的版本之上。请先运行一次下载的安装程序，Windows 会提示发布者未知。安装后即可在此切换版本，包括切回稳定版。"
+          "webUnavailable": "仅桌面应用支持切换版本。"
         },
         "TerminalTccAttributionNotice": {
           "body": "终端守护进程是由不再存在的 Orca 安装启动的，因此 macOS 无法将其命令归因于 Orca — 可访问性和自动化授权将被静默忽略（osascript 失败并出现错误 -25211）。重新启动守护进程可以解决此问题；正在运行的终端会话将关闭。",
@@ -12270,69 +11837,7 @@
           "account": "Orca 账户",
           "connected": "已连接",
           "signInRequired": "需要登录才能上传和管理工件。",
-          "signIn": "登录 Orca",
-          "title": "工件",
-          "description": "与您的团队共享 HTML 和 Markdown 文件并管理他们的公共链接。",
-          "howToTitle": "如何使用神器",
-          "howToDescription": "将 HTML 或 Markdown 文件发布为公共链接，然后与您的团队共享。",
-          "shareStepTitle": "选择要共享的文件",
-          "shareStepDescription": "打开 HTML 或 Markdown 文件并选择共享为工件，或要求智能体共享它。",
-          "linkStepTitle": "复制公共链接",
-          "linkStepDescription": "发布后，复制链接并将其发送给您的团队。",
-          "manageStepTitle": "在 Orca 中管理它",
-          "manageStepDescription": "从侧边栏打开工件以预览或删除链接。",
-          "openArtifacts": "打开工件",
-          "openArtifactsDescription": "查看和删除通过您的帐户共享的链接。",
-          "showButton": "显示工件按钮",
-          "showButtonDescription": "在侧边栏中显示 Artifacts 快捷方式。",
-          "openArtifactsDescriptionV2": "预览、复制和管理通过您的帐户共享的链接。",
-          "signInTitle": "登录以共享工件",
-          "signInDescription": "使用您的 Orca 帐户上传工件并管理其公共链接。",
-          "signInAgain": "重新登录",
-          "enableStepTitle": "启用工件共享",
-          "enableStepWebDescription": "在主机设备上的 Orca 桌面应用程序中打开设置 → 工件并启用发布。",
-          "enableStepDescription": "打开上面的“允许发布公共工件链接”。",
-          "allowPublishing": "允许发布公共工件链接",
-          "allowPublishingWebDescription": "仅限桌面。打开主机设备上的设置 → 工件以更改此设置。",
-          "allowPublishingDescription": "将 HTML 和 Markdown 文件发布为任何知道 URL 的人都可以打开的链接。现有链接将保留，直到您从工件中将其删除。",
-          "howToDescriptionDisabled": "启用上面的工件共享以将 HTML 或 Markdown 文件发布为公共链接。",
-          "allowPublishingSearchDescription": "允许 Orca 将 HTML 和 Markdown 文件发布为公共链接。",
-          "keywordArtifacts": "工件",
-          "keywordShare": "分享",
-          "keywordPublish": "发布",
-          "keywordPublic": "民众",
-          "keywordPermission": "允许",
-          "keywordHtml": "超文本标记语言",
-          "keywordMarkdown": "Markdown",
-          "keywordUpload": "上传"
-        },
-        "orcaAccount": {
-          "connected": "已连接",
-          "reconnectRequired": "您的会话已过期。重新登录即可使用云功能。",
-          "unavailable": "Orca 登录在此版本中不可用。",
-          "signedOut": "登录以使用云功能扩展 Orca，包括 Artifacts 和 Orca Relay。",
-          "checking": "检查帐户状态...",
-          "account": "Orca 账户",
-          "signOut": "登出",
-          "signInAgain": "重新登录",
-          "signIn": "登录 Orca",
-          "title": "Orca 账户",
-          "description": "无论您身在何处，都可以立即共享工作并通过 Orca Mobile 访问您的桌面。",
-          "searchDescription": "登录或退出 Artifacts 和 Orca Relay 使用的帐户。",
-          "benefitsTitle": "包含在您的帐户中",
-          "artifactsTitle": "神器分享",
-          "artifactsDescription": "发布 HTML 和 Markdown 文件，然后管理 Orca 中的每个共享链接。",
-          "relayTitle": "Orca 接力赛",
-          "relayDescription": "通过蜂窝网络或任何 Wi-Fi 将 Orca Mobile 连接到此桌面。",
-          "skillsTitle": "技能分享",
-          "skillsDescription": "在未列出的链接后面共享一项技能或一整套技能，并将它们安装在您使用的任何计算机上。",
-          "keywordAccount": "帐户",
-          "keywordLogin": "登录",
-          "keywordLogout": "注销",
-          "keywordSignIn": "登入",
-          "keywordSignOut": "登出",
-          "keywordRelay": "中继",
-          "keywordCloud": "云"
+          "openArtifactsDescription": "查看和删除通过您的帐户共享的链接。"
         },
         "automations": {
           "showButton": "显示自动化按钮",
@@ -12355,52 +11860,7 @@
           "keywordRuns": "运行"
         },
         "shareSkills": {
-          "title": "分享技能",
-          "description": "通过未列出的链接分享您的技能。任何拥有它的人都可以安装它们。",
-          "allowAgentPublishing": "允许智能体和 Orca CLI 发布技能链接",
-          "allowAgentPublishingDescription": "让命令发布明确命名的已安装技能。技能文件夹可以包含脚本、配置或机密，因此默认情况下此功能处于关闭状态。",
-          "allowAgentPublishingWebDescription": "仅限桌面。在主机设备上打开“设置”→“共享技能”以更改此设置。",
-          "selectTitle": "选择一项或多项技能",
-          "selectDescription": "打开技能，选择共享技能，然后选择要打包到一个链接中的技能。",
-          "reviewTitle": "审核并发布",
-          "reviewDescription": "在上传不可变包之前检查包含的文件、脚本和可执行文件。",
-          "copyTitle": "复制未列出的链接",
-          "copyDescription": "知道该链接的任何人都可以在不登录的情况下检查并安装所有或选定的技能。",
-          "manageTitle": "管理或撤销链接",
-          "manageDescription": "撤销会阻止将来的访问。已安装在另一台机器上的技能仍保留在那里。",
-          "linkTitle": "未列出的技能链接",
-          "linkDescription": "共享捆绑包无法在 Orca 中搜索或列出。该链接是凭据，因此仅将其发送给您信任的人。",
-          "signInTitle": "登录以分享技能",
-          "signInWebDescription": "Orca 桌面应用程序提供发布和链接管理。",
-          "signInDescription": "使用您的 Orca 帐户发布捆绑包并管理其链接。收件人不需要帐户。",
-          "signInAgain": "重新登录",
-          "signIn": "登录 Orca",
-          "howToTitle": "如何分享技能",
-          "howToDescription": "发布一项技能或一组技能，例如在一个链接后面发布 30 项技能的集合。",
-          "openSkills": "开放技能",
-          "openSkillsDescription": "发布捆绑包、从链接安装或管理已安装和共享的技能。",
-          "searchDescription": "通过未列出的链接分享您的技能。任何拥有它的人都可以安装它们。",
-          "linksReconnect": "再次登录以管理共享链接。",
-          "linksUnavailable": "共享链接目前不可用。",
-          "linkCopied": "分享链接已复制",
-          "linkRevoked": "链接已撤销",
-          "revokeFailed": "Orca 无法撤销此链接。",
-          "activeLinks": "活跃的共享链接",
-          "activeLinksDescription": "只有知道链接的人才能打开它。取消共享链接以阻止将来的检查和安装。",
-          "refreshLinks": "刷新",
-          "noActiveLinks": "没有活动链接。从技能中发布技能包以创建技能包。",
-          "copyLink": "复制链接",
-          "confirmUnshare": "确认取消共享",
-          "unshare": "取消分享",
-          "showButton": "显示技能按钮",
-          "showButtonDescription": "在侧边栏中显示技能快捷方式。",
-          "manageInSkills": "管理技能",
-          "keywordSkills": "技能",
-          "keywordShare": "分享",
-          "keywordBundle": "捆",
-          "keywordLink": "关联",
-          "keywordUnlisted": "未上市的",
-          "keywordRevoke": "撤销"
+          "refreshLinks": "刷新"
         },
         "bitbucket": {
           "credentials": {
@@ -15199,9 +14659,6 @@
             "33dca8bbbe": "Orca 的一个简短的、逐个工作流程的浏览。",
             "3567e147c8": "了解 Orca"
           },
-          "FeatureWallPreview": {
-            "a666384798": "也在这个工作流程中"
-          },
           "FeatureWallRail": {
             "69ea857689": "已完成",
             "7593d15f94": "工作流程"
@@ -16474,32 +15931,15 @@
       "crash": {
         "report": {
           "CrashReportDialog": {
-            "b4951cd27c": "发送报告",
-            "88fea8e84e": "不发送",
             "50b00dc327": "复制详情",
             "6d3ebe216a": "诊断文本",
             "835037edc9": "·Orca",
             "56a3dfa283": "无法发送错误报告。",
-            "8e24fe4f75": "已发送错误报告。",
             "8b8473c544": "已复制错误报告。",
             "b175e90213": "没有可用的错误报告。",
             "765591798d": "正在检查错误报告...",
             "b2e36f53a1": "发送崩溃报告失败。诊断票据 {{value0}} 已上传，但未关联。",
-            "ead6fc0510": "没有捕获到自动崩溃报告。你仍然可以发送详情，并在可用时包含最近的诊断日志。",
-            "b082f27490": "附加最近的诊断日志",
-            "e59f0b9427": "随报告发送经过删减且有大小限制的日志包。"
-          },
-          "submit": {
-            "notice": {
-              "unknownError": "崩溃报告请求在返回原因之前失败。",
-              "ticketUploaded": "诊断工单 {{value0}} 已上传但未关联。",
-              "uncheckDiagnostics": "取消勾选\"附加最近的诊断日志\"并重试，或复制详细信息。",
-              "checkConnection": "请检查网络连接并重试，或复制详细信息。",
-              "notSent": "崩溃报告未发送",
-              "copyDetails": "Copy Details",
-              "sentWithoutDiagnostics": "崩溃报告已发送，但未附带诊断日志",
-              "diagnosticsReason": "诊断日志未附加：{{value0}}"
-            }
+            "ead6fc0510": "没有捕获到自动崩溃报告。你仍然可以发送详情，并在可用时包含最近的诊断日志。"
           },
           "copy": {
             "copyFailed": "无法复制崩溃报告详细信息。"
@@ -17787,37 +17227,9 @@
       "ShortcutKeyCombo": {
         "07eb4985a1": "双击 {{value0}}"
       },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "已加星，谢谢！",
-            "githubOpened": "已打开 GitHub",
-            "opening": "正在打开…",
-            "starring": "正在加星…",
-            "openGithub": "打开 GitHub",
-            "starOnGithub": "在 GitHub 上加星",
-            "onboardingCompleted": "入门流程已完成！",
-            "body": "如果你目前喜欢 Orca，在 GitHub 上加星可以帮助其他开发者发现它。",
-            "dismiss": "关闭",
-            "later": "稍后"
-          }
-        }
-      },
       "nativeChat": {
         "contextMenu": {
           "copy": "复制"
-        }
-      },
-      "orca": {
-        "profiles": {
-          "signout": {
-            "confirm": {
-              "title": "退出 Orca？",
-              "description": "你将在此设备上退出 Orca。本地项目和工作树不会受到影响。",
-              "cancel": "取消",
-              "action": "退出登录"
-            }
-          }
         }
       },
       "linear-issue-attribute-filter-dropdowns": {
@@ -17908,118 +17320,11 @@
       },
       "artifacts": {
         "ArtifactsPage": {
-          "deleteTitle": "删除工件？",
-          "deleteDescription": "“{{name}}” 将无法再通过其公共链接访问。",
-          "delete": "删除",
-          "signInAgain": "再次登录 Orca 以加载工件。",
-          "loadFailed": "无法加载工件。",
-          "deleteFailed": "无法删除工件。",
-          "title": "工件",
-          "refresh": "刷新",
-          "signInHeading": "登录 Orca",
-          "signInCopy": "登录以查看和管理通过您的帐户共享的工件。",
-          "signIn": "登录 Orca",
-          "empty": "没有共享工件",
-          "emptyCopy": "打开 HTML 或 Markdown 文件并选择共享为工件，或要求您的智能体共享它。",
-          "openArtifact": "打开神器",
-          "deleteArtifact": "删除工件",
-          "moreAvailable": "更多工件可用",
-          "moreAvailableCopy": "加载下一页以继续。",
-          "loadMoreFailed": "无法加载更多工件。",
-          "publishingOff": "发布已关闭",
-          "publishingOffCopy": "此设备上的任何内容都无法创建公共工件链接。允许在“设置”→“工件”中进行发布，然后从打开的 HTML 或 Markdown 文件进行共享或询问您的智能体。",
-          "openArtifactsSettings": "打开设置 → 工件",
-          "retry": "重试",
-          "reconnectHeading": "再次登录 Orca",
-          "reconnectCopy": "再次登录以查看和管理通过您的帐户共享的工件。",
-          "signInAgainAction": "重新登录",
-          "unconfiguredCopy": "此计算机上尚未配置 Orca 帐户登录。",
-          "openAccountSettings": "开设账户设置"
-        },
-        "ArtifactPublishButton": {
-          "a4a49da6af": "分享为工件",
-          "confirmTitle": "分享为工件",
-          "confirmDescription": "这会将当前文件发布为链接，任何拥有该 URL 的人都可以查看。",
-          "accountTitle": "Orca 账户",
-          "accountDescription": "登录以创建和管理此链接。",
-          "signInAgain": "重新登录",
-          "signIn": "登录",
-          "publishingOffTitle": "工件共享已关闭",
-          "publishingOffDescription": "了解公共链接并在“设置”中启用共享。",
-          "openSettings": "打开工件设置",
-          "sharing": "正在分享…",
-          "sharePublicLink": "生成链接",
-          "publishedDescription": "拥有此链接的任何人都可以查看共享文件。",
-          "checkingLink": "正在检查现有链接…",
-          "checkFailed": "无法检查现有链接。",
-          "tryAgain": "重试"
+          "openArtifact": "打开神器"
         },
         "artifact-publish-flow": {
-          "9a078a0c65": "工件共享不可用",
-          "bba20daa6d": "登录 Orca 并重试。",
-          "54b1805328": "无法共享工件",
-          "430019efd0": "工件已共享",
-          "2fc727c831": "工件已更新",
-          "5cb4f5ec36": "复制链接",
-          "fbb5018602": "该文件为空。",
-          "6112db5a1c": "此工件太大，无法分享。",
-          "e2ed5acd8c": "Orca 无法读取该文件。请从工作区打开它并重试。",
-          "visualUnreadable": "无法读取此可视化内容以进行分享。",
-          "6d475e9b25": "只有本地 HTML 和 Markdown 文件可以作为工件共享。",
-          "29a406be09": "工件必须包含文本。"
-        },
-        "ArtifactPublishedLinkPanel": {
-          "copyLink": "复制链接",
-          "openLink": "打开链接",
-          "updating": "正在更新…",
-          "update": "更新共享内容"
-        },
-        "copySuccess": "神器链接已复制",
-        "copyFailed": "无法复制工件链接",
-        "copyLink": "复制链接",
-        "openInBrowser": "在浏览器中打开",
-        "preview": "神器预览",
-        "previewUnavailable": "预览不可用",
-        "previewUnavailableDescription": "在浏览器中打开此工件进行查看。",
-        "actions": "神器动作",
-        "ArtifactActions": {
-          "more": "更多神器动作"
-        },
-        "ArtifactCollection": {
-          "loadMore": "加载更多",
-          "noMatches": "没有匹配项"
-        },
-        "ArtifactDetailHeader": {
-          "publicLink": "知道此链接的任何人都可以查看",
-          "close": "关闭"
-        },
-        "updatedAt": "已更新 {{when}}",
-        "updatedRecently": "最近",
-        "expiryUnknown": "到期日期未知",
-        "expired": "链接已过期",
-        "expires": "链接过期{{when}}",
-        "ArtifactDetailDrawer": {
-          "description": "预览并管理此共享工件。"
-        },
-        "ArtifactListSearchField": {
-          "label": "搜索工件",
-          "placeholder": "搜索...",
-          "clear": "清除搜索"
-        },
-        "ArtifactListTableHeader": {
-          "name": "姓名",
-          "type": "类型",
-          "size": "尺寸",
-          "updated": "已更新",
-          "expires": "过期",
-          "actions": "操作"
-        },
-        "ArtifactsPageSkeleton": {
-          "loading": "加载工件"
-        },
-        "expiredCompact": "已到期",
-        "typeMarkdown": "Markdown",
-        "typeHtml": "超文本标记语言"
+          "5cb4f5ec36": "复制链接"
+        }
       },
       "ComposerParentWorktreePicker": {
         "label": "父工作树",
@@ -18131,20 +17436,6 @@
         "label": "从工作区取消 {{value0}} 链接",
         "description": "Orca 将隐藏此工作区的 {{value0}} {{value1}} 详细信息。 {{value0}} 和 {{value2}} 上的分支不会更改。"
       },
-      "UnexpectedSignoutCard": {
-        "9f2c1a4b7d": "您已退出",
-        "3e8f5c2a91": "关闭",
-        "7b4d9e1f2a": "再次以 {{value0}} 身份登录即可恢复神器共享、Orca Relay 和技能共享。",
-        "5a1c8d3e6f": "重新登录即可恢复神器共享、Orca Relay 和技能共享。",
-        "1f6b2c9d4e": "你得到什么",
-        "8d2e4f7a1b": "神器分享",
-        "2c9a5b6e8d": "发布 HTML 和 Markdown 文件并管理 Orca 的每个共享链接。",
-        "6e3f1a9c5b": "Orca 接力赛",
-        "4b7d2e8f1a": "通过蜂窝网络或任何 Wi-Fi 将 Orca Mobile 连接到此桌面。",
-        "9a4c6b2d7e": "技能分享",
-        "3d8e5f1b9c": "分享未列出链接背后的技能并将其安装在您使用的任何计算机上。",
-        "c5b3e8a17d": "登录 Orca"
-      },
       "NativeChatResumeOutcomeRow": {
         "openChat": "打开聊天",
         "retry": "重试",
@@ -18227,14 +17518,6 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
-      },
-      "OrcaSignInProgress": {
-        "waiting": "正在等待在浏览器中登录",
-        "copyLink": "复制登录链接",
-        "copied": "已复制登录链接",
-        "copyFailed": "无法复制链接。",
-        "signingIn": "正在登录…",
-        "cancel": "取消"
       }
     },
     "i18n": {

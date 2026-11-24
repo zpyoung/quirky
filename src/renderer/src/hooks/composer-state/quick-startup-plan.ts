@@ -9,11 +9,11 @@ import {
   resolveTuiAgentLaunchArgs,
   resolveTuiAgentLaunchEnv
 } from '../../../../shared/tui-agent-launch-defaults'
-import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import {
   requireExecutionHostPlatform,
   type ExecutionHostPlatformFact
 } from '@/lib/execution-host-facts'
+import { tuiAgentToAgentKind } from '../../../../shared/agent-kind'
 
 export type QuickComposerStartupInput = {
   agent: TuiAgent | null
@@ -24,7 +24,6 @@ export type QuickComposerStartupInput = {
   launchHost: ExecutionHostPlatformFact
   shell: AgentStartupShell | null | undefined
   isRemote: boolean
-  telemetrySource: WorktreeCreationRequest['telemetrySource']
 }
 
 export type QuickComposerStartup = {
@@ -82,8 +81,7 @@ export function buildQuickComposerStartup(input: QuickComposerStartupInput): Qui
       ? null
       : {
           agent_kind: tuiAgentToAgentKind(agent),
-          launch_source:
-            input.telemetrySource === 'onboarding' ? 'onboarding' : 'new_workspace_composer',
+          launch_source: 'new_workspace_composer',
           request_kind: 'new'
         }
   const backendStartup =

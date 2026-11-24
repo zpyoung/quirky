@@ -4,8 +4,6 @@ import { makePaneKey } from '../../shared/stable-pane-id'
 import { AGENT_HOOK_INFER_INTERRUPT_METHOD } from '../../shared/agent-hook-interrupt-reconciliation'
 import { bindRemoteClaudeInterruptReconciliation } from './ssh-agent-hook-interrupt-reconciliation'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 const PANE = makePaneKey('tab-1', '11111111-1111-4111-8111-111111111111')
 const REVISION = '11111111-1111-4111-8111-111111111112'
 

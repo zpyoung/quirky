@@ -3,7 +3,6 @@ import type {
   RuntimeFileOpenPosition
 } from '../../shared/runtime-file-contracts'
 import { ipcRenderer } from 'electron'
-import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
 import type { TerminalTabCreateReply } from '../../shared/terminal-reveal-identity'
 import type {
   AgentLaunchTabPublishReply,
@@ -55,7 +54,6 @@ export const uiTerminalAndSessionTabsApi = {
       leafId?: string
       splitFromLeafId?: string
       splitDirection?: 'horizontal' | 'vertical'
-      splitTelemetrySource?: TerminalPaneSplitSource
     }) => void
   ): (() => void) => {
     const listener = (
@@ -85,7 +83,6 @@ export const uiTerminalAndSessionTabsApi = {
         leafId?: string
         splitFromLeafId?: string
         splitDirection?: 'horizontal' | 'vertical'
-        splitTelemetrySource?: TerminalPaneSplitSource
       }
     ) => callback(data)
     ipcRenderer.on('ui:createTerminal', listener)
@@ -150,7 +147,6 @@ export const uiTerminalAndSessionTabsApi = {
       command?: string
       worktreeId?: string
       sourceLeafId?: string
-      telemetrySource?: TerminalPaneSplitSource
       newLeafId?: string
     }) => void
   ): (() => void) => {
@@ -163,7 +159,6 @@ export const uiTerminalAndSessionTabsApi = {
         command?: string
         worktreeId?: string
         sourceLeafId?: string
-        telemetrySource?: TerminalPaneSplitSource
         newLeafId?: string
       }
     ) => callback(data)

@@ -10,10 +10,7 @@ import type { Store } from '../../persistence'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { PtyRetirementWithoutProof } from '../../pty-exit-proof'
 import { toAppSshPtyId } from '../../../shared/ssh-pty-id'
-import { track } from '../../telemetry/client'
 import type { SshConnection } from '../connection/ssh-connection'
-import { knownSshHostPlatform } from '../ssh-host-platform-memo'
-import { hostProps } from '../ssh-host-server-telemetry'
 import {
   attachLegacyRelayPane,
   closeLegacyRelayPane,
@@ -24,7 +21,6 @@ import {
   setLegacyRelayPaneOutputPaused,
   writeLegacyRelayPane
 } from './legacy-relay-bridge-registry'
-import { terminalsBucket } from './legacy-relay-daily-activity'
 
 const PtyIdSchema = z.string().min(1).max(4096)
 const SizeSchema = z.number().int().positive().max(10_000)
@@ -98,17 +94,6 @@ export function registerLegacyRelayBridgeIpc(args: {
       } catch (error) {
         // The bridge still retires the pane and re-lists.
         console.warn('[legacy-relay] runtime exit failed:', error)
-      }
-    },
-    report: (targetId, phase, terminals) => {
-      try {
-        track('ssh_host_server_legacy_relay_bridge', {
-          phase,
-          terminals: terminalsBucket(terminals),
-          ...hostProps(knownSshHostPlatform(targetId))
-        })
-      } catch {
-        // Telemetry never costs a terminal.
       }
     }
   })

@@ -2,8 +2,8 @@ import { BUNDLED_AGENT_STATE_RULE_FILES } from './agent-state-rules-catalog'
 import { BUNDLED_AGENT_STATE_RULES_VERSION } from './agent-state-rules-bundle'
 import type { AgentStateRulesFile } from './agent-state-rules-schema'
 
-/** Where the rules in use came from: precedence is override, then downloaded, then bundled. */
-export type AgentStateRulesSource = 'bundled' | 'downloaded' | 'override'
+/** Where the rules in use came from: a local override, else the bundled rules. */
+export type AgentStateRulesSource = 'bundled' | 'override'
 
 export type ActiveAgentStateRules = {
   files: readonly AgentStateRulesFile[]

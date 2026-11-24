@@ -3,11 +3,6 @@ import { AgentHookServer } from './server'
 import { AGENT_STATUS_STALE_AFTER_MS } from '../../shared/agent-status-types'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 class ClockedHookServer extends AgentHookServer {
   advanceConnectionClock(at: number): void {
     this.connectionTimestampWatermarkById.set('conn-1', at)

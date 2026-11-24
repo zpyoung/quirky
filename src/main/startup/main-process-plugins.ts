@@ -1,7 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { performance } from 'node:perf_hooks'
 import { PluginService } from '../plugins/plugin-service'
-import { PluginKillListService } from '../plugins/plugin-kill-list-service'
 import { PluginMarketplaceService } from '../plugins/plugin-marketplace-service'
 import { PluginMarketplaceInstaller } from '../plugins/plugin-marketplace-installer'
 import { PluginBundledBootstrapCoordinator } from '../plugins/plugin-bundled-bootstrap-coordinator'
@@ -31,29 +30,13 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     throw new Error('Store and keybindings must be initialized before plugins')
   }
   const pluginSystemStartupStartedAt = performance.now()
-  state.pluginKillListService = new PluginKillListService({
+  state.pluginMarketplaceService = new PluginMarketplaceService({
     pluginsDataDir: getPluginsDataDir(app.getPath('userData'))
   })
-  await state.pluginKillListService.initialize()
-  state.pluginMarketplaceService = new PluginMarketplaceService({
-    pluginsDataDir: getPluginsDataDir(app.getPath('userData')),
-    getKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null
-  })
-  const requestOfficialMarketplaceSeed = (): void => {
-    if (store.getSettings().pluginSystemEnabled !== true) {
-      return
-    }
-    void state.pluginMarketplaceService
-      ?.seedOfficialSource()
-      .catch((error) =>
-        console.warn('[plugins] failed to configure the official marketplace:', error)
-      )
-  }
   state.pluginMarketplaceInstaller = new PluginMarketplaceInstaller({
     marketplace: state.pluginMarketplaceService,
     userDataPath: app.getPath('userData'),
-    hostVersion: app.getVersion(),
-    blockedPluginReason: (pluginKey) => state.pluginKillListService?.reason(pluginKey) ?? null
+    hostVersion: app.getVersion()
   })
   state.pluginService = new PluginService({
     userDataPath: app.getPath('userData'),
@@ -65,7 +48,6 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     getPluginConsents: () => normalizePluginConsents(state.store?.getSettings().pluginConsents),
     getDevPluginPaths: () => normalizePluginIdList(state.store?.getSettings().devPluginPaths),
     getKeybindings: () => state.keybindings?.getOverrides() ?? {},
-    getPluginKillListEntry: (pluginKey) => state.pluginKillListService?.find(pluginKey) ?? null,
     hostEntryPath: resolvePluginHostEntryPath(app.getAppPath(), app.isPackaged)
   })
   const bundledPluginBootstrap = new PluginBundledBootstrapCoordinator({
@@ -77,7 +59,6 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     userDataPath: app.getPath('userData'),
     hostVersion: app.getVersion(),
     isEnabled: () => state.store?.getSettings().pluginSystemEnabled === true,
-    blockedPluginReason: (pluginKey) => state.pluginKillListService?.reason(pluginKey) ?? null,
     refreshPlugins: () => state.pluginService?.refresh() ?? Promise.resolve()
   })
   const requestBundledPluginBootstrap = (): void => {
@@ -90,24 +71,9 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
       })
       .catch((error) => console.warn('[plugins] failed to bootstrap bundled plugins:', error))
   }
-  state.pluginKillListService.onChanged(() => {
-    void state.pluginService
-      ?.reconcileActivationState()
-      .catch((error) =>
-        console.warn('[plugins] failed to apply plugin safety-list refresh:', error)
-      )
-  })
   store.onSettingsChanged((updates) => {
     if (updates.pluginSystemEnabled === true) {
       requestBundledPluginBootstrap()
-      requestOfficialMarketplaceSeed()
-    }
-    if (app.isPackaged && updates.pluginSystemEnabled === true) {
-      void state.pluginKillListService
-        ?.refresh()
-        .catch((error) =>
-          console.warn('[plugins] failed to refresh plugin safety list; using cached state:', error)
-        )
     }
   })
   // Why: headless `orca serve` clients reach plugins through the runtime RPC
@@ -130,13 +96,6 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
       })
     })
     .catch((error) => console.warn('[plugins] failed to initialize plugin service:', error))
-  if (app.isPackaged && store.getSettings().pluginSystemEnabled === true) {
-    void state.pluginKillListService
-      .refresh()
-      .catch((error) =>
-        console.warn('[plugins] failed to refresh plugin safety list; using cached state:', error)
-      )
-  }
   state.pluginService.onChanged((event) => {
     if (
       event.contentPacksChanged &&
@@ -154,7 +113,6 @@ export async function initializeMainProcessPlugins(runtime: OrcaRuntimeService):
     }
   })
   requestBundledPluginBootstrap()
-  requestOfficialMarketplaceSeed()
   // v0 plugin event seams: agent status (hook pipeline tap) + worktree
   // lifecycle (runtime tap). Server-side filtered per plugin subscription.
   agentHookServer.subscribeEnrichedStatus((enriched) => {

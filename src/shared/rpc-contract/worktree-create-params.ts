@@ -2,7 +2,6 @@ import { z } from 'zod'
 import { WorkspaceAttachmentsSchema } from '../workspace-attachment-schema'
 import { WorkspaceLinkedItemSchema } from '../workspace-linked-item-schema'
 import { TaskSourceContextSchema } from '../task-source-context-schema'
-import { workspaceSourceSchema } from '../telemetry-events'
 import { RUNTIME_NAVIGATION_TARGETS } from '../runtime-navigation'
 import { sleepingAgentLaunchConfigSchema } from '../workspace-session-sleeping-agents'
 import { isTuiAgent } from '../tui-agent-config'
@@ -53,13 +52,6 @@ export const WorktreeCreate = z
     comment: OptionalString,
     displayName: OptionalString,
     displayNameKind: z.enum(['generated', 'user']).optional(),
-    telemetrySource: z
-      .unknown()
-      .transform((value) => {
-        const parsed = workspaceSourceSchema.safeParse(value)
-        return parsed.success ? parsed.data : undefined
-      })
-      .optional(),
     workspaceStatus: OptionalString,
     manualOrder: OptionalFiniteNumber,
     // Why: the client's "Nest Workspaces" choice; absent (older clients) keeps the host's own setting.

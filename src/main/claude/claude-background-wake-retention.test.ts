@@ -17,8 +17,6 @@ import { hostWithParent, parent, producer } from './claude-child-work-producer-h
 import { PROVIDER_SESSION_ID } from './claude-structured-session-test-support'
 import { createStructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
 afterEach(() => vi.restoreAllMocks())
 
 type Journal = Parameters<StructuredAgentSessionJournalProjections['read']>[0]

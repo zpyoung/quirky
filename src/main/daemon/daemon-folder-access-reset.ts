@@ -6,19 +6,15 @@ import { app } from 'electron'
 import { dirname, resolve } from 'node:path'
 import {
   isMacTccFolderClass,
-  type DaemonPtyCwdClass,
   type MacTccFolderClass
-} from '../../shared/daemon-adoption-telemetry'
-import type { EventProps } from '../../shared/telemetry-events'
+} from '../../shared/daemon-folder-access-class'
 import { readMacosBundleId, resetMacosTccPermission } from '../macos-tcc-reset'
 import { enumerateDirectoryOnce } from './directory-enumeration-probe'
-import { track } from '../telemetry/client'
 import {
   getDaemonFolderAccessMismatch,
   getDaemonFolderAccessTarget,
   refreshDaemonFolderAccessProbe,
-  type DaemonFolderAccessMismatchNotice,
-  type FreshDaemonAccess
+  type DaemonFolderAccessMismatchNotice
 } from './daemon-folder-access-mismatch'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
 
@@ -70,27 +66,6 @@ async function promptByReadingFolder(path: string): Promise<boolean> {
   }
 }
 
-const RESET_OUTCOME_ACTION = {
-  allowed: 'reset_outcome_allowed',
-  denied: 'reset_outcome_still_denied',
-  unknown: 'reset_outcome_unknown'
-} as const satisfies Record<FreshDaemonAccess, EventProps<'daemon_folder_access_notice'>['action']>
-
-/**
- * Emitted from main, not the renderer: nobody has verified this remedy on an affected machine, so
- * the verdict the re-probe returns is the only evidence the feature works.
- */
-function emitResetOutcome(cwdClass: DaemonPtyCwdClass, access: FreshDaemonAccess): void {
-  try {
-    track('daemon_folder_access_notice', {
-      action: RESET_OUTCOME_ACTION[access],
-      cwd_class: cwdClass
-    })
-  } catch {
-    // Best-effort: a dropped event must not turn a completed reset into a failure.
-  }
-}
-
 export async function resetFolderAccessForDaemon(
   identity: DaemonEndpointIdentity | null
 ): Promise<DaemonFolderAccessResetResult> {
@@ -115,9 +90,8 @@ export async function resetFolderAccessForDaemon(
     await refreshDaemonFolderAccessProbe(identity, { force: true })
   }
   const mismatch = getDaemonFolderAccessMismatch(identity)
-  // One access for the event and the dialog: with the prompt unanswered the stored verdict predates
-  // the reset, so reporting it as the reset's would claim a denial nothing has re-read.
+  // With the prompt unanswered the stored verdict predates the reset, so reporting it as the
+  // reset's would claim a denial nothing has re-read.
   const access = prompted ? (mismatch?.freshDaemonAccess ?? 'unknown') : 'unknown'
-  emitResetOutcome(target.cwdClass, access)
   return { outcome: 'probed', mismatch: mismatch && { ...mismatch, freshDaemonAccess: access } }
 }

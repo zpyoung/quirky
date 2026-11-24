@@ -10,7 +10,6 @@ export function useWorkspaceKanbanCreateWorktree(): {
   const createWorktreeForStatus = useCallback(
     (workspaceStatus: WorkspaceStatus) => {
       openModal('new-workspace-composer', {
-        telemetrySource: 'sidebar',
         initialWorkspaceStatus: workspaceStatus
       })
     },

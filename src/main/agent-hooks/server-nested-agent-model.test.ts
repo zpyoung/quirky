@@ -2,14 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({
-  track: vi.fn()
-}))
-
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 type StatusPayload = {
   state: 'working' | 'done'
   prompt: string

@@ -19,7 +19,6 @@ vi.mock('./native-chat-runtime-image-send', () => ({
 vi.mock('../../store', () => ({
   useAppStore: { getState: () => ({ clearNativeChatLaunchDraft: vi.fn() }) }
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
 
 function send(
   agent: AgentType,

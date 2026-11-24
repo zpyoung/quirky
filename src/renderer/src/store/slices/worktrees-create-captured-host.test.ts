@@ -45,7 +45,7 @@ describe('background creation host capture', () => {
       const createWorktree = store.getState().createWorktree
       const args: Parameters<typeof createWorktree> = ['repo1', 'feature']
       const options = { executionHostId, nameWasGenerated: false }
-      args[25] = options
+      args[24] = options
       await createWorktree(...args)
       if (executionHostId === 'runtime:env-1') {
         expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
@@ -77,7 +77,7 @@ describe('background creation host capture', () => {
     })
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'feature']
-    args[25] = { executionHostId: 'runtime:env-1' }
+    args[24] = { executionHostId: 'runtime:env-1' }
     const creating = createWorktree(...args)
     await vi.waitFor(() => expect(runtimeEnvironmentCall).toHaveBeenCalled())
     store.setState({
@@ -102,7 +102,7 @@ describe('background creation host capture', () => {
     store.setState({ repos: [], worktreesByRepo: { repo1: [] } })
     const createWorktree = store.getState().createWorktree
     const args: Parameters<typeof createWorktree> = ['repo1', 'feature']
-    args[25] = { executionHostId: 'runtime:unresolved-owner' }
+    args[24] = { executionHostId: 'runtime:unresolved-owner' }
 
     await expect(createWorktree(...args)).rejects.toThrow('The workspace host is unresolved')
     expect(mockApi.worktrees.create).not.toHaveBeenCalled()

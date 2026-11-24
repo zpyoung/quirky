@@ -14,10 +14,6 @@ import {
 import { ProfileStateSqliteAuthority } from './profile-state-sqlite-authority'
 import { createProfileStateStore } from './profile-state-store-factory'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

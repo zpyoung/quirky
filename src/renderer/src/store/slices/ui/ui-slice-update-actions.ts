@@ -56,18 +56,6 @@ export function createUiUpdateActions(set: UISliceSet, get: UISliceGet): Partial
     updateChangelog: null,
     updateUserInitiatedCycle: false,
     dismissedUpdateVersion: null,
-    dismissedUnexpectedSignoutVersion: null,
-    unexpectedSignoutDismissedVersions: [],
-    dismissUnexpectedSignoutCard: (version) => {
-      if (get().unexpectedSignoutDismissedVersions.includes(version)) {
-        return
-      }
-      set({
-        dismissedUnexpectedSignoutVersion: version,
-        unexpectedSignoutDismissedVersions: [...get().unexpectedSignoutDismissedVersions, version]
-      })
-      void window.api.ui.set({ dismissedUnexpectedSignoutVersion: version }).catch(console.error)
-    },
     clearDismissedUpdateVersion: () => {
       set({ dismissedUpdateVersion: null })
     },
@@ -81,16 +69,10 @@ export function createUiUpdateActions(set: UISliceSet, get: UISliceGet): Partial
         // Why: the 'error' variant has no version field, so the card passes it via versionOverride.
         const dismissedUpdateVersion =
           versionOverride ?? ('version' in s.updateStatus ? (s.updateStatus.version ?? null) : null)
-        const activeNudgeId =
-          'activeNudgeId' in s.updateStatus ? (s.updateStatus.activeNudgeId ?? null) : null
         // Why: persist dismissal so relaunch doesn't immediately re-show the same card until a newer release.
         void window.api.ui.set({ dismissedUpdateVersion }).catch(console.error)
         // Why: main can't otherwise tell an offered update was abandoned, which keeps a local-build session pinned and stalls background checks.
         void window.api.updater.dismissAvailableUpdate().catch(console.error)
-        // Why: only consume the nudge campaign for cards from a nudge cycle, not ordinary dismissals.
-        if (activeNudgeId) {
-          void window.api.updater.dismissNudge().catch(console.error)
-        }
         return { dismissedUpdateVersion, updateUserInitiatedCycle: false }
       }),
     updateCardCollapsed: false,

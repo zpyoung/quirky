@@ -1,17 +1,15 @@
 import { useCallback, useRef } from 'react'
-import { track } from '@/lib/telemetry'
 import { useAppStore } from '@/store'
 import {
   ONBOARDING_FINAL_STEP,
   ONBOARDING_FLOW_VERSION
 } from '../../../../shared/onboarding-defaults'
-import type { EventProps } from '../../../../shared/telemetry-events'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { OnboardingState } from '../../../../shared/onboarding-state-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import { applyAgentPermissionMode } from '../../../../shared/tui-agent-permissions'
 import type { AgentChatPermissionMode } from '../../../../shared/agent-chat-permission-mode'
-import type { StepId, StepNumber } from './use-onboarding-flow-types'
+import type { StepId } from './use-onboarding-flow-types'
 
 export async function persistStep(
   stepNumber: number,
@@ -53,52 +51,18 @@ export function buildCompletedOnboardingNotificationSettings(
 
 type CloseWithDeps = {
   onOnboardingChange: (state: OnboardingState) => void
-  startTimeRef: { current: number }
   setError: (msg: string | null) => void
 }
 
-export type DismissedExtras = {
-  advancedVia: NonNullable<EventProps<'onboarding_dismissed'>['advanced_via']>
-  durationMs: number
-}
-
-export function buildOnboardingDismissedPayload(
-  lastStepReached: StepNumber,
-  dismissedExtras?: DismissedExtras
-): EventProps<'onboarding_dismissed'> {
-  return {
-    last_step: lastStepReached,
-    ...(dismissedExtras
-      ? {
-          duration_ms: dismissedExtras.durationMs,
-          advanced_via: dismissedExtras.advancedVia
-        }
-      : {})
-  }
-}
-
-export function trackOnboardingDismissed(
-  lastStepReached: StepNumber,
-  dismissedExtras?: DismissedExtras
-): void {
-  track('onboarding_dismissed', buildOnboardingDismissedPayload(lastStepReached, dismissedExtras))
-}
-
-export function useCloseWith({ onOnboardingChange, startTimeRef, setError }: CloseWithDeps) {
+export function useCloseWith({ onOnboardingChange, setError }: CloseWithDeps) {
   // Why: onboarding closes exactly once. On the final notifications step both
   // the "Add your first project" handoff (completed) and a click-off/Escape
   // dismissal (dismissed) can reach closeWith, and next()'s persist window
   // leaves the modal interactive with no busy flag. This latch makes closeWith
-  // idempotent so the first close wins — no double onboarding.update write and
-  // no double completed/dismissed telemetry.
+  // idempotent so the first close wins — no double onboarding.update write.
   const closedRef = useRef(false)
   return useCallback(
-    async (
-      outcome: 'completed' | 'dismissed',
-      lastStepReached: StepNumber,
-      completedPath?: 'add_project_modal',
-      dismissedExtras?: DismissedExtras
-    ): Promise<boolean> => {
+    async (outcome: 'completed' | 'dismissed'): Promise<boolean> => {
       if (closedRef.current) {
         return false
       }
@@ -120,28 +84,9 @@ export function useCloseWith({ onOnboardingChange, startTimeRef, setError }: Clo
         return false
       }
       onOnboardingChange(nextState)
-      if (outcome === 'completed' && completedPath) {
-        const total = Math.max(0, Date.now() - startTimeRef.current)
-        // Why: no `is_git_repo` — project selection now happens in the Add
-        // Project modal after this fires, so the signal moved to
-        // `repo_added.is_git_repo`.
-        track('onboarding_completed', {
-          path: completedPath,
-          total_duration_ms: total
-        })
-      }
-      if (outcome === 'completed') {
-        // Why: closeWith updates parent state synchronously from this hook's
-        // perspective, but the modal unmounts on the next React commit.
-        window.setTimeout(() => {
-          void window.api.starNag.onboardingCompleted()
-        }, 0)
-      } else if (outcome === 'dismissed') {
-        trackOnboardingDismissed(lastStepReached, dismissedExtras)
-      }
       return true
     },
-    [onOnboardingChange, startTimeRef, setError]
+    [onOnboardingChange, setError]
   )
 }
 
@@ -196,18 +141,11 @@ export function usePersistCurrentStep({
           )
         })
         const choseAgent = defaultTuiAgent !== 'blank'
-        const wasAlreadyChosen = onboardingChecklist.choseAgent
         onOnboardingChange(
           await persistStep(1, {
             checklist: { ...onboardingChecklist, choseAgent }
           })
         )
-        if (choseAgent && !wasAlreadyChosen) {
-          track('activation_checklist_item_completed', {
-            item: 'choseAgent',
-            time_since_completed_ms: 0
-          })
-        }
         return { ok: true }
       }
       if (currentStepId === 'theme') {

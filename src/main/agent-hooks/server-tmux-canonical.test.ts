@@ -9,8 +9,6 @@ import {
   tmuxTestBody
 } from '../../shared/tmux-status.test-fixture'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 const probe = vi.hoisted(() => vi.fn())
 vi.mock('../../shared/tmux-host-attachment-probe', () => ({ probeTmuxHostAttachments: probe }))
 class CanonicalTestServer extends AgentHookServer {

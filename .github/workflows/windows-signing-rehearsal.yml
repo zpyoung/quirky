@@ -86,7 +86,7 @@ jobs:
       - uses: ./.github/actions/install-mobile-dependencies
 
       # Why: rehearsal builds are never published, so the official-build
-      # secrets (telemetry key, diagnostics URL) are intentionally omitted.
+      # secrets are intentionally omitted.
       - name: Build app
         run: pnpm build:release
         env:

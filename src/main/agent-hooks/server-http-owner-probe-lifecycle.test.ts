@@ -3,8 +3,6 @@ import { AgentHookServer } from './server'
 import { buildBody, postHookEvent } from './server.test-fixtures'
 import type { probeAgentProcessPresence } from '../../shared/agent-process-presence-probe'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 const probe = vi.hoisted(() => vi.fn<typeof probeAgentProcessPresence>(async () => 'live'))
 vi.mock('../../shared/agent-process-presence-probe', () => ({ probeAgentProcessPresence: probe }))
 const servers: AgentHookServer[] = []

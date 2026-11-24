@@ -10,7 +10,7 @@ import type { JiraIssue } from '../../../../../shared/jira-types'
 import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 import type { TaskProvider } from '../../../../../shared/task-providers'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
-import type { LaunchSource } from '../../../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../../../shared/agent-kind'
 import type { TaskSourceContext } from '../../../../../shared/task-source-context'
 import type { ExecutionHostId } from '../../../../../shared/execution-host'
 import type { TaskResumeState, TopLevelView } from '../../../../../shared/ui-chrome-types'
@@ -121,7 +121,6 @@ export type UiViewHistory =
   | 'automations'
   | 'space'
   | 'skills'
-  | 'artifacts'
   | 'mobile'
   | 'ledger'
   | 'heimdall'
@@ -164,7 +163,6 @@ export type UISliceCore = {
   previousViewBeforeSpace: Exclude<UiViewHistory, 'space'>
   previousViewBeforeSkills: Exclude<UiViewHistory, 'skills'>
   previousViewBeforeMobile: Exclude<UiViewHistory, 'mobile'>
-  previousViewBeforeArtifacts: Exclude<UiViewHistory, 'artifacts'>
   setActiveView: (view: UISliceCore['activeView']) => void
   taskPageData: TaskPageData
   taskResumeState: TaskResumeState | undefined
@@ -197,15 +195,6 @@ export type UISliceCore = {
   closeSpacePage: () => void
   openSkillsPage: () => void
   closeSkillsPage: () => void
-  pendingSkillShareId: string | null
-  openSkillShare: (shareId: string) => void
-  clearPendingSkillShare: () => void
-  /** Set when another surface links straight to the page's shared-links view. */
-  pendingSkillsSharedView: boolean
-  openSkillsSharedLinks: () => void
-  clearPendingSkillsSharedView: () => void
-  openArtifactsPage: () => void
-  closeArtifactsPage: () => void
   openMobilePage: () => void
   closeMobilePage: () => void
   setNewWorkspaceDraft: (draft: NonNullable<UISliceCore['newWorkspaceDraft']>) => void

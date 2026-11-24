@@ -32,7 +32,7 @@ describe('BrowserChromeFoldedMenuItems', () => {
     const onSelect = vi.fn()
     render(
       <BrowserChromeFoldedMenuItems
-        tools={[{ stage: 'share', label: 'Share', icon: Share2, onSelect }]}
+        tools={[{ stage: 'devtools', label: 'Share', icon: Share2, onSelect }]}
         deferUntilClose={vi.fn()}
       />
     )
@@ -48,7 +48,7 @@ describe('BrowserChromeFoldedMenuItems', () => {
       <BrowserChromeFoldedMenuItems
         tools={[
           {
-            stage: 'share',
+            stage: 'devtools',
             label: 'Share',
             icon: Share2,
             onSelect,
@@ -90,7 +90,7 @@ describe('BrowserChromeFoldedMenuItems', () => {
       <BrowserChromeFoldedMenuItems
         tools={[
           { stage: 'draw', label: 'Draw', icon: Share2, onSelect: vi.fn(), active: false },
-          { stage: 'share', label: 'Share', icon: Share2, onSelect: vi.fn() }
+          { stage: 'devtools', label: 'Share', icon: Share2, onSelect: vi.fn() }
         ]}
         deferUntilClose={vi.fn()}
       />

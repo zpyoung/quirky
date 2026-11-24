@@ -13,7 +13,6 @@ import { buildProfileStateCutoverFixture } from '../profile-state-cutover-fixtur
 import { ProfileStateSqliteAuthority } from '../profile-state/profile-state-sqlite-authority'
 import type * as OwnerInvariants from '../../../shared/workspace-layout/terminal-owner-invariants'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

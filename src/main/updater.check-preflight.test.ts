@@ -5,7 +5,6 @@ const {
   appMock,
   autoUpdaterMock,
   nativeUpdaterMock,
-  fetchChangelogMock,
   fetchNewerReleaseTagsMock,
   moduleFactories,
   resetUpdaterMocks
@@ -18,8 +17,6 @@ vi.mock('@electron-toolkit/utils', () => moduleFactories.electronToolkitUtils())
 vi.mock('./ipc/pty/kill-all', () => moduleFactories.ptyKillAll())
 vi.mock('./linux-update-package-type', () => moduleFactories.linuxUpdatePackageType())
 vi.mock('./updater-lifecycle-diagnostics', () => moduleFactories.updaterLifecycleDiagnostics())
-vi.mock('./updater-changelog', () => moduleFactories.updaterChangelog())
-vi.mock('./updater-nudge', () => moduleFactories.updaterNudge())
 vi.mock('./update-install-exit-watchdog', () => moduleFactories.updateInstallExitWatchdog())
 vi.mock('./updater-prerelease-feed', () => moduleFactories.updaterPrereleaseFeed())
 vi.mock('./local-builds/local-build-switch', () => moduleFactories.localBuildSwitch())
@@ -219,74 +216,6 @@ describe('updater', () => {
     })
   })
 
-  it('does not let a stale pending update-available block a later silent settle', async () => {
-    vi.useFakeTimers()
-    let resolveChangelog: (value: null) => void = () => {}
-    fetchChangelogMock.mockImplementation(
-      () =>
-        new Promise<null>((resolve) => {
-          resolveChangelog = resolve
-        })
-    )
-    fetchNewerReleaseTagsMock.mockResolvedValue({ tags: ['v1.0.52'], state: 'ready' })
-    autoUpdaterMock.checkForUpdates.mockImplementation(() => {
-      const callCount = autoUpdaterMock.checkForUpdates.mock.calls.length
-      autoUpdaterMock.emit('checking-for-update')
-      if (callCount === 1) {
-        queueMicrotask(() => {
-          autoUpdaterMock.emit('update-available', { version: '1.0.52' })
-        })
-      }
-      return Promise.resolve(undefined)
-    })
-    const sendMock = vi.fn()
-    const mainWindow = { webContents: { send: sendMock } }
-
-    const { setupAutoUpdater, checkForUpdatesFromMenu } = await loadUpdaterModule()
-
-    setupAutoUpdater(mainWindow as never, { getLastUpdateCheckAt: () => Date.now() })
-    checkForUpdatesFromMenu()
-
-    await vi.waitFor(() => {
-      expect(fetchChangelogMock).toHaveBeenCalledTimes(1)
-    })
-
-    autoUpdaterMock.emit('error', new Error('boom'))
-    await vi.waitFor(() => {
-      expect(sendMock).toHaveBeenCalledWith('updater:status', {
-        state: 'error',
-        message: 'boom',
-        userInitiated: undefined
-      })
-    })
-
-    sendMock.mockClear()
-    checkForUpdatesFromMenu()
-    await vi.waitFor(() => {
-      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(2)
-      expect(sendMock).toHaveBeenCalledWith('updater:status', {
-        state: 'checking',
-        userInitiated: true
-      })
-    })
-
-    await vi.advanceTimersByTimeAsync(1000)
-
-    expect(sendMock).toHaveBeenCalledWith('updater:status', {
-      state: 'not-available',
-      userInitiated: true
-    })
-
-    sendMock.mockClear()
-    resolveChangelog(null)
-    await vi.advanceTimersByTimeAsync(0)
-
-    expect(sendMock).not.toHaveBeenCalledWith(
-      'updater:status',
-      expect.objectContaining({ state: 'available', version: '1.0.52' })
-    )
-  })
-
   it('ignores a stale update-available event after a new check starts preflight', async () => {
     vi.useFakeTimers()
     fetchNewerReleaseTagsMock.mockResolvedValue({ tags: [], state: 'no-newer' })
@@ -322,7 +251,6 @@ describe('updater', () => {
     autoUpdaterMock.emit('update-available', { version: '1.0.61' })
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(fetchChangelogMock).not.toHaveBeenCalled()
     expect(sendMock).not.toHaveBeenCalledWith(
       'updater:status',
       expect.objectContaining({ state: 'available', version: '1.0.61' })
@@ -499,7 +427,7 @@ describe('updater', () => {
     })
     expect(autoUpdaterMock.setFeedURL).toHaveBeenLastCalledWith({
       provider: 'generic',
-      url: 'https://github.com/stablyai/orca/releases/download/v1.4.36-rc.5'
+      url: 'https://github.com/zpyoung/quirky/releases/download/v1.4.36-rc.5'
     })
     expect(
       sendMock.mock.calls

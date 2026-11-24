@@ -4,7 +4,6 @@ import type { CreateWorktreeCallOptions } from './worktrees/create/worktree-crea
 import type { WorktreeCatalogVersion } from '../../../../shared/worktree/catalog-version'
 import type { WorkspaceKey } from '../../../../shared/folder-workspace-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../../shared/workspace-source'
 import type {
   WorktreeBaseStatusEvent,
   WorktreeRemoteBranchConflictEvent
@@ -195,10 +194,6 @@ export type WorktreeSlice = {
     baseBranch?: string,
     setupDecision?: SetupDecision,
     sparseCheckout?: CreateSparseCheckoutRequest,
-    /** Telemetry-only: which renderer surface initiated this create. Optional
-     *  so existing callers default to `unknown`; specify when the surface
-     *  matters for the activation funnel. */
-    telemetrySource?: WorkspaceCreateTelemetrySource,
     displayName?: string,
     linkedIssue?: number,
     linkedPR?: number,

@@ -6,7 +6,6 @@ import type {
   RelayDeviceBinding,
   RelayRevokeOutbox
 } from '../mobile-cloud-relay/relay-revoke-outbox'
-import type { PushUnregisterOutbox } from '../push/push-unregister-outbox'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../../shared/pairing'
 import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
@@ -47,10 +46,6 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
 
   getRelayRevokeOutbox(): RelayRevokeOutbox {
     return this.relayRevokeOutbox
-  }
-
-  getPushUnregisterOutbox(): PushUnregisterOutbox {
-    return this.pushUnregisterOutbox
   }
 
   setMobileRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {

@@ -24,7 +24,7 @@ let leases: SshRemotePtyLease[]
 let listing: LegacyRelayEndpointListing
 let endpointExited: boolean
 let stops: LegacyRelayPaneStops
-let events: { data: string[]; exits: string[]; exitedTelemetry: number; panesChanged: number }
+let events: { data: string[]; exits: string[]; panesChanged: number }
 
 /** Persists stops onto the leases, as the store does, so a fresh instance models a restart. */
 function paneStops(): LegacyRelayPaneStops {
@@ -73,9 +73,6 @@ function bridge(overrides: Partial<LegacyRelayTargetBridgeDeps> = {}): LegacyRel
       // As the registry wires it.
       stops.exited(id)
     },
-    onTerminalExited: () => {
-      events.exitedTelemetry += 1
-    },
     // As the registry keeps them: one target's owners outlive each bridge.
     owners,
     ...overrides
@@ -91,7 +88,7 @@ beforeEach(() => {
   leases = [lease()]
   listing = { kind: 'listed', endpoints: [ENDPOINT], exhaustive: true }
   endpointExited = false
-  events = { data: [], exits: [], exitedTelemetry: 0, panesChanged: 0 }
+  events = { data: [], exits: [], panesChanged: 0 }
 })
 
 afterEach(() => {
@@ -150,7 +147,6 @@ describe('one target’s legacy relay bridge', () => {
     await subject.attach(PTY)
     relay.clients[0].emitExit('pty-1', 0)
     expect(events.exits).toEqual([PTY])
-    expect(events.exitedTelemetry).toBe(1)
     expect(leases[0].state).toBe('terminated')
     expect(subject.snapshot()).toEqual([])
     expect(relay.clients[0].closed).toBe(true)
@@ -201,7 +197,6 @@ describe('one target’s legacy relay bridge', () => {
     await bridge().refresh()
     expect(leases[0].state).toBe('terminated')
     // Never seen live in this session, so no exit is counted for it.
-    expect(events.exitedTelemetry).toBe(0)
   })
 
   it('keeps a lease when a relay could not be asked', async () => {

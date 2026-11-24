@@ -6,9 +6,6 @@ import {
   type AgentTransitionStep
 } from '../../shared/agent-transitions.test-fixture'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 const WT = 'repo-1::/tmp/a'
 const OTHER_WT = 'repo-1::/tmp/b'
 const FOLDER = 'folder:11111111-1111-4111-8111-111111111111'

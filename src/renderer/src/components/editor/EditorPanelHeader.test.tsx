@@ -47,10 +47,6 @@ vi.mock('./EditorFileLocationMenuItems', () => ({
   EditorFileLocationMenuItems: () => <span data-file-location-actions />
 }))
 
-vi.mock('@/components/artifacts/fork-artifact-passwords/ArtifactPublishButton', () => ({
-  ArtifactPublishButton: () => <button data-artifact-publish />
-}))
-
 vi.mock('./diff-navigation-context', () => ({
   useDiffNavigation: () => ({
     changeCount: 2,
@@ -139,30 +135,5 @@ describe('EditorPanelHeader', () => {
     expect(html).toContain('data-delay-duration="300"')
     expect(html).toContain('aria-label="Previous change"')
     expect(html).toContain('aria-label="Next change"')
-  })
-
-  it('offers artifact sharing on non-diff surfaces given a shareable document', () => {
-    const createRequest = vi.fn()
-
-    expect(
-      renderHeader({
-        isDiffSurface: false,
-        isMarkdown: false,
-        createArtifactRequest: createRequest
-      })
-    ).toContain('data-artifact-publish="true"')
-    expect(
-      renderHeader({
-        isDiffSurface: true,
-        isMarkdown: true,
-        createArtifactRequest: createRequest
-      })
-    ).not.toContain('data-artifact-publish')
-    expect(
-      renderHeader({
-        isDiffSurface: false,
-        isMarkdown: true
-      })
-    ).not.toContain('data-artifact-publish')
   })
 })

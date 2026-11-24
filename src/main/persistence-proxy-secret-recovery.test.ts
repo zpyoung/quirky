@@ -37,14 +37,6 @@ vi.mock('electron', () => ({
   session: { defaultSession: undefined }
 }))
 
-vi.mock('./telemetry/client', () => ({
-  track: vi.fn()
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn().mockReturnValue({ nth_repo_added: 2 })
-}))
-
 async function createStore() {
   const { setSecretStore } = await import('../shared/secret-store')
   setSecretStore({

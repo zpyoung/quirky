@@ -56,7 +56,7 @@ const release = (tag: string, extra: Record<string, unknown> = {}) => ({
   tag_name: tag,
   draft: false,
   published_at: '2026-07-28T14:00:00Z',
-  html_url: `https://github.com/stablyai/orca/releases/tag/${tag}`,
+  html_url: `https://github.com/zpyoung/quirky/releases/tag/${tag}`,
   assets: allPlatformAssets,
   ...extra
 })
@@ -77,41 +77,23 @@ describe('listReleaseBuilds', () => {
     vi.restoreAllMocks()
   })
 
-  it('lists hourly builds from the dedicated repo, newest first', async () => {
+  it('lists rc builds from the main repo, newest first', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse([
-        release('v1.4.160-hourly.202607280900'),
-        release('v1.4.160-hourly.202607281400'),
-        release('v1.4.160-hourly.202607281000')
+        release('v1.4.160-rc.1'),
+        release('v1.4.160-rc.3'),
+        release('v1.4.160-rc.2'),
+        release('v1.4.160')
       ])
     )
 
-    const builds = await listReleaseBuilds('hourly', 'darwin')
+    const builds = await listReleaseBuilds('rc', 'darwin')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('stablyai/orca-hourly')
+    expect(fetchMock.mock.calls[0][0]).toContain('zpyoung/quirky')
     expect(builds.map((build) => build.version)).toEqual([
-      '1.4.160-hourly.202607281400',
-      '1.4.160-hourly.202607281000',
-      '1.4.160-hourly.202607280900'
-    ])
-  })
-
-  it('lists daily builds from the dedicated repo, newest first', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse([
-        release('v1.4.160-daily.202607271300'),
-        release('v1.4.160-daily.202607291300'),
-        release('v1.4.160-daily.202607281300')
-      ])
-    )
-
-    const builds = await listReleaseBuilds('daily', 'darwin')
-
-    expect(fetchMock.mock.calls[0][0]).toContain('stablyai/orca-daily')
-    expect(builds.map((build) => build.version)).toEqual([
-      '1.4.160-daily.202607291300',
-      '1.4.160-daily.202607281300',
-      '1.4.160-daily.202607271300'
+      '1.4.160-rc.3',
+      '1.4.160-rc.2',
+      '1.4.160-rc.1'
     ])
   })
 
@@ -150,21 +132,19 @@ describe('listReleaseBuilds', () => {
     expect(builds.map((build) => build.version)).toEqual(['1.4.159'])
   })
 
-  // Why: the hourly workflow composes the release title and the picker renders it
-  // verbatim, so the two can never drift. A title that only repeats the tag says
-  // nothing the version beside it does not, and must not become a picker row
-  // reading "v1.4.163-hourly.202607311933".
+  // Why: a title that only repeats the tag says nothing the version beside it
+  // does not, and must not become a picker row reading "v1.4.163-rc.3".
   it('keeps a composed release title and drops one that repeats the tag', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse([
-        release('v1.4.163-hourly.202607312054', { name: '1.4.163 • 01 • 07-31 13:54 • e698241' }),
-        release('v1.4.163-hourly.202607311933', { name: 'v1.4.163-hourly.202607311933' }),
-        release('v1.4.163-hourly.202607311835', { name: '   ' }),
-        release('v1.4.163-hourly.202607311735', { name: 42 })
+        release('v1.4.163-rc.4', { name: '1.4.163 • 01 • 07-31 13:54 • e698241' }),
+        release('v1.4.163-rc.3', { name: 'v1.4.163-rc.3' }),
+        release('v1.4.163-rc.2', { name: '   ' }),
+        release('v1.4.163-rc.1', { name: 42 })
       ])
     )
 
-    const builds = await listReleaseBuilds('hourly', 'darwin')
+    const builds = await listReleaseBuilds('rc', 'darwin')
     expect(builds.map((build) => build.name)).toEqual([
       '1.4.163 • 01 • 07-31 13:54 • e698241',
       null,
@@ -179,73 +159,47 @@ describe('listReleaseBuilds', () => {
   it('hides builds that published no artifact for this platform', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse([
-        release('v1.4.163-hourly.202607312054'),
-        release('v1.4.163-hourly.202607311933', {
+        release('v1.4.163-rc.2'),
+        release('v1.4.163-rc.1', {
           assets: [{ name: 'latest-mac.yml' }, { name: 'orca-macos-arm64.dmg' }]
         })
       ])
     )
 
     await expect(
-      listReleaseBuilds('hourly', 'win32').then((builds) => builds.map((build) => build.version))
-    ).resolves.toEqual(['1.4.163-hourly.202607312054'])
+      listReleaseBuilds('rc', 'win32').then((builds) => builds.map((build) => build.version))
+    ).resolves.toEqual(['1.4.163-rc.2'])
   })
 
-  // The mac-only releases every dev channel published before Windows builds
+  // The mac-only releases published before Windows builds
   // existed must simply not appear on Windows, rather than erroring.
   it('returns an empty list when no build has this platform artifact', async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse([
-        release('v1.4.163-hourly.202607312054', { assets: [{ name: 'latest-mac.yml' }] })
-      ])
+      jsonResponse([release('v1.4.163-rc.2', { assets: [{ name: 'latest-mac.yml' }] })])
     )
 
-    await expect(listReleaseBuilds('hourly', 'win32')).resolves.toEqual([])
+    await expect(listReleaseBuilds('rc', 'win32')).resolves.toEqual([])
   })
 
   it('keeps mac builds visible on macOS regardless of the Windows leg', async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse([
-        release('v1.4.163-hourly.202607312054', { assets: [{ name: 'latest-mac.yml' }] })
-      ])
+      jsonResponse([release('v1.4.163-rc.2', { assets: [{ name: 'latest-mac.yml' }] })])
     )
 
     await expect(
-      listReleaseBuilds('hourly', 'darwin').then((builds) => builds.map((build) => build.version))
-    ).resolves.toEqual(['1.4.163-hourly.202607312054'])
-  })
-
-  // Why: on Windows a signed stable cannot reach a dev channel through the
-  // updater, so the picker needs a direct download to hand the user instead.
-  it('resolves the platform installer download url', async () => {
-    fetchMock.mockResolvedValue(jsonResponse([release('v1.4.163-hourly.202607312054')]))
-
-    const [build] = await listReleaseBuilds('hourly', 'win32')
-
-    expect(build.installerUrl).toBe(
-      'https://github.com/stablyai/orca-hourly/releases/download/v1.4.163-hourly.202607312054/orca-windows-setup.exe'
-    )
-  })
-
-  it('leaves the installer url null when the release published no installer', async () => {
-    fetchMock.mockResolvedValue(
-      jsonResponse([release('v1.4.163-hourly.202607312054', { assets: [{ name: 'latest.yml' }] })])
-    )
-
-    const [build] = await listReleaseBuilds('hourly', 'win32')
-
-    expect(build.installerUrl).toBeNull()
+      listReleaseBuilds('rc', 'darwin').then((builds) => builds.map((build) => build.version))
+    ).resolves.toEqual(['1.4.163-rc.2'])
   })
 
   it('tolerates a release whose assets are missing or malformed', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse([
-        release('v1.4.163-hourly.202607312054', { assets: undefined }),
-        release('v1.4.163-hourly.202607311933', { assets: [null, { name: 7 }] })
+        release('v1.4.163-rc.2', { assets: undefined }),
+        release('v1.4.163-rc.1', { assets: [null, { name: 7 }] })
       ])
     )
 
-    await expect(listReleaseBuilds('hourly', 'win32')).resolves.toEqual([])
+    await expect(listReleaseBuilds('rc', 'win32')).resolves.toEqual([])
   })
 
   // Why: unauthenticated requests draw from a 60/hour bucket shared by every
@@ -422,7 +376,7 @@ describe('listReleaseBuilds', () => {
       })
     )
 
-    await expect(listReleaseBuilds('hourly', 'darwin')).rejects.toThrow(
+    await expect(listReleaseBuilds('rc', 'darwin')).rejects.toThrow(
       "GitHub rate limit reached. Try again in about 28 minutes, or run `gh auth login` so Orca can use your account's higher limit."
     )
   })
@@ -433,7 +387,7 @@ describe('listReleaseBuilds', () => {
       jsonResponse(null, { ok: false, status: 403, headers: { 'x-ratelimit-remaining': '0' } })
     )
 
-    const failure = listReleaseBuilds('hourly', 'darwin')
+    const failure = listReleaseBuilds('rc', 'darwin')
     await expect(failure).rejects.toThrow(/rate limit reached/)
     await expect(failure).rejects.not.toThrow(/gh auth login/)
   })
@@ -443,7 +397,7 @@ describe('listReleaseBuilds', () => {
       jsonResponse(null, { ok: false, status: 429, headers: { 'retry-after': '90' } })
     )
 
-    await expect(listReleaseBuilds('hourly', 'darwin')).rejects.toThrow(/in about 2 minutes/)
+    await expect(listReleaseBuilds('rc', 'darwin')).rejects.toThrow(/in about 2 minutes/)
   })
 
   // Why: a 403 without rate-limit headers is a permission or access problem, and
@@ -451,14 +405,14 @@ describe('listReleaseBuilds', () => {
   it('reports a 403 without rate-limit headers as a plain HTTP error', async () => {
     fetchMock.mockResolvedValue(jsonResponse(null, { ok: false, status: 403 }))
 
-    const failure = listReleaseBuilds('hourly', 'darwin')
+    const failure = listReleaseBuilds('rc', 'darwin')
     await expect(failure).rejects.toThrow(/HTTP 403/)
     await expect(failure).rejects.not.toThrow(/rate limit/)
   })
 
-  it('reports a missing hourly repo distinctly', async () => {
+  it('reports a missing releases repo distinctly', async () => {
     fetchMock.mockResolvedValue(jsonResponse(null, { ok: false, status: 404 }))
-    await expect(listReleaseBuilds('hourly', 'darwin')).rejects.toThrow(/No releases repository/i)
+    await expect(listReleaseBuilds('rc', 'darwin')).rejects.toThrow(/No releases repository/i)
   })
 })
 
@@ -512,31 +466,23 @@ describe('describeRateLimitReset', () => {
 })
 
 describe('resolveTargetBuild', () => {
-  it('pins an hourly tag at the hourly repo download path', () => {
-    expect(resolveTargetBuild('hourly', 'v1.4.160-hourly.202607281400')).toEqual({
-      tag: 'v1.4.160-hourly.202607281400',
-      version: '1.4.160-hourly.202607281400',
-      feedUrl:
-        'https://github.com/stablyai/orca-hourly/releases/download/v1.4.160-hourly.202607281400'
-    })
-  })
-
-  it('pins a daily tag at the daily repo download path', () => {
-    expect(resolveTargetBuild('daily', 'v1.4.160-daily.202607281300')).toEqual({
-      tag: 'v1.4.160-daily.202607281300',
-      version: '1.4.160-daily.202607281300',
-      feedUrl:
-        'https://github.com/stablyai/orca-daily/releases/download/v1.4.160-daily.202607281300'
-    })
-  })
-
   it('pins a stable tag at the main repo download path', () => {
-    expect(resolveTargetBuild('stable', 'v1.4.159').feedUrl).toBe(
-      'https://github.com/zpyoung/orca/releases/download/v1.4.159'
-    )
+    expect(resolveTargetBuild('v1.4.159')).toEqual({
+      tag: 'v1.4.159',
+      version: '1.4.159',
+      feedUrl: 'https://github.com/zpyoung/quirky/releases/download/v1.4.159'
+    })
+  })
+
+  it('pins an rc tag at the main repo download path', () => {
+    expect(resolveTargetBuild('v1.4.160-rc.2')).toEqual({
+      tag: 'v1.4.160-rc.2',
+      version: '1.4.160-rc.2',
+      feedUrl: 'https://github.com/zpyoung/quirky/releases/download/v1.4.160-rc.2'
+    })
   })
 
   it('rejects a tag that is not a version', () => {
-    expect(() => resolveTargetBuild('stable', 'main')).toThrow(/not a valid release tag/)
+    expect(() => resolveTargetBuild('main')).toThrow(/not a valid release tag/)
   })
 })

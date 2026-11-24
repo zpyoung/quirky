@@ -19,7 +19,7 @@ function placement(
     topology: 'canonical-copy',
     status: 'outdated',
     currentPackageDigest: 'current',
-    lockSource: 'stablyai/orca',
+    lockSource: 'zpyoung/quirky',
     errorCategory: null,
     ...overrides
   }
@@ -33,7 +33,7 @@ describe('groupSkillFreshness', () => {
       name: 'orca-cli',
       status: 'update-available',
       orcaOwned: true,
-      lockSource: 'stablyai/orca'
+      lockSource: 'zpyoung/quirky'
     })
     expect(groups[0]?.locations).toEqual([
       {
@@ -51,7 +51,7 @@ describe('groupSkillFreshness', () => {
         placement('computer-use', { lockSource: 'acme/agent-skills' }),
         placement('linear-tickets', { lockSource: null }),
         placement('orchestration'),
-        placement('orca-cli', { lockSource: 'https://github.com/StablyAI/orca.git' })
+        placement('orca-cli', { lockSource: 'https://github.com/zpyoung/quirky.git' })
       ],
       ['computer-use', 'linear-tickets', 'orca-cli', 'orchestration']
     )
@@ -100,7 +100,7 @@ describe('groupSkillFreshness', () => {
         name: 'dataviz',
         status: 'cannot-update',
         orcaOwned: true,
-        lockSource: 'stablyai/orca',
+        lockSource: 'zpyoung/quirky',
         locations: [
           {
             id: expect.any(String),
@@ -114,7 +114,7 @@ describe('groupSkillFreshness', () => {
         name: 'linear-tickets',
         status: 'cannot-update',
         orcaOwned: true,
-        lockSource: 'stablyai/orca',
+        lockSource: 'zpyoung/quirky',
         locations: [
           {
             id: expect.any(String),

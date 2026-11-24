@@ -13,9 +13,4 @@ export function registerUpdaterStatusIpcBridge(unsubs: (() => void)[]): void {
       useAppStore.getState().setUpdateStatus(raw as UpdateStatus)
     })
   )
-  unsubs.push(
-    window.api.updater.onClearDismissal(() => {
-      useAppStore.getState().clearDismissedUpdateVersion()
-    })
-  )
 }

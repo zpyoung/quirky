@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       dev_build:
-        description: Build without official-channel telemetry constants
+        description: Build the development bundle
         type: boolean
         default: false
       runner:
@@ -18,9 +18,6 @@ on:
         value: ${{ jobs.bundle.outputs.supported }}
       source_sha:
         value: ${{ jobs.bundle.outputs.source_sha }}
-    secrets:
-      ORCA_POSTHOG_WRITE_KEY:
-        required: false
 
 permissions:
   contents: read
@@ -85,8 +82,6 @@ jobs:
           ORCA_CLI_BUILD_COMPILER: ${{ inputs.dev_build && 'tsrs' || 'bun' }}
           ORCA_BUILD_IDENTITY: ${{ steps.identity.outputs.value }}
           ORCA_RELEASE_JAVASCRIPT_BUILD_IDENTITY: ${{ inputs.dev_build && 'dev' || '' }}
-          ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
-          ORCA_POSTHOG_WRITE_KEY: ${{ !inputs.dev_build && secrets.ORCA_POSTHOG_WRITE_KEY || '' }}
         run: |
           pnpm run "$JAVASCRIPT_BUILD_SCRIPT"
           node config/scripts/release-javascript-artifact.mjs pack

@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import type { AgentLaunchOptionSelection } from '../../../../shared/fork-automation-launch-settings/agent-launch-overrides'
-import type { LaunchSource } from '../../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../../shared/agent-kind'
 import type {
   SourceControlActionRecipe,
   SourceControlLaunchActionId

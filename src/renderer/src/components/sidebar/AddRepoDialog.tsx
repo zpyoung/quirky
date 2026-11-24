@@ -80,8 +80,7 @@ export default React.memo(function AddRepoDialog({
     resetNestedRepoReviewState,
     handleImportNestedRepos,
     handleOpenNestedRootFolder,
-    resetNestedImportFlow,
-    trackNestedBackAction
+    resetNestedImportFlow
   } = useAddRepoNestedReviewController({
     reviewRuntimeEnvironmentId: selectedRuntimeEnvironmentId,
     cancelNestedRepoScan,
@@ -270,23 +269,17 @@ export default React.memo(function AddRepoDialog({
   })
 
   const handleBack = useCallback(() => {
-    if (step === 'nested') {
-      trackNestedBackAction()
-    }
     resetState()
-  }, [resetState, step, trackNestedBackAction])
+  }, [resetState])
 
   const handleOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        if (step === 'nested' && !isAdding) {
-          trackNestedBackAction()
-        }
         closeModal()
         resetState()
       }
     },
-    [closeModal, isAdding, resetState, step, trackNestedBackAction]
+    [closeModal, resetState]
   )
 
   return (

@@ -213,8 +213,7 @@ describe('useIpcEvents browser tab create routing', () => {
         settings: { onChanged: () => () => {} },
         updater: {
           getStatus: () => Promise.resolve({ state: 'idle' }),
-          onStatus: () => () => {},
-          onClearDismissal: () => () => {}
+          onStatus: () => () => {}
         },
         browser: {
           onGuestLoadFailed: () => () => {},

@@ -57,7 +57,6 @@ vi.mock('@/runtime/runtime-terminal-verified-input', () => ({
 }))
 vi.mock('@/runtime/runtime-terminal-stream', () => ({ subscribeToRuntimeTerminalData: vi.fn() }))
 vi.mock('./agent-ready-wait', () => ({ waitForAgentReady: vi.fn(async () => ({ ready: false })) }))
-vi.mock('@/lib/telemetry', () => ({ track: vi.fn(), tuiAgentToAgentKind: () => 'claude' }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), message: vi.fn() } }))
 
 const { launchNewTabPromptThroughHost } = await import('./launch-agent-new-tab-host-route')

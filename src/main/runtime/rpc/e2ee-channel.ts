@@ -25,11 +25,7 @@ import type {
   RpcBinarySender
 } from './rpc-binary-sender'
 import type { RuntimeCapability } from '../../../shared/protocol-version'
-import type { EventProps } from '../../../shared/telemetry-events'
-import { track } from '../../telemetry/client'
 import type { DevicePrincipal } from '../device-principal'
-
-type OutboundBudgetEmitter = EventProps<'remote_outbound_budget_close'>['emitter']
 
 const HANDSHAKE_TIMEOUT_MS = 10_000
 const MAX_CONSECUTIVE_DECRYPT_FAILURES = 5
@@ -98,7 +94,7 @@ export class E2EEChannel {
     this.outbound = new MobileE2EEDesktopOutboundOwner(
       ws,
       () => Boolean(this.sharedKey),
-      () => this.closeForOutboundBudget('queue'),
+      () => this.closeForOutboundBudget(),
       options.outboundMemoryBudget
     )
 
@@ -171,7 +167,7 @@ export class E2EEChannel {
       ws: this.ws,
       outbound: this.outbound,
       getSharedKey: () => this.sharedKey,
-      onOversize: () => this.closeForOutboundBudget('size')
+      onOversize: () => this.closeForOutboundBudget()
     })
     this.messageHandler?.(plaintext, reply.text, reply.binary)
   }
@@ -303,20 +299,15 @@ export class E2EEChannel {
       return false
     }
     if (!isMobileE2EEOutboundItemWithinLimit(item)) {
-      this.closeForOutboundBudget('size')
+      this.closeForOutboundBudget()
       return false
     }
     return this.outbound.enqueueV2(item, this.v2Session, options)
   }
 
-  // Why: this close kills the whole remote session. `size` means a producer emitted something
-  // too big and should fall to zero once producers cap themselves; `queue` means a backed-up link.
-  private closeForOutboundBudget(emitter: OutboundBudgetEmitter): void {
-    try {
-      track('remote_outbound_budget_close', { emitter })
-    } catch {
-      // Telemetry is best-effort; closing the unsafe socket remains authoritative.
-    }
+  // Why: this close kills the whole remote session, whether a producer emitted something too big
+  // or the link is backed up.
+  private closeForOutboundBudget(): void {
     this.onError(1013, 'Outbound reply buffer overflow')
   }
 

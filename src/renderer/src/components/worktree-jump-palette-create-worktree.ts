@@ -99,9 +99,7 @@ export function createWorktreeJumpPaletteWorktreeHandler({
       )
       closeModal()
       recordFeatureInteraction('cmd-j-create-workspace')
-      queueMicrotask(() =>
-        openModal('new-workspace-composer', { ...data, telemetrySource: 'command_palette' })
-      )
+      queueMicrotask(() => openModal('new-workspace-composer', { ...data }))
     }
 
     if (linearIssueUrlIntent) {
@@ -283,8 +281,7 @@ export function createWorktreeJumpPaletteWorktreeHandler({
                       getLinkedWorkItemWorkspaceName(linkedWorkItem)?.seedName ??
                       getLinkedWorkItemSuggestedName({ title: linkedWorkItem.title })
                   }
-                : { prefilledName: trimmed }),
-              telemetrySource: 'command_palette'
+                : { prefilledName: trimmed })
             })
           )
         })
@@ -293,8 +290,7 @@ export function createWorktreeJumpPaletteWorktreeHandler({
             queueMicrotask(() =>
               openModal('new-workspace-composer', {
                 initialRepoId: repo.id,
-                prefilledName: trimmed,
-                telemetrySource: 'command_palette'
+                prefilledName: trimmed
               })
             )
           }

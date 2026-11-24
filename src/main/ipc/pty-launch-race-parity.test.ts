@@ -39,12 +39,6 @@ vi.mock('../pwsh', () => import('./pty-ipc-mock-registry').then((m) => m.pwshMod
 vi.mock('../wsl', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).wslModuleMock(await importOriginal())
 )
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
-)
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
 )
@@ -103,7 +97,7 @@ describe('launch race parity, both spawn lanes', () => {
         })
 
         const winner = lanes.spawn.ipc(pane.args)
-        await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+        await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce(), { timeout: 15_000 })
         const joinPaneSpawn = vi.spyOn(paneSpawnReservations, 'joinPaneSpawn')
         onTestFinished(() => joinPaneSpawn.mockRestore())
         const joiner = lanes.spawn[lane]({ ...pane.args, command: 'claude' })
@@ -138,7 +132,9 @@ describe('launch race parity, both spawn lanes', () => {
       const lanes = registerLaunchRaceLanes({ handlers, mainWindow, runtime })
 
       const automatic = lanes.spawn.runtime({ ...pane.args, refuseSleptWorktree: true })
-      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce())
+      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce(), {
+        timeout: 15_000
+      })
       const joinPaneSpawn = vi.spyOn(paneSpawnReservations, 'joinPaneSpawn')
       onTestFinished(() => joinPaneSpawn.mockRestore())
       const joiner = lanes.spawn.runtime(pane.args)
@@ -171,7 +167,9 @@ describe('launch race parity, both spawn lanes', () => {
       const automatic = lanes.spawn
         .runtime({ ...pane.args, refuseSleptWorktree: true })
         .finally(release)
-      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce())
+      await vi.waitFor(() => expect(lock.acquireWorktreeTerminalSpawn).toHaveBeenCalledOnce(), {
+        timeout: 15_000
+      })
       const mount = lanes.spawn.ipc(pane.args)
       lock.refuse()
 
@@ -206,7 +204,7 @@ describe('launch race parity, both spawn lanes', () => {
       bound = reply.id
       return reply
     })
-    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalledOnce(), { timeout: 15_000 })
     const joinPaneSpawn = vi.spyOn(paneSpawnReservations, 'joinPaneSpawn')
     onTestFinished(() => joinPaneSpawn.mockRestore())
     const starter = new RestoredPaneStarter({

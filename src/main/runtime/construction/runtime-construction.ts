@@ -30,7 +30,6 @@ import { installRuntimeReviewCommandSurface } from '../runtime-review-command-su
 import { installRuntimeServiceCommandSurface } from '../runtime-service-command-surface'
 import { RuntimeSkillCommands } from '../runtime-skill-command-surface'
 import { installRuntimeSkillCommandSurface } from '../runtime-skill-command-contract'
-import { getAppEnvironment } from '../../../shared/app-environment'
 import { RuntimeClientSettingsController } from '../runtime-client-settings'
 import { RuntimeSessionSearchSettingsController } from '../runtime-session-search-settings'
 import { RuntimeAutomationController } from '../runtime-automation-controller'
@@ -153,28 +152,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       messageWaiters: this.messageWaiters
     })
     this.skillCommands = new RuntimeSkillCommands({
-      getRuntimeId: () => this.runtimeId,
-      getUserDataPath: () => getAppEnvironment().getPath('userData'),
-      isPackaged: () => getAppEnvironment().isPackaged(),
-      getSettings: () => this.store?.getSettings?.() ?? {},
-      listRepos: () => this.listRepos(),
-      listFolderWorkspaces: () =>
-        (this.store?.getFolderWorkspaces?.() ?? []).map((workspace) => ({
-          id: workspace.id,
-          folderPath: workspace.folderPath,
-          connectionId: workspace.connectionId,
-          executionHostId: workspace.executionHostId
-        })),
-      listResolvedWorktrees: () => this.listResolvedWorktrees(),
-      showManagedWorktree: (selector) => this.showManagedWorktree(selector),
-      resolveProjectRuntimeForWorktree: (worktreeId) =>
-        this.resolveProjectRuntimeForWorktree(worktreeId),
-      getClaudeConfigDirectory: (target) => this.accounts.getClaudeConfigDirectory(target),
-      skillTransactionRecovery: (deps?.skillTransactionRecovery ?? Promise.resolve()).catch(
-        (error) => {
-          console.warn('[skills] startup transaction recovery failed:', error)
-        }
-      )
+      getClaudeConfigDirectory: (target) => this.accounts.getClaudeConfigDirectory(target)
     })
     installRuntimeSkillCommandSurface(runtime, this.skillCommands)
     Object.assign(this, this.edgeCommands.surface)

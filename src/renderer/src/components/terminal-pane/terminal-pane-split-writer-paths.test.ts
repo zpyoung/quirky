@@ -4,8 +4,7 @@ import { recordContextMenuCreatedTerminalPaneSplit } from './use-terminal-pane-s
 import { recordRuntimeCreatedTerminalPaneSplit } from './terminal-pane-lifecycle-primitives'
 
 const mocks = vi.hoisted(() => ({
-  recordFeatureInteraction: vi.fn(),
-  trackTerminalPaneSplit: vi.fn()
+  recordFeatureInteraction: vi.fn()
 }))
 
 vi.mock('@/store', () => ({
@@ -17,14 +16,9 @@ vi.mock('@/store', () => ({
   }
 }))
 
-vi.mock('@/lib/feature-education-telemetry', () => ({
-  trackTerminalPaneSplit: mocks.trackTerminalPaneSplit
-}))
-
 describe('terminal split writer paths', () => {
   beforeEach(() => {
     mocks.recordFeatureInteraction.mockReset()
-    mocks.trackTerminalPaneSplit.mockReset()
   })
 
   it('does not record keyboard split completion when the local split fails', () => {
@@ -36,7 +30,6 @@ describe('terminal split writer paths', () => {
     ).toBe(false)
 
     expect(mocks.recordFeatureInteraction).not.toHaveBeenCalled()
-    expect(mocks.trackTerminalPaneSplit).not.toHaveBeenCalled()
   })
 
   it('records context-menu split completion after the local split succeeds', () => {
@@ -51,10 +44,6 @@ describe('terminal split writer paths', () => {
     ).toBe(true)
 
     expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).toHaveBeenCalledWith({
-      source: 'context_menu',
-      direction: 'horizontal'
-    })
   })
 
   it('records runtime split completion after SPLIT_TERMINAL_PANE_EVENT creates a pane', () => {
@@ -69,25 +58,5 @@ describe('terminal split writer paths', () => {
     ).toBe(true)
 
     expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).toHaveBeenCalledWith({
-      source: 'command',
-      direction: 'vertical'
-    })
-  })
-
-  it('keeps runtime split completion when mirrored telemetry is suppressed', () => {
-    expect(
-      recordRuntimeCreatedTerminalPaneSplit(
-        { id: 2 },
-        {
-          source: 'command',
-          direction: 'horizontal',
-          telemetrySuppressed: true
-        }
-      )
-    ).toBe(true)
-
-    expect(mocks.recordFeatureInteraction).toHaveBeenCalledWith('terminal-pane-split')
-    expect(mocks.trackTerminalPaneSplit).not.toHaveBeenCalled()
   })
 })

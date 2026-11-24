@@ -9,7 +9,6 @@ import { isPluginUiLanguage } from '../../../shared/ui-language'
 import { useAppStore } from '@/store'
 import { usePluginLanguagePackStore } from '@/store/plugin-language-packs'
 import { translate } from '@/i18n/i18n'
-import { track } from '@/lib/telemetry'
 import { resolveUiLocale } from '@/i18n/supported-languages'
 import { MANAGE_SESSIONS_SECTION_ID } from '@/components/settings/TerminalTccAttributionNotice'
 import { macFolderAccessFolderName } from '@/components/shared/mac-folder-access-folder-name'
@@ -122,9 +121,6 @@ export function useMacTccAttributionSeveredNotice(): void {
       showNotice(daemonScope)
       // Counted once per scope, not once per raise: a retired scope re-shows after a reconnect
       // blip, and that second toast is the same notice, not a second affected user.
-      if (phase === undefined) {
-        track('daemon_folder_access_notice', { action: 'shown', cwd_class: cwdClass })
-      }
       toast.warning(
         translate(
           'auto.hooks.useMacTccAttributionSeveredNotice.folderAccessTitle',
@@ -144,7 +140,6 @@ export function useMacTccAttributionSeveredNotice(): void {
               // Sonner deletes the toast after an action click, silently: the evidence is still
               // true until a restart, so the toast has to survive the dialog being cancelled.
               event.preventDefault()
-              track('daemon_folder_access_notice', { action: 'fix_opened', cwd_class: cwdClass })
               // No captured verdict: the dialog opens on whatever the latest poll reported.
               openFix()
             }
@@ -157,7 +152,6 @@ export function useMacTccAttributionSeveredNotice(): void {
               return
             }
             store.dismissNotice(daemonScope)
-            track('daemon_folder_access_notice', { action: 'dismissed', cwd_class: cwdClass })
           }
         }
       )

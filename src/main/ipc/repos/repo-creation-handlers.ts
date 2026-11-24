@@ -15,7 +15,6 @@ import { gitExecFileAsync } from '../../git/runner'
 import { detectRepoIconAndUpstream } from '../../repo-icon-autodetect'
 import { prepareLocalWorktreeRootForRepo } from '../../worktree-root-preparation'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
-import { emitRepoAdded } from './repo-added-telemetry'
 import { notifyReposChanged } from './repos-changed-notification'
 import { addLocalRepoFromPath } from './local-repo-registration'
 
@@ -76,7 +75,6 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       }
       invalidateAuthorizedRootsCache()
       notifyReposChanged(mainWindow)
-      emitRepoAdded('folder_picker', result.alreadyExisted, result.repo.kind === 'git')
       return { repo: result.repo }
     }
   )
@@ -113,7 +111,6 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       // Dedup by path so a double-click on Create doesn't make two entries for one folder (first of three dedup checks).
       const existing = store.getRepos().find((r) => r.path === targetPath)
       if (existing) {
-        emitRepoAdded('folder_picker', true, repoKind === 'git')
         return { repo: existing }
       }
 
@@ -214,7 +211,6 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       const raceWinner = store.getRepos().find((r) => r.path === targetPath)
       if (raceWinner) {
         // Why: don't rm even if we made the dir — the race winner owns it; leaking an empty folder beats deleting a dir in use.
-        emitRepoAdded('folder_picker', true, repoKind === 'git')
         return { repo: raceWinner }
       }
 
@@ -244,7 +240,6 @@ export function registerRepoCreationHandlers(mainWindow: BrowserWindow, store: S
       invalidateAuthorizedRootsCache()
       notifyReposChanged(mainWindow)
       // Why: repos:create git-inits when kind is 'git', so repoKind is the true git-vs-folder signal.
-      emitRepoAdded('folder_picker', false, repoKind === 'git')
       return { repo }
     }
   )

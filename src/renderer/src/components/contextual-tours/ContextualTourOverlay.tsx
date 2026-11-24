@@ -5,11 +5,7 @@ import {
   type ContextualTourId,
   type ContextualTourStepAction
 } from '../../../../shared/contextual-tours'
-import type { ContextualTourOutcome } from '../../../../shared/feature-education-telemetry'
-import {
-  trackContextualTourOutcome,
-  trackContextualTourShown
-} from '@/lib/feature-education-telemetry'
+import type { ContextualTourOutcome } from '../../../../shared/contextual-tours'
 import { isContextualTourAllowedForModal } from './contextual-tour-gate'
 import {
   areContextualTourRenderStatesEqual,
@@ -75,7 +71,7 @@ export function ContextualTourOverlay(): JSX.Element | null {
   )
 
   const emitContextualTourOutcome = useCallback(
-    (outcome: ContextualTourOutcome): void => {
+    (_outcome: ContextualTourOutcome): void => {
       if (
         !activeTourId ||
         telemetryOutcomeSentRef.current ||
@@ -84,20 +80,6 @@ export function ContextualTourOverlay(): JSX.Element | null {
         return
       }
       telemetryOutcomeSentRef.current = true
-      const furthestStepIndex = telemetryFurthestStepIndexRef.current
-      trackContextualTourOutcome({
-        tourId: activeTourId,
-        source: activeTourSource,
-        outcome,
-        stepsSeen: telemetryStepsSeenRef.current.size,
-        totalSteps: telemetryTotalStepsRef.current,
-        ...(furthestStepIndex > 0
-          ? {
-              furthestStepIndex,
-              definedStepCount: telemetryDefinedStepCountRef.current
-            }
-          : {})
-      })
     },
     [activeTourId, activeTourSource]
   )
@@ -270,11 +252,6 @@ export function ContextualTourOverlay(): JSX.Element | null {
       telemetryFurthestStepIndexRef.current,
       activeStepIndex + 1
     )
-    trackContextualTourShown({
-      tourId: activeTourId,
-      source: activeTourSource,
-      wasFeaturePreviouslyInteracted
-    })
   }, [activeStepIndex, activeTourId, activeTourSource, renderState, wasFeaturePreviouslyInteracted])
 
   useEffect(() => {

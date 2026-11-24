@@ -236,11 +236,7 @@ export function TerminalWindowsAdministratorSection(): React.JSX.Element {
               <Button
                 variant="link"
                 size="sm"
-                onClick={() =>
-                  void window.api.shell.openUrl(
-                    'https://www.onorca.dev/docs/terminal#windows-administrator-mode'
-                  )
-                }
+                onClick={() => void window.api.shell.openUrl('https://github.com/zpyoung/quirky')}
               >
                 {translate(
                   'settings.terminal.windows.administratorDocumentation',

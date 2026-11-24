@@ -27,11 +27,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -39,14 +34,6 @@ vi.mock('electron', () => ({
   safeStorage: {
     isEncryptionAvailable: () => false
   }
-}))
-
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
 }))
 
 /** A profile this build has already loaded and written, so no unrelated migration is still pending. */
@@ -82,9 +69,6 @@ async function reloadAndSettleWrites(): Promise<PersistedState> {
 describe('load-time normalization durability', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
-    trackMock.mockReset()
-    getCohortAtEmitMock.mockReset()
-    getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   })
 
   afterEach(async () => {

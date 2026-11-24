@@ -2,7 +2,6 @@
  * Every SSH target's legacy relay bridge, and the one seam the rest of main calls.
  * COMPAT(legacy-relay-bridge): revisit 2027-01-15.
  */
-import type { EventProps } from '../../../shared/telemetry-events'
 import type {
   LegacyRelayBridgeAttachResult,
   LegacyRelayBridgeCloseResult,
@@ -20,7 +19,6 @@ import { listLegacyRelayEndpoints, posixEndpointExited } from './legacy-relay-en
 import { LegacyRelayTargetBridge } from './legacy-relay-target-bridge'
 import { LegacyRelayHiddenOutput } from './legacy-relay-hidden-output'
 import { LegacyRelayPaneStops, type LegacyRelayStopProof } from './legacy-relay-pane-stops'
-import { reportDailyRelayActivity, watchDailyRelayActivity } from './legacy-relay-daily-activity'
 import {
   bridgeableLeasesByRelayId,
   isBridgeableLease,
@@ -35,8 +33,6 @@ const START_BUDGET_MS = 20_000
 /** How long an attach waits for a target whose connection is still coming up. */
 const CONNECTION_WAIT_MS = 20_000
 
-type ReportPhase = EventProps<'ssh_host_server_legacy_relay_bridge'>['phase']
-
 export type LegacyRelayBridgeHost = {
   leases: (targetId: string) => SshRemotePtyLease[]
   /** Ends the lease and any stop recorded on it: on the relay's proof, or on a stop it can't be sent. */
@@ -48,7 +44,6 @@ export type LegacyRelayBridgeHost = {
   onData: (ptyId: string, data: string) => void
   onReplay: (ptyId: string, replay: string) => void
   onExit: (ptyId: string, code: number) => void
-  report: (targetId: string, phase: ReportPhase, terminals: number) => void
   /** Absent: relay-era `orca` commands are refused, as before this host served them. */
   remoteCli?: {
     runtime: () => OrcaRuntimeService | null
@@ -78,9 +73,6 @@ export function installLegacyRelayBridge(next: LegacyRelayBridgeHost | null): vo
   paneOwners.clear()
   paneStops.forEach((stops) => stops.dispose())
   paneStops.clear()
-  watchDailyRelayActivity(next, () =>
-    [...bridges].map(([id, bridge]) => [id, bridge.livePaneCount()] as const)
-  )
   host = next
   hiddenOutput = next
     ? new LegacyRelayHiddenOutput({
@@ -146,7 +138,6 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
       if (bridges.get(targetId) === bridge) {
         heldPanes.delete(targetId)
         stopsFor(targetId).flush(bridge)
-        reportDailyRelayActivity(targetId, bridge.livePaneCount(), installed.report)
       }
       installed.onPanesChanged(legacyRelayBridgedPanes())
     },
@@ -156,7 +147,6 @@ function bridgeFor(targetId: string): LegacyRelayTargetBridge | null {
       stopsFor(targetId).exited(ptyId)
       installed.onExit(ptyId, code)
     },
-    onTerminalExited: () => installed.report(targetId, 'terminal_exited', 0),
     owners: ownersFor(targetId)
   })
   bridges.set(targetId, bridge)
@@ -203,10 +193,6 @@ export async function startLegacyRelayBridge(targetId: string): Promise<void> {
     })
   ])
   clearTimeout(timer)
-  const live = bridge.livePaneCount()
-  if (live > 0) {
-    host?.report(targetId, 'connected', live)
-  }
 }
 
 export function stopLegacyRelayBridge(targetId: string): void {

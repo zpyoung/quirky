@@ -6,7 +6,6 @@ import type {
   LaunchAgentBackgroundSessionArgs,
   LaunchAgentBackgroundSessionResult
 } from '@/lib/agent-background-session-contract'
-import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { scheduleAgentBackgroundDraft } from '@/lib/agent-background-draft-delivery'
 import { requestBackgroundTerminalWorktreeMount } from '@/components/terminal/background-terminal-worktree-mount'
 import { resolveAgentStartupPlanInputs } from '../../../shared/agent-startup-plan-inputs'
@@ -36,6 +35,7 @@ import {
 import { createBackgroundAgentStatusConsumer } from '@/lib/background-agent-status-consumer'
 import { isWslUncPath } from '../../../shared/wsl-paths'
 import { runtimeWaitExitCode, settleTabPtyBinding } from '@/lib/agent-background-session-exit'
+import { tuiAgentToAgentKind } from '../../../shared/agent-kind'
 
 export async function launchAgentBackgroundSession(
   args: LaunchAgentBackgroundSessionArgs

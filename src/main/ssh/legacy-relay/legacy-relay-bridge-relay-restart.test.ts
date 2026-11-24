@@ -49,7 +49,6 @@ function bridge(overrides: Partial<LegacyRelayTargetBridgeDeps> = {}): LegacyRel
       events.exits.push(id)
       stops.exited(id)
     },
-    onTerminalExited: () => {},
     owners,
     ...overrides
   })

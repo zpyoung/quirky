@@ -27,7 +27,7 @@ import type { AppApi, E2EApi, PlatformApi } from './api/app-api'
 import type { AutomationsApi } from './api/automation-api'
 import type { BrowserApi } from './api/browser-api'
 import type { CliApi } from './api/cli-install-api'
-import type { CrashReportsApi, FeedbackApi } from './api/crash-report-api'
+import type { CrashReportsApi } from './api/crash-report-api'
 import type { DashboardApi, TerminalPreviewApi } from './api/dashboard-api'
 import type { DocPreviewApi } from './api/doc-preview-api'
 import type { EmulatorApi } from './api/emulator-api'
@@ -44,7 +44,7 @@ import type { JiraApi } from './api/jira-api'
 import type { LinearApi } from './api/linear-api'
 import type { MobileApi } from './api/mobile-api'
 import type { NativeChatApi } from './api/native-chat-api'
-import type { OnboardingApi, StarNagApi } from './api/onboarding-api'
+import type { OnboardingApi } from './api/onboarding-api'
 import type { OrcaProfileApi } from './api/orca-profile-api'
 import type {
   ComputerUsePermissionsApi,
@@ -64,7 +64,7 @@ import type { ShellApi } from './api/shell-api'
 import type { SpeechApi } from './api/speech-api'
 import type { SshApi } from './api/ssh-api'
 import type { LegacyRelayBridgeApi } from './api/legacy-relay-bridge-api'
-import type { DiagnosticsApi, MemoryApi, StatsApi, TelemetryApi } from './api/telemetry-api'
+import type { MemoryApi, StatsApi } from './api/stats-memory-api'
 import type { UiCommandEventApi } from './api/ui-command-event-api'
 import type { UiWindowApi } from './api/ui-window-api'
 import type { UpdaterApi } from './api/updater-api'
@@ -102,7 +102,6 @@ export type PreloadApi = {
   workspaceSpace: WorkspaceSpaceApi
   workspacePorts: WorkspacePortsApi
   pty: PtyApi
-  feedback: FeedbackApi
   crashReports: CrashReportsApi
   export: ExportApi
   gh: Merged<GithubPullRequestApi & GithubWorkItemApi & GithubAccountApi>
@@ -111,12 +110,6 @@ export type PreloadApi = {
   bitbucket: BitbucketApi
   linear: LinearApi
   jira: JiraApi
-  starNag: StarNagApi
-  telemetryTrack: TelemetryApi['telemetryTrack']
-  telemetrySetOptIn: TelemetryApi['telemetrySetOptIn']
-  diagnostics: DiagnosticsApi
-  telemetryGetConsentState: TelemetryApi['telemetryGetConsentState']
-  telemetryAcknowledgeBanner: TelemetryApi['telemetryAcknowledgeBanner']
   settings: SettingsApi
   agentAwake: AgentAwakeApi
   localhostWorktreeLabels: LocalhostWorktreeLabelsApi
@@ -238,13 +231,7 @@ export type {
   ShellOpenExternalEditorResult,
   ShellOpenLocalPathResult
 } from './api/shell-api'
-export type {
-  DiagnosticsBundlePayload,
-  DiagnosticsStatusPayload,
-  DiagnosticsUploadPayload,
-  MemoryApi,
-  StatsApi
-} from './api/telemetry-api'
+export type { MemoryApi, StatsApi } from './api/stats-memory-api'
 import type { ForkSessionHandoffPreloadApi } from './fork-session-handoff/session-handoff-preload-api'
 import type { ForkSessionInfoApi } from './fork-session-info/session-info-preload-api'
 

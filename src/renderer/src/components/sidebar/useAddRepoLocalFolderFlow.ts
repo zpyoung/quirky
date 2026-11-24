@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { track } from '@/lib/telemetry'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import {
-  buildNestedRepoScanTelemetry,
-  createNestedRepoTelemetryAttemptId,
-  type NestedRepoTelemetryRuntimeKind
-} from '../../../../shared/nested-repo-telemetry'
-import type { AddRepoExistingWorkspaceSource } from '../../../../shared/telemetry-events'
+  createNestedRepoAttemptId,
+  type NestedRepoRuntimeKind
+} from '../../../../shared/nested-repo-attempt'
+import type { AddRepoExistingWorkspaceSource } from '../../../../shared/add-repo-source'
 import type { NestedRepoScanResult } from '../../../../shared/project-group-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeFetchOptions } from '@/store/slices/worktree-helpers'
@@ -22,7 +20,7 @@ type ShowNestedRepoReview = (args: {
   selectedPath: string
   connectionId: string | null
   attemptId: string
-  runtimeKind: NestedRepoTelemetryRuntimeKind
+  runtimeKind: NestedRepoRuntimeKind
   inProgress: boolean
   scanId: string | null
   runtimeEnvironmentId?: string | null
@@ -102,7 +100,7 @@ export function useAddRepoLocalFolderFlow({
       }
       setAddProjectBusyLabel('Scanning for repositories...')
       try {
-        const attemptId = createNestedRepoTelemetryAttemptId()
+        const attemptId = createNestedRepoAttemptId()
         const scanId = createNestedRepoScanId()
         setActiveNestedScanId(scanId, activeRuntimeEnvironmentId ?? null)
         setNestedScanInProgress(true)
@@ -134,15 +132,6 @@ export function useAddRepoLocalFolderFlow({
           return { status: 'cancelled' }
         }
         clearNestedScanState()
-        track(
-          'add_repo_nested_scan_result',
-          buildNestedRepoScanTelemetry({
-            attemptId,
-            surface: 'sidebar',
-            runtimeKind: 'local',
-            scan
-          })
-        )
         if (scan?.selectedPathKind === 'non_git_folder' && mode === 'batch') {
           return { status: 'skipped' }
         }

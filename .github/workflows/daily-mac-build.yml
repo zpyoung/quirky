@@ -296,10 +296,6 @@ jobs:
         run: pnpm build:release
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-          # Why: daily builds are not an official channel — telemetry's transport
-          # gate accepts only 'stable' or 'rc', so leaving this unset keeps them
-          # silent, which is correct for unvetted dev artifacts.
-          ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
 
       # After the app build so nothing that cleans out/ can drop it; electron-builder ships it.
       - name: Download the orcad deployment template

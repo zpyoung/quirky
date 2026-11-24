@@ -26,11 +26,6 @@ import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../shared/
 import type { PersistedState } from '../shared/persisted-state-types'
 import type { Store as PersistenceStore } from './persistence/loading-store/store'
 
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: {
@@ -46,8 +41,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({ track: trackMock }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
 vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: vi.fn(() => ({ hosts: [] })),
   sshConfigHostsToTargets: vi.fn(() => [])

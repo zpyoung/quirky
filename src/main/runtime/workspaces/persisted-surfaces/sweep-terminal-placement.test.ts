@@ -15,7 +15,6 @@ import { TERMINAL_QUERY_METHODS } from '../../rpc/methods/terminal/terminal-quer
 import { FIRST_SURFACE_PLACEMENT_WAIT_MS } from './restored-terminal-placement'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
-vi.mock('../../../telemetry/client', () => ({ track: vi.fn() }))
 
 // Layout-owner build: a window's sweep (first visit, an empty or sleeping activation, a phone
 // wake) asks main to show the swept workspace's unshown live terminals before it reads the host's

@@ -9,7 +9,6 @@ import type {
   AgentLaunchTabViewerRule,
   AgentLaunchTabPublishRequest
 } from '../../shared/agent-launch-tab-publication'
-import type { TerminalPaneSplitSource } from '../../shared/feature-education-telemetry'
 import type { TerminalRevealIdentity } from '../../shared/terminal-reveal-identity'
 import type { TerminalPaneRevealTarget } from '../../shared/terminal-pane-reveal'
 import type { TuiAgent } from '../../shared/tui-agent'
@@ -83,7 +82,6 @@ export type RuntimeNotifier = {
       leafId?: string
       splitFromLeafId?: string
       splitDirection?: 'horizontal' | 'vertical'
-      splitTelemetrySource?: TerminalPaneSplitSource
       focus?: boolean
       expectedProcessIdentity?: {
         terminalHandle: string
@@ -114,7 +112,6 @@ export type RuntimeNotifier = {
       command?: string
       worktreeId?: string
       sourceLeafId?: string
-      telemetrySource?: TerminalPaneSplitSource
       newLeafId?: string
     }
   ): void

@@ -1,4 +1,4 @@
-import type { OrcaCloudAuthConfig } from '../../orca-profiles/profile-cloud-auth-config'
+import type { OrcaCloudAuthConfig } from './relay-cloud-auth-config'
 import type { MobilePairingConnectionContext } from '../runtime-rpc/runtime-rpc-pairing-types'
 import type { OrcaRuntimeRpcServer } from '../runtime-rpc'
 import type {

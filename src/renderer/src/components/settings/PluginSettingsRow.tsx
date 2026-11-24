@@ -41,12 +41,6 @@ type PluginSettingsRowProps = {
 }
 
 function statusPresentation(plugin: PluginHostListEntry): { label: string; className: string } {
-  if (plugin.blockedByKillList) {
-    return {
-      label: translate('auto.components.settings.PluginSettingsRow.blocked', 'Blocked'),
-      className: 'border-destructive/25 bg-destructive/8 text-destructive'
-    }
-  }
   if (plugin.needsReconsent || plugin.status === 'pending') {
     return {
       label: translate('auto.components.settings.PluginSettingsRow.needsReview', 'Needs review'),
@@ -145,8 +139,7 @@ export function PluginSettingsRow({
     plugin.status === 'restarting' ||
     plugin.status === 'idle' ||
     plugin.status === 'errored'
-  const switchDisabled =
-    busy || needsReview || plugin.status === 'invalid' || Boolean(plugin.blockedByKillList)
+  const switchDisabled = busy || needsReview || plugin.status === 'invalid'
 
   // Why: the wide primary action ("Review & enable") renders on its own footer
   // row so it never wraps the compact toggle + overflow cluster to an
@@ -214,34 +207,6 @@ export function PluginSettingsRow({
                 'No description provided.'
               )}
           </p>
-          {plugin.blockedByKillList ? (
-            <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-destructive">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              <span>
-                {translate(
-                  'auto.components.settings.PluginSettingsRow.killListMessage',
-                  "Orca's safety list disabled this plugin: {{value0}}",
-                  { value0: plugin.blockedByKillList.reason }
-                )}
-                {plugin.blockedByKillList.advisoryUrl ? (
-                  <>
-                    {' '}
-                    <a
-                      href={plugin.blockedByKillList.advisoryUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline underline-offset-2"
-                    >
-                      {translate(
-                        'auto.components.settings.PluginSettingsRow.viewAdvisory',
-                        'View advisory'
-                      )}
-                    </a>
-                  </>
-                ) : null}
-              </span>
-            </p>
-          ) : null}
           {plugin.error ? (
             <p className="mt-1.5 flex items-start gap-1.5 text-xs leading-5 text-destructive">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />

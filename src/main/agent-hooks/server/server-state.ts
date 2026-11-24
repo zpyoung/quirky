@@ -133,12 +133,9 @@ export abstract class AgentHookServerState {
     nextListingOrder: this.nextStatusListingOrder,
     isCanonicalPaneKey: (paneKey) => this.canonicalSubjectsByPane.has(paneKey)
   })
-  protected onTransportInterference: ((report: HookTransportInterferenceReport) => void) | null =
-    null
   protected transportInterference = createHookTransportInterferenceTracker(
     (report: HookTransportInterferenceReport) => {
       console.warn(describeHookTransportInterference(report))
-      this.onTransportInterference?.(report)
     }
   )
   // Why: hydrated rows give UI continuity but aren't evidence of live agent work in this runtime.

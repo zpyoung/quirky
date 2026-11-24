@@ -232,33 +232,4 @@ describeOnWindows('a secure store that exists but cannot be read', () => {
 
     expectUntouched(filePath, locked)
   })
-
-  /**
-   * The one site that *deletes* rather than overwrites: a refresh failure plus an unreadable
-   * session used to fall past the `status === 'found'` guard into `clearOrcaCloudSession`.
-   */
-  it('does not delete the account session it could not read', async () => {
-    vi.doMock('electron', () => ({
-      safeStorage: {
-        isEncryptionAvailable: () => true,
-        encryptString: (value: string) => Buffer.from(value),
-        decryptString: (buffer: Buffer) => buffer.toString()
-      }
-    }))
-    const { readOrcaCloudSession, getOrcaCloudSessionPath } =
-      await import('./../orca-profiles/profile-cloud-session-store')
-    const dir = join(root, 'profiles')
-    mkdirSync(dir, { recursive: true })
-    const filePath = getOrcaCloudSessionPath('profile-1', dir)
-    mkdirSync(join(filePath, '..'), { recursive: true })
-    const original = JSON.stringify({ version: 1, format: 'dev-plaintext-v1', savedAt: 1 })
-    writeFileSync(filePath, original)
-    const locked = makeUnreadable(filePath)
-
-    // The status the delete path keys off: `unreadable`, never `decrypt-failed`.
-    expect(readOrcaCloudSession('profile-1', dir).status).toBe('unreadable')
-
-    expectUntouched(filePath, locked)
-    vi.doUnmock('electron')
-  })
 })

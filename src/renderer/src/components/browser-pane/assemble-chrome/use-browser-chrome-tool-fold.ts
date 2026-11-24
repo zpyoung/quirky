@@ -9,7 +9,6 @@ export type BrowserChromeFoldStage =
   | 'import-label'
   | 'external'
   | 'devtools'
-  | 'share'
   | 'import'
   | 'draw'
   | 'grab'
@@ -19,7 +18,6 @@ export const BROWSER_CHROME_FOLD_ORDER: readonly BrowserChromeFoldStage[] = [
   'import-label',
   'external',
   'devtools',
-  'share',
   'import',
   'draw',
   'grab',

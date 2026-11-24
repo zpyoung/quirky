@@ -7,11 +7,6 @@ import { STATUS_PERSIST_MIN_INTERVAL_MS } from './server/server-constants'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
 import { AtomicSnapshotWriter } from '../persistence/atomic-snapshot-writer'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: vi.fn(() => ({ nth_repo_added: 2 }))
-}))
-
 class ProbeServer extends AgentHookServer {
   persistTimerArmed(): boolean {
     return this.statusPersistTimer !== null

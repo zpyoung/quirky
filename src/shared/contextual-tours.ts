@@ -249,3 +249,5 @@ export function normalizeContextualTourIds(value: unknown): ContextualTourId[] {
   }
   return [...seen]
 }
+
+export type ContextualTourOutcome = 'completed' | 'skipped' | 'cancelled'

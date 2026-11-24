@@ -73,7 +73,6 @@ describe('headless automation workspace create args', () => {
       createdWithAgent: 'codex',
       startupAgent: 'codex',
       startupPrompt: 'Review changes',
-      telemetrySource: 'unknown',
       automationProvenance: {
         kind: 'created-by-automation',
         automationId: 'automation-1',

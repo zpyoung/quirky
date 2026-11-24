@@ -31,11 +31,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -53,20 +48,9 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 describe('Store', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
-    trackMock.mockReset()
-    getCohortAtEmitMock.mockReset()
-    getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   })
 
   afterEach(async () => {
@@ -98,20 +82,6 @@ describe('Store', () => {
     expect(updated.terminalFontWeightBold).toBe(800)
     // Other fields preserved
     expect(updated.branchPrefix).toBe('git-username')
-  })
-
-  it('persists the agent skill sharing capability as an exact boolean', async () => {
-    const store = await createStore()
-
-    expect(store.updateSettings({ agentSkillSharingEnabled: true }).agentSkillSharingEnabled).toBe(
-      true
-    )
-    expect(
-      store.updateSettings({ agentSkillSharingEnabled: 'yes' as never }).agentSkillSharingEnabled
-    ).toBe(false)
-    expect(
-      store.updateSettings({ agentSkillSharingEnabled: 1 as never }).agentSkillSharingEnabled
-    ).toBe(false)
   })
 
   it('normalizes bot-author overrides on load and every settings write', async () => {

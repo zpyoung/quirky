@@ -8,8 +8,8 @@ import { listReleaseBuilds, resolveTargetBuild } from '../updater-release-builds
 
 const version = '1.4.201-rc.0.zy03'
 const tag = `v${version}`
-const releaseUrl = `https://github.com/zpyoung/orca/releases/tag/${tag}`
-const feedUrl = `https://github.com/zpyoung/orca/releases/download/${tag}`
+const releaseUrl = `https://github.com/zpyoung/quirky/releases/tag/${tag}`
+const feedUrl = `https://github.com/zpyoung/quirky/releases/download/${tag}`
 
 describe('fork release routing', () => {
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('fork release routing', () => {
     fetchMock.mockImplementation(async (url: string) => ({
       ok: true,
       json: async () =>
-        url === 'https://api.github.com/repos/zpyoung/orca/releases?per_page=100'
+        url === 'https://api.github.com/repos/zpyoung/quirky/releases?per_page=100'
           ? [{ tag_name: tag, assets: [{ name: 'latest-mac.yml' }, { name: 'orca.dmg' }] }]
           : []
     }))
@@ -34,6 +34,6 @@ describe('fork release routing', () => {
     expect(
       builds.map((build) => ({ version: build.version, releaseUrl: build.releaseUrl }))
     ).toEqual([{ version, releaseUrl }])
-    expect(resolveTargetBuild('rc', tag)).toEqual({ tag, version, feedUrl })
+    expect(resolveTargetBuild(tag)).toEqual({ tag, version, feedUrl })
   })
 })

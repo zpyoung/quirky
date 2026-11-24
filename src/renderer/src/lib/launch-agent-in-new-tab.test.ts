@@ -127,11 +127,6 @@ vi.mock('@/lib/agent-ready-wait', () => ({
   waitForAgentReady: mockWaitForAgentReady
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mockTrack,
-  tuiAgentToAgentKind: (agent: string) => agent
-}))
-
 const mockCreateWebRuntimeSessionTerminal = vi.fn()
 const mockCreateWebRuntimeAgentSessionTerminalWithLaunchDraft = vi.fn()
 const mockIsWebRuntimeSessionActive = vi.fn(() => false)

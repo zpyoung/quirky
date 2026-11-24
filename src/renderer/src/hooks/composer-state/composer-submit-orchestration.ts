@@ -37,8 +37,7 @@ export function useComposerSubmitOrchestration(
     setCreateError: target.asyncComposerState.setCreateError,
     setCreating: target.asyncComposerState.setCreating,
     settings: target.composerTargetStore.settings,
-    taskSourceContext: target.sourceContextState.taskSourceContext,
-    telemetrySource: target.composerTargetStore.telemetrySource
+    taskSourceContext: target.sourceContextState.taskSourceContext
   })
   const multipleCreateReset = useMultipleCreateReset({
     handleClearSmartNameSelection: source.issueSourceActions.handleClearSmartNameSelection,
@@ -117,8 +116,7 @@ export function useComposerSubmitOrchestration(
     selectedWorkspaceTarget: target.runtimeTargetSelection.selectedWorkspaceTarget,
     settings: target.composerTargetStore.settings,
     sparseEnabled: target.asyncComposerState.sparseEnabled,
-    taskSourceContext: target.sourceContextState.taskSourceContext,
-    telemetrySource: target.composerTargetStore.telemetrySource
+    taskSourceContext: target.sourceContextState.taskSourceContext
   })
   const quickSubmitAction = useQuickSubmitAction({
     effectiveLinkedPR: target.derivedComposerState.effectiveLinkedPR,

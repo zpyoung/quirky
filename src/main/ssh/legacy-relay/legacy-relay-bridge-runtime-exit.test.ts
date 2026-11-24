@@ -33,7 +33,6 @@ vi.mock('electron', () => ({
     removeAllListeners: vi.fn()
   }
 }))
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('./legacy-relay-endpoints', () => ({
   listLegacyRelayEndpoints: async () => ({
     kind: 'listed',

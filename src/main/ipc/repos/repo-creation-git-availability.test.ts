@@ -18,7 +18,6 @@ vi.mock('../registered-worktree-roots-cache', () => ({
   invalidateAuthorizedRootsCache: vi.fn(),
   invalidateAuthorizedRootsCacheForRepo: vi.fn()
 }))
-vi.mock('./repo-added-telemetry', () => ({ emitRepoAdded: vi.fn() }))
 vi.mock('./repos-changed-notification', () => ({ notifyReposChanged: vi.fn() }))
 vi.mock('./local-repo-registration', () => ({ addLocalRepoFromPath: vi.fn() }))
 

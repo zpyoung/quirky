@@ -1,10 +1,9 @@
 import React, { useCallback, useState } from 'react'
 import { CircleCheck, CircleDashed, LoaderCircle } from 'lucide-react'
 import type { PtyManagementFolderAccessMismatch } from '../../../../preload/api-types'
-import { isMacTccFolderClass } from '../../../../shared/daemon-adoption-telemetry'
+import { isMacTccFolderClass } from '../../../../shared/daemon-folder-access-class'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { translate } from '@/i18n/i18n'
-import { track } from '@/lib/telemetry'
 import { useMacFolderAccessFixStore } from '@/store/mac-folder-access-fix'
 import { Button } from '../ui/button'
 import {
@@ -260,12 +259,10 @@ function FolderAccessFix({
   const { cwdClass, daemonScope } = mismatch
 
   const onOpenSettings = useCallback((): void => {
-    track('daemon_folder_access_notice', { action: 'settings_opened', cwd_class: cwdClass })
     void window.api?.developerPermissions?.openSettings(FILES_AND_FOLDERS_PANE)
   }, [cwdClass])
 
   const onReset = useCallback(async (): Promise<void> => {
-    track('daemon_folder_access_notice', { action: 'reset_clicked', cwd_class: cwdClass })
     setResetState('busy')
     try {
       const result = await window.api.pty.management.resetFolderAccess()
@@ -288,7 +285,6 @@ function FolderAccessFix({
   }, [applyVerdict, cwdClass, mountedRef])
 
   const onRestart = useCallback(async (): Promise<void> => {
-    track('daemon_folder_access_notice', { action: 'restart_clicked', cwd_class: cwdClass })
     setRestartState('busy')
     try {
       const { success } = await window.api.pty.management.restart()

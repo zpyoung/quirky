@@ -21,8 +21,6 @@ function createWindowOwner() {
   })
   const ui = {
     lastUpdateCheckAt: 123,
-    pendingUpdateNudgeId: 'pending',
-    dismissedUpdateNudgeId: 'dismissed',
     releaseChannelOverride: 'rc'
   } satisfies Partial<ReturnType<Store['getUI']>>
   const store = {
@@ -371,7 +369,7 @@ describe('completed deferred updater setup ownership', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
-  it('keeps setup options, live store reads, nudge writes and required quit flush', async () => {
+  it('keeps setup options, live store reads and required quit flush', async () => {
     const updater = await import('./main-window-updater')
     const owner = createWindowOwner()
     const trace: string[] = []
@@ -393,30 +391,16 @@ describe('completed deferred updater setup ownership', () => {
       'getLastUpdateCheckAt',
       'onBeforeQuit',
       'setLastUpdateCheckAt',
-      'getPendingUpdateNudgeId',
-      'getDismissedUpdateNudgeId',
-      'setPendingUpdateNudgeId',
-      'setDismissedUpdateNudgeId',
       'getReleaseChannelOverride',
       'onBeforeQuitFailure',
       'installMode'
     ])
     expect(options.getLastUpdateCheckAt?.()).toBe(123)
-    expect(options.getPendingUpdateNudgeId?.()).toBe('pending')
-    expect(options.getDismissedUpdateNudgeId?.()).toBe('dismissed')
     expect(options.getReleaseChannelOverride?.()).toBe('rc')
     owner.store.getUI.mockReturnValue({ ...owner.store.getUI(), lastUpdateCheckAt: 456 })
     expect(options.getLastUpdateCheckAt?.()).toBe(456)
     options.setLastUpdateCheckAt?.(789)
-    options.setPendingUpdateNudgeId?.('next')
-    options.setPendingUpdateNudgeId?.(null)
-    options.setDismissedUpdateNudgeId?.('dismiss')
-    expect(owner.store.updateUI.mock.calls).toEqual([
-      [{ lastUpdateCheckAt: 789 }],
-      [{ pendingUpdateNudgeId: 'next', dismissedUpdateVersion: null }],
-      [{ pendingUpdateNudgeId: null }],
-      [{ dismissedUpdateNudgeId: 'dismiss' }]
-    ])
+    expect(owner.store.updateUI.mock.calls).toEqual([[{ lastUpdateCheckAt: 789 }]])
     expect(options.installMode).toBe('supervised-headless-serve')
     expect(options.onBeforeQuitFailure).toBe('abort')
     await expect(options.onBeforeQuit?.()).rejects.toBe(error)

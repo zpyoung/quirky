@@ -31,8 +31,8 @@ function deferred(): {
 
 function persist(updateSettings: () => Promise<void>): void {
   persistConfirmationSkipPreference({
-    updates: { skipDeleteArtifactConfirm: true },
-    settingsSectionId: 'artifact-confirmation',
+    updates: { skipDeleteAutomationConfirm: true },
+    settingsSectionId: 'automation-confirmation',
     updateSettings,
     openSettingsPage: vi.fn(),
     openSettingsTarget: vi.fn()

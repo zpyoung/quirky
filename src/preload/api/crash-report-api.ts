@@ -2,15 +2,9 @@ import type {
   CrashReportBreadcrumbData,
   CrashReportCopyDiagnosticsArgs,
   CrashReportRecord,
-  CrashReportSubmitArgs,
-  CrashReportSubmitResult,
   ReactErrorBoundaryReportArgs,
   ReactErrorBoundaryReportResult
 } from '../../shared/crash-reporting'
-import type {
-  FeedbackSubmitArgs,
-  FeedbackSubmitResult
-} from '../../shared/feedback-submit-contract'
 import type { RendererHeapStatistics } from '../../shared/renderer-heap-statistics'
 import type { RendererProcessMemory } from '../../shared/renderer-process-memory'
 
@@ -22,7 +16,6 @@ export type CrashReportsApi = {
     args: ReactErrorBoundaryReportArgs
   ) => Promise<ReactErrorBoundaryReportResult>
   recordBreadcrumb: (args: { name: string; data?: CrashReportBreadcrumbData }) => void
-  submit: (args: CrashReportSubmitArgs) => Promise<CrashReportSubmitResult>
   copyLatestDiagnostics: (
     args?: CrashReportCopyDiagnosticsArgs
   ) => Promise<{ ok: true } | { ok: false; error: string }>
@@ -30,8 +23,4 @@ export type CrashReportsApi = {
   readHeapStatistics: () => RendererHeapStatistics | null
   /** This renderer's OS-level footprint, which the heap counters never include. */
   readProcessMemory?: () => Promise<RendererProcessMemory | null>
-}
-
-export type FeedbackApi = {
-  submit: (args: FeedbackSubmitArgs) => Promise<FeedbackSubmitResult>
 }

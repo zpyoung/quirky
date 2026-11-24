@@ -17,9 +17,11 @@ import type { PreparationRearmHolder } from '../../worktree-create-preparation'
 import { prepareRuntimeLocalWorktreeSetup } from '../runtime-local-worktree-setup'
 import { invalidateAuthorizedRootsCacheForRepo } from '../../ipc/registered-worktree-roots-scoped-invalidation'
 import { startRuntimeLocalWorktreeTerminals } from '../runtime-local-worktree-terminal-startup'
-import { trackRuntimeWorkspaceCreate } from '../../workspace-create-telemetry'
 import { assertOpenCodeModelLaunchPreferencesAbsent } from '../../opencode/opencode-model-startup-plan'
-import type { RuntimeWorkspaceCreateEvents } from '../../workspace-create-telemetry'
+import {
+  withRuntimeWorkspaceCreate,
+  type RuntimeWorkspaceCreateEvents
+} from '../../workspace-create-session'
 import { createdWorkspaceActivationCallbacks } from './workspace-create-activation'
 import { assertWslMoveRepoWritable } from '../../persistence/moving-wsl-projects/wsl-move-scope-guard'
 import { resolveManagedWorktreeCreateStartup } from './managed-worktree-create-startup'
@@ -44,7 +46,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     // Re-arm a consumed checkout after terminal startup, including failed creates.
     const rearm: PreparationRearmHolder = { fire: () => {} }
     try {
-      return await trackRuntimeWorkspaceCreate(args, (events) =>
+      return await withRuntimeWorkspaceCreate((events) =>
         this.performManagedWorktreeCreate(args, rearm, events)
       )
     } finally {
@@ -138,9 +140,8 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     if (createRoute.kind === 'runtime') {
       throw new ExecutionHostNotDispatchableError(createRoute.hostId)
     }
-    const timing = events.begin(repo.path)
+    const timing = events.begin()
     if (createRoute.kind === 'ssh') {
-      // Tagged before the refusal so the failed-create event keeps naming its host.
       timing.recordExecutionHost('ssh')
       throw new SshHostNotServedError(createRoute.connectionId)
     }

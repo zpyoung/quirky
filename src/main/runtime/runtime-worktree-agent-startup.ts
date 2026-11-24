@@ -1,4 +1,3 @@
-import { agentStartedTelemetry } from '../agent-launch/agent-started-telemetry'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import {
   agentLaunchOverridesToSessionOptionValues,
@@ -23,6 +22,7 @@ import {
 import { detectAgentsOnHost } from '../preflight/workspace-agent-detection'
 import type { RuntimeStore } from './runtime-store-contract'
 import type { RuntimeManagedWorktreeCreateArgs } from './runtime-managed-worktree-create-types'
+import { hostAgentLaunchMetadata } from '../agent-launch/agent-launch-metadata'
 
 export type WorktreeStartupDraftPaste = { agent: TuiAgent; content: string }
 export type WorktreeStartupFollowup = { expectedProcess: string; prompt: string }
@@ -102,7 +102,7 @@ export async function buildWorktreeStartupForDraft(
     isRemote: repoIsRemote(repo),
     ...(environment.agentArgs !== undefined ? { agentArgs: environment.agentArgs } : {})
   })
-  const telemetry = agentStartedTelemetry(agent, environment.launchSource)
+  const telemetry = hostAgentLaunchMetadata(agent, environment.launchSource)
   const draftPlan = buildAgentDraftLaunchPlan({ ...launchArgs, draft: content })
   if (draftPlan) {
     return {
@@ -219,7 +219,7 @@ export function buildWorktreeStartupForAgent(
         ? { startupCommandDelivery: startupPlan.startupCommandDelivery }
         : {}),
       ...(startupPlan.env ? { env: startupPlan.env } : {}),
-      telemetry: agentStartedTelemetry(agent, environment.launchSource)
+      telemetry: hostAgentLaunchMetadata(agent, environment.launchSource)
     },
     launchRuntime,
     ...(startupPlan.followupPrompt

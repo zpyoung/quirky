@@ -47,7 +47,6 @@ export type LegacyRelayTargetBridgeDeps = {
   onPanesChanged: () => void
   onData: (ptyId: string, data: string) => void
   onExit: (ptyId: string, code: number) => void
-  onTerminalExited: () => void
   /** The target's relay-id owners; the registry keeps them across bridges, so a reconnect keeps them. */
   owners: LegacyRelayPaneOwners
 }
@@ -223,9 +222,8 @@ export class LegacyRelayTargetBridge {
       const seen = relistedPane(lease, relayPtyId, listedRows, this.deps.owners, complete)
       if ('exited' in seen) {
         const proven = seen.exited !== null
-        const counted = proven || Boolean(this.panes.get(ptyId)?.endpoint)
         this.deps.retireLease(relayPtyId, proven ? 'exit-observed' : 'absent')
-        this.emitExit(ptyId, seen.exited ?? -1, counted)
+        this.emitExit(ptyId, seen.exited ?? -1)
       } else {
         next.set(ptyId, seen)
       }
@@ -318,13 +316,9 @@ export class LegacyRelayTargetBridge {
     this.waiters.wake()
   }
 
-  /** Only a terminal this session saw running counts as a bridged exit in telemetry. */
-  private emitExit(ptyId: string, code: number, counted = true): void {
+  private emitExit(ptyId: string, code: number): void {
     this.attached.delete(ptyId)
     this.deps.onExit(ptyId, code)
-    if (counted) {
-      this.deps.onTerminalExited()
-    }
   }
 
   /** The connection that carries a live pane, or null while its relay can't be asked. */

@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { closeTestStores, createStore, testState } from './persistence-test-harness'
 import { normalizeJiraSavedFilterState } from '../shared/jira-saved-filters'
 vi.mock('electron', () => ({ app: { getPath: () => testState.dir } }))
-vi.mock('./telemetry/client', () => ({ track: vi.fn() }))
 beforeEach(() => {
   testState.dir = mkdtempSync(join(tmpdir(), 'orca-jira-saved-filters-'))
 })

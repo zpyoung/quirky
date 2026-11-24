@@ -54,7 +54,6 @@ export function buildManagedWorktreeCreateArgs(
     comment: params.comment,
     displayName: params.displayName,
     displayNameKind: params.displayNameKind,
-    telemetrySource: params.telemetrySource,
     workspaceStatus: params.workspaceStatus,
     manualOrder: params.manualOrder,
     ...(params.nestWorkspaces !== undefined ? { nestWorkspaces: params.nestWorkspaces } : {}),

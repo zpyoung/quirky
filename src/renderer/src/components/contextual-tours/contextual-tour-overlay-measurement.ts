@@ -1,6 +1,6 @@
 import { formatShortcutLabel } from '@/hooks/useShortcutLabel'
 import type { ContextualTour, ContextualTourId } from '../../../../shared/contextual-tours'
-import type { ContextualTourOutcome } from '../../../../shared/feature-education-telemetry'
+import type { ContextualTourOutcome } from '../../../../shared/contextual-tours'
 import { useAppStore } from '@/store'
 import {
   getContextualTourOutcomeStepTotal,

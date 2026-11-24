@@ -1,4 +1,4 @@
-import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
+import type { TerminalPaneSplitSource } from '../../../../shared/terminal-pane-split-source'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { splitWebRuntimeTerminal } from '@/runtime/web-runtime-terminal-actions'
 import type { PtyTransport } from './pty-transport-types'
@@ -23,7 +23,7 @@ type SplitArgs = {
 export function splitTerminalPaneWithInheritedCwd(args: SplitArgs): void {
   const ptyId = args.paneTransports.get(args.pane.id)?.getPtyId() ?? null
   if (
-    splitWebRuntimeTerminal(ptyId, args.direction, args.source, {
+    splitWebRuntimeTerminal(ptyId, args.direction, {
       worktreeId: args.worktreeId,
       tabId: args.tabId,
       leafId: args.pane.leafId

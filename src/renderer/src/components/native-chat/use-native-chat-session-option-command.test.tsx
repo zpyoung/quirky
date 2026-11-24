@@ -22,7 +22,6 @@ vi.mock('./native-chat-pty-send-queue', () => ({
   cancelNativeChatPtySends: (...args: unknown[]) => queueMocks.cancelNativeChatPtySends(...args),
   waitForNativeChatPtyIdle: (...args: unknown[]) => queueMocks.waitForNativeChatPtyIdle(...args)
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
 vi.mock('./claude-model-switch-confirmation', () => ({
   createClaudeModelSwitchConfirmationObserver: (...args: unknown[]) => observerMocks.create(...args)
 }))

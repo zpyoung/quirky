@@ -72,7 +72,6 @@ export type PluginListEntry = {
     commands: { phase: 'create' | 'suspend' | 'resume' | 'destroy'; command: string }[]
   }[]
   restarts: number
-  blockedByKillList?: { reason: string; advisoryUrl?: string }
   source?: {
     kind: 'local-path' | 'git' | 'marketplace' | 'bundled'
     reference: string
@@ -121,7 +120,6 @@ export async function buildPluginList(
       const activation = service.activationState(plugin)
       const worker = service.workerState(plugin.pluginKey)
       const activationError = service.activationError(plugin.pluginKey)
-      const killListEntry = service.options.getPluginKillListEntry?.(plugin.pluginKey) ?? null
       let status: PluginListStatus
       if (activation === 'disabled') {
         status = 'disabled'
@@ -192,14 +190,6 @@ export async function buildPluginList(
           commands: listPluginVmRecipeCommands(recipe)
         })),
         restarts: worker.restarts,
-        ...(killListEntry
-          ? {
-              blockedByKillList: {
-                reason: killListEntry.reason,
-                ...(killListEntry.advisoryUrl ? { advisoryUrl: killListEntry.advisoryUrl } : {})
-              }
-            }
-          : {}),
         ...(lockEntry
           ? {
               source: {

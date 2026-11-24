@@ -1,21 +1,12 @@
+beforeEach(() => {
+  _internals.resetCachesForTests()
+})
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentHookSource } from '../../shared/agent-hook-relay'
 import { AgentHookServer, _internals } from './server'
 import { PANE } from './server.test-fixtures'
 
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-
-beforeEach(() => {
-  _internals.resetCachesForTests()
-  trackMock.mockReset()
-  getCohortAtEmitMock.mockReset()
-  getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
-})
 afterEach(() => vi.restoreAllMocks())
 
 /** Each source's own new-turn boundary, as `isNewTurnEvent` classifies it. `null` means the

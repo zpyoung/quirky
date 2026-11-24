@@ -31,8 +31,7 @@ describe('a generic kill of a terminal an older relay still runs', () => {
       onPanesChanged: () => {},
       onData: () => {},
       onReplay: () => {},
-      onExit: () => {},
-      report: () => {}
+      onExit: () => {}
     })
     const finishPtyShutdown = vi.fn()
     const deps = {
@@ -77,8 +76,7 @@ describe('a tab close of a terminal an older relay still runs', () => {
       onPanesChanged: () => {},
       onData: () => {},
       onReplay: () => {},
-      onExit: () => {},
-      report: () => {}
+      onExit: () => {}
     })
     const ptyId = toAppSshPtyId(TARGET, lease.ptyId)
     const deps = {
@@ -108,8 +106,7 @@ describe('a tab close of a terminal an older relay still runs', () => {
       onPanesChanged: () => {},
       onData: () => {},
       onReplay: () => {},
-      onExit: () => {},
-      report: () => {}
+      onExit: () => {}
     })
     const deps = {
       store,
@@ -142,8 +139,7 @@ describe('a stop-and-wait of a terminal an older relay still runs', () => {
       onPanesChanged: () => {},
       onData: () => {},
       onReplay: () => {},
-      onExit: () => {},
-      report: () => {}
+      onExit: () => {}
     })
     const deps = {
       runtime: null,

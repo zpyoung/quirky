@@ -5,9 +5,6 @@ import { join } from 'node:path'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, PANE } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
-
 // The execution host labels each turn end by what it can prove now: an identified end (an unused
 // opening or a new turn id) or revision (a verified re-entered Stop) mints; a proven repeat keeps
 // the end; anything else is ambiguous, never mints, and leaves main's title behavior to the renderer.

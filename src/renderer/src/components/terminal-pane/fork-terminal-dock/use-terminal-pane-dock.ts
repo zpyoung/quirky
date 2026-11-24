@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { useAppStore } from '@/store'
-import { emitTerminalDockToggled } from '@/lib/fork-terminal-dock/terminal-dock-telemetry'
 import type { AgentType } from '../../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
 import type { Tab } from '../../../../../shared/tab-types'
@@ -241,26 +240,9 @@ export function useTerminalPaneDock(args: UseTerminalPaneDockArgs): UseTerminalP
           exitPanePassthrough(paneKey)
         }
       }
-      if (
-        !applyDockState(paneKey, { docked: nextDocked, userUndocked: !nextDocked }, beforeApply)
-      ) {
-        return
-      }
-      emitTerminalDockToggled({
-        docked: nextDocked,
-        agent:
-          agentForPane(paneKey) ?? useAppStore.getState().agentStatusByPaneKey[paneKey]?.agentType
-      })
+      applyDockState(paneKey, { docked: nextDocked, userUndocked: !nextDocked }, beforeApply)
     },
-    [
-      agentForPane,
-      applyDockState,
-      enabled,
-      exitPanePassthrough,
-      isPaneDocked,
-      noteUserUndock,
-      tabId
-    ]
+    [applyDockState, enabled, exitPanePassthrough, isPaneDocked, noteUserUndock, tabId]
   )
 
   const toggleDockForFocusedPane = useCallback((): void => {

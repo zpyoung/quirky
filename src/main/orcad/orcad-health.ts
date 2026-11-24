@@ -21,7 +21,7 @@ import {
   getDaemonEndpointFacts,
   readDaemonPidRecord
 } from '../daemon/daemon-provider-state'
-import type { OrcadProfileStateAuthoritySelection } from './orcad-profile-state-telemetry'
+import type { ProfileStateStorageClassification } from '../persistence/profile-state/profile-state-storage-classification'
 import { ORCAD_STOP_REQUESTS_CAPABILITY } from '../../shared/orcad-stop-request'
 import type { OrcadIdleStopRecord } from '../../shared/orcad-idle-exit'
 
@@ -42,6 +42,18 @@ export type PtySelfTest = {
   /** The daemon's own verdict word, so a failure is diagnosable without re-probing. */
   verdict: DaemonHealth | 'no-daemon'
   durationMs: number
+}
+
+/**
+ * The low-cardinality profile-state selection facts that a headless host can publish safely.
+ * Paths, profile IDs, and serialized state deliberately stay out of this record.
+ */
+export type OrcadProfileStateAuthoritySelection = {
+  backend: 'sqlite'
+  classification: ProfileStateStorageClassification
+  authority_mode: 'sqlite-established'
+  runtime: 'orcad'
+  migrated: boolean
 }
 
 export type TerminalDaemonHealth = {

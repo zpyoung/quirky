@@ -87,8 +87,7 @@ function installHost(): void {
     onPanesChanged: () => {},
     onData: () => {},
     onReplay: () => {},
-    onExit: () => {},
-    report: () => {}
+    onExit: () => {}
   })
 }
 

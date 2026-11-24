@@ -3,10 +3,6 @@ import { fixture } from './profile-state-delayed-authority-fixture'
 import { resolvePersistedStablePaneOwner } from '../../ipc/pty/pane/stable-owner'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

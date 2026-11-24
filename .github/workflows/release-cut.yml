@@ -1130,9 +1130,6 @@ jobs:
     uses: ./.github/workflows/release-javascript.yml
     with:
       ref: refs/tags/${{ needs.cut.outputs.tag }}
-    secrets:
-      # fork has no PostHog secret; pack and restore need the same non-empty key, inert while TELEMETRY_ENABLED is false
-      ORCA_POSTHOG_WRITE_KEY: ${{ secrets.ORCA_POSTHOG_WRITE_KEY || 'fork-telemetry-disabled' }}
 
   build:
     needs:
@@ -1320,16 +1317,13 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool rpm
 
-      # Why: telemetry's transport gate (`src/main/telemetry/client.ts:IS_OFFICIAL_BUILD`)
-      # requires the build identity to be the literal string `stable` or `rc`,
-      # substituted by electron-vite's `define` block at build time. Derive
-      # that identity from the release tag here — `stable` for plain semver
+      # Why: the official build identity is the literal string `stable` or `rc`.
+      # Derive it from the release tag here — `stable` for plain semver
       # (`vX.Y.Z`), `rc` for prerelease (`vX.Y.Z-rc.N`). The strict regex is
       # a safety net: this workflow only fires on cut-tags that already match
       # one of those shapes, but if a future change ever loosens that, we
-      # refuse to ship rather than let an unclassified build go out with
-      # `BUILD_IDENTITY = null`.
-      - name: Classify release tag for telemetry build identity
+      # refuse to ship rather than let an unclassified build go out.
+      - name: Classify release tag for build identity
         id: tag-classify
         shell: bash
         env:
@@ -1337,7 +1331,7 @@ jobs:
         run: |
           set -euo pipefail
           # Why the optional trailing identifier: suffixed side-branch RCs
-          # (vX.Y.Z-rc.N.perf) are rc-channel prerelease builds — same telemetry
+          # (vX.Y.Z-rc.N.perf) are rc-channel prerelease builds — same
           # identity as plain RCs.
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+(\.[0-9A-Za-z]+)?$ ]]; then
             identity=rc
@@ -1388,9 +1382,6 @@ jobs:
           ORCA_BUILD_IDENTITY: ${{ steps.tag-classify.outputs.identity }}
           SHARED_JAVASCRIPT: ${{ needs.release-javascript.outputs.supported }}
           ORCA_RELEASE_JAVASCRIPT_SOURCE_SHA: ${{ needs.release-javascript.outputs.source_sha }}
-          ORCA_DIAGNOSTICS_TOKEN_URL: https://www.onorca.dev/diagnostics/token
-          # fork has no PostHog secret; pack and restore need the same non-empty key, inert while TELEMETRY_ENABLED is false
-          ORCA_POSTHOG_WRITE_KEY: ${{ secrets.ORCA_POSTHOG_WRITE_KEY || 'fork-telemetry-disabled' }}
 
       # After the app build so nothing that cleans out/ can drop it; electron-builder ships it.
       - name: Download the orcad deployment template
@@ -2217,20 +2208,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.cut.outputs.tag }}
         run: node config/scripts/assert-github-release-is-draft.mjs "${{ needs.cut.outputs.tag }}"
-
-      # Why post-pack for Linux: electron-builder packs and uploads in one
-      # `--publish always` invocation. The previous step re-drafts if that
-      # upload flipped the GitHub release public; this telemetry check still
-      # blocks `publish-release` from undrafting a bad binary.
-      #
-      # Why this guards against: a misconfigured CI run where
-      # `ORCA_POSTHOG_WRITE_KEY` is unset or the tag fails to classify
-      # would otherwise produce a binary with `BUILD_IDENTITY = null` and
-      # `WRITE_KEY = null`, which silently disables transport
-      # (`IS_OFFICIAL_BUILD === false`) — the exact failure mode flagged
-      # in PR #1385's deferred follow-up.
-      - name: Verify telemetry constants present in app.asar
-        run: node config/scripts/verify-telemetry-constants.mjs
 
   build-mac:
     needs:

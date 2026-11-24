@@ -78,7 +78,6 @@ beforeEach(() => {
       ui: { set: vi.fn().mockResolvedValue(undefined), writeClipboardText },
       updater: {
         check,
-        dismissNudge: vi.fn(),
         dismissAvailableUpdate: vi.fn().mockResolvedValue(undefined),
         download,
         getLinuxPackageInstallInstructions: getInstructions,
@@ -188,7 +187,7 @@ describe('UpdateCard Windows signature failures', () => {
     expect(screen.queryByText(message)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Check official releases' }))
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/orca/releases')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/quirky/releases')
     expect(openUrl).not.toHaveBeenCalledWith(expect.stringContaining('/tag/'))
   })
 
@@ -227,14 +226,13 @@ describe('UpdateCard Windows signature failures', () => {
   })
 })
 
-describe('UpdateCard hourly builds', () => {
-  it('links a pinned hourly build to its own repo instead of a 404 main-repo tag', () => {
+describe('UpdateCard release notes', () => {
+  it('links an rc build to its release tag in the main repo', () => {
     useAppStore.setState({
       updateStatus: {
         state: 'available',
-        version: '1.4.160-hourly.202607281400',
-        changelog: null,
-        source: 'hourly'
+        version: '1.4.160-rc.3',
+        changelog: null
       },
       updateChangelog: null,
       dismissedUpdateVersion: null,
@@ -245,7 +243,7 @@ describe('UpdateCard hourly builds', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Release notes' }))
     expect(openUrl).toHaveBeenCalledWith(
-      'https://github.com/stablyai/orca-hourly/releases/tag/v1.4.160-hourly.202607281400'
+      'https://github.com/zpyoung/quirky/releases/tag/v1.4.160-rc.3'
     )
   })
 })
@@ -328,7 +326,7 @@ describe('UpdateCard Linux package-install recovery', () => {
 
     expect(screen.getByText('Manual Install Required')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Download Manually' }))
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/orca/releases/tag/v1.4.200')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/quirky/releases/tag/v1.4.200')
   })
 
   it('uses the recovery version when cached update state is stale', () => {
@@ -336,7 +334,7 @@ describe('UpdateCard Linux package-install recovery', () => {
     showPackageRecovery()
 
     fireEvent.click(screen.getByRole('button', { name: 'Download Manually' }))
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/orca/releases/tag/v1.4.200')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/quirky/releases/tag/v1.4.200')
   })
 
   it.each([
@@ -379,7 +377,7 @@ describe('UpdateCard Linux package-install recovery', () => {
     await flushActions()
 
     fireEvent.click(screen.getByRole('button', { name: 'Download Manually' }))
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/orca/releases/tag/v1.4.200')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/quirky/releases/tag/v1.4.200')
   })
 
   it('resets command discovery when a newer package cycle replaces the recovery', async () => {
@@ -418,7 +416,7 @@ describe('UpdateCard Linux package-install recovery', () => {
     expect(screen.queryByText('Manual Install Required')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Retry Download' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Download Manually' }))
-    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/orca/releases/tag/v1.4.200')
+    expect(openUrl).toHaveBeenCalledWith('https://github.com/zpyoung/quirky/releases/tag/v1.4.200')
   })
 
   it('keeps generic errors on the generic card when no recovery is attached', () => {

@@ -5,9 +5,6 @@ import { normalizeHookPayload } from '../../shared/agent-hook-listener'
 import type { EnrichedAgentHookEventPayload } from './server/server-types'
 import { buildBody, PANE } from './server.test-fixtures'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
-
 const CONNECTION = 'conn-1'
 const T0 = 1_800_000_000_000
 

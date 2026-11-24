@@ -26,7 +26,6 @@ import {
 import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session-owners'
 import { seedResumeLaunchIdentityFromSpawn } from '../pane/resume-launch-identity'
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
-import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
 import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
@@ -222,9 +221,6 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   // Why: arms main's per-PTY Command Code output detector from the launch command (renderer startupCommand parity).
   if (!ctx.stablePaneOwner) {
     ctx.deps.runtime?.noteTerminalSpawnCommand?.(ctx.result.id, ctx.launchCommand ?? null)
-  }
-  if (args.telemetry && !ctx.stablePaneOwner) {
-    recordPtySpawnTelemetry(args.telemetry)
   }
   // Why: runtime-owned CLI PTYs bypass the renderer pty:spawn handler; record paneKey here too since hook titles and cache cleanup need this reverse lookup.
   const paneKey = rememberPaneKeyForPty(ctx.result.id, ctx.env?.ORCA_PANE_KEY)

@@ -138,7 +138,6 @@ describe('useIpcEvents App-lifetime lifecycle', () => {
     // Subscribe before consuming pending requests or reading snapshots, so startup cannot miss pushes.
     for (const [subscribe, read] of [
       ['ui.onOpenSettings', 'ui.consumePendingOpenSettings'],
-      ['ui.onOpenSkillShare', 'ui.consumePendingSkillShare'],
       ['rateLimits.onUpdate', 'rateLimits.get'],
       ['agentStatus.onSet', 'agentStatus.getSnapshot'],
       ['agentStatus.onClear', 'agentStatus.getSnapshot'],

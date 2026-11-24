@@ -87,10 +87,6 @@ vi.mock('@/lib/browser-uuid', () => ({
   createBrowserUuid: () => 'launch-token-1'
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mockTrack
-}))
-
 vi.mock('@/lib/agent-background-session-timeout-toast', () => ({
   showAutomationPromptNotSentToast: mockShowAutomationPromptNotSentToast
 }))

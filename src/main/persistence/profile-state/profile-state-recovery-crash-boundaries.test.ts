@@ -50,10 +50,6 @@ import {
   type RecoveryCrashOptions
 } from './profile-state-recovery-crash-process'
 
-vi.mock('../../telemetry/client', () => ({ track: () => {} }))
-vi.mock('../../telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: () => ({ nth_repo_added: 2 })
-}))
 vi.mock('../../ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: () => ({ hosts: [] }),
   sshConfigHostsToTargets: () => []

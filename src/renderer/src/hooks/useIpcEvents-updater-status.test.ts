@@ -163,8 +163,7 @@ describe('useIpcEvents updater integration', () => {
           onStatus: (listener: (status: unknown) => void) => {
             updaterStatusListenerRef.current = listener
             return () => {}
-          },
-          onClearDismissal: () => () => {}
+          }
         },
         browser: {
           onGuestLoadFailed: () => () => {},
@@ -302,8 +301,7 @@ describe('useIpcEvents updater integration', () => {
         browser: makeEvents(),
         updater: {
           getStatus: () => Promise.resolve({ state: 'idle' }),
-          onStatus: () => () => {},
-          onClearDismissal: () => () => {}
+          onStatus: () => () => {}
         },
         rateLimits: {
           get: () => Promise.resolve({ limits: {}, lastUpdatedAt: Date.now() }),

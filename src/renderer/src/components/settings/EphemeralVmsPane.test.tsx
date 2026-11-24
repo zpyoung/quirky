@@ -139,8 +139,7 @@ describe('EphemeralVmsPane', () => {
 
     expect(storeMocks.openModal).toHaveBeenCalledWith('new-workspace-composer', {
       initialRepoId: 'repo-1',
-      initialEphemeralVmRecipeId: 'cloud-sandbox',
-      telemetrySource: 'settings'
+      initialEphemeralVmRecipeId: 'cloud-sandbox'
     })
   })
 

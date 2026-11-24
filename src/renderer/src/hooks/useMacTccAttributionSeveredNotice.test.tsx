@@ -22,7 +22,6 @@ type AttributionResult = {
 const macTccAttribution = vi.hoisted(() =>
   vi.fn(async (): Promise<AttributionResult> => ({ health: 'intact', folderAccessMismatch: null }))
 )
-const trackTelemetry = vi.hoisted(() => vi.fn())
 const openSettingsPage = vi.hoisted(() => vi.fn())
 const openSettingsTarget = vi.hoisted(() => vi.fn())
 const setSettingsSearchQuery = vi.hoisted(() => vi.fn())
@@ -76,8 +75,6 @@ vi.mock('@/i18n/i18n', () => ({
     fallback.replace(/\{\{(\w+)\}\}/g, (match, name: string) => options?.[name] ?? match)
 }))
 
-vi.mock('@/lib/telemetry', () => ({ track: trackTelemetry }))
-
 vi.mock('./useMacosTccPromptNotice', () => ({
   useMacosTccPromptNotice: vi.fn()
 }))
@@ -86,7 +83,6 @@ describe('useMacTccAttributionSeveredNotice', () => {
   beforeEach(() => {
     macTccAttribution.mockReset()
     macTccAttribution.mockResolvedValue({ health: 'intact', folderAccessMismatch: null })
-    trackTelemetry.mockReset()
     openSettingsPage.mockReset()
     openSettingsTarget.mockReset()
     setSettingsSearchQuery.mockReset()
@@ -258,22 +254,8 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
     onDismiss?: () => void
   }
 
-  function dismissedEvents(): Record<string, unknown>[] {
-    return trackTelemetry.mock.calls
-      .filter(
-        ([name, props]) => name === 'daemon_folder_access_notice' && props.action === 'dismissed'
-      )
-      .map(([, props]) => props)
-  }
-
   function noticePhase(daemonScope: string): FolderAccessNoticePhase | undefined {
     return useMacFolderAccessFixStore.getState().noticePhaseByScope.get(daemonScope)
-  }
-
-  function shownEvents(): Record<string, unknown>[] {
-    return trackTelemetry.mock.calls
-      .filter(([name, props]) => name === 'daemon_folder_access_notice' && props.action === 'shown')
-      .map(([, props]) => props)
   }
 
   /** Sonner hands the action a real event and deletes the toast unless the handler prevents it. */
@@ -299,7 +281,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
   beforeEach(() => {
     macTccAttribution.mockReset()
     macTccAttribution.mockResolvedValue({ health: 'intact', folderAccessMismatch: null })
-    trackTelemetry.mockReset()
     openSettingsPage.mockReset()
     openSettingsTarget.mockReset()
     setSettingsSearchQuery.mockReset()
@@ -362,10 +343,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
     expect(useMacFolderAccessFixStore.getState().openScope).toBe(SCOPE_A.daemonScope)
     expect(useMacFolderAccessFixStore.getState().mismatch).toEqual(SCOPE_A)
     expect(openSettingsPage).not.toHaveBeenCalled()
-    expect(trackTelemetry).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'fix_opened',
-      cwd_class: 'documents'
-    })
   })
 
   it('carries a later poll’s verdict into the open dialog', async () => {
@@ -410,7 +387,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
       expect(macTccAttribution).toHaveBeenCalledTimes(2)
     })
     expect(folderNoticeCalls()).toHaveLength(1)
-    expect(dismissedEvents()).toHaveLength(0)
   })
 
   // The open remedy belongs to one scope, so evidence that moves closes it rather than retargeting
@@ -498,18 +474,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
       expect(macTccAttribution).toHaveBeenCalledTimes(2)
     })
     expect(folderNoticeCalls()).toHaveLength(1)
-    expect(shownEvents()).toHaveLength(1)
-  })
-
-  // The notice is shown by the renderer, so the renderer is what can count it.
-  it('counts the notice as shown when it raises one, and not when it withholds one', async () => {
-    macTccAttribution.mockResolvedValue({ health: 'intact', folderAccessMismatch: SCOPE_A })
-    render(<MacosTccPromptNoticeHost />)
-    await waitFor(() => {
-      expect(folderNoticeCalls()).toHaveLength(1)
-    })
-
-    expect(shownEvents()).toEqual([{ action: 'shown', cwd_class: 'documents' }])
   })
 
   it('never re-shows a scope the user dismissed this session', async () => {
@@ -520,10 +484,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
     })
 
     folderNoticeCalls()[0].options.onDismiss?.()
-    expect(trackTelemetry).toHaveBeenCalledWith('daemon_folder_access_notice', {
-      action: 'dismissed',
-      cwd_class: 'documents'
-    })
 
     act(() => {
       window.dispatchEvent(new Event('focus'))
@@ -552,8 +512,7 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
   })
 
   // A reconnect blip reports no daemon and takes the toast down, so the same notice comes back.
-  // Counting that raise would inflate the denominator the affected-user rate is read against.
-  it('re-shows the same daemon after a poll that briefly reported nothing, counting it once', async () => {
+  it('re-shows the same daemon after a poll that briefly reported nothing', async () => {
     macTccAttribution.mockResolvedValueOnce({ health: 'intact', folderAccessMismatch: SCOPE_A })
     render(<MacosTccPromptNoticeHost />)
     await waitFor(() => {
@@ -574,7 +533,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
     await waitFor(() => {
       expect(folderNoticeCalls()).toHaveLength(2)
     })
-    expect(shownEvents()).toHaveLength(1)
     expect(noticePhase(SCOPE_A.daemonScope)).toBe('visible')
   })
 
@@ -593,8 +551,6 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
       expect(folderNoticeCalls()).toHaveLength(2)
     })
     expect(folderNoticeCalls()[1].title).toContain('Desktop folder')
-    // A second scope is a second affected notice, so it does count.
-    expect(shownEvents()).toHaveLength(2)
   })
 
   // A second scope — a replacement daemon, or one daemon denied a second folder class — reuses the
@@ -618,13 +574,12 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
       replaced?.()
     })
 
-    expect(dismissedEvents()).toHaveLength(0)
     expect(noticePhase(SCOPE_A.daemonScope)).toBe('retired')
     expect(noticePhase(SCOPE_B.daemonScope)).toBe('visible')
   })
 
   // A takedown the user did not ask for reaches the same callback, and must not read as their X.
-  it('counts only the user’s own close as a dismissal', async () => {
+  it('latches a dismissal only on the user’s own close', async () => {
     macTccAttribution.mockResolvedValueOnce({ health: 'intact', folderAccessMismatch: SCOPE_A })
     render(<MacosTccPromptNoticeHost />)
     await waitFor(() => {
@@ -638,7 +593,7 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
     await waitFor(() => {
       expect(toast.dismiss).toHaveBeenCalledWith('mac-daemon-folder-access-mismatch')
     })
-    expect(dismissedEvents()).toHaveLength(0)
+    expect(noticePhase(SCOPE_A.daemonScope)).toBe('retired')
 
     macTccAttribution.mockResolvedValue({ health: 'intact', folderAccessMismatch: SCOPE_A })
     act(() => {
@@ -651,7 +606,7 @@ describe('useMacTccAttributionSeveredNotice folder-access notice', () => {
       folderNoticeCalls()[1].options.onDismiss?.()
     })
 
-    expect(dismissedEvents()).toHaveLength(1)
+    expect(noticePhase(SCOPE_A.daemonScope)).toBe('dismissed')
   })
 
   it('raises both notices when attribution is severed and a folder is denied', async () => {

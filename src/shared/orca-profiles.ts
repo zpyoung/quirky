@@ -4,9 +4,6 @@ import type { ExecutionHostId } from './execution-host'
 export const ORCA_PROFILE_INDEX_SCHEMA_VERSION = 1
 export const DEFAULT_LOCAL_ORCA_PROFILE_ID = 'local-default'
 export const DEFAULT_LOCAL_ORCA_PROFILE_NAME = 'Personal'
-/** Main -> renderer push when the stored auth status changed without the renderer asking. */
-export const ORCA_PROFILE_AUTH_STATUS_CHANGED_CHANNEL = 'orcaProfiles:authStatusChanged'
-export const ORCA_PROFILE_SIGN_IN_PROGRESS_CHANGED_CHANNEL = 'orcaProfiles:signInProgressChanged'
 const LEGACY_ORCA_BROWSER_SESSION_PARTITION_PREFIX = 'persist:orca-browser-session-'
 
 export type OrcaProfileAvatar = {
@@ -17,45 +14,6 @@ export type OrcaProfileAvatar = {
 
 export type OrcaProfileKind = 'local' | 'cloud-linked'
 
-export type OrcaProfileCloudSummary = {
-  cloudProfileId: string
-  userId: string
-  email: string
-  displayName?: string
-  activeOrgId?: string
-  activeOrgName?: string
-  linkedAt: number
-}
-
-export type OrcaCloudOrgSummary = {
-  orgId: string
-  name: string
-  role?: string
-}
-
-export type OrcaCloudCapabilityFlags = Record<string, boolean>
-
-export type OrcaCloudCapabilities = {
-  flags: OrcaCloudCapabilityFlags
-  refreshedAt: number
-}
-
-export type OrcaCloudSessionPersistence = 'none' | 'encrypted' | 'memory-only' | 'dev-plaintext'
-
-export type OrcaProfileAuthState = 'local' | 'unconfigured' | 'connected' | 'reconnect-required'
-
-export type OrcaProfileAuthStatus = {
-  activeProfileId: string
-  configured: boolean
-  state: OrcaProfileAuthState
-  persistence: OrcaCloudSessionPersistence
-  cloud?: OrcaProfileCloudSummary
-  organizations?: OrcaCloudOrgSummary[]
-  capabilities?: OrcaCloudCapabilities
-  credentialError?: string
-  setupMessage?: string
-}
-
 export type OrcaProfileSummary = {
   id: string
   name: string
@@ -64,7 +22,6 @@ export type OrcaProfileSummary = {
   createdAt: number
   updatedAt: number
   lastOpenedAt: number
-  cloud?: OrcaProfileCloudSummary
 }
 
 export type OrcaProfileIndex = {
@@ -90,11 +47,6 @@ export type CreateLocalOrcaProfileArgs = {
 
 export type CreateLocalOrcaProfileResult = OrcaProfileListState & {
   profile: OrcaProfileSummary
-}
-
-export type CreateCloudLinkedOrcaProfileArgs = {
-  orgId?: string
-  name?: string
 }
 
 export type SwitchOrcaProfileArgs = {
@@ -151,164 +103,6 @@ export type TransferOrcaProfileProjectResult =
       sourceRepoId: string
       duplicateRepoId: string
     }
-
-/** A sign-in in flight; `link` is set only while the browser has not answered yet. */
-export type OrcaCloudSignInProgress = { link: string | null }
-
-export type ConnectCurrentOrcaProfileResult =
-  | {
-      status: 'connected'
-      auth: OrcaProfileAuthStatus
-      activeProfileId: string
-      profiles: OrcaProfileSummary[]
-    }
-  | {
-      status: 'unconfigured'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'cancelled'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'timed-out'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'failed'
-      auth: OrcaProfileAuthStatus
-      error: string
-    }
-
-export type CreateCloudLinkedOrcaProfileResult =
-  | {
-      status: 'created'
-      auth: OrcaProfileAuthStatus
-      activeProfileId: string
-      profiles: OrcaProfileSummary[]
-      profile: OrcaProfileSummary
-    }
-  | {
-      status: 'unconfigured' | 'reconnect-required'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'failed'
-      auth: OrcaProfileAuthStatus
-      error: string
-    }
-
-export type SignOutCurrentOrcaProfileResult = {
-  status: 'signed-out'
-  auth: OrcaProfileAuthStatus
-  activeProfileId: string
-  profiles: OrcaProfileSummary[]
-}
-
-export type SelectOrcaProfileOrgArgs = {
-  orgId: string
-}
-
-export type SelectOrcaProfileOrgResult =
-  | {
-      status: 'selected'
-      auth: OrcaProfileAuthStatus
-      activeProfileId: string
-      profiles: OrcaProfileSummary[]
-    }
-  | {
-      status: 'unconfigured' | 'reconnect-required'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'failed'
-      auth: OrcaProfileAuthStatus
-      error: string
-    }
-
-export type RefreshCurrentOrcaProfileAuthResult =
-  | {
-      status: 'refreshed'
-      auth: OrcaProfileAuthStatus
-      activeProfileId: string
-      profiles: OrcaProfileSummary[]
-    }
-  | {
-      status: 'local' | 'unconfigured' | 'reconnect-required'
-      auth: OrcaProfileAuthStatus
-    }
-  | {
-      status: 'failed'
-      auth: OrcaProfileAuthStatus
-      error: string
-    }
-
-// Why: organization roles are a fixed server-side enum; the desktop UI mirrors
-// exactly these three so role selects can't drift from what the API accepts.
-export type OrcaOrgRole = 'owner' | 'admin' | 'member'
-
-export type OrcaOrgMember = {
-  // Why: null for teammates provisioned server-side who never signed into Orca;
-  // mutation actions are disabled for them since the API keys on a real userId.
-  userId: string | null
-  email: string
-  displayName?: string
-  role: OrcaOrgRole
-}
-
-export type OrcaOrgPendingInvite = {
-  email: string
-  role: OrcaOrgRole
-  createdAt: number
-}
-
-export type OrcaOrgMembersRoster = {
-  members: OrcaOrgMember[]
-  pendingInvites: OrcaOrgPendingInvite[]
-  viewerRole: OrcaOrgRole
-  canManageMembers: boolean
-}
-
-export type OrcaProfileOrgMembersListArgs = {
-  orgId: string
-}
-
-export type OrcaProfileOrgMemberInviteArgs = {
-  orgId: string
-  email: string
-  role: OrcaOrgRole
-}
-
-export type OrcaProfileOrgInviteRevokeArgs = {
-  orgId: string
-  email: string
-}
-
-export type OrcaProfileOrgMemberChangeRoleArgs = {
-  orgId: string
-  userId: string
-  role: OrcaOrgRole
-}
-
-export type OrcaProfileOrgMemberRemoveArgs = {
-  orgId: string
-  userId: string
-}
-
-export type OrcaProfileOrgMembersListResult =
-  | { status: 'ok'; roster: OrcaOrgMembersRoster }
-  | { status: 'unconfigured' | 'reconnect-required' }
-  | { status: 'failed'; error: string }
-
-export type OrcaOrgInviteConflictReason = 'already_member' | 'already_invited'
-export type OrcaOrgMutationInvalidReason = 'cannot_change_own_role' | 'cannot_remove_self'
-
-export type OrcaProfileOrgMemberMutationResult =
-  | { status: 'ok' }
-  | { status: 'unconfigured' | 'reconnect-required' | 'forbidden' | 'not-found' }
-  | { status: 'conflict'; reason: OrcaOrgInviteConflictReason }
-  | { status: 'invalid'; reason: OrcaOrgMutationInvalidReason }
-  | { status: 'failed'; error: string }
 
 export function createDefaultLocalOrcaProfile(now: number): OrcaProfileSummary {
   return {

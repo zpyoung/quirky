@@ -1,13 +1,11 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
-import { track } from '@/lib/telemetry'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import {
-  buildNestedRepoScanTelemetry,
-  createNestedRepoTelemetryAttemptId,
-  type NestedRepoTelemetryRuntimeKind
-} from '../../../../shared/nested-repo-telemetry'
-import type { AddRepoExistingWorkspaceSource } from '../../../../shared/telemetry-events'
+  createNestedRepoAttemptId,
+  type NestedRepoRuntimeKind
+} from '../../../../shared/nested-repo-attempt'
+import type { AddRepoExistingWorkspaceSource } from '../../../../shared/add-repo-source'
 import type { NestedRepoScanResult } from '../../../../shared/project-group-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { WorktreeFetchOptions } from '@/store/slices/worktree-helpers'
@@ -20,7 +18,7 @@ type ShowNestedRepoReview = (args: {
   selectedPath: string
   connectionId: string | null
   attemptId: string
-  runtimeKind: NestedRepoTelemetryRuntimeKind
+  runtimeKind: NestedRepoRuntimeKind
   inProgress: boolean
   scanId: string | null
   runtimeEnvironmentId?: string | null
@@ -47,7 +45,7 @@ export function useAddRepoServerPathFlow({
   activeRuntimeEnvironmentId: string | null
   closeModal: () => void
   fetchWorktrees: (repoId: string, options?: WorktreeFetchOptions) => Promise<unknown>
-  getNestedRepoRuntimeKind: (connectionId: string | null) => NestedRepoTelemetryRuntimeKind
+  getNestedRepoRuntimeKind: (connectionId: string | null) => NestedRepoRuntimeKind
   scanNestedRepos: (
     path: string,
     connectionId: string | undefined,
@@ -94,7 +92,7 @@ export function useAddRepoServerPathFlow({
       setAddProjectBusyLabel(kind === 'git' ? 'Scanning for repositories...' : 'Opening folder...')
       try {
         if (kind === 'git') {
-          const attemptId = createNestedRepoTelemetryAttemptId()
+          const attemptId = createNestedRepoAttemptId()
           const runtimeKind = getNestedRepoRuntimeKind(null)
           const supportsStreamingScan = runtimeKind !== 'runtime'
           const scanId = supportsStreamingScan ? createNestedRepoScanId() : null
@@ -134,15 +132,6 @@ export function useAddRepoServerPathFlow({
           }
           setNestedScanInProgress(false)
           setActiveNestedScanId(null)
-          track(
-            'add_repo_nested_scan_result',
-            buildNestedRepoScanTelemetry({
-              attemptId,
-              surface: 'sidebar',
-              runtimeKind,
-              scan
-            })
-          )
           if (scan?.selectedPathKind === 'non_git_folder' && scan.repos.length > 0) {
             showNestedRepoReview({
               scan,

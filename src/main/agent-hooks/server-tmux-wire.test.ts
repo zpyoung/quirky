@@ -3,8 +3,6 @@ import { AgentHookServer, _internals } from './server'
 import { PANE } from './server.test-fixtures'
 import { buildRelayHookEnvelope } from '../../wsl-guest/agent-hook-envelope-build'
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 const time = 1_800_000_000_000
 const envelope = {
   source: 'opencode',

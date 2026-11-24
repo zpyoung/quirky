@@ -90,7 +90,7 @@ function buildChallengeFixture(options: {
   const relayKeys = nacl.box.keyPair()
   const nonce = randomBytes(24)
   const secret = randomBytes(32)
-  const origin = 'https://c2.relay.onorca.dev'
+  const origin = 'https://c2.relay.example.test'
   const relayHostId = 'host-abc123'
   const challengeId = 'challenge-skew'
   const transcript = buildTranscript({

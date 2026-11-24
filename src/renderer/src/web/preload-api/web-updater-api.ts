@@ -13,7 +13,6 @@ export function createUpdaterApi(): NonNullable<Partial<PreloadApi>['updater']> 
     check: () => Promise.resolve(),
     download: () => Promise.resolve(),
     quitAndInstall: () => Promise.resolve(),
-    dismissNudge: () => Promise.resolve(),
     dismissAvailableUpdate: () => Promise.resolve(),
     getLinuxPackageInstallInstructions: () => Promise.reject(new Error(desktopOnlyMessage)),
     showLinuxPackage: () => Promise.reject(new Error(desktopOnlyMessage)),
@@ -28,7 +27,6 @@ export function createUpdaterApi(): NonNullable<Partial<PreloadApi>['updater']> 
           'Switching builds is only available in the desktop app.'
         )
       }),
-    onStatus: () => noopUnsubscribe,
-    onClearDismissal: () => noopUnsubscribe
+    onStatus: () => noopUnsubscribe
   }
 }

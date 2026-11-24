@@ -1,6 +1,5 @@
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import { track, tuiAgentToAgentKind } from '@/lib/telemetry'
 import { translate } from '@/i18n/i18n'
 import type { TuiAgent } from '../../../shared/tui-agent'
 
@@ -42,10 +41,6 @@ export function createPasteReadinessTimeoutNotice(args: {
         )
       )
       notified = true
-      track('agent_error', {
-        error_class: 'paste_readiness_timeout',
-        agent_kind: tuiAgentToAgentKind(args.agent)
-      })
     }
   }
 }

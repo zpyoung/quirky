@@ -80,17 +80,6 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     load: async () => (await import('./fork-loops/handlers.js')).LOOP_HANDLERS
   },
   {
-    name: 'artifacts',
-    keys: [
-      'artifacts list',
-      'artifacts share',
-      'artifacts update',
-      'artifacts unshare',
-      'artifacts delete'
-    ],
-    load: async () => (await import('./handlers/artifacts.js')).ARTIFACT_HANDLERS
-  },
-  {
     name: 'ledger',
     keys: [
       'ledger file',
@@ -316,11 +305,6 @@ export const HANDLER_GROUPS: readonly HandlerGroup[] = [
     name: 'vm',
     keys: ['vm recipe doctor'],
     load: async () => (await import('./handlers/vm.js')).VM_HANDLERS
-  },
-  {
-    name: 'skill-sharing',
-    keys: ['skills installed', 'skills share'],
-    load: async () => (await import('./handlers/skill-sharing.js')).SKILL_SHARING_HANDLERS
   },
   {
     name: 'skills',

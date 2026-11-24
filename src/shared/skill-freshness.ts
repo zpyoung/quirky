@@ -61,7 +61,7 @@ export type SkillFreshnessInstallation = {
   errorCategory: string | null
 }
 
-const ORCA_SKILL_LOCK_SOURCE = 'stablyai/orca'
+const ORCA_SKILL_LOCK_SOURCE = 'zpyoung/quirky'
 
 /** Whether the skills.sh lock says this name was installed from Orca's repository. */
 export function isOrcaSkillLockSource(source: string | null): boolean {

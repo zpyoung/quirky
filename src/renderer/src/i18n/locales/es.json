@@ -572,20 +572,9 @@
         "orca": {
           "profiles": {
             "612f7f6861": "Error al crear perfil",
-            "319d7cf39b": "Perfil en la nube creado",
-            "d6e764e7db": "Reconectar este perfil",
-            "f0c9e11a6d": "Error al crear perfil en la nube",
-            "8b8fa73174": "El inicio de sesión de Orca Cloud no está configurado",
-            "33290e88ed": "Error al conectar perfil",
-            "9fcb07a796": "Perfil conectado",
-            "2f6c78a039": "Error al actualizar autenticación del perfil",
-            "a37b5e6d37": "Sesión cerrada del perfil",
-            "83600521e7": "Error al cerrar sesión",
-            "76deec8f58": "Error al cambiar organización",
             "7d4bc516ee": "Error al cambiar perfil",
             "f518e89aa5": "El proyecto ya existe en ese perfil",
-            "f03ae7f27b": "Error al transferir proyecto",
-            "signInTimedOut": "Se agotó el tiempo de inicio de sesión"
+            "f03ae7f27b": "Error al transferir proyecto"
           }
         },
         "runtime": {
@@ -1012,22 +1001,6 @@
       "pluginCommandKeybindings": {
         "group": "Plugins"
       },
-      "feedback": {
-        "image": {
-          "attachments": {
-            "fallbackName": "Image attachment",
-            "unsupportedType": "{{fileName}} is not a supported image type.",
-            "empty": "{{fileName}} is empty.",
-            "tooLarge": "{{fileName}} is larger than {{maxSize}}.",
-            "tooMany": "You can attach up to {{maxCount}} images.",
-            "dimensionsTooLarge": "{{fileName}} has dimensions that are too large to preview safely.",
-            "invalidImage": "{{fileName}} is not a valid supported image.",
-            "additionalErrors": "{{count}} additional images could not be attached.",
-            "totalTooLarge": "{{fileName}} superaría el total de {{maxSize}} de archivos adjuntos.",
-            "compressed": "{{fileName}} se comprimió de {{originalSize}} a {{size}} para ajustarse al límite de archivos adjuntos."
-          }
-        }
-      },
       "dropSkipReason": {
         "missing": "Ya no está en su ruta original.",
         "symlink": "Los enlaces simbólicos no se pueden adjuntar.",
@@ -1146,15 +1119,12 @@
         "225071c560": "Experimental",
         "e338c507c1": "Ajustes de compatibilidad de bajo nivel para solucionar problemas.",
         "580a04cd81": "Avanzado",
-        "8400cfe1c1": "Datos de uso anónimos y controles de telemetría.",
-        "3618579df6": "Privacidad y telemetría",
         "65ec7d1968": "Permisos de privacidad de macOS para herramientas de desarrollo lanzadas desde terminales.",
         "d91ae31fbd": "Permisos de macOS",
         "95a1886d94": "Controla terminales y agentes desde tu teléfono.",
         "1cd25673df": "Móvil",
         "31e57d1c70": "Usa máquinas existentes por SSH para archivos, terminales, Git y espacios de trabajo.",
         "94a5afe910": "Hosts SSH",
-        "40d80bad8a": "Beta",
         "de0c2907a1": "Servidores remotos de Orca",
         "b351014180": "Estadísticas de Orca más análisis de tokens de Claude, Codex, OpenCode y Muse y uso de suscripción de Grok.",
         "d72a58b5b9": "Estadísticas y uso",
@@ -1217,12 +1187,8 @@
         "pluginsTitle": "Plugins",
         "pluginsDescription": "Instala y administra plugins experimentales de Orca.",
         "tasksDescription": "Conecta proveedores, instala la habilidad de Linear y elige qué aparece en Tareas.",
-        "artifactsTitle": "Artefactos",
-        "artifactsDescription": "Comparte archivos HTML y Markdown con tu equipo y gestiona sus enlaces públicos.",
         "automationsTitle": "Automatizaciones",
         "automationsDescription": "Programa el trabajo del agente y elige si Automatizaciones aparece en la barra lateral.",
-        "shareSkillsTitle": "Compartir skills",
-        "shareSkillsDescription": "Comparte tus skills con un enlace no listado. Cualquiera que lo tenga puede instalarlos.",
         "floatingWorkspaceWebDescription": "Pestañas globales de terminal y markdown."
       },
       "useAppMenuPaste": {
@@ -1287,15 +1253,6 @@
         "d3e8a1f4b2": "Cuenta cambiada",
         "9375620cc3": "Reinicia esta sesión para usar {{value0}}. Se mantiene en la cuenta anterior hasta que lo hagas.",
         "6133594b12": "Mantener cuenta anterior"
-      },
-      "FirstLaunchBanner": {
-        "b9e1b966c7": "Descartar aviso",
-        "94cc673726": "Entiendo",
-        "fc5cc29955": "Optar por no participar",
-        "d1deebb050": "Política de privacidad",
-        "958d2cc31b": "Los recuentos anónimos de las funciones que usas nos ayudan a priorizar qué crear. Sin contenido de archivos, prompts, salida de terminal ni nada que te identifique. Puedes cambiarlo en cualquier momento en Ajustes -> Privacidad y telemetría.",
-        "9784b4d7bc": "Ayúdanos a decidir qué crear a continuación",
-        "fcbee32f08": "Aviso de telemetría"
       },
       "GitHubItemDialog": {
         "3ab6ac0fc8": "Previsualiza y edita el issue o pull request de GitHub seleccionado.",
@@ -1609,7 +1566,6 @@
         "6ca6ff404e": "ORCA",
         "520304a067": "logotipo de Orca",
         "ce44fad849": "Dependencias faltantes",
-        "c1cf168479": "Ocultar",
         "00cee697c1": "Ejecuta \"gh auth login\" en una terminal para conectar tu cuenta de GitHub.",
         "9f96d018b7": "La CLI de GitHub no está autenticada",
         "73e1ad4282": "Orca usa GitHub CLI (gh) para mostrar pull requests, issues y checks.",
@@ -1619,9 +1575,6 @@
         "cd21242762": "Agrega un proyecto para comenzar.",
         "9c00bd4adf": "Selecciona un espacio de trabajo en la barra lateral para comenzar.",
         "16e9e3df89": "con estrella",
-        "0d0ace8861": "Dar estrella en GitHub",
-        "ec43b38ba7": "Con estrella en GitHub",
-        "157bb5ecbb": "Abrir GitHub",
         "preflightDismiss": "Descartar"
       },
       "LinearIssueMarkdownDescriptionEditor": {
@@ -2028,16 +1981,8 @@
         "92b0f9d921": "está autenticado y vuelve a intentarlo.",
         "cd8c34aac1": "gh",
         "cf82170065": "No se pudo dar estrella al repositorio. Asegúrate de que",
-        "30c36231c1": "Orca es de código abierto. Si te ayudó hoy, una estrella en GitHub ayuda a otros desarrolladores a encontrarlo.",
-        "b5e685e4d9": "Descartar",
-        "5f6df21046": "¿Disfrutando de Orca?",
-        "2d67b6c849": "Dar estrella en GitHub",
-        "af3c9bbb37": "Dando estrella...",
         "68a41bc3aa": "No se pudo dar estrella con",
         "996bf76e46": "Abre GitHub para terminar en tu navegador.",
-        "d32015fec7": "Abriendo...",
-        "157bb5ecbb": "Abrir GitHub",
-        "8c967b4d15": "Más tarde",
         "73dfd4eb8d": "No volver a preguntar"
       },
       "TaskPage": {
@@ -4626,8 +4571,6 @@
           "08a321a984": "Ninguna skill coincide con la búsqueda y los filtros actuales.",
           "cd7893fbc1": "Analizando skills",
           "35b9a724a0": "Disponible",
-          "c13b82793c": "Gestionar instalaciones",
-          "aee7b99cc6": "Instalar desde un enlace",
           "filterProvider": "Filtrar por agente",
           "filterSource": "Filtrar por origen",
           "allSources": "Todo",
@@ -4635,12 +4578,7 @@
           "closeSkills": "Cerrar skills",
           "closeTooltip": "Cerrar · Esc",
           "moreActions": "Más acciones",
-          "sharedLinks": "Enlaces compartidos",
-          "emptyCopy": "Las carpetas de skills analizadas están vacías. Instala un paquete compartido o actualiza después de añadir una skill.",
           "retry": "Reintentar",
-          "remoteShareNotice": "Estas skills están en {{host}}. Abre Skills en esa máquina para compartirlas.",
-          "viewSwitch": "Mostrar",
-          "searchLinks": "Buscar enlaces",
           "deleteSkills": "Eliminar skills…",
           "984405683f": "Complemento",
           "4d177feabd": "incluido",
@@ -4658,15 +4596,10 @@
           "0c74e7ff34": "Instalado"
         },
         "SkillShareSelectionControls": {
-          "01c5a15e02": "Compartir skills",
           "01c5a15e05": "Compartir habilidades {{value0}}",
           "01c5a15e01": "Cancelar compartir",
           "01c5a15e03": "{{value0}} seleccionado",
-          "01c5a15e04": "Seleccionar todos los resultados",
-          "01c5a15e06": "Abra esta habilidad en su propia máquina para compartirla.",
-          "01c5a15e07": "Instala esta habilidad antes de compartirla.",
-          "01c5a15e08": "Solo se pueden compartir habilidades en el hogar y el espacio de trabajo.",
-          "01c5a15e09": "Una habilidad con este nombre ya está seleccionada de otra fuente."
+          "01c5a15e04": "Seleccionar todos los resultados"
         },
         "SkillRow": {
           "updatedUnknown": "Sin fecha",
@@ -4676,7 +4609,6 @@
           "skillActions": "Acciones para {{value0}}",
           "viewDetails": "Ver detalles",
           "deleteSkill": "Eliminar…",
-          "notShareable": "No compartible",
           "detailSource": "Fuente",
           "detailContents": "Contenido",
           "notDeletable": "No eliminable"
@@ -4708,14 +4640,6 @@
           "resultOne": "{{count}} resultado",
           "resultOther": "{{count}} resultados",
           "selected": "{{count}} seleccionadas",
-          "shareOne": "Compartir {{count}} skill",
-          "shareOther": "Compartir {{count}} skills",
-          "linkOne": "{{count}} enlace",
-          "linkOther": "{{count}} enlaces",
-          "installOne": "Instalar la habilidad {{count}}",
-          "installOther": "Instalar habilidades {{count}}",
-          "retryOne": "Reintentar la habilidad {{count}}",
-          "retryOther": "Reintentar habilidades {{count}}",
           "deleteOne": "Eliminar habilidad {{count}}",
           "deleteOther": "Eliminar habilidades {{count}}",
           "deletedOne": "Habilidad {{count}} eliminada",
@@ -4732,7 +4656,6 @@
         "SkillsSelectionHeader": {
           "exit": "Salir de la selección",
           "exitTooltip": "Salir de la selección · Esc",
-          "title": "Seleccionar skills para compartir",
           "selectAll": "Seleccionar las {{count}} aptas",
           "clear": "Borrar",
           "deleteTitle": "Seleccionar skills para eliminar"
@@ -4845,33 +4768,14 @@
           "remote": "Entorno conectado"
         },
         "SkillShareDialog": {
-          "reconnect": "Vuelva a conectar su cuenta Orca antes de compartir.",
-          "unconfigured": "Conecte una cuenta de Orca Cloud antes de compartir.",
-          "prepareFailed": "No se pudo preparar esta habilidad para compartir.",
           "peopleRequired": "Selecciona al menos un compañero de equipo.",
-          "publishCancelled": "Subida cancelada. La copia preparada todavía está disponible para volver a intentarlo.",
-          "publishFailed": "No se pudo publicar esta habilidad. La copia preparada todavía está disponible para volver a intentarlo.",
-          "nameTaken": "El nombre de habilidad “{{name}}” ya está en uso. Cambia el nombre de tu habilidad para compartirla.",
-          "copied": "Compartir enlace copiado",
-          "preparing": "Preparando vista previa…",
-          "ready": "Enlace de habilidad listo",
-          "title": "Compartir habilidad",
           "readyDescription": "Los destinatarios se autentican en Orca antes de poder inspeccionarlo o instalarlo.",
           "newVersionDescription": "Revise los archivos exactos y luego publique una versión inmutable en el paquete de nube existente.",
           "description": "Revise los archivos exactos, elija quién puede acceder a ellos y luego publique una versión inmutable.",
-          "0f07fa2a79": "Publicar habilidad",
-          "7aa4ba0dba": "Publicar nueva versión",
-          "3a51d0f34f": "Cancelar carga",
-          "e9d652ae3d": "Cancelado…",
-          "30985d4fc0": "Cancelar",
-          "3af85f6add": "Hecho",
           "readyDescriptionV2": "Cualquiera que tenga este enlace no listado puede inspeccionar e instalar las habilidades.",
-          "descriptionV2": "Revise los archivos exactos y luego publique una versión inmutable detrás de un enlace no listado.",
-          "publishBundle": "Publicar paquete",
-          "cancelRequestFailed": "Orca no pudo enviar la solicitud de cancelación. Es posible que la carga aún finalice."
+          "descriptionV2": "Revise los archivos exactos y luego publique una versión inmutable detrás de un enlace no listado."
         },
         "SkillCard": {
-          "d25a1b8ae6": "Compartir habilidad",
           "01c5a16e01": "Seleccione {{value0}}"
         },
         "SkillCloudManagementActions": {
@@ -4896,17 +4800,9 @@
         },
         "SkillInstallDialog": {
           "39acb9e8f4": "instalar habilidad",
-          "59c3b76cdd": "Reintentar la instalación",
-          "241e72f9d6": "Instalando…",
-          "05588076a9": "Cancelar instalación",
-          "d198ec91e5": "Cerrar",
-          "4a00d133c5": "Orca verifica el acceso y la identidad del paquete antes de cambiar la máquina seleccionada.",
-          "fcbec627cc": "Instalar habilidad compartida",
-          "01c5a14e01": "Instalar habilidades compartidas",
-          "opening": "Abriendo este enlace…"
+          "4a00d133c5": "Orca verifica el acceso y la identidad del paquete antes de cambiar la máquina seleccionada."
         },
         "SkillInstallManagementDialog": {
-          "8095927ff3": "Cerrar",
           "e91af0079f": "Eliminar",
           "470d8d2476": "Confirmar eliminación",
           "c1d03ee50d": "Cancelar instalación",
@@ -4918,71 +4814,24 @@
           "74b70892ea": "Los archivos locales fueron modificados.",
           "86ed219b55": "Elige una versión",
           "9c04bd0120": "Versión instalada",
-          "64c71cf7b9": "No se encontraron instalaciones de habilidades administradas por Orca en esta máquina.",
-          "0900db719a": "— desconectado",
-          "176fef9516": "· SSH",
-          "6cb1fbe039": "esta computadora",
-          "3677ae58e7": "Actualice, revierta o elimine de forma segura las versiones instaladas por Orca.",
-          "44d118a8f7": "Administrar habilidades instaladas",
           "1c9e7f420a": "Habilidades del paquete instalado",
           "34c2ef9e71": "Instalar habilidades {{count}}",
           "a0cab67c2f": "Eliminar habilidades {{count}}",
           "f970d8088d": "Confirmar la eliminación de {{count}} habilidades",
-          "dab29e4b54": "{{installed}} instalado · {{updated}} actualizado · {{keptLocal}} mantenido local",
           "installAnotherMachine": "Instalar en otra máquina"
         },
         "SkillInstallReviewContent": {
-          "89e2601162": "Desechar y reemplazar",
-          "a5675fb371": "contenido y lo dejó intacto. Consérvelo o deséchelo explícitamente y reemplácelo con esta versión.",
-          "37d990b94c": "cambió",
-          "2a31912f14": "Orca encontrada",
-          "651b7d8a57": "La copia local necesita una decisión",
           "98ed90e523": "Una habilidad contiene instrucciones y puede incluir guiones. Trátelo como código de su autor.",
           "f72ee4022a": "SHA-256",
           "3d8421ca2f": "ejecutable",
           "87137bcb8d": "guiones",
           "fab8fce842": "archivos",
           "8f9833d509": "Versión inmutable",
-          "66270286ac": "· Puedes volver a intentarlo de forma segura.",
-          "1b6ad2ca5c": "comprobado.",
-          "3fc62a61eb": "colocación",
-          "157de228b4": "inspeccionar habilidad",
-          "69236de8d6": "De cheques…",
-          "27672470d9": "Abrir el enlace no instala nada. Revise primero la versión inmutable.",
-          "66cff7a804": "https://app.orca.dev/skills/share/…",
-          "93eb0fe8c7": "Enlace de habilidad de Orca",
-          "releaseNotes": "Notas de la versión:",
-          "targetHeader": "Objetivo de instalación"
-        },
-        "SkillInstallTargetFields": {
-          "8e6a972229": "No se conocen espacios de trabajo en esta máquina.",
-          "7a366323e7": "Carpeta",
-          "d628c416a2": "árbol de trabajo de git",
-          "5845cfe543": "Elija un árbol de trabajo o carpeta",
-          "0e5b43a9e3": "Espacio de trabajo",
-          "0c10a406fb": "WSL·",
-          "e5b0d15e64": "sistema operativo anfitrión",
-          "cb47652227": "Entorno de ejecución",
-          "a4dfd33095": "Un espacio de trabajo",
-          "c779621aa0": "Habilidades globales",
-          "63cc9e31fe": "Destino",
-          "85d85880df": "· SSH",
-          "71eefd7660": "— desconectado",
-          "0785d0a503": "— actualización requerida",
-          "8562dd1e6e": "esta computadora",
-          "b8a0b706ad": "Máquina"
-        },
-        "SkillInstallWorkspaceCombobox": {
-          "search": "Buscar espacios de trabajo...",
-          "empty": "No se encontraron espacios de trabajo."
+          "27672470d9": "Abrir el enlace no instala nada. Revise primero la versión inmutable."
         },
         "SkillShareReviewContent": {
           "e3caf6baeb": "Revocar este enlace bloquea el acceso futuro. No elimina las copias ya instaladas en las máquinas de los destinatarios.",
-          "6d6233a3a4": "Copiar enlace",
-          "0142581727": "Subiendo…",
           "ad940367a5": "Validando y publicando…",
-          "bf02d6ed9e": "¿Qué cambió en esta versión?",
-          "f0c0411549": "Notas de la versión",
           "4895d3e0ee": "No hay compañeros de equipo disponibles.",
           "8188f5d765": "puede acceder al enlace.",
           "fe204e06f0": "la organización",
@@ -4990,44 +4839,25 @@
           "f25429e266": "personas seleccionadas",
           "0a49d901ab": "Organización",
           "6817a7f6f8": "Acceso a habilidades",
-          "c15d90c10b": "Se requiere una cuenta de Orca Cloud conectada.",
           "266527d295": "Publicando como {{value0}}{{value1}}.",
           "78d863235c": "Acceso",
-          "b3b1d4b911": "SHA-256",
           "77f636eac3": "ejecutable",
           "8edd32622f": "guiones",
           "3121f44358": "archivos",
-          "2dca0b720b": "Publicar nueva versión de habilidad",
           "01c5a17e01": "{{value0}} habilidades",
           "01c5a17e02": "Revisión de habilidades incluidas.",
           "01c5a17e03": "{{value0}} archivos · {{value1}}",
           "unlistedLinkTitle": "Enlace no listado",
           "unlistedPublishingAs": "Publicando como {{value0}}. Cualquiera que tenga el enlace puede inspeccionar e instalar estas habilidades.",
-          "unlistedLinkDetails": "El enlace no se puede buscar ni aparece públicamente. Revocarlo para bloquear el acceso futuro; quedan copias instaladas.",
-          "bundleReady": "Enlace del paquete de habilidades listo",
-          "publishBundleVersion": "Publicar una nueva versión del paquete de habilidades",
-          "shareBundle": "Compartir paquete de habilidades",
-          "publishingLink": "Enlace de publicación…",
-          "verifyingPackage": "Verificando paquete…"
+          "unlistedLinkDetails": "El enlace no se puede buscar ni aparece públicamente. Revocarlo para bloquear el acceso futuro; quedan copias instaladas."
         },
         "SkillBundleInstallFlow": {
-          "01c5a13e01": "Cerrar",
-          "01c5a13e02": "Cancelar instalación",
-          "01c5a13e03": "Instalando…",
           "01c5a13e04": "Reintentar habilidades {{value0}}",
           "01c5a13e05": "Instalar habilidades {{value0}}"
         },
         "SkillBundleInstallOutcome": {
-          "01c5a12e01": "Instalado",
-          "01c5a12e02": "Actualizado",
-          "01c5a12e03": "Sin alterar",
-          "01c5a12e04": "Mantenido local",
           "01c5a12e05": "Fallido",
-          "01c5a12e06": "Cancelado",
-          "01c5a12e07": "La instalación del paquete necesita atención.",
-          "01c5a12e08": "Habilidades instaladas y verificadas.",
-          "01c5a12e09": "{{value0}} habilidades seleccionadas marcadas.",
-          "01c5a12e10": "Necesita volver a intentarlo"
+          "01c5a12e06": "Cancelado"
         },
         "SkillBundleInstallReview": {
           "01c5a11e01": "Versión inmutable",
@@ -5036,17 +4866,12 @@
           "01c5a11e04": "{{value0}} guiones",
           "01c5a11e05": "{{value0}} ejecutable",
           "01c5a11e06": "SHA-256",
-          "01c5a11e09": "Notas de la versión:",
           "01c5a11e0a": "Las habilidades contienen instrucciones y pueden incluir guiones. Trátelos como código de su autor.",
           "01c5a11e0b": "Habilidades para instalar",
           "01c5a11e0c": "Elija cualquier subconjunto de este paquete.",
-          "01c5a11e0d": "Seleccionar todo",
           "01c5a11e0e": "Sin descripción",
           "01c5a11e0f": "{{value0}} archivos · {{value1}} scripts",
           "01c5a11e10": "{{value0}} ejecutable",
-          "01c5a11e11": "Las copias locales necesitan una decisión.",
-          "01c5a11e12": "Orca conservará estas copias locales de forma predeterminada. Seleccione solo las copias que desea descartar y reemplazar.",
-          "01c5a11e13": "Reemplazar {{value0}} ({{value1}})",
           "01c5a11e14": "{{value0}} nuevo",
           "01c5a11e15": "{{value0}} sin cambios",
           "01c5a11e16": "{{value0}} actualizaciones",
@@ -5055,104 +4880,25 @@
         "SkillManagedInstallList": {
           "86c76cb262": "Paquete de habilidades {{count}}"
         },
-        "skill-install-progress-state": {
-          "currentSkill": "Instalando {{value0}} de {{value1}}: {{value2}}…"
-        },
         "SkillSelectionBar": {
           "selectAll": "Seleccione todos los {{count}} elegibles",
           "clear": "Claro"
         },
         "share": {
-          "fileExecutable": "ejecutable",
-          "fileScript": "guion",
-          "reviewFiles": "Revisar archivos que se pueden ejecutar",
-          "reviewSkills": "Revisión de habilidades incluidas.",
-          "releaseNotesVersion": "Notas de la versión",
-          "releaseNotesOptional": "Agregar notas de la versión (opcional)",
-          "releaseNotesFirst": "Describe esta versión",
           "readyDescription": "Copia el enlace para compartirlo.",
           "newVersionDescription": "Publica una versión inmutable del paquete existente.",
           "description": "Publica una versión inmutable detrás de un enlace no listado.",
           "accessSummary": "Cualquiera que tenga el enlace puede instalarlo. No aparece en ninguna parte y revocarlo bloquea nuevas instalaciones, no copias ya instaladas. Publicando como {{value0}}.",
-          "manageLinks": "Administrar o revocar este enlace en Configuración",
-          "scriptOne": "Guión {{count}}",
-          "scriptOther": "{{count}} guiones",
-          "executableOne": "{{count}} ejecutable",
-          "executableOther": "{{count}} ejecutables",
-          "noExecutableContent": "Sin scripts ni ejecutables",
-          "newVersionDescriptionPlain": "Agrega una nueva versión al enlace existente.",
-          "accessSummaryShort": "Enlace no listado: cualquiera que lo tenga puede instalarlo. Publicando como {{value0}}.",
-          "accessSummaryPlain": "Enlace no listado: cualquiera que lo tenga puede instalarlo."
-        },
-        "description": {
-          "showLess": "Mostrar menos",
-          "showMore": "Mostrar más"
+          "accessSummaryShort": "Enlace no listado: cualquiera que lo tenga puede instalarlo. Publicando como {{value0}}."
         },
         "install": {
-          "authorizing": "Autorizando el acceso al paquete...",
-          "installing": "Descargando, verificando e instalando...",
-          "selectSkill": "Seleccione al menos una habilidad.",
-          "chooseWorkspace": "Elija un espacio de trabajo.",
-          "reconnectBeforeInstalling": "Vuelva a conectar su cuenta de Orca antes de realizar la instalación.",
-          "bundleVerificationFailed": "La instalación falló antes de que Orca pudiera verificar el paquete solicitado.",
-          "destinationAlreadyFinished": "El destino ya había terminado esta instalación.",
-          "enterShareLink": "Ingrese un enlace para compartir habilidades de Orca.",
-          "shareUnavailable": "Este recurso compartido no está disponible. El enlace puede no ser válido, caducado o revocado.",
-          "requestedVersionVerificationFailed": "La instalación falló antes de que Orca pudiera verificar la versión solicitada.",
-          "versionVerificationFailed": "Orca no pudo verificar la versión solicitada.",
-          "inspectManagedFailed": "Orca no pudo inspeccionar las instalaciones administradas en esta máquina.",
-          "reconnectForVersionHistory": "Vuelva a conectar su cuenta de Orca para cargar el historial de versiones.",
-          "versionHistoryUnavailable": "El historial de versiones no está disponible para esta habilidad.",
-          "bundleSkillsMissing": "Esta versión no contiene ninguna de las habilidades del paquete instalado.",
-          "reconnectBeforeVersionChange": "Vuelva a conectar su cuenta Orca antes de cambiar de versión.",
-          "removeFailed": "Orca no pudo eliminar esta habilidad de forma segura.",
-          "agentsLabel": "Agentes",
           "agentsCanonical": "Siempre instalado para {{value0}}, que decía {{value1}}.",
           "agentsNoneChosen": "Sin agentes adicionales",
           "agentsSummary": "También: {{value0}}",
-          "agentNotInstalled": "No instalado",
           "bundleDestinationSummary": "{{value0}} nuevo · {{value1}} ya instalado · {{value2}} necesita una decisión",
           "trustNote": "Las habilidades son instrucciones y códigos de su autor. Instala lo que confías.",
-          "agentsNone": "No hay agentes seleccionados",
-          "agentsSelected": "Instalación para: {{value0}}",
           "agentAlways": "Siempre",
-          "agentsCanonicalNote": "{{value0}} lee {{value1}}, que escribe cada instalación.",
-          "linkHint": "Abrir un enlace nunca instala nada: primero lo revisas.",
-          "rowNeedsDecision": "Necesita una decisión",
-          "rowInstalled": "Ya instalado",
-          "rowUpdate": "Actualizar",
-          "rowNew": "Nuevo",
-          "chooseSkills": "Elija qué instalar desde este enlace.",
-          "singleRunnableWarning": "Esta habilidad incluye scripts o archivos binarios.",
-          "runnableWarning": "{{affectedCount}} de {{selectedCount}} habilidades seleccionadas incluyen scripts o archivos binarios: {{affected}}.",
-          "reviewRunnableFiles": "Incluye scripts o archivos binarios.",
-          "reviewSupportingFiles": "Incluye archivos de soporte",
-          "reviewInstructions": "Acerca de esta habilidad",
-          "supportingFileWarning": "Las habilidades seleccionadas incluyen {{fileCount}} más allá de SKILL.md.",
-          "agentAccessWarning": "Las habilidades contienen instrucciones que su agente puede seguir. Continúe solo si confía en la fuente de este enlace para compartir.",
-          "fileBinary": "binario",
-          "fileRunnable": "ejecutable",
-          "agentsCountBadge": "{{count}} seleccionado",
-          "agentsCountLabel": "{{count}} {{label}}",
-          "targetAgentsHeader": "Agentes objetivo",
-          "deselectAll": "Deseleccionar opcional",
-          "selectAll": "Seleccionar todo",
-          "canonicalHeader": "Agentes Estándar (Siempre Incluidos)",
-          "canonicalExplanation": "Estos agentes leen de forma nativa {{root}}, que Orca instala de forma predeterminada:",
-          "additionalAgentsHeader": "Directorios de agentes adicionales"
-        },
-        "SkillSharedLinkRow": {
-          "contentsUnavailable": "No se pudo cargar lo que contiene este enlace.",
-          "loading": "Cargando contenidos…",
-          "deleteFailed": "Orca no pudo eliminar esto de la nube.",
-          "deleted": "Eliminado de la nube",
-          "confirmDelete": "Confirmar eliminación",
-          "moreActions": "Otras acciones para {{name}}",
-          "deletePackage": "Eliminar de la nube"
-        },
-        "SkillSharedLinksView": {
-          "loading": "Cargando enlaces compartidos…",
-          "noMatches": "Ningún enlace coincide con esta búsqueda."
+          "agentsCanonicalNote": "{{value0}} lee {{value1}}, que escribe cada instalación."
         },
         "SkillsSharedLinksHeader": {
           "back": "Volver a habilidades",
@@ -5160,34 +4906,7 @@
           "unlisted": "No listado: solo las personas con un enlace pueden abrirlo."
         },
         "managedInstall": {
-          "versionLabel": "Versión",
-          "editedWarning": "Sus ediciones se conservan a menos que decida descartarlas.",
-          "finishInstall": "Terminar de instalar",
-          "useVersion": "Usa esta versión",
-          "reinstall": "Reinstalar",
-          "cancel": "Cancelar",
-          "sendToMachine": "Enviar a otra máquina",
-          "confirmRemove": "Confirmar eliminación",
-          "remove": "Eliminar",
-          "discardEditsRemove": "Descartar mis ediciones y eliminar",
-          "discardEdits": "Descartar mis ediciones y reinstalar",
-          "titleMore": "{{name}} +{{count}}",
-          "scopeWorkspace": "este espacio de trabajo",
-          "scopeGlobal": "En todos lados",
-          "installedOn": "Instalado {{date}}",
-          "stateEdited": "Editado después de instalar",
-          "stateMissing": "Faltan archivos",
-          "skillEdited": "Editado",
-          "skillMissing": "Desaparecido",
-          "versionCurrent": "{{date}} (instalado)",
-          "installElsewhere": "Instalar en otro lugar..."
-        },
-        "skillWarningPreview": {
-          "bundleDescription": "Un paquete de vista previa que cubre todos los niveles de advertencia.",
-          "instructionsOnlyDescription": "Instrucciones contenidas íntegramente en SKILL.md.",
-          "supportingFilesDescription": "Incluye archivos de referencia legibles más allá de las instrucciones principales.",
-          "runnableFilesDescription": "Incluye scripts que un agente puede ejecutar con su acceso.",
-          "binaryFilesDescription": "Incluye activos opacos y un binario ejecutable."
+          "sendToMachine": "Enviar a otra máquina"
         },
         "SkillDelete": {
           "dismissResults": "Descartar",
@@ -5517,30 +5236,6 @@
           "822ff300ad": "Descartar",
           "5bfd5c8779": "Descartar scripts de configuración"
         },
-        "SidebarFeedbackDialog": {
-          "8bf619e4cf": "Cancelar",
-          "8de03e23c5": "Envíalo solo con tu feedback escrito o conecta `gh` para incluir tu identidad de GitHub.",
-          "d20439c560": "Comprobando identidad de GitHub...",
-          "5b120b9634": "Enviar de forma anónima",
-          "c9e5ea0791": "GitHub:",
-          "d46ddd66fc": "¿Qué podríamos mejorar?",
-          "3460258a54": "Sigue en X",
-          "26108d3699": "Únete a Discord",
-          "d245c4ef6c": "Issues de GitHub",
-          "9b33530b3d": "Otras formas de contactarnos",
-          "a828fa4aee": "Comparte qué funciona, qué está roto o qué debería hacer Orca después.",
-          "0eb643f07f": "Enviar feedback",
-          "60b721e857": "No se pudo enviar el feedback. Inténtalo de nuevo.",
-          "7a46c228b8": "Gracias por el feedback.",
-          "a2fd890d9e": "Introduce feedback antes de enviarlo.",
-          "f2e42e1307": "Enviar",
-          "69969ba364": "Envío…",
-          "imageReadFailed": "Could not read the attached images. Try attaching them again.",
-          "attachWhileSending": "Wait for the current feedback to finish sending before attaching more images.",
-          "imagesNotDelivered": "Feedback sent, but image delivery could not be confirmed.",
-          "imagesNotIncluded": "Comentarios enviados. No se pudieron subir tus capturas de pantalla y no se incluyeron.",
-          "imagesRejected": "Comentarios enviados. Tus capturas de pantalla eran demasiado grandes para subirlas y no se incluyeron."
-        },
         "SidebarFilter": {
           "e3b3898218": "Agregar proyecto",
           "92a23e6d07": "Restablecer filtros",
@@ -5584,7 +5279,6 @@
           "0ccba862b8": "Abrir tareas de GitHub",
           "fee535205b": "Tareas",
           "d599269755": "Ocultar de la barra lateral",
-          "artifacts": "Artefactos",
           "skills": "Habilidades"
         },
         "SidebarRepositoryFilterSection": {
@@ -5602,20 +5296,15 @@
         "SidebarSettingsHelpMenu": {
           "ad3d3ed7f1": "Reiniciar Orca",
           "29c56f30ee": "Buscar actualizaciones",
-          "eb9884e55b": "Discord",
           "5687ab246a": "GitHub",
-          "5f83d86d92": "Changelog",
-          "cdc87f897e": "Documentación",
           "e565171a7c": "Atajos de teclado",
-          "4cf5b868d7": "Enviar comentarios",
           "a428c25998": "Ajustes",
           "2991a0106c": "Ayuda",
           "4e8f5710d3": "No se pudo reiniciar Orca.",
           "5161eef55d": "Reiniciando Orca...",
           "d396773ef0": "comprobando",
           "f8a2c91d4e": "Milestones",
-          "b7e4d2a19c": "Onboarding",
-          "c4f8e1b72a": "X"
+          "b7e4d2a19c": "Onboarding"
         },
         "SidebarToolbar": {
           "19e32d0e5f": "Abrir el selector de carpetas para agregar un proyecto",
@@ -6488,12 +6177,6 @@
         "WorktreeDeveloperMenu": {
           "developer": "Developer",
           "parkTerminal": "Park terminal"
-        },
-        "SidebarFeedbackImageAttachments": {
-          "preparing": "Preparando archivos adjuntos…",
-          "attachImages": "Attach",
-          "removeImage": "Remove {{fileName}}",
-          "screenshotsHint": "Adjunta hasta {{count}} capturas de pantalla, {{maxSize}} en total"
         },
         "WorkspaceKanbanSearchField": {
           "bdb753c78d": "Ningún espacio de trabajo coincide",
@@ -7524,20 +7207,12 @@
           "confirm_running_terminal_close_description": "Pregunte antes de detener un agente o comando en ejecución al cerrar una terminal."
         },
         "GeneralSupportSection": {
-          "af7d9f4396": "¡Gracias por el apoyo!",
-          "6922c1fa2b": "Dale una estrella a Orca en GitHub",
-          "511782265b": "Apoya el proyecto con una estrella de GitHub mediante la CLI gh.",
-          "55a87e5fd1": "Apoya a Orca",
-          "964acc6bb4": "Dar una estrella",
           "73b327e793": "Intentar otra vez",
           "c9f96d4234": "error",
-          "397719bee5": "Dando una estrella...",
           "1e29570462": "dando estrella",
           "9d181300e3": "con estrella",
           "5c49f02662": "oculto",
-          "b3f0584f5d": "cargando",
-          "cb65c75b11": "Abriendo...",
-          "f2d4f877b2": "Abrir GitHub"
+          "b3f0584f5d": "cargando"
         },
         "GeneralUpdateSettingsSection": {
           "8a52ca1d02": "Notas de la versión",
@@ -7585,10 +7260,7 @@
           "externalWorktrees": "Worktrees externos",
           "externalWorktreesDescription": "Elige si los worktrees creados fuera de Orca aparecen de forma predeterminada.",
           "show": "Mostrar",
-          "hide": "Ocultar",
-          "31e300af1c": "Preguntar antes de eliminar artefactos",
-          "fb29a73a17": "Muestra un cuadro de diálogo de confirmación antes de eliminar un artefacto compartido y romper su enlace público.",
-          "bf46474e33": "Muestra una confirmación antes de eliminar un artefacto compartido. Cualquiera que mantenga su enlace público pierde el acceso."
+          "hide": "Ocultar"
         },
         "GhosttyImportModal": {
           "9d3e56ca36": "Aplicar cambios",
@@ -8008,37 +7680,7 @@
           "d3dc559225": "No se pudo copiar el comando de instalación.",
           "239bf9132b": "Comando de instalación copiado."
         },
-        "PrivacyDiagnosticBundleControls": {
-          "dc8404a930": "Crear archivo de diagnóstico",
-          "a5acaffdb6": "Desechar",
-          "aca2c8a367": "Enviar a soporte",
-          "798b6f0be5": "Abrir archivo de revisión",
-          "2ae9a6b63e": "Hecho",
-          "7f14a1733c": "Eliminar archivo enviado",
-          "2801d4ce22": "Copiar ID de referencia",
-          "d8be621237": "Abre primero el archivo de revisión.",
-          "61676df223": "Diagnósticos enviados. Comparte este ID de referencia con soporte: {{value0}}.",
-          "fd7b3891af": "Abriste el archivo de revisión ({{value0}}). Envía ese archivo a soporte o descártalo.",
-          "62340d4439": "Tu archivo de revisión está listo ({{value0}}). Ábrelo para ver qué se enviaría y luego elige si quieres enviarlo a soporte.",
-          "19ec5e29b3": "Recopila actividad reciente y errores de la app en un archivo depurado que puedes revisar antes de enviarlo. Nada se sube hasta que elijas enviarlo."
-        },
-        "PrivacyDiagnosticsSection": {
-          "af2fc82cde": "Enviar diagnósticos de la app a soporte",
-          "c18cbe45df": "Se eliminaron los diagnósticos enviados",
-          "7a4944595b": "No se pudo copiar el ID de referencia",
-          "13eb2c65a1": "ID de referencia copiado",
-          "860bca9ec9": "Archivo de revisión descartado",
-          "49fc6c80e8": "Diagnósticos enviados",
-          "db3228e01a": "Archivo de revisión abierto",
-          "a2b3505c77": "Archivo de revisión creado"
-        },
         "PrivacyPane": {
-          "36e0e2e63b": "variable de entorno. Quítala y reinicia para volver a habilitarla.",
-          "79a0f3c16c": "La telemetría está desactivada por el",
-          "e3970bbbf5": "La telemetría está desactivada porque hay una variable de entorno de CI configurada. Quítala y reinicia.",
-          "fe904ac984": "Compartir datos de uso anónimos",
-          "77410e0566": "Política de privacidad",
-          "8bfdd23a88": "Ayúdanos a descubrir qué crear a continuación. Orca envía recuentos anónimos de qué funciones usas y dónde fallan las cosas.",
           "afec8b03be": "ci"
         },
         "QuickCommandsPane": {
@@ -8513,8 +8155,6 @@
           "8b017f2506": "Experimental",
           "499c1cd7f9": "Ajustes de compatibilidad de bajo nivel para solucionar problemas.",
           "1c87f8d024": "Avanzado",
-          "c1b43dc4e2": "Datos de uso anónimos y controles de telemetría.",
-          "d7e3f62d70": "Privacidad y telemetría",
           "9b83cc62c2": "Acceso a la privacidad de macOS para herramientas de desarrollo lanzadas en terminales.",
           "65660d4548": "Permisos de macOS",
           "c6c01ac209": "Controla terminales y agentes desde tu teléfono.",
@@ -9931,13 +9571,6 @@
         },
         "general": {
           "search": {
-            "bdfb6dc21b": "me gusta",
-            "e6b01c8e30": "comentarios",
-            "b65665703a": "soporte",
-            "06ea5a69a6": "github",
-            "e4fb4516d0": "estrella",
-            "e0b8c8bc25": "Apoya el proyecto con una estrella de GitHub mediante la CLI gh.",
-            "36a72f0d9e": "Dar una estrella a Orca en GitHub",
             "c61b14be7c": "grok",
             "5d9ba08673": "copiloto",
             "f472e97440": "aider",
@@ -10463,38 +10096,6 @@
             "a7f76b4ca7": "orquestación",
             "e05ff36753": "Coordina varios agentes de codificación mediante mensajería, DAG de tareas, dispatch y controles de decisión.",
             "c34045764e": "Orquestación de agentes"
-          }
-        },
-        "privacy": {
-          "search": {
-            "3922051573": "datos",
-            "e8bc614a18": "desactivar",
-            "d8191ae5ca": "variable de entorno",
-            "94e04427f6": "env",
-            "664f1a8984": "integración continua",
-            "5854a5c752": "CI",
-            "69637f4dc4": "orca_telemetry_disabled",
-            "058550f6bc": "do_not_track",
-            "83a6cd79b3": "no rastrear",
-            "f7a2d9f137": "Variables de entorno que deshabilitan la transmisión de telemetría.",
-            "e058a3c98d": "Variables de entorno de telemetría",
-            "1686c07fee": "soporte",
-            "c0494ff48a": "diagnósticos",
-            "8b08f32366": "Diagnósticos de la aplicación y controles para compartir con soporte.",
-            "6d258d2ed6": "Diagnósticos",
-            "ead1deded2": "compartir",
-            "27a27b2f63": "optar por no participar",
-            "4d4bb76bf4": "optar por participar",
-            "b021b9cb81": "anónimo",
-            "79c319948b": "uso",
-            "77d3180def": "telemetría",
-            "b707cc3981": "Ayude a mejorar Orca enviando eventos anónimos de uso de funciones.",
-            "57b283461a": "Compartir datos de uso anónimos",
-            "2b5a5c312f": "posthog",
-            "4104f6f0f3": "analíticas",
-            "10124159f1": "privacidad",
-            "aa3b794c17": "Datos anónimos de uso del producto, diagnósticos y controles de telemetría.",
-            "5c508bad41": "Privacidad y telemetría"
           }
         },
         "quick": {
@@ -11424,13 +11025,6 @@
           "cancel": "Cancelar",
           "applyRuntimeChange": "Aplicar cambio de runtime"
         },
-        "PrivacyDiagnosticsRows": {
-          "5a7cbe069a": "DO_NOT_TRACK=1 está configurado: crear y enviar archivos de diagnóstico está deshabilitado.",
-          "63d03261d1": "ORCA_TELEMETRY_DISABLED=1 está configurado: crear y enviar archivos de diagnóstico está deshabilitado.",
-          "d37e92a06b": "ORCA_DIAGNOSTICS_DISABLED=1 está configurado: los diagnósticos de la app están desactivados.",
-          "5ebb31e1fb": "Se está ejecutando en CI: los diagnósticos están desactivados.",
-          "e27c8d45bf": "Los diagnósticos están desactivados por una variable de entorno."
-        },
         "ShortcutCommandBlock": {
           "eb72c52c28": "Pulsa un atajo o toca dos veces una tecla modificadora (p. ej., {{value0}}). Esc cancela.",
           "70b5d25583": "Atajo de {{value0}}",
@@ -11522,13 +11116,6 @@
           "notificationPlayground": "Panel de prueba de notificaciones",
           "notificationPlaygroundDescription": "Disparadores solo para desarrollo para comprobar el diseño de toasts, acciones de recuperación y ajuste de texto largo.",
           "devOnly": "Solo para desarrollo",
-          "orcaCloud": "Orca Cloud",
-          "orcaCloudDescription": "Vista previa solo para desarrolladores del inicio de sesión de la nube propia. Oculto en producción; en desarrollo también aparece en el selector de cuentas de la barra lateral cuando se configuran ORCA_CLOUD_API_URL y ORCA_CLOUD_CLIENT_ID.",
-          "orcaCloudStatus": "Estado",
-          "orcaCloudSignOut": "Cerrar sesión",
-          "orcaCloudConnect": "Conectar perfil",
-          "orcaCloudRefresh": "Actualizar estado",
-          "orcaCloudNotConfigured": "Configura ORCA_CLOUD_API_URL y ORCA_CLOUD_CLIENT_ID para previsualizar el inicio de sesión de Orca Cloud en esta versión de desarrollo.",
           "deleteAnywayClicked": "Eliminar de todos modos hecho clic"
         },
         "EphemeralVmRecipeRow": {
@@ -11689,22 +11276,12 @@
           "standby": "Standby — no relay devices"
         },
         "MobilePairingConnectionOptions": {
-          "ready": "Listo",
-          "connecting": "Conectando",
-          "available": "Disponible",
-          "reconnecting": "Reconectando",
           "unavailable": "No disponible",
-          "signIn": "Iniciar sesión para Relay",
           "localDescription": "El teléfono debe estar en esta Wi‑Fi o conectado por Tailscale. No se necesita cuenta.",
           "pathGroup": "Cómo llega el teléfono a este ordenador",
           "anywhereTitle": "Orca Relay",
-          "anywhereDescription": "El teléfono puede estar en datos móviles o cualquier Wi‑Fi. El inicio de sesión solo es necesario para Relay.",
           "relayUnavailable": "Orca Relay no está disponible en esta compilación. Usa LAN.",
-          "signInAgain": "Volver a iniciar sesión para Relay",
-          "localTitle": "LAN",
-          "retrying": "Reintentando",
-          "relayCell": "celda de relevo",
-          "relaySignInDetail": "Inicia la sesión de este escritorio en Orca y enruta el teléfono a través de los servidores de Orca. LAN no necesita una cuenta."
+          "localTitle": "LAN"
         },
         "MobilePairingSetupSection": {
           "title": "Vincular un teléfono",
@@ -11924,8 +11501,6 @@
           "official": "Oficial",
           "installed": "Instalado",
           "noDescription": "No description provided.",
-          "blocked": "Bloqueado por la lista de seguridad de Orca: {{value0}}",
-          "blockedAction": "Bloqueado",
           "checkUpdate": "Buscar actualización",
           "install": "Install"
         },
@@ -11948,7 +11523,6 @@
           "noContributions": "Solo metadatos del manifiesto",
           "capabilities": "Acceso solicitado",
           "workerWarning": "Las capacidades limitan cómo usa este plugin la API de Orca. Su proceso sigue ejecutándose como un proceso normal en este ordenador, con acceso completo a tus archivos, red y otros procesos.",
-          "blocked": "La lista de seguridad de Orca bloquea este plugin: {{value0}}",
           "current": "Este contenido exacto del plugin ya está instalado.",
           "close": "Close",
           "cancel": "Cancelar",
@@ -12009,7 +11583,6 @@
           "rollbackFailed": "No se pudo revertir este plugin. Es posible que no haya una versión inmutable anterior disponible."
         },
         "PluginSettingsRow": {
-          "blocked": "Bloqueado",
           "needsReview": "Requiere revisión",
           "restarting": "Reiniciando",
           "invalid": "No válido",
@@ -12025,8 +11598,6 @@
           "dev": "Desarrollo",
           "bundled": "Incluido",
           "noDescription": "No description provided.",
-          "killListMessage": "La lista de seguridad de Orca desactivó este plugin: {{value0}}",
-          "viewAdvisory": "Ver aviso",
           "runtimeError": "El plugin se detuvo tras un error de activación o del proceso.",
           "restartCount": " · {{value0}} reinicios",
           "moreActions": "Más acciones para {{value0}}",
@@ -12242,74 +11813,12 @@
           "title": "Las concesiones de permisos de macOS no llegan a los terminales"
         },
         "artifacts": {
-          "title": "Artefactos",
-          "description": "Comparte archivos HTML y Markdown con tu equipo y gestiona sus enlaces públicos.",
-          "keywordPermission": "permiso",
           "connected": "Conectado",
           "enable": "Habilitar artefactos",
           "enableDescription": "Agregue artefactos a la barra lateral para poder abrir y eliminar archivos compartidos.",
           "account": "cuenta Orca",
           "signInRequired": "Es necesario iniciar sesión para cargar y administrar artefactos.",
-          "signIn": "Iniciar sesión en Orca",
-          "howToTitle": "Cómo utilizar artefactos",
-          "howToDescription": "Publique archivos HTML o Markdown como enlaces públicos y luego compártalos con su equipo.",
-          "shareStepTitle": "Elige un archivo para compartir",
-          "shareStepDescription": "Abra un archivo HTML o Markdown y seleccione Compartir como artefacto o pídale a un agente que lo comparta.",
-          "linkStepTitle": "Copia el enlace público",
-          "linkStepDescription": "Después de publicar, copie el enlace y envíelo a su equipo.",
-          "manageStepTitle": "Gestionarlo en Orca",
-          "manageStepDescription": "Abra Artefactos desde la barra lateral para obtener una vista previa o eliminar enlaces.",
-          "openArtifacts": "Artefactos abiertos",
-          "openArtifactsDescription": "Ver y eliminar enlaces compartidos a través de su cuenta.",
-          "showButton": "Botón Mostrar artefactos",
-          "showButtonDescription": "Muestra el acceso directo a Artefactos en la barra lateral.",
-          "signInTitle": "Inicia sesión para compartir artefactos",
-          "signInAgain": "Iniciar sesión nuevamente",
-          "openArtifactsDescriptionV2": "Obtenga una vista previa, copie y administre enlaces compartidos a través de su cuenta.",
-          "signInDescription": "Utilice su cuenta Orca para cargar artefactos y administrar sus enlaces públicos.",
-          "enableStepTitle": "Habilitar el intercambio de artefactos",
-          "enableStepWebDescription": "Abra Configuración → Artefactos en la aplicación de escritorio Orca en el dispositivo host y habilite la publicación.",
-          "enableStepDescription": "Active \"Permitir la publicación de enlaces de artefactos públicos\" arriba.",
-          "allowPublishing": "Permitir la publicación de enlaces de artefactos públicos",
-          "allowPublishingWebDescription": "Solo escritorio. Abra Configuración → Artefactos en el dispositivo host para cambiar esta configuración.",
-          "allowPublishingDescription": "Publique archivos HTML y Markdown como enlaces que cualquiera con la URL puede abrir. Los enlaces existentes permanecen hasta que los elimine de Artifacts.",
-          "howToDescriptionDisabled": "Habilite el uso compartido de artefactos arriba para publicar archivos HTML o Markdown como enlaces públicos.",
-          "allowPublishingSearchDescription": "Permita que Orca publique archivos HTML y Markdown como enlaces públicos.",
-          "keywordArtifacts": "artefactos",
-          "keywordShare": "compartir",
-          "keywordPublish": "publicar",
-          "keywordPublic": "público",
-          "keywordHtml": "HTML",
-          "keywordMarkdown": "Markdown",
-          "keywordUpload": "subir"
-        },
-        "orcaAccount": {
-          "keywordLogin": "acceso",
-          "connected": "Conectado",
-          "keywordCloud": "nube",
-          "account": "cuenta Orca",
-          "signInAgain": "Iniciar sesión nuevamente",
-          "signIn": "Iniciar sesión en Orca",
-          "reconnectRequired": "Tu sesión expiró. Inicie sesión nuevamente para utilizar las funciones de la nube.",
-          "unavailable": "El inicio de sesión de Orca no está disponible en esta compilación.",
-          "signedOut": "Inicie sesión para ampliar Orca con funciones en la nube, incluidos Artifacts y Orca Relay.",
-          "checking": "Comprobando el estado de la cuenta...",
-          "signOut": "desconectar",
-          "title": "Cuenta Orca",
-          "description": "Comparte tu trabajo al instante y accede a tu escritorio desde Orca Mobile estés donde estés.",
-          "searchDescription": "Iniciar o cerrar sesión en la cuenta utilizada por Artifacts y Orca Relay.",
-          "benefitsTitle": "Incluido con tu cuenta",
-          "artifactsTitle": "Compartir artefactos",
-          "artifactsDescription": "Publique archivos HTML y Markdown, luego administre cada enlace compartido desde Orca.",
-          "relayTitle": "Relevo de Orca",
-          "relayDescription": "Conecte Orca Mobile a esta computadora de escritorio a través de celular o cualquier Wi-Fi.",
-          "skillsTitle": "Compartir habilidades",
-          "skillsDescription": "Comparta una habilidad o un conjunto completo detrás de un enlace no listado e instálelas en cualquier máquina que utilice.",
-          "keywordAccount": "cuenta",
-          "keywordLogout": "cerrar sesión",
-          "keywordSignIn": "iniciar sesión",
-          "keywordSignOut": "desconectar",
-          "keywordRelay": "relé"
+          "openArtifactsDescription": "Ver y eliminar enlaces compartidos a través de su cuenta."
         },
         "automations": {
           "title": "Automatizaciones",
@@ -12332,52 +11841,7 @@
           "keywordRuns": "corre"
         },
         "shareSkills": {
-          "title": "Compartir skills",
-          "description": "Comparte tus skills con un enlace no listado. Cualquiera que lo tenga puede instalarlos.",
-          "searchDescription": "Comparte tus skills con un enlace no listado. Cualquiera que lo tenga puede instalarlos.",
-          "linkCopied": "Compartir enlace copiado",
-          "copyLink": "Copiar enlace",
-          "confirmUnshare": "Confirmar dejar de compartir",
-          "unshare": "Dejar de compartir",
-          "signInAgain": "Iniciar sesión nuevamente",
-          "signIn": "Iniciar sesión en Orca",
-          "keywordShare": "compartir",
-          "allowAgentPublishing": "Permitir que los agentes y la CLI de Orca publiquen enlaces de habilidades",
-          "allowAgentPublishingDescription": "Permita que los comandos publiquen habilidades instaladas con nombres explícitos. Las carpetas de habilidades pueden contener scripts, configuración o secretos, por lo que está desactivado de forma predeterminada.",
-          "allowAgentPublishingWebDescription": "Solo escritorio. Abra Configuración → Compartir habilidades en el dispositivo host para cambiar esta configuración.",
-          "selectTitle": "Seleccione una o más habilidades",
-          "selectDescription": "Abra Habilidades, elija Compartir habilidades y seleccione las habilidades para agruparlas detrás de un enlace.",
-          "reviewTitle": "Revisar y publicar",
-          "reviewDescription": "Revise los archivos, scripts y ejecutables incluidos antes de cargar el paquete inmutable.",
-          "copyTitle": "Copia el enlace no listado",
-          "copyDescription": "Cualquiera que tenga el enlace puede inspeccionar e instalar todas las habilidades seleccionadas sin iniciar sesión.",
-          "manageTitle": "Administrar o revocar enlaces",
-          "manageDescription": "Revocar bloquea el acceso futuro. Las habilidades ya instaladas en otra máquina permanecen allí.",
-          "linkTitle": "Enlaces de habilidades no listados",
-          "linkDescription": "Los paquetes compartidos no se pueden buscar ni enumerar en Orca. El enlace es la credencial, así que envíelo sólo a personas en las que confíe.",
-          "signInTitle": "Inicia sesión para compartir habilidades",
-          "signInWebDescription": "La publicación y la gestión de enlaces están disponibles en la aplicación de escritorio de Orca.",
-          "signInDescription": "Utilice su cuenta Orca para publicar paquetes y administrar sus enlaces. Los destinatarios no necesitan una cuenta.",
-          "howToTitle": "Cómo compartir habilidades",
-          "howToDescription": "Publique una habilidad o un paquete, como una colección de 30 habilidades, detrás de un enlace.",
-          "openSkills": "Habilidades abiertas",
-          "openSkillsDescription": "Publique un paquete, instálelo desde un enlace o administre habilidades instaladas y compartidas.",
-          "linksReconnect": "Inicie sesión nuevamente para administrar enlaces compartidos.",
-          "linksUnavailable": "Los enlaces compartidos no están disponibles en este momento.",
-          "linkRevoked": "Enlace revocado",
-          "revokeFailed": "Orca no pudo revocar este enlace.",
-          "activeLinks": "Enlaces compartidos activos",
-          "activeLinksDescription": "Sólo las personas con un enlace pueden abrirlo. Dejar de compartir un enlace para bloquear futuras inspecciones e instalaciones.",
-          "refreshLinks": "Refrescar",
-          "noActiveLinks": "No hay enlaces activos. Publica un paquete de habilidades desde Skills para crear uno.",
-          "showButton": "Botón Mostrar habilidades",
-          "showButtonDescription": "Muestra el acceso directo a Habilidades en la barra lateral.",
-          "manageInSkills": "Gestionar en Habilidades",
-          "keywordSkills": "habilidades",
-          "keywordBundle": "manojo",
-          "keywordLink": "enlace",
-          "keywordUnlisted": "no estante en la lista",
-          "keywordRevoke": "revocar"
+          "refreshLinks": "Refrescar"
         },
         "bitbucket": {
           "credentials": {
@@ -12536,11 +12000,7 @@
           "switchTo": "Cambiar a esta versión",
           "alreadyRunning": "Esta es la versión que estás usando.",
           "willSwitch": "{{value0}} → {{value1}}",
-          "webUnavailable": "Solo puedes cambiar de versión en la aplicación de escritorio.",
-          "devChannelUnsupportedAria": "{{value0}} (solo {{value1}})",
-          "devChannelUnsupported": "Las versiones de {{value0}} solo están disponibles para {{value1}}. En Linux solo se ofrecen Stable y RC.",
-          "downloadInstaller": "Descargar instalador",
-          "manualInstallHint": "Las versiones de {{value0}} no están firmadas en Windows, por lo que el actualizador de la aplicación no puede instalarlas sobre una versión firmada. Ejecuta una vez el instalador descargado; Windows mostrará una advertencia de editor desconocido. Después podrás cambiar de versión desde aquí, incluso para volver a Stable."
+          "webUnavailable": "Solo puedes cambiar de versión en la aplicación de escritorio."
         },
         "TerminalRenderingSection": {
           "6d4c55bacc": "Imágenes en línea",
@@ -15194,9 +14654,6 @@
             "33dca8bbbe": "Un breve recorrido por Orca, flujo de trabajo por flujo de trabajo.",
             "3567e147c8": "Conozca Orca"
           },
-          "FeatureWallPreview": {
-            "a666384798": "También en este flujo de trabajo"
-          },
           "FeatureWallRail": {
             "69ea857689": "Terminado",
             "7593d15f94": "Flujos de trabajo"
@@ -16469,32 +15926,15 @@
       "crash": {
         "report": {
           "CrashReportDialog": {
-            "b4951cd27c": "Enviar informe",
-            "88fea8e84e": "No enviar",
             "50b00dc327": "Copiar detalles",
             "6d3ebe216a": "Texto de diagnóstico",
             "835037edc9": "· Orca",
             "56a3dfa283": "No se pudo enviar el informe de fallas.",
-            "8e24fe4f75": "Informe de fallo enviado.",
             "8b8473c544": "Se copió el informe de fallos.",
             "b175e90213": "No hay ningún informe de fallo disponible.",
             "765591798d": "Comprobando informes de fallos...",
             "b2e36f53a1": "No se pudo enviar el informe de fallo. Se subió el ticket de diagnóstico {{value0}}, pero no se vinculó.",
-            "ead6fc0510": "No se capturó ningún informe de fallo automático. Aun así puedes enviar detalles e incluir logs de diagnóstico recientes cuando estén disponibles.",
-            "b082f27490": "Adjuntar logs de diagnóstico recientes",
-            "e59f0b9427": "Envía un paquete limitado de logs redactados junto con el informe."
-          },
-          "submit": {
-            "notice": {
-              "unknownError": "The crash report request failed before it returned a reason.",
-              "ticketUploaded": "Diagnostic ticket {{value0}} was uploaded but not linked.",
-              "uncheckDiagnostics": "Uncheck \"Attach recent diagnostic logs\" and try again, or copy the details.",
-              "checkConnection": "Check your connection and try again, or copy the details.",
-              "notSent": "Crash report wasn't sent",
-              "copyDetails": "Copy Details",
-              "sentWithoutDiagnostics": "Crash report sent without diagnostic logs",
-              "diagnosticsReason": "Diagnostic logs were not attached: {{value0}}"
-            }
+            "ead6fc0510": "No se capturó ningún informe de fallo automático. Aun así puedes enviar detalles e incluir logs de diagnóstico recientes cuando estén disponibles."
           },
           "copy": {
             "copyFailed": "No se pudieron copiar los detalles del informe de fallo."
@@ -17782,37 +17222,9 @@
       "ShortcutKeyCombo": {
         "07eb4985a1": "Doble toque en {{value0}}"
       },
-      "star": {
-        "nag": {
-          "StarNagToastHost": {
-            "starredThanks": "Star enviada — ¡gracias!",
-            "githubOpened": "GitHub abierto",
-            "opening": "Abriendo…",
-            "starring": "Enviando star…",
-            "openGithub": "Abrir GitHub",
-            "starOnGithub": "Dar star en GitHub",
-            "onboardingCompleted": "¡Onboarding completado!",
-            "body": "Si Orca te está gustando, una star en GitHub ayuda a que otros desarrolladores lo descubran.",
-            "dismiss": "Descartar",
-            "later": "Más tarde"
-          }
-        }
-      },
       "nativeChat": {
         "contextMenu": {
           "copy": "Copiar"
-        }
-      },
-      "orca": {
-        "profiles": {
-          "signout": {
-            "confirm": {
-              "title": "¿Cerrar sesión en Orca?",
-              "description": "Se cerrará tu sesión de Orca en este dispositivo. Tus proyectos y worktrees locales no se verán afectados.",
-              "cancel": "Cancelar",
-              "action": "Cerrar sesión"
-            }
-          }
         }
       },
       "linear-issue-attribute-filter-dropdowns": {
@@ -17903,118 +17315,11 @@
       },
       "artifacts": {
         "ArtifactsPage": {
-          "deleteTitle": "¿Eliminar el artefacto?",
-          "deleteDescription": "“{{name}}” ya no estará disponible en su enlace público.",
-          "delete": "Eliminar",
-          "title": "Artefactos",
-          "retry": "Reintentar",
-          "signInHeading": "Iniciar sesión en Orca",
-          "signIn": "Iniciar sesión en Orca",
-          "signInAgainAction": "Iniciar sesión nuevamente",
-          "refresh": "Refrescar",
-          "signInAgain": "Inicia sesión en Orca de nuevo para cargar los artefactos.",
-          "loadFailed": "No se pudieron cargar los artefactos.",
-          "deleteFailed": "No se pudo eliminar el artefacto.",
-          "signInCopy": "Inicia sesión para ver y gestionar los artefactos compartidos desde tu cuenta.",
-          "empty": "No hay artefactos compartidos",
-          "emptyCopy": "Abre un archivo HTML o Markdown y selecciona Compartir como artefacto, o pídele a tu agente que lo comparta.",
-          "openArtifact": "Abrir artefacto",
-          "deleteArtifact": "Eliminar artefacto",
-          "moreAvailable": "Hay más artefactos disponibles",
-          "moreAvailableCopy": "Carga la página siguiente para continuar.",
-          "loadMoreFailed": "No se pudieron cargar más artefactos.",
-          "publishingOff": "La publicación está desactivada",
-          "publishingOffCopy": "Nada en este dispositivo puede crear aún un enlace público de artefacto. Permite la publicación en Ajustes → Artefactos, luego comparte desde un archivo HTML o Markdown abierto o pídele a tu agente.",
-          "openArtifactsSettings": "Abrir Ajustes → Artefactos",
-          "reconnectHeading": "Inicia sesión en Orca de nuevo",
-          "reconnectCopy": "Inicia sesión de nuevo para ver y gestionar los artefactos compartidos desde tu cuenta.",
-          "unconfiguredCopy": "El inicio de sesión de la cuenta de Orca aún no está configurado en esta máquina.",
-          "openAccountSettings": "Abrir ajustes de la cuenta"
-        },
-        "ArtifactPublishButton": {
-          "a4a49da6af": "Compartir como artefacto",
-          "confirmTitle": "Compartir como artefacto",
-          "confirmDescription": "Esto publica el archivo actual en un enlace que cualquier persona con la URL puede ver.",
-          "accountTitle": "Cuenta de Orca",
-          "accountDescription": "Inicia sesión para crear y gestionar este enlace.",
-          "signInAgain": "Iniciar sesión de nuevo",
-          "signIn": "Iniciar sesión",
-          "publishingOffTitle": "El uso compartido de artefactos está desactivado",
-          "publishingOffDescription": "Obtén más información sobre los enlaces públicos y activa el uso compartido en Ajustes.",
-          "openSettings": "Abrir los ajustes de artefactos",
-          "sharing": "Compartiendo…",
-          "sharePublicLink": "Generar enlace",
-          "publishedDescription": "Cualquier persona con este enlace puede ver el archivo compartido.",
-          "checkingLink": "Comprobando si existe un enlace…",
-          "checkFailed": "No se pudo comprobar si existe un enlace.",
-          "tryAgain": "Reintentar"
+          "openArtifact": "Abrir artefacto"
         },
         "artifact-publish-flow": {
-          "9a078a0c65": "El uso compartido de artefactos no está disponible",
-          "bba20daa6d": "Inicia sesión en Orca e inténtalo de nuevo.",
-          "54b1805328": "No se pudo compartir el artefacto",
-          "430019efd0": "Artefacto compartido",
-          "2fc727c831": "Artefacto actualizado",
-          "5cb4f5ec36": "Copiar enlace",
-          "fbb5018602": "Este archivo está vacío.",
-          "6112db5a1c": "Este artefacto es demasiado grande para compartirlo.",
-          "e2ed5acd8c": "Orca no pudo leer este archivo. Ábrelo desde un espacio de trabajo e inténtalo de nuevo.",
-          "visualUnreadable": "No se pudo leer esta visualización para compartirla.",
-          "6d475e9b25": "Solo los archivos HTML y Markdown locales se pueden compartir como artefactos.",
-          "29a406be09": "Los artefactos deben contener texto."
-        },
-        "ArtifactPublishedLinkPanel": {
-          "copyLink": "Copiar enlace",
-          "openLink": "Abrir enlace",
-          "updating": "Actualizando…",
-          "update": "Actualizar el contenido compartido"
-        },
-        "copyLink": "Copiar enlace",
-        "ArtifactDetailHeader": {
-          "close": "Cerrar",
-          "publicLink": "Cualquiera con este enlace puede verlo"
-        },
-        "ArtifactListTableHeader": {
-          "updated": "Actualizado",
-          "actions": "Comportamiento",
-          "name": "Nombre",
-          "type": "Tipo",
-          "size": "Tamaño",
-          "expires": "Caduca"
-        },
-        "typeMarkdown": "Markdown",
-        "typeHtml": "HTML",
-        "previewUnavailable": "Vista previa no disponible",
-        "copySuccess": "Enlace del artefacto copiado",
-        "copyFailed": "No se pudo copiar el enlace del artefacto",
-        "openInBrowser": "Abrir en el navegador",
-        "preview": "Vista previa del artefacto",
-        "previewUnavailableDescription": "Abre este artefacto en tu navegador para verlo.",
-        "actions": "Acciones del artefacto",
-        "ArtifactActions": {
-          "more": "Más acciones del artefacto"
-        },
-        "ArtifactCollection": {
-          "loadMore": "Cargar más",
-          "noMatches": "Sin resultados"
-        },
-        "updatedAt": "Actualizado {{when}}",
-        "updatedRecently": "recientemente",
-        "expiryUnknown": "Caducidad desconocida",
-        "expired": "Enlace caducado",
-        "expires": "El enlace caduca {{when}}",
-        "ArtifactDetailDrawer": {
-          "description": "Previsualiza y gestiona este artefacto compartido."
-        },
-        "ArtifactListSearchField": {
-          "label": "Buscar artefactos",
-          "placeholder": "Buscar...",
-          "clear": "Borrar búsqueda"
-        },
-        "ArtifactsPageSkeleton": {
-          "loading": "Cargando artefactos"
-        },
-        "expiredCompact": "Caducado"
+          "5cb4f5ec36": "Copiar enlace"
+        }
       },
       "ComposerParentWorktreePicker": {
         "label": "Worktree padre",
@@ -18118,20 +17423,6 @@
           "externalLinkTitle": "¿Abrir el enlace a {{host}}?"
         }
       },
-      "UnexpectedSignoutCard": {
-        "3e8f5c2a91": "Descartar",
-        "c5b3e8a17d": "Iniciar sesión en Orca",
-        "8d2e4f7a1b": "Compartir artefactos",
-        "6e3f1a9c5b": "Relevo de Orca",
-        "4b7d2e8f1a": "Conecte Orca Mobile a esta computadora de escritorio a través de celular o cualquier Wi-Fi.",
-        "9a4c6b2d7e": "Compartir habilidades",
-        "9f2c1a4b7d": "Se cerró tu sesión",
-        "7b4d9e1f2a": "Inicia sesión de nuevo como {{value0}} para restaurar el uso compartido de artefactos, Orca Relay y el uso compartido de skills.",
-        "5a1c8d3e6f": "Inicia sesión de nuevo para restaurar el uso compartido de artefactos, Orca Relay y el uso compartido de skills.",
-        "1f6b2c9d4e": "Lo que recuperas",
-        "2c9a5b6e8d": "Publica archivos HTML y Markdown y gestiona todos los enlaces compartidos desde Orca.",
-        "3d8e5f1b9c": "Comparte skills mediante un enlace no listado e instálalos en cualquier máquina que uses."
-      },
       "linear-issue-attribute-filter-coverage-notice": {
         "statusPartialTeamCoverage": "Filtrando {{value0}} de {{value1}} estados de equipo; las incidencias de los equipos restantes no se incluyen.",
         "labelsPartialTeamCoverage": "Filtrando {{value0}} de {{value1}} etiquetas de equipo; las incidencias de los equipos restantes no se incluyen.",
@@ -18222,14 +17513,6 @@
         "a62f9db53d": "Cancel",
         "c77189bc0c": "Update filter",
         "19af906d12": "Save filter"
-      },
-      "OrcaSignInProgress": {
-        "waiting": "Esperando el inicio de sesión en tu navegador",
-        "copyLink": "Copiar enlace de inicio de sesión",
-        "copied": "Enlace de inicio de sesión copiado",
-        "copyFailed": "No se pudo copiar el enlace.",
-        "signingIn": "Iniciando sesión…",
-        "cancel": "Cancelar"
       }
     },
     "i18n": {

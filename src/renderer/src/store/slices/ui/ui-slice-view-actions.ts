@@ -63,39 +63,6 @@ export function createUiViewActions(set: UISliceSet, get: UISliceGet): Partial<U
         activeView: state.previousViewBeforeSkills,
         worktreeNavHistoryIndex: rewindHistoryIndexPastView(state, 'skills')
       })),
-    openSkillShare: (shareId) => {
-      get().recordViewVisit('skills')
-      set((state) => ({
-        activeView: 'skills',
-        previousViewBeforeSkills:
-          state.activeView === 'skills' ? state.previousViewBeforeSkills : state.activeView,
-        pendingSkillShareId: shareId
-      }))
-    },
-    clearPendingSkillShare: () => set({ pendingSkillShareId: null }),
-    openSkillsSharedLinks: () => {
-      get().recordViewVisit('skills')
-      set((state) => ({
-        activeView: 'skills',
-        previousViewBeforeSkills:
-          state.activeView === 'skills' ? state.previousViewBeforeSkills : state.activeView,
-        pendingSkillsSharedView: true
-      }))
-    },
-    clearPendingSkillsSharedView: () => set({ pendingSkillsSharedView: false }),
-    openArtifactsPage: () => {
-      get().recordViewVisit('artifacts')
-      set((state) => ({
-        activeView: 'artifacts',
-        previousViewBeforeArtifacts:
-          state.activeView === 'artifacts' ? state.previousViewBeforeArtifacts : state.activeView
-      }))
-    },
-    closeArtifactsPage: () =>
-      set((state) => ({
-        activeView: state.previousViewBeforeArtifacts,
-        worktreeNavHistoryIndex: rewindHistoryIndexPastView(state, 'artifacts')
-      })),
     openMobilePage: () =>
       set((state) => ({
         activeView: 'mobile',

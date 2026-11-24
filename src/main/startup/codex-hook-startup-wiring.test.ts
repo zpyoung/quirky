@@ -56,7 +56,6 @@ vi.mock('../crash-reporting/process-gone-diagnostics', () => ({
 vi.mock('./main-window-lifecycle-flags', () => ({ recordProcessGoneCrash: vi.fn() }))
 vi.mock('./gpu-lifecycle', () => ({ handleGpuChildCrash: vi.fn() }))
 vi.mock('./configure-process', () => ({ shouldInstallManagedHooks: () => false }))
-vi.mock('../agent-hooks/install-telemetry', () => ({ recordManagedHookInstallFailure: vi.fn() }))
 vi.mock('./main-process-observers', () => ({ initializeMainProcessObservers: vi.fn() }))
 vi.mock('./branch-rename-hook', () => ({
   installFirstWorkRenameHookSubscription: fixture.installFirstWorkRename

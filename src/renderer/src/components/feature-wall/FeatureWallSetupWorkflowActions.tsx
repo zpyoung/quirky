@@ -70,7 +70,6 @@ export function WorkspacesAction(props: { done: boolean }): React.JSX.Element | 
         const tourRequestId = createSetupGuideTourRequestId()
         openModal('new-workspace-composer', {
           initialRepoId: repo.id,
-          telemetrySource: 'unknown',
           contextualTourSource: 'setup_guide_parallel_work',
           setupGuideTourRequestId: tourRequestId
         })

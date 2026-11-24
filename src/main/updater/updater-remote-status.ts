@@ -8,11 +8,29 @@ import type {
 } from '../../shared/remote-server-update'
 import { hasServeUpdateSupervisor } from '../serve-update-handoff'
 import { getLinuxPackageType } from '../linux-update-package-type'
-import { UpdaterNudge } from './updater-nudge'
+import { UpdaterBuildSelection } from './updater-build-selection'
 import type { UpdateInstallMode } from './updater-state'
 
 /** Exposes updater state to runtime RPC callers without leaking internal mutators. */
-export abstract class UpdaterRemoteStatus extends UpdaterNudge {
+export abstract class UpdaterRemoteStatus extends UpdaterBuildSelection {
+  /** Abandons an un-acted local or pinned update and restores the release feed. */
+  protected dismissAvailableUpdate(): void {
+    if (this.activeUpdateSource === 'release' && !this.isPinnedBuildActive) {
+      return
+    }
+    if (this.localBuildSelectionInProgress || this.pinnedBuildSelectionInProgress) {
+      return
+    }
+    // Why: only an un-acted 'available' card is abandoned — 'downloading'/'downloaded' still need the pinned feed and allowDowngrade.
+    if (this.currentStatus.state !== 'available') {
+      return
+    }
+    this.clearAvailableUpdateContext()
+    this.restoreReleaseUpdateSource()
+    // Why: leaving the card's 'available' status behind would let a retry download the local version off the restored release feed.
+    this.sendStatus({ state: 'idle' })
+  }
+
   protected getUpdateStatus(): UpdateStatus {
     return this.currentStatus
   }

@@ -5,14 +5,6 @@ import { join } from 'node:path'
 import { AgentHookServer, _internals } from './server'
 import { buildBody, postHookEvent, PANE } from './server.test-fixtures'
 
-const { getCohortAtEmitMock, trackMock } = vi.hoisted(() => ({
-  getCohortAtEmitMock: vi.fn(),
-  trackMock: vi.fn()
-}))
-
-vi.mock('../telemetry/client', () => ({ track: trackMock }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
-
 const RESUMED = { key: 'session_id' as const, id: 'resumed-session' }
 
 // #10923: Codex runs SessionStart only at its first turn, so a resumed pane is silent until the
@@ -23,7 +15,6 @@ describe('a resume launch seeds the pane identity', () => {
 
   beforeEach(() => {
     _internals.resetCachesForTests()
-    getCohortAtEmitMock.mockReturnValue({})
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-launch-resume-identity-'))
   })
 

@@ -1,4 +1,4 @@
-import { ClipboardCopy, FolderOpen, Share2, Trash2 } from 'lucide-react'
+import { ClipboardCopy, FolderOpen, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,23 +54,18 @@ function agentNames(
 export function SkillDetailDialog({
   skill,
   agentByRootPath,
-  shareable,
   deletable,
   deleteDisabledReason,
   onOpenChange,
-  onShare,
   onDelete,
   onReveal
 }: {
   skill: DiscoveredSkill | null
   agentByRootPath: ReadonlyMap<string, string>
-  shareable: boolean
   deletable: boolean
-  /** Why a reason string rather than share's bare boolean: delete is valid on a
-   *  remote host, so "can't" always has a specific cause worth showing. */
+  /** Delete is valid on a remote host, so "can't" always has a specific cause worth showing. */
   deleteDisabledReason: string | null
   onOpenChange: (open: boolean) => void
-  onShare: () => void
   onDelete: () => void
   onReveal: () => void
 }): React.JSX.Element | null {
@@ -172,10 +167,6 @@ export function SkillDetailDialog({
               </TooltipContent>
             ) : null}
           </Tooltip>
-          <Button type="button" size="sm" disabled={!shareable} onClick={onShare}>
-            <Share2 className="size-3.5" />
-            {translate('auto.components.skills.SkillCard.d25a1b8ae6', 'Share skill')}
-          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

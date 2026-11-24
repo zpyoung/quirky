@@ -23,9 +23,6 @@ import {
   type StoredTierEvidence
 } from './sort-stamps-producer'
 
-vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 const WT = 'repo-1::/tmp/a'
 const FOLDER_ID = '11111111-1111-4111-8111-111111111111'
 const FOLDER = `folder:${FOLDER_ID}`

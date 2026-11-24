@@ -19,10 +19,6 @@ vi.mock('@/lib/active-agent-note-send', () => ({
   sendNotesToActiveAgentSession: mocks.sendNotesToActiveAgentSession
 }))
 
-vi.mock('@/lib/telemetry', () => ({
-  track: mocks.track
-}))
-
 vi.mock('sonner', () => ({
   toast: {
     message: mocks.toastMessage,

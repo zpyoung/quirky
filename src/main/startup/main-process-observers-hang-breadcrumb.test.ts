@@ -48,22 +48,6 @@ vi.mock('../agent-hooks/server', () => ({
 vi.mock('../agent-hooks/hook-status-session-tabs-republish', () => ({
   installHookStatusSessionTabsRepublish: () => () => {}
 }))
-vi.mock('../telemetry/client', () => ({
-  initTelemetry: () => {},
-  track: () => {}
-}))
-vi.mock('../codex/codex-trust-grant-telemetry', () => ({
-  setCodexTrustGrantTelemetry: () => {}
-}))
-vi.mock('../skills/skill-transaction-startup-recovery', () => ({
-  recoverPendingSkillTransactions: () => new Promise(() => {})
-}))
-vi.mock('../telemetry/cohort-classifier', () => ({
-  initCohortClassifier: () => {}
-}))
-vi.mock('../telemetry/onboarding-cohort-classifier', () => ({
-  initOnboardingCohortClassifier: () => {}
-}))
 vi.mock('../stats/collector', () => ({ StatsCollector: class {} }))
 vi.mock('../stats/agent-session-transition-recorder', () => ({
   AgentSessionTransitionRecorder: class {}

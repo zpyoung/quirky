@@ -207,23 +207,6 @@ describe('PluginMarketplaceBrowser', () => {
     act(() => root.unmount())
   })
 
-  it('disables a listing revoked by the safety list', async () => {
-    installApi({
-      listMarketplacePlugins: vi
-        .fn()
-        .mockResolvedValue([
-          { ...listing, blockedByKillList: { reason: 'Known credential theft' } }
-        ])
-    })
-    const { root, container } = await renderBrowser()
-    const blocked = button('Blocked')
-
-    expect(container.textContent).toContain('Known credential theft')
-    expect(blocked.disabled).toBe(true)
-    expect(window.api.plugins.previewMarketplacePlugin).not.toHaveBeenCalled()
-    act(() => root.unmount())
-  })
-
   it('detects when an update preview matches the installed content hash', async () => {
     const { root } = await renderBrowser([installedPlugin(preview.contentHash)])
 

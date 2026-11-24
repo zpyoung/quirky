@@ -68,11 +68,7 @@ export function classifySkillInstallFailureCode(code: string): SkillInstallFailu
   if (code.startsWith('skill-package-')) {
     return { category: 'archive', code, retryable: false }
   }
-  if (
-    code.startsWith('skill-download-') ||
-    code.startsWith('skill-transfer-') ||
-    code.startsWith('skill-cloud-')
-  ) {
+  if (code.startsWith('skill-download-') || code.startsWith('skill-transfer-')) {
     return { category: 'transport', code, retryable: retryableCode(code) }
   }
   if (

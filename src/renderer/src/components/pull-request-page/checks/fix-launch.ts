@@ -63,7 +63,6 @@ export async function startFixChecksFromDialog(args: {
     item: { ...args.item, repoId: args.targetRepoId, pasteContent: args.commandInput },
     repoId: args.targetRepoId,
     launchSource: 'task_page',
-    telemetrySource: 'sidebar',
     promptDelivery: 'submit-after-ready',
     agentOverride: args.agent,
     agentArgs: args.agentArgs,
@@ -112,7 +111,6 @@ export async function fixBrokenPullRequestChecks(args: {
       repoId: args.targetRepoId,
       basePrompt,
       launchSource: 'task_page',
-      telemetrySource: 'sidebar',
       openModalFallback: () => {
         args.setFixChecksComposerPrompt(basePrompt)
       }

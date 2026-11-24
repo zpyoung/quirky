@@ -121,7 +121,6 @@ export const TopLevelViewSchema = z.enum([
   'automations',
   'space',
   'skills',
-  'artifacts',
   'mobile',
   'heimdall',
   'ledger'
@@ -204,10 +203,7 @@ export const UiUpdateFields = z
     usagePercentageDisplay: z.enum(['used', 'remaining']).optional(),
     statusBarUsageMode: z.enum(['verbose', 'compact']).optional(),
     dismissedUpdateVersion: NullableString.optional(),
-    dismissedUnexpectedSignoutVersion: NullableString.optional(),
     lastUpdateCheckAt: z.number().finite().nullable().optional(),
-    pendingUpdateNudgeId: NullableString.optional(),
-    dismissedUpdateNudgeId: NullableString.optional(),
     // Why the predicate rather than an inline z.enum: an enum here is a copy of
     // RELEASE_CHANNELS, and a copy that drifts silently rejects the new
     // channel's override on its way here — the picker moves, nothing installs.

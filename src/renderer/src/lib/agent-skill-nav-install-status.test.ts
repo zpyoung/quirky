@@ -43,7 +43,7 @@ function placement(name: string, status: SkillFreshnessStatus): SkillFreshnessIn
     topology: 'canonical-copy',
     status,
     currentPackageDigest: 'current',
-    lockSource: 'stablyai/orca',
+    lockSource: 'zpyoung/quirky',
     errorCategory: null
   }
 }

@@ -12,7 +12,6 @@ export type UpdaterApi = {
   check: (options?: UpdateCheckOptions) => Promise<void>
   download: () => Promise<void>
   quitAndInstall: () => Promise<void>
-  dismissNudge: () => Promise<void>
   dismissAvailableUpdate: () => Promise<void>
   /** Desktop-only. Rejects unless the current status carries `linux-package-install` recovery. */
   getLinuxPackageInstallInstructions: () => Promise<LinuxPackageInstallInstructions>
@@ -25,5 +24,4 @@ export type UpdaterApi = {
   ) => Promise<ReleaseBuildListResult>
 
   onStatus: (callback: (status: UpdateStatus) => void) => () => void
-  onClearDismissal: (callback: () => void) => () => void
 }

@@ -211,7 +211,6 @@ export function useProjectRowActions({
         item: workItem,
         repoId: resolution.repo.id,
         launchSource: 'task_page',
-        telemetrySource: 'sidebar',
         openModalFallback: () => {
           if (row.content.url) {
             void window.api.shell.openUrl(row.content.url)

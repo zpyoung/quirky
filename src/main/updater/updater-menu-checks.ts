@@ -51,8 +51,6 @@ export abstract class UpdaterMenuChecks extends UpdaterScheduling {
     const checkAlreadyInFlight =
       this.backgroundCheckLaunchPending || this.currentStatus.state === 'checking'
     this.userInitiatedCheck = true
-    // Why: manual checks are nudge-independent; clear the marker so a later dismiss can't consume the campaign by accident.
-    this.activeUpdateNudgeId = null
     // Why: respond visibly before feed pinning/updater events; duplicate broadcasts are suppressed by status equality below.
     this.sendStatus({ state: 'checking', userInitiated: true })
     if (checkAlreadyInFlight) {

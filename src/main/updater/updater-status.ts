@@ -55,42 +55,12 @@ export abstract class UpdaterStatus extends BaseUpdaterState {
     this.pendingPrereleaseFallback = null
   }
 
-  protected clearPendingUpdateNudge(): void {
-    this.activeUpdateNudgeId = null
-    this.awaitingNudgeCheckOutcome = false
-    this._setPendingUpdateNudgeId?.(null)
-  }
-
-  protected deferPendingUpdateNudgeUntilRetry(): void {
-    this.activeUpdateNudgeId = null
-    this.awaitingNudgeCheckOutcome = false
-  }
-
   protected clearPublishingWindowLastGoodCheck(): void {
     this.publishingWindowLastGoodCheck = null
   }
 
   protected getPublishingWindowLastGoodCheck(): { lastGoodTag: string } | null {
     return this.publishingWindowLastGoodCheck
-  }
-
-  protected getPersistedPendingUpdateNudgeId(): string | null {
-    return this._getPendingUpdateNudgeId?.() ?? null
-  }
-
-  protected decorateStatusWithActiveNudge(status: UpdateStatus): UpdateStatus {
-    // Why: only actionable/error states carry the nudge marker so the renderer knows a dismiss should ack the campaign; cycle-boundary states never need it.
-    if (!this.activeUpdateNudgeId) {
-      return status
-    }
-    if (
-      status.state === 'idle' ||
-      status.state === 'checking' ||
-      status.state === 'not-available'
-    ) {
-      return status
-    }
-    return { ...status, activeNudgeId: this.activeUpdateNudgeId }
   }
 
   /** `force` re-delivers a status the renderer must not miss even when it repeats the current one. */
@@ -102,43 +72,11 @@ export abstract class UpdaterStatus extends BaseUpdaterState {
         status.state === 'not-available' ||
         status.state === 'available' ||
         status.state === 'error')
-    const shouldPreserveNudgeForPublishingWindow =
-      this.publishingWindowLastGoodCheck !== null &&
-      (status.state === 'idle' ||
-        status.state === 'not-available' ||
-        status.state === 'available' ||
-        status.state === 'error')
-    if (this.awaitingNudgeCheckOutcome) {
-      if (status.state === 'available') {
-        if (shouldPreserveNudgeForPublishingWindow) {
-          // Why: a last-good available update is only a temporary fallback; dismissing it must not consume the newest-release nudge campaign.
-          this.deferPendingUpdateNudgeUntilRetry()
-        } else {
-          this.awaitingNudgeCheckOutcome = false
-        }
-      } else if (
-        status.state === 'idle' ||
-        status.state === 'not-available' ||
-        status.state === 'error'
-      ) {
-        if (shouldPreserveNudgeForPublishingWindow) {
-          // Why: last-good checks can say "not available" while the campaign's newest release is still publishing.
-          this.deferPendingUpdateNudgeUntilRetry()
-        } else {
-          // Why: on no-update, mark the campaign dismissed so a nudge covering already-up-to-date users doesn't re-fire every 30-min poll.
-          if (this.activeUpdateNudgeId) {
-            this._setDismissedUpdateNudgeId?.(this.activeUpdateNudgeId)
-          }
-          this.clearPendingUpdateNudge()
-        }
-      }
-    }
-
     const sourcedStatus: UpdateStatus =
       this.activeUpdateSource === 'release'
         ? status
         : { ...status, source: this.activeUpdateSource }
-    const decoratedStatus = this.decorateStatusWithActiveNudge(sourcedStatus)
+    const decoratedStatus = sourcedStatus
 
     if (this.isUpdateCheckResultState(status.state)) {
       this.finishActiveUpdateCheckAttempt()

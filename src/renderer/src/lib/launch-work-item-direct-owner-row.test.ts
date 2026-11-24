@@ -20,7 +20,6 @@ vi.mock('@/lib/ensure-hooks-confirmed', () => ({
 vi.mock('@/lib/connection-context', () => ({ getConnectionId: () => null }))
 vi.mock('@/runtime/runtime-hooks-client', () => ({ checkRuntimeHooks: mocks.checkRuntimeHooks }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
-vi.mock('@/lib/telemetry', () => ({ track: vi.fn(), tuiAgentToAgentKind: (a: string) => a }))
 
 import { launchWorkItemDirect } from './launch-work-item-direct'
 
@@ -71,7 +70,6 @@ describe('launchWorkItemDirect owner row', () => {
     await launchWorkItemDirect({
       repoId: 'repo-1',
       launchSource: 'task_page',
-      telemetrySource: 'sidebar',
       openModalFallback: vi.fn(),
       item: { type: 'pr', number: 7, title: 'Fix', url: 'https://github.com/o/r/pull/7' }
     })
@@ -123,7 +121,6 @@ describe('launchWorkItemDirect owner row', () => {
       launchWorkItemDirect({
         repoId: 'repo-1',
         launchSource: 'task_page',
-        telemetrySource: 'sidebar',
         openModalFallback,
         item: { type: 'pr', number: 7, title: 'Fix', url: 'https://github.com/o/r/pull/7' }
       })

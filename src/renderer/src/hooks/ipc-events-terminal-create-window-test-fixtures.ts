@@ -66,12 +66,6 @@ export function buildTerminalCreateWindow(args: {
             leafId?: string
             splitFromLeafId?: string
             splitDirection?: 'horizontal' | 'vertical'
-            splitTelemetrySource?:
-              | 'contextual_tour'
-              | 'keyboard'
-              | 'context_menu'
-              | 'command'
-              | 'unknown'
           }) => void
         ) => {
           createTerminalListenerRef.current = listener
@@ -157,8 +151,7 @@ export function buildTerminalCreateWindow(args: {
       },
       updater: {
         getStatus: () => Promise.resolve({ state: 'idle' }),
-        onStatus: () => () => {},
-        onClearDismissal: () => () => {}
+        onStatus: () => () => {}
       },
       browser: {
         onGuestLoadFailed: () => () => {},

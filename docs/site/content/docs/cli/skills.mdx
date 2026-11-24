@@ -82,26 +82,9 @@ orca skills update --skill orca-cli --dry-run
 
 Prefer the in-app updater when Orca offers it so the same global placements the app scanned get rewritten. Rows marked **Skipped** explain why that skill cannot be updated automatically (for example a read-only folder or a link pointing outside Orca's skill folders) — fix the placement, then re-check.
 
-## Install and delete from the Skills page
+## Delete from the Skills page
 
-When an in-app install asks for a workspace target, search the picker by workspace name or by kind (**worktree** / **folder**). The agent picker separates directories Orca always includes from additional agent directories you can select, so you can review the exact installation targets before continuing.
-
-To remove a scanned skill, open its actions menu and choose **Delete…**. For several skills, open the page's **More actions** menu, choose **Delete skills…**, and select the eligible results. Orca explains why a copy cannot be deleted—for example because it is bundled, plugin-managed, read-only, or outside a removable skill folder—before you confirm. This is separate from **Manage installs**, which manages copies installed from shared links.
-
-## Share private skills between hosts
-
-Open **Skills → Share skills** to publish one skill or a bundle behind one unlisted, revocable link. Publishing requires your Orca account. Review the included files, scripts, executables, digest, and optional release notes before you publish; each published version is immutable, so later local edits do not silently change what recipients install.
-
-Anyone with an active link can inspect and install the shared skills without signing in, so treat the link like a credential. A recipient reviews the exact version, chooses all or a subset of its skills, then selects global or workspace scope on this computer, a paired Orca runtime, WSL, or an SSH host. Existing modified skills default to **Keep local**. Use **Skills → Manage installs** to update, roll back, or remove copies Orca installed, and **Settings → Share Skills** to copy or revoke your active links. Revoking a link blocks future access but does not remove copies already installed.
-
-Agents can publish an explicitly named set from the CLI after you enable the separate, default-off **Settings → Share Skills → Allow agents and the Orca CLI to publish skill links** permission:
-
-```bash
-orca skills installed --json
-orca skills share --skill frontend --skill testing --bundle-name "Team Toolkit" --json
-```
-
-`skills installed` returns safe selectors without exposing local paths. `skills share` accepts exact discovery IDs or unambiguous names; it does not accept arbitrary paths or `--all`.
+To remove a scanned skill, open its actions menu and choose **Delete…**. For several skills, open the page's **More actions** menu, choose **Delete skills…**, and select the eligible results. Orca explains why a copy cannot be deleted—for example because it is bundled, plugin-managed, read-only, or outside a removable skill folder—before you confirm.
 
 ## orca-cli
 

@@ -5,7 +5,7 @@ import * as teamsPlan from '../runtime/terminal/launch/agent-teams-launch-plan'
 import { SessionNotFoundError } from '../daemon/daemon-errors'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { classifyErrorMock, statSyncMock, trackMock } from './pty-ipc-mock-registry'
+import { classifyErrorMock, statSyncMock } from './pty-ipc-mock-registry'
 import {
   providerFacts,
   recordOf,
@@ -87,12 +87,6 @@ vi.mock('../wsl', async (importOriginal) =>
 )
 vi.mock('node:fs/promises', async (importOriginal) =>
   (await import('./pty-ipc-mock-registry')).fsPromisesModuleMock(await importOriginal())
-)
-vi.mock('../telemetry/client', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.telemetryClientModuleMock())
-)
-vi.mock('../telemetry/classify-error', () =>
-  import('./pty-ipc-mock-registry').then((m) => m.classifyErrorModuleMock())
 )
 vi.mock('../cli/linux-terminal-orca-cli-shim', () =>
   import('./pty-ipc-mock-registry').then((m) => m.linuxCliShimModuleMock())
@@ -180,7 +174,6 @@ describe('window lane: pty:spawn request -> provider', () => {
       expect(await providerFacts(lanes.provider)).toEqual(
         expectedWindowProvider(request, provider, agentEnv)
       )
-      expect(trackMock.mock.calls).toEqual([['agent_started', request.telemetry]])
       expect(lanes.persistPtyBinding.mock.calls).toEqual([
         [
           {
@@ -277,7 +270,6 @@ describe('host lane: producer call -> runtime controller -> provider', () => {
     // The host stamps its own pane identity (the window lane's stale-key case is below).
     const spawned = recordOf(lanes.provider.mock.calls.at(-1)?.[0])
     expect(recordOf(spawned.env).ORCA_PANE_KEY).toBe(spawned.paneKey)
-    expect(trackMock.mock.calls).toEqual(c.telemetry ? [['agent_started', c.telemetry]] : [])
     expect(lanes.persistPtyBinding.mock.calls[0]?.[0]).toMatchObject({
       placement: { kind: 'new-tab' }
     })
@@ -584,14 +576,8 @@ describe('launch facts outside the tables', () => {
       ...c.request
     })
     await expect(launch).rejects.toThrow('spawn boom')
-    expect(trackMock.mock.calls.filter(([event]) => event === 'agent_error')).toEqual(c.calls)
   })
 
-  // C5a (one execute) keeps this on both lanes; C5a-2 flips only the host's agent_error.
-  const FAILED_START_AGENT_ERROR: Record<'window' | 'host', unknown[]> = {
-    window: [['agent_error', { agent_kind: 'claude-code', error_class: 'binary_not_found' }]],
-    host: [['agent_error', { agent_kind: 'claude-code', error_class: 'binary_not_found' }]]
-  }
   it.each(['window', 'host'] as const)(
     '%s lane: a start the provider fails undoes everything it claimed',
     async (lane) => {
@@ -632,7 +618,6 @@ describe('launch facts outside the tables', () => {
 
       await expect(launch).rejects.toThrow('spawn boom')
       const sessionId = String(recordOf(lanes.provider.mock.calls.at(-1)?.[0]).sessionId)
-      expect(trackMock.mock.calls).toEqual(FAILED_START_AGENT_ERROR[lane])
       expect(hiddenWhileSpawning).toBe(true)
       expect(isHiddenRendererPty(sessionId)).toBe(false)
       const claim =
@@ -673,9 +658,6 @@ describe('launch facts outside the tables', () => {
 
     expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected'])
     expect(lanes.provider).toHaveBeenCalledOnce()
-    expect(trackMock.mock.calls.filter(([event]) => event === 'agent_error')).toEqual([
-      ['agent_error', { agent_kind: 'claude-code', error_class: 'binary_not_found' }]
-    ])
   })
 
   it('host lane: a Claude resume its claim refuses counts one failed start', async () => {
@@ -695,7 +677,6 @@ describe('launch facts outside the tables', () => {
       })
     ).rejects.toThrow('agent_session_conflict')
     expect(lanes.provider).not.toHaveBeenCalled()
-    expect(trackMock.mock.calls.filter(([event]) => event === 'agent_error')).toHaveLength(1)
   })
 
   // C5e (presentation merge): a worker asks the window to reveal its titled tab without activating it.

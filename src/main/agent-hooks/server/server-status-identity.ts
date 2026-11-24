@@ -1,4 +1,4 @@
-import type { AgentKind } from '../../../shared/telemetry-events'
+import type { AgentKind } from '../../../shared/agent-kind'
 import {
   getAgentResumeArgv,
   type AgentProviderSessionMetadata

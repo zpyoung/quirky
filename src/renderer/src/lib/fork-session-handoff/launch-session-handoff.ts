@@ -7,7 +7,7 @@ import {
 } from '@/lib/launch-agent-in-new-tab'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
-import type { LaunchSource } from '../../../../shared/telemetry-events'
+import type { LaunchSource } from '../../../../shared/agent-kind'
 import { TUI_AGENT_CONFIG, type TuiAgentConfig } from '../../../../shared/tui-agent-config'
 import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../../shared/tui-agent'

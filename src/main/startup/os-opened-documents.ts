@@ -79,9 +79,9 @@ export function documentPathsFromArguments(
 /**
  * Buffers document paths the OS handed us until a renderer can receive them.
  *
- * Mirrors SkillShareDeepLinkState: main pushes when a window is already live, and the
- * renderer pulls the same buffer when its listener attaches, so a cold-start "Open With"
- * that lands before mount is not dropped.
+ * Main pushes when a window is already live, and the renderer pulls the same buffer
+ * when its listener attaches, so a cold-start "Open With" that lands before mount is
+ * not dropped.
  */
 export class OsOpenedDocumentState {
   private pending: string[] = []

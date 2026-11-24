@@ -18,9 +18,6 @@ vi.mock('electron', () => ({
   app: { getPath: vi.fn(() => '/tmp') }
 }))
 
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
-vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() => ({})) }))
-
 type CapturedHook = { scenario: string; kind: string; payload?: Record<string, unknown> }
 const hooks: CapturedHook[] = readFileSync(
   join(import.meta.dirname, '../../shared/__fixtures__/claude-task-notification-hooks.jsonl'),

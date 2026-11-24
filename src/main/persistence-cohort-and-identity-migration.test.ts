@@ -29,11 +29,6 @@ vi.mock('./ssh/config/ssh-config-parser', () => ({
   loadUserSshConfig: loadUserSshConfigMock,
   sshConfigHostsToTargets: sshConfigHostsToTargetsMock
 }))
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn()
-}))
-
 vi.mock('electron', () => ({
   app: {
     getPath: () => testState.dir
@@ -51,97 +46,19 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('./telemetry/client', () => ({
-  track: trackMock
-}))
-
-vi.mock('./telemetry/cohort-classifier', () => ({
-  getCohortAtEmit: getCohortAtEmitMock
-}))
-
 describe('Store', () => {
   beforeEach(() => {
     testState.dir = mkdtempSync(join(tmpdir(), 'orca-test-'))
-    trackMock.mockReset()
-    getCohortAtEmitMock.mockReset()
-    getCohortAtEmitMock.mockReturnValue({ nth_repo_added: 2 })
   })
 
   afterEach(async () => {
     await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
-  // ── Telemetry cohort migration ─────────────────────────────────────
-  // Why: keys on `existsSync(dataFile)`, not the new `telemetry` field, so pre-telemetry installs aren't misclassified as fresh and flipped default-on.
 
-  it('classifies a truly fresh install as new-user cohort (file absent → optedIn=true)', async () => {
-    // No data file written — truly fresh install of the telemetry release.
-    const store = await createStore()
-    const t = store.getSettings().telemetry
-    expect(t).toBeDefined()
-    expect(t!.existedBeforeTelemetryRelease).toBe(false)
-    expect(t!.optedIn).toBe(true)
-    expect(t!.installId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-    )
-  })
-
-  it('classifies a pre-existing install as existing-user cohort (file present → optedIn=null)', async () => {
-    // A pre-telemetry data file exists on disk with no telemetry block.
-    writeDataFile({
-      schemaVersion: 1,
-      repos: [makeRepo()],
-      worktreeMeta: {},
-      settings: { theme: 'dark' },
-      ui: {},
-      githubCache: { pr: {}, issue: {} },
-      workspaceSession: {}
-    })
-    const store = await createStore()
-    const t = store.getSettings().telemetry
-    expect(t).toBeDefined()
-    expect(t!.existedBeforeTelemetryRelease).toBe(true)
-    expect(t!.optedIn).toBeNull()
-    expect(t!.installId).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-    )
-    // Sibling migrations still run alongside the telemetry migration.
-    expect(store.getSettings().theme).toBe('dark')
-  })
-
-  it('retains the existing-user cohort when a corrupt legacy primary recovers from backup', async () => {
+  it('keeps the existing-user layout default when a corrupt legacy primary recovers from backup', async () => {
     await withRecoveredLegacyProfile((store) => {
-      const telemetry = store.getSettings().telemetry
-      expect(telemetry?.existedBeforeTelemetryRelease).toBe(true)
-      expect(telemetry?.optedIn).toBeNull()
-      expect(telemetry?.installId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-      )
       expect(store.getSettings().experimentalNewWorktreeCardStyle).toBe(false)
-    })
-  })
-
-  it('preserves an already-migrated telemetry block on subsequent launches', async () => {
-    writeDataFile({
-      schemaVersion: 1,
-      repos: [],
-      worktreeMeta: {},
-      settings: {
-        telemetry: {
-          optedIn: true,
-          installId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          existedBeforeTelemetryRelease: false
-        }
-      },
-      ui: {},
-      githubCache: { pr: {}, issue: {} },
-      workspaceSession: {}
-    })
-    const store = await createStore()
-    expect(store.getSettings().telemetry).toEqual({
-      optedIn: true,
-      installId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      existedBeforeTelemetryRelease: false
     })
   })
 })

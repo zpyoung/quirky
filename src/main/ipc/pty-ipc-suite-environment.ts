@@ -32,7 +32,6 @@ import {
   piClearPtyMock,
   isPwshAvailableMock,
   wslUncDirectoryExistsAsyncMock,
-  trackMock,
   classifyErrorMock,
   registerPtyMock,
   unregisterPtyMock,
@@ -164,7 +163,6 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
     isPwshAvailableMock.mockReset()
     wslUncDirectoryExistsAsyncMock.mockReset()
     wslUncDirectoryExistsAsyncMock.mockResolvedValue(null)
-    trackMock.mockReset()
     classifyErrorMock.mockReset()
     registerPtyMock.mockReset()
     unregisterPtyMock.mockReset()

@@ -20,7 +20,6 @@ import {
   prepareCodexSessionResumeForLaunch
 } from './codex-session-resume-launch'
 import { isRecoveryReloadInFlight } from './main-window-lifecycle-flags'
-import { RELAY_HOST_CLOSE_REASON } from '../../shared/relay-host-close-reason'
 
 export function attachMainWindowCoreServices(
   window: BrowserWindow,
@@ -95,17 +94,6 @@ export function attachMainWindowCoreServices(
         state.isQuitting = true
         state.desktopRelayService?.fenceAndCloseNow()
         await preserveAgentAuthBeforeRestart({ codexRuntimeHome, store })
-      },
-      onOrcaProfileAuthMutation: () => {
-        // Why: a provider whose launch-time install failed is installed by the next auth change.
-        void state.desktopRelayInstaller?.authChanged()
-        state.desktopRelayService?.authMutated()
-      },
-      // Sign-out is the one fence a paired phone can be told about; quit and
-      // relaunch above stay reasonless so a restart never reads as signed out.
-      onBeforeOrcaProfileSignOut: () => {
-        state.desktopRelayInstaller?.suspend()
-        state.desktopRelayService?.fenceAndCloseNow(RELAY_HOST_CLOSE_REASON.SIGNED_OUT)
       }
     },
     state.pluginService ?? undefined,

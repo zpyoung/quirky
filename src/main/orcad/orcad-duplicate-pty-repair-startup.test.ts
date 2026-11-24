@@ -44,7 +44,6 @@ vi.mock('../../shared/layout-owner-switch', () => ({
     return state.layoutOwnerIsMain
   }
 }))
-vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 // Why: startup reconciles the user-global agent configs; keep it off this machine's real home.
 vi.mock('../codex/codex-hook-reconcile', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -92,8 +91,8 @@ vi.mock('./orcad-automations', () => ({
   stopOrcadAutomationScheduler: () => {},
   orcadAutomationsKeepHostBusy: () => false
 }))
-vi.mock('../runtime/agent-state-rules/agent-state-rules-live-update', () => ({
-  startAgentStateRulesLiveUpdates: () => {}
+vi.mock('../runtime/agent-state-rules/agent-state-rules-override', () => ({
+  startAgentStateRulesOverride: () => {}
 }))
 vi.mock('../daemon/daemon-provider-state', () => ({ daemonOwnsFreshPersistentPtys: () => false }))
 vi.mock('../ipc/pty/register-headless-runtime', () => ({

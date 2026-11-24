@@ -4,7 +4,6 @@ import { getLinearIssueWorkspaceName } from '../../../../shared/workspace-name'
 import type { AppState } from '../../store/types'
 
 type NewWorkspaceShortcutModalData = {
-  telemetrySource: 'shortcut'
   prefilledName?: string
   linkedWorkItem?: LinkedWorkItemSummary
 }
@@ -15,11 +14,10 @@ export function buildNewWorkspaceShortcutModalData(
   const linearIssue =
     state.activeView === 'tasks' ? (state.taskPageData.openLinearIssue ?? null) : null
   if (!linearIssue) {
-    return { telemetrySource: 'shortcut' }
+    return {}
   }
 
   return {
-    telemetrySource: 'shortcut',
     prefilledName: getLinearIssueWorkspaceName(linearIssue),
     // Cmd+N from a Linear issue mirrors its Start-workspace action with source context.
     linkedWorkItem: buildLinearIssueLinkedWorkItem(linearIssue)

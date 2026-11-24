@@ -1,6 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { useState } from 'react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserChromeFoldStage } from './use-browser-chrome-tool-fold'
 import type { BrowserChromeFoldedTool } from './browser-chrome-folded-tools'
@@ -15,7 +14,6 @@ vi.mock('./use-browser-chrome-tool-fold', () => ({
     'import-label',
     'external',
     'devtools',
-    'share',
     'import',
     'draw',
     'grab',
@@ -130,29 +128,5 @@ describe('BrowserChromeToolbar', () => {
 
     expect(mocks.stages).not.toContain('grab')
     expect(mocks.stages).toContain('annotate')
-  })
-
-  it('keeps the same share control mounted when it moves into overflow', () => {
-    function StatefulShare(): React.JSX.Element {
-      const [clicks, setClicks] = useState(0)
-      return <button onClick={() => setClicks((count) => count + 1)}>Share state {clicks}</button>
-    }
-    const props = {
-      controls,
-      addressSlot: null,
-      elementTools: null,
-      markup: { active: false, disabled: false, onToggle: vi.fn(), canShowDiscoveryHint: false },
-      shareControl: () => <StatefulShare />,
-      viewSource: null,
-      openExternal: null,
-      overflowMenu: emptyOverflowMenu
-    }
-    const view = render(<BrowserChromeToolbar {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Share state 0' }))
-
-    mocks.folded = new Set(['share'])
-    view.rerender(<BrowserChromeToolbar {...props} />)
-
-    expect(screen.getByRole('button', { name: 'Share state 1' })).not.toBeNull()
   })
 })

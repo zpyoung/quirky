@@ -8,7 +8,7 @@ import { ORCA_SKILLS_REPOSITORY_URL } from './skills-repository-url'
 
 describe('fork skills repository url', () => {
   it('names the fork, not upstream', () => {
-    expect(ORCA_SKILLS_REPOSITORY_URL).toBe('https://github.com/zpyoung/orca')
+    expect(ORCA_SKILLS_REPOSITORY_URL).toBe('https://github.com/zpyoung/quirky')
   })
 
   // Why: an upstream sync that reverts the seam in agent-feature-install-commands.ts leaves this

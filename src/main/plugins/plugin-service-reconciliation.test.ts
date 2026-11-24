@@ -60,7 +60,6 @@ function createHarness(root: string) {
   let enabled = true
   let disabled: string[] = []
   let devPaths = [root]
-  let killed = false
   const consent = fingerprintPluginConsent(manifest())
   const workers: ReturnType<typeof testWorker>[] = []
   const factory = vi.fn<PluginWorkerFactory>(async () => {
@@ -75,10 +74,6 @@ function createHarness(root: string) {
     getDisabledPlugins: () => disabled,
     getPluginConsents: () => ({ [pluginKey]: consent }),
     getDevPluginPaths: () => devPaths,
-    getPluginKillListEntry: (key) =>
-      killed && key === pluginKey
-        ? { pluginKey, reason: 'Security incident', advisoryUrl: 'https://orca.example/advisory' }
-        : null,
     workerFactory: factory
   })
   services.push(service)
@@ -94,9 +89,6 @@ function createHarness(root: string) {
     },
     setDevPaths: (value: string[]) => {
       devPaths = value
-    },
-    setKilled: (value: boolean) => {
-      killed = value
     }
   }
 }
@@ -256,31 +248,6 @@ describe('PluginService worker reconciliation', () => {
 
     expect(harness.workers[0]!.dispose).toHaveBeenCalledOnce()
     expect(harness.service.workerState(pluginKey).state).toBe('inactive')
-  })
-
-  it('immediately revokes every authority surface and stops a killed plugin', async () => {
-    const root = await pluginRoot()
-    const harness = createHarness(root)
-    await activate(harness.service)
-    expect(await harness.service.panels.open('renderer:1', pluginKey, 'panel')).not.toBeNull()
-
-    harness.setKilled(true)
-
-    expect(harness.service.getGrantedCapabilities(pluginKey)).toBeNull()
-    expect(harness.service.activationError(pluginKey)).toContain('Security incident')
-    await expect(harness.service.invokeCommand(pluginKey, 'run')).rejects.toThrow('not enabled')
-    await expect(harness.service.panels.readEntry(pluginKey, 'panel')).resolves.toBeNull()
-    harness.service.emitEvent('worktree.created', {
-      worktreeId: 'worktree-1',
-      path: '/repo',
-      branch: 'feature'
-    })
-    await harness.service.reconcileActivationState()
-
-    expect(harness.workers[0]!.dispose).toHaveBeenCalledOnce()
-    expect(harness.service.options.getPluginKillListEntry?.(pluginKey)).toMatchObject({
-      reason: 'Security incident'
-    })
   })
 
   it('deactivates a worker when changed capabilities make consent pending', async () => {

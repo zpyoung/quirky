@@ -2,7 +2,7 @@ import { parsePtyStartupIngressIntent } from '../../shared/pty-startup-ingress-i
 import { normalizeColorQueryReplyColors } from '../../shared/pty-owner-color-query-colors'
 import { recognizeAgentLaunchCommand } from '../../shared/agent-command-line-intent'
 import { isTuiAgent } from '../../shared/tui-agent-config'
-import { agentKindSchema } from '../../shared/telemetry-events'
+import { agentKindSchema } from '../../shared/agent-kind'
 import type { SleepingAgentLaunchConfig } from '../../shared/agent-session-resume'
 
 function isAgentLaunch(args: {

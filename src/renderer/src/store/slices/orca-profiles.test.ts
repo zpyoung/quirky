@@ -2,7 +2,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { createTestStore } from './store-test-helpers'
 import type {
   CreateLocalOrcaProfileResult,
-  OrcaProfileAuthStatus,
   OrcaProfileListResult,
   TransferOrcaProfileProjectResult
 } from '../../../../shared/orca-profiles'
@@ -61,39 +60,9 @@ const createdState: CreateLocalOrcaProfileResult = {
   }
 }
 
-const localAuthStatus: OrcaProfileAuthStatus = {
-  activeProfileId: 'local-default',
-  configured: false,
-  state: 'unconfigured',
-  persistence: 'none'
-}
-
-const connectedAuthStatus: OrcaProfileAuthStatus = {
-  activeProfileId: 'local-default',
-  configured: true,
-  state: 'connected',
-  persistence: 'encrypted',
-  cloud: {
-    cloudProfileId: 'cloud-profile-1',
-    userId: 'user-1',
-    email: 'nina@example.com',
-    linkedAt: 3
-  },
-  capabilities: {
-    flags: { share: true },
-    refreshedAt: 4
-  }
-}
-
 const orcaProfilesApi = {
   list: vi.fn(),
-  authStatus: vi.fn(),
   createLocal: vi.fn(),
-  createCloudLinked: vi.fn(),
-  connectCurrent: vi.fn(),
-  refreshAuth: vi.fn(),
-  signOutCurrent: vi.fn(),
-  selectOrg: vi.fn(),
   switchProfile: vi.fn(),
   transferProject: vi.fn()
 }
@@ -102,7 +71,6 @@ describe('orca profile slice', () => {
   beforeEach(() => {
     vi.resetAllMocks()
     toastErrorMock.mockReset()
-    orcaProfilesApi.authStatus.mockResolvedValue(localAuthStatus)
     vi.stubGlobal('window', {
       api: {
         orcaProfiles: orcaProfilesApi
@@ -118,7 +86,6 @@ describe('orca profile slice', () => {
 
     expect(store.getState().activeOrcaProfileId).toBe('local-default')
     expect(store.getState().orcaProfiles).toEqual(listState.profiles)
-    expect(store.getState().orcaProfileAuthStatus).toEqual(localAuthStatus)
     expect(store.getState().orcaProfilesMultiProfileUi).toBe(false)
     expect(store.getState().orcaProfilesLoading).toBe(false)
   })
@@ -141,16 +108,6 @@ describe('orca profile slice', () => {
     expect(profile).toEqual(createdState.profile)
     expect(orcaProfilesApi.createLocal).toHaveBeenCalledWith({ name: 'Work' })
     expect(store.getState().orcaProfiles).toEqual(createdState.profiles)
-  })
-
-  it('fetches auth status independently', async () => {
-    orcaProfilesApi.authStatus.mockResolvedValue(connectedAuthStatus)
-    const store = createTestStore()
-
-    await expect(store.getState().fetchOrcaProfileAuthStatus()).resolves.toEqual(
-      connectedAuthStatus
-    )
-    expect(store.getState().orcaProfileAuthStatus).toEqual(connectedAuthStatus)
   })
 
   it('sets switching state while requesting a profile switch', async () => {

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { useAppStore } from '@/store'
-import { emitTerminalDockPassthroughToggled } from '@/lib/fork-terminal-dock/terminal-dock-telemetry'
 import type { AgentStatusState } from '../../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
 import { shouldAutoExitPassthroughOnAgentStatus } from './terminal-pane-dock-passthrough'
@@ -62,11 +61,6 @@ export function useTerminalDockPassthrough(args: {
         next.delete(paneKey)
       }
       return next
-    })
-    emitTerminalDockPassthroughToggled({
-      active: entering,
-      agent:
-        agentForPane(paneKey) ?? useAppStore.getState().agentStatusByPaneKey[paneKey]?.agentType
     })
   }, [agentForPane, isPaneComposerMounted, managerRef, paneKeys, tabId])
 

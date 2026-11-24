@@ -26,11 +26,6 @@ import {
 } from './persistence-test-harness'
 import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 
-const { trackMock, getCohortAtEmitMock } = vi.hoisted(() => ({
-  trackMock: vi.fn(),
-  getCohortAtEmitMock: vi.fn(() => ({ nth_repo_added: 1 }))
-}))
-
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
   safeStorage: {
@@ -39,9 +34,6 @@ vi.mock('electron', () => ({
     decryptString: (ciphertext: Buffer) => ciphertext.toString('utf-8').slice('encrypted:'.length)
   }
 }))
-
-vi.mock('./telemetry/client', () => ({ track: trackMock }))
-vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: getCohortAtEmitMock }))
 
 /** Stage then commit: the only path a destination publishes a catalog through. */
 function commitCatalog(

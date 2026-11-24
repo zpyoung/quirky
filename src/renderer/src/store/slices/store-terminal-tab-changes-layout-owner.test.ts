@@ -15,7 +15,6 @@ type Reply = { ok: boolean; result?: object; code?: string }
 
 const mocks = vi.hoisted(() => ({
   layoutOwnerIsMain: true,
-  toggled: vi.fn(),
   callRuntimeRpc: vi.fn(
     async (
       _target: unknown,
@@ -44,7 +43,6 @@ vi.mock('@/components/terminal-pane/pty-dispatcher', () => ({
   restorePtyDataHandlersAfterFailedShutdown: vi.fn(),
   unregisterPtyDataHandlers: vi.fn(() => [])
 }))
-vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatToggled: mocks.toggled }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
@@ -115,7 +113,6 @@ const answered = async (): Promise<void> => {
 beforeEach(() => {
   mocks.layoutOwnerIsMain = true
   mocks.callRuntimeRpc.mockReset()
-  mocks.toggled.mockReset()
   mocks.callRuntimeRpc.mockResolvedValue({ ok: true, result: {} })
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -231,7 +228,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(sent()).toEqual([
       { command: { type: 'setTabProps', workspace: WORKTREE, tabId: tabBarId, viewMode: 'chat' } }
     ])
-    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledOnce())
+    await answered()
     expect(row(store).viewMode).toBeUndefined()
   })
 
@@ -242,11 +239,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'terminal'])
-    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(2))
-    expect(mocks.toggled.mock.calls.map(([event]) => [event.from, event.to])).toEqual([
-      ['terminal', 'chat'],
-      ['chat', 'terminal']
-    ])
+    await answered()
     expect(row(store).viewMode).toBeUndefined()
   })
 
@@ -257,7 +250,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'terminal'])
-    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
+    await answered()
     expect(row(store).viewMode).toBeUndefined()
   })
 
@@ -275,7 +268,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'chat'])
-    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
+    await answered()
     expect(row(store).viewMode).toBeUndefined()
   })
 

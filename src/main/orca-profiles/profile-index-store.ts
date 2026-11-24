@@ -146,8 +146,6 @@ export function writeProfileIndex(indexPath: string, index: OrcaProfileIndex): v
   bestEffortFsyncDirectorySync(dirname(indexPath))
 }
 
-export { seedNewOrcaProfileTelemetryConsent } from './profile-telemetry-consent-seed'
-
 function createInitialProfileIndex(now = Date.now()): OrcaProfileIndex {
   const profile = createDefaultLocalOrcaProfile(now)
   return {
