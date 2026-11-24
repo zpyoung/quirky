@@ -267,7 +267,6 @@
       "config/scripts/pullfrog-review-scope.test.mjs": 46,
       "config/scripts/quadratic-buffer-concat-plugin.test.mjs": 1492,
       "config/scripts/ratchet-baseline.test.mjs": 53,
-      "config/scripts/readme-downloads-badge.test.mjs": 30,
       "config/scripts/rebuild-native-deps-node-pty.test.mjs": 1338,
       "config/scripts/rebuild-native-deps-windows-process-tree.test.mjs": 44,
       "config/scripts/rebuild-native-deps.test.mjs": 1191,

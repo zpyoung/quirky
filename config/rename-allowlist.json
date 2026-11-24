@@ -6,6 +6,7 @@
     "docs/quirk/specs/2026-11-24-orca-based-quirky/**",
     "src/main/import-from-orca/**",
     "src/shared/repo-config-paths.ts",
+    "src/shared/repo-config-paths.test.ts",
     "mobile/src/app-update/fixtures/**",
     "config/ipc-channel-parity-baseline.json",
     "config/rename-allowlist.json",

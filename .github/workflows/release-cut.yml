@@ -1328,31 +1328,3 @@ jobs:
           done
           echo "::error::Failed to dispatch docs deployment for $TAG after 3 attempts."
           exit 1
-
-  homebrew-bump-published-rc-draft:
-    needs:
-      - cut
-    # Why: publish-complete-draft-releases can expose a recovered RC without
-    # running the build/publish jobs; still advance the RC cask to that tag.
-    # Fork: gated off. homebrew-bump PRs into stablyai/homebrew-quirky with the
-    # stablyai app key (BUFO_BOT_PRIVATE_KEY), which this fork does not have and
-    # should not use — the fork ships no tap. Same call as PR #1 dropping
-    # track-community-prs.yaml.
-    if: ${{ github.repository == 'stablyai/orca' && needs.cut.outputs.latest_published_rc_tag != '' }}
-    uses: ./.github/workflows/homebrew-bump.yml
-    with:
-      tag: ${{ needs.cut.outputs.latest_published_rc_tag }}
-    secrets: inherit
-
-  homebrew-bump:
-    needs:
-      - cut
-      - publish-release
-    # Fork: gated off for the same reason as homebrew-bump-published-rc-draft.
-    # This one only ever skipped because publish-release did; a release that
-    # actually succeeds would be its first run, and its first failure.
-    if: ${{ github.repository == 'stablyai/orca' && !cancelled() && needs.publish-release.result == 'success' && needs.cut.outputs.tag != '' && startsWith(needs.cut.outputs.tag, 'v') }}
-    uses: ./.github/workflows/homebrew-bump.yml
-    with:
-      tag: ${{ needs.cut.outputs.tag }}
-    secrets: inherit
