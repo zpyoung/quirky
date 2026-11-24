@@ -117,6 +117,5 @@
 1 tests/e2e/terminal-warm-reattach-split-live-output.spec.ts
 1 tests/e2e/workspace-space-git-status.spec.ts
 1 tests/tools/omp-child-history-rendered/fixture.tsx
-1 tests/tools/omp-fresh-launch-windows-smoke.ts
 1 tests/tools/omp-remote-sidebar-rendered/fixture.tsx
 1 tests/tools/omp-transcript-rendered/fixture.tsx

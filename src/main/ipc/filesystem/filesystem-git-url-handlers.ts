@@ -1,5 +1,4 @@
 import { ipcMain } from 'electron'
-import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
 import { getRemoteCommitUrl, getRemoteFileUrl } from '../../git/repo'
 import { resolveRegisteredWorktreePath } from '../registered-worktree-roots-cache'
 import { validateFullGitObjectId } from '../filesystem-path-containment'
@@ -18,7 +17,6 @@ export function registerFilesystemGitUrlHandlers(context: FilesystemHandlerConte
       // Why: remote repos can't read relay-side .git/config locally; delegate URL construction to the SSH provider.
       requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
-      await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
       return getRemoteFileUrl(worktreePath, args.relativePath, args.line)
     }
   )
@@ -33,7 +31,6 @@ export function registerFilesystemGitUrlHandlers(context: FilesystemHandlerConte
       // Why: remote repos can't read relay-side .git/config locally; delegate URL construction to the SSH provider.
       requireReachableGitRoute(getConnectionExecutionHostId(args.connectionId))
       const worktreePath = await resolveRegisteredWorktreePath(args.worktreePath, store)
-      await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
       return getRemoteCommitUrl(worktreePath, sha)
     }
   )

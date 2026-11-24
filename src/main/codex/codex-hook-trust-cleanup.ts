@@ -1,4 +1,3 @@
-import { win32 as pathWin32 } from 'node:path'
 import { MANAGED_HOOK_TIMEOUT_SECONDS, type HookDefinition } from '../agent-hooks/installer-utils'
 import {
   codexHookSourcePathsEqual,
@@ -17,17 +16,11 @@ import {
   getCodexConfigTomlPath,
   getManagedCommand,
   getManagedScriptPath,
-  getSystemCodexConfigTomlPath,
-  wrapReadablePosixHookCommand
+  getSystemCodexConfigTomlPath
 } from './codex-hook-definition'
 import { getOrcaManagedCodexHomePath } from './codex-home-paths'
-import {
-  removeCodexManagedHookTrustEntries,
-  removeStaleWslCodexManagedHookTrustEntries
-} from './codex-managed-trust-reconciliation'
-import type { CodexTrustGrantLedgerHome } from './codex-trust-grant-ledger'
+import { removeCodexManagedHookTrustEntries } from './codex-managed-trust-reconciliation'
 import type { CodexHookHashes } from './codex-hook-trust-derivation'
-import type { CodexWslRuntimeHookInstallPlan } from './codex-wsl-hook-install-plan'
 
 export function collectManagedTrustEntries(
   sourcePath: string,
@@ -145,39 +138,4 @@ export function removeRuntimeManagedHookTrustEntries(
     // Best effort — stale trust is harmless once hooks.json no longer references the hook; log so a programmer error isn't silent.
     console.warn('[codex-hook-service] failed to clean trust entries', error)
   }
-}
-
-export function removeWslRuntimeManagedHookTrustEntries(
-  plan: CodexWslRuntimeHookInstallPlan
-): void {
-  try {
-    removeCodexManagedHookTrustEntries({
-      tomlPath: plan.tomlPath,
-      runtimeHomePath: pathWin32.dirname(plan.tomlPath),
-      sourcePaths: [plan.trustConfigPath],
-      command: wrapReadablePosixHookCommand(plan.commandScriptPath),
-      managedEventLabels: CODEX_MANAGED_EVENT_LABELS,
-      timeoutSec: MANAGED_HOOK_TIMEOUT_SECONDS
-    })
-  } catch (error) {
-    // Why: best-effort like host cleanup; stale trust is inert once hooks.json no longer points at us.
-    console.warn('[codex-hook-service] failed to clean WSL trust entries', error)
-  }
-}
-
-export function removeStaleWslRuntimeManagedHookTrustEntries(
-  tomlPath: string,
-  desiredEntries: readonly CodexTrustEntry[],
-  priorLedgerHomes: readonly CodexTrustGrantLedgerHome[] = []
-): void {
-  removeStaleWslCodexManagedHookTrustEntries({
-    tomlPath,
-    runtimeHomePath: pathWin32.dirname(tomlPath),
-    desiredEntries,
-    managedEventLabels: CODEX_MANAGED_EVENT_LABELS,
-    timeoutSec: MANAGED_HOOK_TIMEOUT_SECONDS,
-    buildManagedCommand: (linuxRuntimeHome) =>
-      wrapReadablePosixHookCommand(`${linuxRuntimeHome}/.orca/agent-hooks/codex-hook.sh`),
-    priorLedgerHomes
-  })
 }

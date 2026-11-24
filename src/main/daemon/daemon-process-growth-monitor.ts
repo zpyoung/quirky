@@ -1,8 +1,4 @@
 import { readProcessTable } from '../pty-descendant-termination'
-import {
-  isWindowsProcessTableAvailable,
-  readWindowsProcessIdentityTableFresh
-} from '../windows/windows-process-table'
 import type { HostPressureLevel } from '../../shared/host-spawn-admission'
 import {
   countDescendantsByRoot,
@@ -19,12 +15,9 @@ const ACTIVE_SAMPLE_INTERVAL_MS = 5_000
 const IDLE_SAMPLE_INTERVAL_MS = 30_000
 const MAX_REPORTED_TRIPS = 5
 
-/** pid/ppid rows from a child process (POSIX `ps`) or the native Windows table; null when unreadable. */
+/** pid/ppid rows from a child process (POSIX `ps`); null when unreadable. */
 export async function readDaemonProcessRows(): Promise<ProcessRow[] | null> {
   try {
-    if (process.platform === 'win32') {
-      return isWindowsProcessTableAvailable() ? await readWindowsProcessIdentityTableFresh() : null
-    }
     return (await readProcessTable()).rows
   } catch {
     return null

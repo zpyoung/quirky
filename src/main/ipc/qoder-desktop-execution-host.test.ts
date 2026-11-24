@@ -3,7 +3,6 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { createDaemonActiveProviderFixtures } from './pty-ipc-daemon-provider-fixtures'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { isCommandOnPath } from './preflight-command-exec'
-import { detectWslCommandsOnPath } from './preflight-wsl-agent-detection'
 import type * as FsPromises from 'node:fs/promises'
 import type { Store } from '../persistence'
 import type { FolderWorkspace } from '../../shared/folder-workspace-types'
@@ -13,9 +12,6 @@ import type { PtySpawnIpcArgs } from './pty/ipc/spawn-types'
 vi.mock('./preflight-command-exec', () => ({ isCommandOnPath: vi.fn() }))
 vi.mock('../../shared/local-agent-install-dir-detection', () => ({
   detectCommandsInInstallDirs: () => new Set()
-}))
-vi.mock('./preflight-wsl-agent-detection', () => ({
-  detectWslCommandsOnPath: vi.fn()
 }))
 vi.mock('node:fs/promises', async (importOriginal) => ({
   ...(await importOriginal<typeof FsPromises>()),
@@ -61,15 +57,13 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () =>
 
 describe('desktop Qoder execution-host selection', () => {
   const { handlers, mainWindow } = setupPtyIpcSuite()
-  const { setupDaemonAdapter, withWin32Platform } = createDaemonActiveProviderFixtures({
+  const { setupDaemonAdapter } = createDaemonActiveProviderFixtures({
     handlers,
     mainWindow
   })
   const nativeProbe = vi.mocked(isCommandOnPath)
-  const wslProbe = vi.mocked(detectWslCommandsOnPath)
   beforeEach(() => {
     nativeProbe.mockReset().mockImplementation(async (cmd) => cmd === 'qodercli')
-    wslProbe.mockReset().mockResolvedValue(new Set(['qoder']))
   })
   async function spawn(args: Partial<PtySpawnIpcArgs> = {}, store?: Store) {
     const providerSpawn = setupDaemonAdapter()
@@ -124,7 +118,6 @@ describe('desktop Qoder execution-host selection', () => {
     )
     expect(nativeProbe).toHaveBeenCalledWith('qodercli')
     expect(nativeProbe).toHaveBeenCalledWith('qoder')
-    expect(wslProbe).not.toHaveBeenCalled()
   })
   it('preserves exact resume tokens and captured configuration on a native folder', async () => {
     nativeProbe.mockImplementation(async (cmd) => cmd === 'qoder')
@@ -163,73 +156,5 @@ describe('desktop Qoder execution-host selection', () => {
     const { providerSpawn } = await spawn(args)
     expect(providerSpawn).toHaveBeenCalledWith(expect.objectContaining({ command: args.command }))
     expect(nativeProbe).not.toHaveBeenCalled()
-    expect(wslProbe).not.toHaveBeenCalled()
-  })
-  it('uses the selected project WSL distro rather than installed native legacy', async () => {
-    await withWin32Platform(async () => {
-      const { providerSpawn } = await spawn({
-        cwd: '/work/project',
-        worktreeId: 'repo-review::/work/project',
-        projectRuntime: {
-          status: 'resolved',
-          runtime: {
-            kind: 'wsl',
-            hostPlatform: 'wsl',
-            projectId: 'project-review',
-            distro: 'Debian',
-            reason: 'project-override',
-            cacheKey: 'review'
-          }
-        }
-      })
-      expect(providerSpawn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: 'qoder --resume original-id',
-          shellOverride: 'wsl.exe',
-          terminalWindowsWslDistro: 'Debian'
-        })
-      )
-      expect(wslProbe).toHaveBeenCalledWith({ distro: 'Debian' }, ['qodercli', 'qoder'])
-      expect(nativeProbe).not.toHaveBeenCalled()
-    })
-  })
-  it('retains a repo-less UNC folder execution distro', async () => {
-    await withWin32Platform(async () => {
-      const { providerSpawn } = await spawn(
-        {
-          cwd: String.raw`\\wsl.localhost\Ubuntu\home\review\folder`,
-          worktreeId: 'folder:review-folder',
-          shellOverride: 'wsl.exe'
-        },
-        folderStore(String.raw`\\wsl.localhost\Ubuntu\home\review\folder`)
-      )
-      expect(providerSpawn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: 'qoder --resume original-id',
-          terminalWindowsWslDistro: 'Ubuntu',
-          cwd: '//wsl.localhost/Ubuntu/home/review/folder'
-        })
-      )
-      expect(wslProbe).toHaveBeenCalledWith({ distro: 'Ubuntu' }, ['qodercli', 'qoder'])
-      expect(nativeProbe).not.toHaveBeenCalled()
-    })
-  })
-  it('keeps native Windows launches on the host shell', async () => {
-    await withWin32Platform(async () => {
-      nativeProbe.mockImplementation(async (cmd) => cmd === 'qoder')
-      const { providerSpawn } = await spawn({
-        cwd: 'C:\\review',
-        worktreeId: 'repo-review::C:\\review',
-        shellOverride: 'cmd.exe'
-      })
-      expect(providerSpawn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          command: 'qoder --resume original-id',
-          shellOverride: 'cmd.exe',
-          terminalWindowsWslDistro: null
-        })
-      )
-      expect(wslProbe).not.toHaveBeenCalled()
-    })
   })
 })

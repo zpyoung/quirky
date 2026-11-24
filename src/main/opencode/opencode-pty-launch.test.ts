@@ -17,21 +17,14 @@ const plan: LocalPtyLaunchPlan = {
   startupAgentRecognition: null,
   defaultCwd: '',
   cwd: '',
-  wslInfo: null,
-  worktreeWslContext: undefined,
-  preferredWslContext: undefined,
-  launchWslContext: undefined,
   shellPath: process.platform === 'win32' ? 'cmd.exe' : '/bin/sh',
   shellArgs: [],
   effectiveCwd: '',
   validationCwd: '',
   startupCommandDeliveredInShellArgs: false,
-  windowsFallbackAttempts: [],
   shellReadyLaunch: null,
   getFallbackShellReadyConfig: undefined,
-  primaryPreLaunchEnv: {},
-  isWslShell: false,
-  launchWslDistro: null
+  primaryPreLaunchEnv: {}
 }
 
 const hookServer = vi.hoisted(() => {

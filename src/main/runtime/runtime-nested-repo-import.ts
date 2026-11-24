@@ -9,7 +9,6 @@ import type {
 } from '../../shared/project-group-types'
 import type { Repo } from '../../shared/repo-types'
 import { getRepoExecutionHostId, getSshTargetIdForExecutionHost } from '../../shared/execution-host'
-import { awaitWindowsHostGitEnvironmentReady } from '../git/runner'
 import { getRepoName, isGitRepoAsync } from '../git/repo'
 import { scanNestedRepos } from '../project-groups/nested-repo-discovery'
 import {
@@ -38,7 +37,6 @@ export class RuntimeNestedRepoImport {
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
     }
-    await awaitWindowsHostGitEnvironmentReady({ cwd: path })
     return scanNestedRepos({ path, options: { timeoutMs: 15_000 } })
   }
 
@@ -48,7 +46,6 @@ export class RuntimeNestedRepoImport {
     projectPaths: string[]
     mode: ProjectGroupImportMode
   }): Promise<ProjectGroupImportResult> {
-    await awaitWindowsHostGitEnvironmentReady({ cwd: args.parentPath })
     const store = this.deps.getStore()
     if (!store?.createProjectGroup || !store.moveProjectToGroup) {
       throw new Error('runtime_unavailable')
@@ -77,7 +74,6 @@ export class RuntimeNestedRepoImport {
     const importTargetResolver = createNestedRepoImportTargetResolver()
     for (const [projectGroupOrder, repoPath] of selection.selectedPaths.entries()) {
       try {
-        await awaitWindowsHostGitEnvironmentReady({ cwd: repoPath })
         if (!(await isGitRepoAsync(repoPath))) {
           results.push({ path: repoPath, status: 'failed', error: 'Not a valid git repository' })
           continue

@@ -1,0 +1,12 @@
+#!/bin/sh
+# research/ is a local-only nested repo; refuse any push that would carry files under it
+zero=0000000000000000000000000000000000000000
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then range="$local_sha"; else range="$remote_sha..$local_sha"; fi
+  if [ -n "$(git rev-list -n 1 "$range" -- research)" ]; then
+    echo "pre-push: $local_ref has commits touching research/, which must stay local" >&2
+    exit 1
+  fi
+done
+exit 0

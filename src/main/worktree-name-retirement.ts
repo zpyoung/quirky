@@ -29,7 +29,6 @@ import {
 } from './worktree-retirement-namespace'
 import { discoverRetiredWorktreeNames } from './worktree-retirement-discovery'
 import { runRetirementBackfillScan } from './worktree-retirement-backfill-scan'
-import { hasCachedWslHome, parseWslPath } from './wsl'
 import { getWorktreeMirrorDistro } from './project-runtime-git-options'
 import type { ProjectRuntimeResolutionStore } from './local-project-runtime-resolution'
 
@@ -139,12 +138,6 @@ async function getRetirementCollisionKey(
     return cached
   }
   const key = retirementNamespaceKey(hostIdentity, await getRetirementProbePath(repo, settings))
-  // Why not always cache: only the WSL home *success* path is cached upstream, so a stopped distro
-  // yields a fallback namespace. Memoizing that would strand the repo there for the whole session.
-  const wsl = parseWslPath(repo.path)
-  if (wsl && !hasCachedWslHome(wsl.distro)) {
-    return key
-  }
   if (collisionKeyCache.size >= COLLISION_KEY_CACHE_MAX) {
     collisionKeyCache.clear()
   }
@@ -273,9 +266,7 @@ function parentPath(path: string): string {
   return separatorIndex < 0 ? '' : trimmed.slice(0, separatorIndex)
 }
 
-/** Async throughout on purpose: this runs on composer open, not just at create time, and the sync
- *  probe would resolve a WSL home with a blocking `wsl.exe` call — up to 5s of frozen main process
- *  on a stopped distro. Resolving it here also warms the shared cache for later sync callers. */
+/** Async throughout on purpose: this runs on composer open, not just at create time. */
 export async function ensureRetiredWorktreeNamesBackfilled(
   store: RetirementBackfillStore,
   repo: Repo,

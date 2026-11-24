@@ -10,11 +10,7 @@ describe('electron-builder speech resources', () => {
     expect(electronBuilderConfig.files).toContain('!node_modules/sherpa-onnx*{,/**/*}')
     expect(electronBuilderConfig.asarUnpack).not.toContain('node_modules/sherpa-onnx*/**')
 
-    for (const [platform, packagePath] of [
-      ['mac', 'node_modules/sherpa-onnx-darwin-${arch}'],
-      ['linux', 'node_modules/sherpa-onnx-linux-${arch}'],
-      ['win', 'node_modules/sherpa-onnx-win-x64']
-    ]) {
+    for (const [platform, packagePath] of [['mac', 'node_modules/sherpa-onnx-darwin-${arch}']]) {
       const speechResources = electronBuilderConfig[platform].extraResources.filter(
         (resource) =>
           typeof resource.to === 'string' && resource.to.startsWith('node_modules/sherpa-onnx')

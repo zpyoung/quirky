@@ -7,13 +7,11 @@ import { stampRuntimeSourceEnv } from '../../../shared/runtime-source-env'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { isAgentStatusHooksEnabled } from '../../agent-hooks/managed-agent-hook-controls'
-import { awaitExplicitPiOmpGuestReadiness } from '../../agent-hooks/wsl-pi-omp-guest-readiness'
 import { ensureCodexStateDbBackfillRecoveryStarted } from '../../codex/codex-state-db-backfill-recovery'
 import type { CodexSessionResumePreparation } from '../../codex/codex-session-resume-home'
 import type { CodexAccountSelectionTarget } from '../../codex-accounts/runtime-selection'
 import { isSafePtySessionId } from '../../daemon/pty-session-id'
 import type { IPtyProvider } from '../../providers/pty-provider-contract'
-import { stampWslOrchestrationCompatibilityHost } from '../../pty/wsl-orca-env'
 import { getRuntimeSourceStamp } from '../../runtime/host-descriptor'
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { buildPtyHostEnv } from './host-env/assembly'
@@ -204,13 +202,6 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       launchAgent: args.launchAgent,
       launchCommand
     })
-    await awaitExplicitPiOmpGuestReadiness({
-      isWsl,
-      distro: wslDistro,
-      codexHomePath: selectedCodexHomePath,
-      launchAgent: isTuiAgent(args.launchAgent) ? args.launchAgent : undefined,
-      launchCommand
-    })
     buildPtyHostEnv(sessionId, env, {
       isPackaged: getAppEnvironment().isPackaged(),
       resourcesPath: process.resourcesPath,
@@ -231,11 +222,6 @@ export async function resolvePtySpawnHostEnv(args: PtySpawnHostEnvArgs): Promise
       deferGitConfigGuardToDaemon:
         args.provider.supportsGitCredentialGuardHost?.(sessionId) === true
     })
-    stampWslOrchestrationCompatibilityHost(
-      env,
-      deps.runtime?.getOrchestrationCompatibilityHostId?.(),
-      wslDistro
-    )
     stampRuntimeSourceEnv(
       env,
       getRuntimeSourceStamp(deps.runtime, getAppEnvironment().getPath('userData'))

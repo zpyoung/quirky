@@ -2,7 +2,6 @@ import { it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { join, posix } from 'node:path'
 import { getBundledLauncherPath } from '../cli/bundled-cli-launcher-path'
-import { resolveWindowsShellLaunchArgs } from '../providers/windows-shell-args'
 
 /** The narrow slice of vitest's test API these suites use; keeps `it`/`it.skip` interchangeable. */
 export type PlatformGatedTest = (
@@ -24,18 +23,6 @@ export const expectedOmpStatusExtension = posix.join(
   'orca-agent-status.ts'
 )
 
-// Why: Windows resolves a bare PowerShell name to an absolute exe before ConPTY, else CreateProcessW fails with error 5 (PR #6537 / #5161).
-export const RESOLVED_WINDOWS_POWERSHELL =
-  'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-export const RESOLVED_PWSH7 = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-// Why: default spawn cwd in the Windows UTF-8 suite is USERPROFILE; derive shell
-// args from the production resolver so expectations stay in lockstep when the
-// PowerShell bootstrap grows (e.g. cwd restore after profiles load).
-export const DEFAULT_WINDOWS_PTY_CWD = 'C:\\Users\\test'
-export function powerShellOsc133ArgsForCwd(cwd: string = DEFAULT_WINDOWS_PTY_CWD): string[] {
-  return resolveWindowsShellLaunchArgs(RESOLVED_WINDOWS_POWERSHELL, cwd, cwd).shellArgs
-}
-export const POWERSHELL_OSC133_ARGS = powerShellOsc133ArgsForCwd()
 export const TEST_CODEX_HOME =
   process.platform === 'win32'
     ? 'C:\\Users\\test\\AppData\\Roaming\\orca\\codex-runtime-home\\home'

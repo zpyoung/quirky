@@ -21,50 +21,6 @@ describe('terminateProviderProcessTree', () => {
     resetSelfInitiatedTreeKillLogForTest()
   })
 
-  it('waits for the Windows tree kill before releasing the wrapper, and reports what taskkill reported', async () => {
-    const target = child()
-    const release = Promise.withResolvers<boolean>()
-    const terminateWindowsTree = vi.fn(() => release.promise)
-
-    const teardown = terminateProviderProcessTree(target, {
-      site: 'codex-app-server-teardown',
-      platform: 'win32',
-      terminateWindowsTree
-    })
-    expect(target.kill).not.toHaveBeenCalled()
-    release.resolve(true)
-    await expect(teardown).resolves.toBe('exited')
-
-    expect(terminateWindowsTree).toHaveBeenCalledWith(1234, { site: 'codex-app-server-teardown' })
-    expect(target.kill).toHaveBeenCalledWith('SIGKILL')
-  })
-
-  it('reports an unproven Windows tree when taskkill does not exit cleanly', async () => {
-    const target = child()
-
-    await expect(
-      terminateProviderProcessTree(target, {
-        site: 'codex-app-server-teardown',
-        platform: 'win32',
-        terminateWindowsTree: async () => false
-      })
-    ).resolves.toBe('unverifiable')
-    // The held child is still killed through its handle.
-    expect(target.kill).toHaveBeenCalledWith('SIGKILL')
-  })
-
-  it('passes a non-Codex diagnostic label to Windows teardown', async () => {
-    const terminateWindowsTree = vi.fn(async () => true)
-
-    await terminateProviderProcessTree(child(), {
-      site: 'provider-test-teardown',
-      platform: 'win32',
-      terminateWindowsTree
-    })
-
-    expect(terminateWindowsTree).toHaveBeenCalledWith(1234, { site: 'provider-test-teardown' })
-  })
-
   it('waits for an owned POSIX snapshot before killing the wrapper', async () => {
     const target = child()
     const signalProcessGroup = vi.fn()
@@ -73,7 +29,6 @@ describe('terminateProviderProcessTree', () => {
 
     const teardown = terminateProviderProcessTree(target, {
       site: 'codex-app-server-teardown',
-      platform: 'darwin',
       captureDescendants: async () => snapshot,
       terminateDescendants: () => release.promise,
       signalProcessGroup
@@ -95,7 +50,6 @@ describe('terminateProviderProcessTree', () => {
     await expect(
       terminateProviderProcessTree(target, {
         site: 'provider-test-teardown',
-        platform: 'darwin',
         dedicatedProcessGroup: true,
         captureDescendants,
         signalProcessGroup
@@ -116,7 +70,6 @@ describe('terminateProviderProcessTree', () => {
     await expect(
       terminateProviderProcessTree(target, {
         site: 'codex-app-server-teardown',
-        platform: 'linux',
         dedicatedProcessGroup: true,
         signalProcessGroup: () => {
           throw Object.assign(new Error('denied'), { code: 'EPERM' })
@@ -137,7 +90,6 @@ describe('terminateProviderProcessTree', () => {
       await expect(
         terminateProviderProcessTree(target, {
           site: 'codex-app-server-teardown',
-          platform: 'darwin',
           captureDescendants: async () => ({
             rootPgid: UNREACHABLE_PGID,
             descendants: [],
@@ -162,7 +114,6 @@ describe('terminateProviderProcessTree', () => {
     await expect(
       terminateProviderProcessTree(target, {
         site: 'codex-app-server-teardown',
-        platform: 'darwin',
         captureDescendants: async () => ({ rootPgid: 1234, descendants: [], capturedAtMs: 1 }),
         terminateDescendants: async () => 'exited',
         signalProcessGroup
@@ -191,7 +142,6 @@ describe('terminateProviderProcessTree', () => {
       await expect(
         terminateProviderProcessTree(target, {
           site: 'codex-app-server-teardown',
-          platform: 'darwin',
           captureDescendants: async () => ({
             rootPgid: 1234,
             descendants: [
@@ -220,7 +170,6 @@ describe('terminateProviderProcessTree', () => {
     await expect(
       terminateProviderProcessTree(target, {
         site: 'codex-app-server-teardown',
-        platform: 'darwin',
         captureDescendants: async () => null
       })
     ).resolves.toBeNull()
@@ -231,7 +180,6 @@ describe('terminateProviderProcessTree', () => {
     await expect(
       terminateProviderProcessTree(child(), {
         site: 'provider-test-teardown',
-        platform: 'linux',
         dedicatedProcessGroup: true,
         signalProcessGroup: () => {
           throw Object.assign(new Error('gone'), { code: 'ESRCH' })
@@ -240,7 +188,7 @@ describe('terminateProviderProcessTree', () => {
     ).resolves.toBeNull()
     const spawnless = { pid: undefined, kill: vi.fn<ChildProcess['kill']>(() => true) }
     await expect(
-      terminateProviderProcessTree(spawnless, { site: 'provider-test-teardown', platform: 'linux' })
+      terminateProviderProcessTree(spawnless, { site: 'provider-test-teardown' })
     ).resolves.toBe('unverifiable')
   })
 
@@ -257,7 +205,6 @@ describe('terminateProviderProcessTree', () => {
       targets.map((target) =>
         terminateProviderProcessTree(target, {
           site: 'codex-app-server-teardown',
-          platform: 'linux',
           dedicatedProcessGroup: true,
           captureDescendants,
           signalProcessGroup

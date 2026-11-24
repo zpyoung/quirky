@@ -7,7 +7,6 @@ import { ClaudeDiffPanelNoticeBanner } from './ClaudeDiffPanelNoticeBanner'
 import { NewerDaemonHoldBanner } from './NewerDaemonHoldBanner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { TerminalSshReconnectOverlay } from './TerminalSshReconnectOverlay'
-import { useWslHostUnavailableReason } from './use-wsl-host-unavailable-reason'
 import { useManagedPairingRefusedEnvironmentId } from './use-managed-pairing-refused'
 import { DelayedRemoteRuntimeReconnectBanner } from './TerminalRemoteRuntimeReconnectBanner'
 import { TerminalProcessExitOverlay } from './TerminalProcessExitOverlay'
@@ -177,7 +176,6 @@ export function TerminalPaneRecoveryPortals({
 }): React.JSX.Element | null {
   const { managedPanes, paneTransportsRef, ptyRecoveryStatesByPaneId, showSshReconnectOverlay } =
     controller
-  const wslHostUnavailable = useWslHostUnavailableReason(controller.worktreeId)
   const pairingRefusedEnvironmentId = useManagedPairingRefusedEnvironmentId(controller.worktreeId)
   if (showSshReconnectOverlay) {
     return null
@@ -209,7 +207,6 @@ export function TerminalPaneRecoveryPortals({
               }
               retry()
             }}
-            wslHostUnavailable={wslHostUnavailable}
             pairingRefused={pairingRefusedEnvironmentId !== null}
           />,
           pane.container,

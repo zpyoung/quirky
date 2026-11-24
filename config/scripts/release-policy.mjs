@@ -3,17 +3,14 @@
 import {
   DESKTOP_RC_TAG as RC_TAG,
   DESKTOP_STABLE_TAG as STABLE_TAG,
-  MOBILE_TAG,
-  isAgentStateRulesTag
+  MOBILE_TAG
 } from './release-tag-patterns.mjs'
 
 const BOT_LOGIN = 'github-actions[bot]'
 const BOT_EMAIL = '41898282+github-actions[bot]@users.noreply.github.com'
 
-// Why agent state rules here: their publish workflow is a bot author, and as a prerelease the
-// release can never become Latest, which the app updater follows.
 export function isPrereleaseTag(tag) {
-  return RC_TAG.test(tag) || MOBILE_TAG.test(tag) || isAgentStateRulesTag(tag)
+  return RC_TAG.test(tag) || MOBILE_TAG.test(tag)
 }
 
 export function compareStableTags(left, right) {

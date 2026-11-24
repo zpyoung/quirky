@@ -7,12 +7,9 @@ import type { AppIdentity } from '../../shared/app-identity'
 import type { MarkdownDocument } from '../../shared/filesystem-entry-types'
 import type { FloatingTerminalCwdRequest } from '../../shared/ui-chrome-types'
 import { relaunchApp, runBeforeRelaunchCleanup } from '../app-relaunch'
-import { prepareWindowsAdministratorRestart } from '../windows/windows-administrator-restart'
 import { quitProcess } from '../startup/process-quit-request'
 import type { Store } from '../persistence'
 import { getDevInstanceIdentity } from '../startup/dev-instance-identity'
-import { isPwshAvailableAsync } from '../pwsh'
-import { isWslAvailableAsync, listWslDistrosAsync } from '../wsl'
 import { isGitBashAvailable } from '../git-bash'
 import { setUnreadDockBadgeCount } from '../dock/unread-badge'
 import { destroySystemTray } from '../tray/system-tray'
@@ -34,7 +31,6 @@ import { readMacKeyboardLayoutSnapshot } from './macos-keyboard-layout-snapshot'
 import { registerMacKeyboardLayoutChangeNotifications } from './macos-keyboard-layout-change-notifications'
 import { isProfileStateSaveDelayed } from '../startup/profile-state-save-delay'
 import { readCommandStdout, readKeyboardInputSourceId } from './macos-keyboard-input-source'
-import { getWindowsAdministratorStatus } from '../windows/windows-administrator-status'
 
 import type { ReconnectFactsFor } from '../persistence/window-save-view'
 
@@ -125,7 +121,6 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
   )
   registerMacKeyboardLayoutChangeNotifications()
   ipcMain.handle('app:isProfileStateSaveDelayed', isProfileStateSaveDelayed)
-  ipcMain.handle('app:getWindowsAdministratorStatus', getWindowsAdministratorStatus)
 
   ipcMain.handle('app:getFeatureWallAssetBaseUrl', (): string => getFeatureWallAssetBaseUrl())
 
@@ -142,11 +137,6 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
     }
   })
 
-  // Why: these probes spawn wsl.exe/pwsh.exe; the sync variants would block the main event
-  // loop — every PTY message, window IPC and watchdog beat — for up to 5s per renderer read.
-  ipcMain.handle('wsl:isAvailable', (): Promise<boolean> => isWslAvailableAsync())
-  ipcMain.handle('wsl:listDistros', (): Promise<string[]> => listWslDistrosAsync())
-  ipcMain.handle('pwsh:isAvailable', (): Promise<boolean> => isPwshAvailableAsync())
   ipcMain.handle('gitBash:isAvailable', (): boolean => isGitBashAvailable())
 
   // The selected IME identity must win over its US-shaped backing keyboard layout.
@@ -184,15 +174,6 @@ export function registerAppHandlers(store: Store, options: RegisterAppHandlersOp
     await runBeforeRelaunchCleanup(options.onBeforeRelaunch)
     setTimeout(() => {
       relaunchApp('admin-restart')
-      quitProcess()
-    }, 150)
-  })
-
-  ipcMain.handle('app:restartAsAdministrator', async () => {
-    const relaunchOptions = prepareWindowsAdministratorRestart()
-    await runBeforeRelaunchCleanup(options.onBeforeRelaunch)
-    setTimeout(() => {
-      relaunchApp('windows-administrator', undefined, relaunchOptions)
       quitProcess()
     }, 150)
   })

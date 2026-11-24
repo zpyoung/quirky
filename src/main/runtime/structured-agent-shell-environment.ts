@@ -1,9 +1,5 @@
 import { resolveLoginShellEnvironment } from '../startup/login-shell-environment'
 import { refreshAtRestCommandContext } from '../native-chat/agent-session-wire/at-rest-command-context'
-import {
-  mergePersistedWindowsPathAsync,
-  readPersistedWindowsPathSegmentsAsync
-} from '../pty/windows-environment-path'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import {
   nativeChatShellEnvironmentPolicy,
@@ -85,46 +81,28 @@ const SHELL_ENVIRONMENT_TTL_MS = 10_000
 
 /**
  * This host's shell env, from the shared login-shell cache: the last result at once, rerun in the
- * background past the TTL. Windows keeps a loaded PowerShell profile for good (only a failed load
- * is retried) and lays the saved PATH, where installers add themselves, over it on every read.
+ * background past the TTL.
  */
 async function hostShellEnvironment(): Promise<NodeJS.ProcessEnv> {
-  const windows = process.platform === 'win32'
-  const env = await resolveLoginShellEnvironment({
-    refreshAfterMs: SHELL_ENVIRONMENT_TTL_MS,
-    keepCaptured: windows
-  })
-  if (!windows) {
-    return env
-  }
-  const withSavedPath = { ...env }
-  await mergePersistedWindowsPathAsync(withSavedPath)
-  return withSavedPath
+  return await resolveLoginShellEnvironment({ refreshAfterMs: SHELL_ENVIRONMENT_TTL_MS })
 }
 
 /** For a lookup that started at `askedAt` and found no program: waits for a shell run that started
- *  no earlier (on Windows, a saved PATH reread), so an agent installed before the lookup counts.
+ *  no earlier, so an agent installed before the lookup counts.
  *  The run's own shell timeout bounds the wait. */
 export async function refreshHostAgentBaseEnvironmentAfterMiss(askedAt: number): Promise<void> {
-  await (
-    process.platform === 'win32'
-      ? readPersistedWindowsPathSegmentsAsync({ forceRefresh: true, startedAfter: askedAt })
-      : resolveLoginShellEnvironment({ startedAfter: askedAt })
-  ).catch(() => {})
+  await resolveLoginShellEnvironment({ startedAfter: askedAt }).catch(() => {})
 }
 
 /** Captures this host's shell env again now, so an explicit Refresh never reads a profile kept from
- *  before it (Windows keeps a loaded one for good). */
+ *  before it. */
 export async function recaptureHostShellEnvironment(): Promise<void> {
   await refreshAtRestCommandContext(captureHostShellEnvironment)
 }
 
 export async function captureHostShellEnvironment(): Promise<void> {
   const startedAfter = Date.now()
-  await Promise.all([
-    resolveLoginShellEnvironment({ startedAfter }),
-    readPersistedWindowsPathSegmentsAsync({ forceRefresh: true, startedAfter })
-  ]).catch(() => {})
+  await resolveLoginShellEnvironment({ startedAfter }).catch(() => {})
 }
 
 /** The base env every local agent launch on this host starts from, read from current settings. */

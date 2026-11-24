@@ -62,31 +62,9 @@ vi.mock('../pty-descendant-termination', () => ({
   killWithDescendantSweep: killWithDescendantSweepMock
 }))
 
-// Resolve PowerShell family names to deterministic absolute paths (the fs mock
-// above otherwise makes every probe miss). The real resolver — which skips the
-// Store App Execution Alias stub — is covered in
-// windows-powershell-executable.test.ts.
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('./windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('./agent-foreground-process', () => ({
   resolveAgentForegroundProcessWithAvailability: (...args: unknown[]) =>
     resolveAgentForegroundProcessMock(...args)
-}))
-
-vi.mock('./windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: (...args: unknown[]) => readWindowsPtyJobProcessIdsMock(...args),
-  isWindowsPtyJobReadable: () => true
 }))
 
 vi.mock('../wsl', () => ({
@@ -177,26 +155,6 @@ describe('LocalPtyProvider', () => {
       expect(newEntries[0]).not.toHaveProperty('wslDistro')
       expect(newEntries[1]).not.toHaveProperty('wslDistro')
     })
-
-    it('reports native and WSL ownership explicitly on Windows', async () => {
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      const native = await provider.spawn({
-        cols: 80,
-        rows: 24,
-        cwd: 'C:\\repo',
-        shellOverride: 'powershell.exe'
-      })
-      const wsl = await provider.spawn({
-        cols: 80,
-        rows: 24,
-        cwd: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo'
-      })
-
-      const processes = await provider.listProcesses()
-
-      expect(processes.find((process) => process.id === native.id)?.wslDistro).toBeNull()
-      expect(processes.find((process) => process.id === wsl.id)?.wslDistro).toBe('Ubuntu')
-    })
   })
 
   describe('getDefaultShell', () => {
@@ -212,30 +170,6 @@ describe('LocalPtyProvider', () => {
           process.env.SHELL = originalShell
         }
       }
-    })
-  })
-
-  describe('getProfiles', () => {
-    it('awaits asynchronous WSL availability on Windows', async () => {
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      let resolveAvailability!: (available: boolean) => void
-      isWslAvailableAsyncMock.mockReturnValue(
-        new Promise((resolve) => {
-          resolveAvailability = resolve
-        })
-      )
-
-      const profiles = provider.getProfiles()
-      let settled = false
-      void profiles.then(() => {
-        settled = true
-      })
-      await Promise.resolve()
-      expect(settled).toBe(false)
-
-      resolveAvailability(true)
-      await expect(profiles).resolves.toContainEqual({ name: 'WSL', path: 'wsl.exe' })
-      expect(isWslAvailableAsyncMock).toHaveBeenCalledOnce()
     })
   })
 })

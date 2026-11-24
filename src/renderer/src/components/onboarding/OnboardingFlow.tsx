@@ -8,7 +8,6 @@ import { AgentStep } from './AgentStep'
 import { ThemeStep } from './ThemeStep'
 import { NotificationStep } from './NotificationStep'
 import { IntegrationsStep } from './IntegrationsStep'
-import { WindowsTerminalStep } from './WindowsTerminalStep'
 import { useOnboardingFlow } from './use-onboarding-flow'
 import { OnboardingSkipConfirmationDialog } from './OnboardingSkipConfirmationDialog'
 import { OnboardingFooter } from './OnboardingFooter'
@@ -330,12 +329,6 @@ export default function OnboardingFlow({
                 <NotificationStep settings={flow.settings} updateSettings={flow.updateSettings} />
               )}
               {currentStep.id === 'integrations' && <IntegrationsStep />}
-              {currentStep.id === 'windows_terminal' && (
-                <WindowsTerminalStep
-                  settings={flow.settings}
-                  updateSettings={flow.updateSettings}
-                />
-              )}
             </div>
 
             <OnboardingFooter

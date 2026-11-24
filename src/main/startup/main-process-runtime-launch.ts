@@ -26,8 +26,6 @@ import {
 } from './main-process-pty-startup'
 import { prepareCodexRuntimeHomeForLaunch } from './codex-launch-preparation'
 import { prepareCodexSessionResumeForLaunch } from './codex-session-resume-launch'
-import { startWindowsDesktopBeforeShellPathReady } from './windows-desktop-shell-path-startup'
-import { repairKnownPoisonedInstallDirBeforeWindow } from './windows-install-dir-acl-recovery'
 import { installServeQuitHandling } from './serve-quit-handling'
 import { registerHeadlessServeSshHandlers } from './headless-serve-ssh-registration'
 import { settleServeDesktopActivation } from './serve-desktop-activation'
@@ -36,11 +34,9 @@ import {
   showRuntimeRpcStartupFailureDialog
 } from '../runtime/runtime-rpc-startup-failure'
 import { registerCliForHeadlessServe } from './serve-cli-registration'
-import { startAppImageCopyPreExtraction } from '../cli/appimage-copy-pre-extraction'
 import { scheduleAllPendingHistoryTreeRemovals } from '../terminal-history-deletion'
 import { triggerStartupNotificationRegistration } from '../ipc/startup-notification-registration'
 import { mainProcessState as state } from './main-process-state'
-import { logStartupMilestone } from './startup-diagnostics'
 import { setupHeadlessServeAutoUpdater } from '../window/main-window-updater'
 import { preserveStateBeforeUpdateRestart } from '../update-restart-preservation'
 import { resolveUpdateInstallMode } from '../updater'
@@ -136,12 +132,6 @@ async function launchServeMode(
   // Why here: headless serve has no window to unblock, so keep the persisted proxy strictly
   // ahead of every fetcher this phase can reach (relay, CLI install, RPC clients).
   await state.initialProxyApplicationReady
-  // Why: give managed WSL launchers a brief chance to migrate before headless PTYs go live, without slow repairs withholding all RPC readiness.
-  logStartupMilestone('wsl-cli-barrier-start')
-  await state.managedWslCliStartupBarrierReady
-  logStartupMilestone('wsl-cli-barrier-resolved', {
-    reconciliation: state.managedWslCliReconciliationStatus
-  })
   // Why: headless PTYs must not start on the fallback provider, then get swept when an activated renderer registers desktop lifecycle handlers.
   await state.localPtyStartupReady
   await state.localPtyProviderStartupReady
@@ -202,7 +192,6 @@ async function launchServeMode(
 async function launchDesktopMode(
   runtimeRpc: OrcaRuntimeRpcServer,
   shellPathReady: Promise<void>,
-  desktopWindow: BrowserWindow | null,
   openMainWindow: MainProcessRuntimeLaunchOptions['openMainWindow']
 ): Promise<void> {
   // Preserve the pre-split startup failure contract if composition ever hands
@@ -212,7 +201,7 @@ async function launchDesktopMode(
   }
   // Why: window and RPC startup run in parallel; registerPtyHandlers gates PTY spawns so RPC binds without racing the daemon provider swap.
   const [win, runtimeRpcStartResult] = await Promise.all([
-    Promise.resolve(desktopWindow ?? openMainWindow()),
+    Promise.resolve(openMainWindow()),
     shellPathReady
       .then(() => runtimeRpc.start())
       .then(
@@ -255,9 +244,8 @@ export async function initializeMainProcessRuntimeLaunch(
   options: MainProcessRuntimeLaunchOptions
 ): Promise<void> {
   const runtime = state.runtime
-  const shellPathHydration = state.windowsShellPathHydration
-  if (!runtime || !shellPathHydration) {
-    throw new Error('Runtime and shell-path services must be initialized before launch')
+  if (!runtime) {
+    throw new Error('Runtime must be initialized before launch')
   }
   let serveOptions: ReturnType<typeof getServeOptions> | null = null
   try {
@@ -269,43 +257,13 @@ export async function initializeMainProcessRuntimeLaunch(
   }
   state.serveOptions = serveOptions
   const runtimeRpc = installRuntimeRpc(runtime, serveOptions)
-  const shellPathReady = shellPathHydration.whenReady()
-  // Why published: the renderer's git-environment barrier must fence on the same
-  // generation the terminal startup services wait for, not a later re-read.
-  state.shellPathReady = shellPathReady
-  // Why before any window: the poisoned install DACL kills the renderer at init, and
-  // the probe that detects it cannot finish before createMainWindow. Bounded, and a
-  // no-op (one absent-file read) unless a previous launch already recorded the verdict.
-  const aclGate = await repairKnownPoisonedInstallDirBeforeWindow({
-    isServeMode: state.isServeMode || serveOptions !== null,
-    userDataPath: app.getPath('userData'),
-    appVersion: app.getVersion()
-  })
-  if (aclGate !== 'not-marked' && aclGate !== 'skipped') {
-    logStartupMilestone('install-dir-acl-repair-blocking-done', { mode: aclGate })
-  }
-  let desktopWindow: BrowserWindow | null = null
-  if (process.platform === 'win32' && app.isPackaged && !serveOptions) {
-    const desktopStartup = startWindowsDesktopBeforeShellPathReady({
-      bindServices: bindTerminalRuntimeStartupServices,
-      openWindow: () => options.openMainWindow({ revealOnDidFinishLoad: true }),
-      shellPathReady,
-      startServices: startTerminalRuntimeStartupServices
-    })
-    desktopWindow = desktopStartup.window
-  } else {
-    // Why before the daemon starts: its host choice waits briefly for a copy unpacking here.
-    // Serve unpacks for itself, with a deadline and progress on its own output.
-    if (!serveOptions) {
-      void startAppImageCopyPreExtraction()
-    }
-    await shellPathReady
-    bindTerminalRuntimeStartupServices(Promise.resolve(startTerminalRuntimeStartupServices()))
-  }
+  const shellPathReady = state.shellPathReady
+  await shellPathReady
+  bindTerminalRuntimeStartupServices(Promise.resolve(startTerminalRuntimeStartupServices()))
   app.on('activate', options.handleMacAppActivation)
   if (serveOptions) {
     await launchServeMode(runtime, runtimeRpc, serveOptions)
     return
   }
-  await launchDesktopMode(runtimeRpc, shellPathReady, desktopWindow, options.openMainWindow)
+  await launchDesktopMode(runtimeRpc, shellPathReady, options.openMainWindow)
 }

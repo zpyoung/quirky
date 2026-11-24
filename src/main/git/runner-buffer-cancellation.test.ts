@@ -13,12 +13,10 @@ import {
   GitAdmissionScheduler,
   _resetGitAdmissionForTests
 } from './command-runner/git-subprocess-admission'
-import { configureWindowsHostGitEnvironmentReadiness } from './command-runner/windows-host-git-environment'
 
 beforeEach(() => execFileMock.mockReset())
 afterEach(() => {
   _resetGitAdmissionForTests()
-  configureWindowsHostGitEnvironmentReadiness(null)
 })
 
 describe('buffered Git cancellation', () => {
@@ -74,24 +72,5 @@ describe('buffered Git cancellation', () => {
     expect(scheduler.snapshot().budgets.general.baseUsed).toBe(1)
     child.emit('close', 0)
     await vi.waitFor(() => expect(scheduler.snapshot().budgets.general.baseUsed).toBe(0))
-  })
-
-  it('cancels Windows environment readiness without launching Git', async () => {
-    const platform = process.platform
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    try {
-      configureWindowsHostGitEnvironmentReadiness(() => new Promise(() => {}))
-      const controller = new AbortController()
-      const read = gitExecFileAsyncBuffer(['show', 'HEAD:file'], {
-        cwd: String.raw`C:\repo`,
-        signal: controller.signal
-      })
-      const rejected = expect(read).rejects.toMatchObject({ name: 'AbortError' })
-      controller.abort()
-      await rejected
-      expect(execFileMock).not.toHaveBeenCalled()
-    } finally {
-      Object.defineProperty(process, 'platform', { configurable: true, value: platform })
-    }
   })
 })

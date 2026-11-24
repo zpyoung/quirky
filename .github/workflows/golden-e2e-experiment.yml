@@ -23,9 +23,6 @@ jobs:
             platform: linux
           - os: macos-15
             platform: mac
-          # Match the release gate: Windows runs a focused golden subset.
-          - os: windows-2022
-            platform: windows
 
     steps:
       - name: Checkout
@@ -90,25 +87,6 @@ jobs:
           env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:agent-tui-golden
           env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:tab-bar-agent-launch-golden
           env SKIP_BUILD=1 ORCA_E2E_FORWARD_APP_LOGS=1 pnpm run --if-present test:e2e:source-control-golden
-
-      - name: Run golden E2E tests on Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $env:SKIP_BUILD = '1'
-          $env:ORCA_E2E_FORWARD_APP_LOGS = '1'
-          pnpm run --if-present test:e2e:workspace-session-golden
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm run --if-present test:e2e:windows-fresh-startup-golden
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm run --if-present test:e2e:tab-bar-agent-launch-golden
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (Test-Path tests/e2e/golden-fresh-profile-terminal.spec.ts) {
-            pnpm run test:e2e tests/e2e/golden-fresh-profile-terminal.spec.ts tests/e2e/golden-shell-command.spec.ts
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
-          pnpm run --if-present test:e2e:source-control-golden
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload Playwright traces
         if: failure()

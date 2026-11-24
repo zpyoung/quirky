@@ -25,7 +25,6 @@
     "../src/preload/**/*",
     "../src/shared/**/*",
     "../src/packages/process-host/src/__fixtures__/**/*",
-    "../src/wsl-guest/**/*",
     "../src/types/**/*"
   ],
   "compilerOptions": {

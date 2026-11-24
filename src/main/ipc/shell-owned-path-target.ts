@@ -1,8 +1,7 @@
 import { stat } from 'node:fs/promises'
-import { isAbsolute, normalize, win32 } from 'node:path'
+import { isAbsolute, normalize } from 'node:path'
 import { parseRoutableExecutionHostId } from '../../shared/execution-host'
 import type { ShellOpenLocalPathFailureReason } from '../../shared/shell-open-types'
-import { resolveWindowsPathAccess } from '../windows-path-access-host'
 
 export async function pathExists(pathValue: string): Promise<boolean> {
   try {
@@ -15,7 +14,6 @@ export async function pathExists(pathValue: string): Promise<boolean> {
 
 export async function validateLocalPathTarget(
   pathValue: string,
-  // Why injectable: a WSL host's paths are Windows UNC paths, and only exist on win32.
   pathApi: { normalize: (path: string) => string; isAbsolute: (path: string) => boolean } = {
     normalize,
     isAbsolute
@@ -39,8 +37,8 @@ export function isLocallyOwned(ownerHostId: unknown): boolean {
 }
 
 /**
- * The path this computer opens for `ownerHostId`: the path itself when local, its
- * `\\wsl.localhost` spelling when a WSL host owns it (D5), refused for every other owner.
+ * The path this computer opens for `ownerHostId`: the path itself when local, refused for every
+ * other owner.
  */
 export async function resolveOwnedPathTarget(
   pathValue: string,
@@ -49,12 +47,5 @@ export async function resolveOwnedPathTarget(
   if (isLocallyOwned(ownerHostId)) {
     return validateLocalPathTarget(pathValue)
   }
-  const access = resolveWindowsPathAccess(ownerHostId)
-  if (!access) {
-    return { ok: false, reason: 'remote-runtime-unsupported' }
-  }
-  const windowsPath = access.toWindows(pathValue)
-  return windowsPath
-    ? validateLocalPathTarget(windowsPath, win32)
-    : { ok: false, reason: 'not-absolute' }
+  return { ok: false, reason: 'remote-runtime-unsupported' }
 }

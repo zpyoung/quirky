@@ -6,7 +6,6 @@ import type {
 } from '../shared/worktree/create-types'
 import type { WorktreeCreatePhase } from '../shared/worktree/create-timing-vocabulary'
 import type { PreparationWork, WorktreeCreateInFlightHandle } from './worktree-create-concurrency'
-import { wslDistroForCommand } from './git/command-runner/git-command-resolution'
 
 type TimingClock = () => number
 
@@ -27,13 +26,9 @@ export type WorktreeCreateTimingRecorder = {
   finish(): WorktreeCreateTiming
 }
 
-/** A local repo's create host by the Git routing rule: a \\wsl.localhost repo runs Git in WSL even
- *  without a WSL project runtime. */
-export function localWorktreeCreateExecutionHost(gitExecOptions: {
-  cwd?: string
-  wslDistro?: string
-}): WorktreeCreateExecutionHost {
-  return wslDistroForCommand(gitExecOptions.cwd, gitExecOptions.wslDistro) ? 'wsl' : 'local'
+/** A local repo's create host. */
+export function localWorktreeCreateExecutionHost(): WorktreeCreateExecutionHost {
+  return 'local'
 }
 
 function defaultClock(): number {

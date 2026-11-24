@@ -5,11 +5,9 @@ import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type {
   AgentSessionClaimStatus,
-  AgentSessionExecutionLocation,
   AgentSessionProcessIdentity,
   AgentSessionRecord
 } from '../../shared/agent-session-record'
-import { __setWindowsProcessTreeLoaderForTests } from '../windows/windows-process-table'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import {
   JournalHostDatabase,
@@ -359,38 +357,5 @@ describe('structured agent-session runtime install', () => {
     finishWrite()
     await stop
     expect(stopped).toBe(true)
-  })
-
-  it('supports native Windows creation without the process-table addon', async () => {
-    stateDirectory = await mkdtemp(join(tmpdir(), 'orca-structured-runtime-'))
-    const originalPlatform = process.platform
-    const location: AgentSessionExecutionLocation = {
-      executionHostId: 'local',
-      wslDistro: null,
-      workspaceId: 'workspace-1',
-      workspaceKind: 'folder'
-    }
-    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-    __setWindowsProcessTreeLoaderForTests(() => null)
-    try {
-      const host = await ensureStructuredAgentSessionHost({
-        logger: createStructuredAgentSessionLogger(),
-        stateDirectory,
-        hostId: HOST_ID,
-        claimKeyId: 'key-1',
-        resolveWorkspacePath: async () => stateDirectory!,
-        resolveEnvironment: async () => ({}),
-        resolveLaunchArgs: () => [],
-        resolveClaudeAuthPolicy: () => ({ account: 'managed' }),
-        readProcessStartTime: async () => 1_700_000_000_000
-      })
-
-      // No addon means no creation times; chat no longer depends on them.
-      expect(host.supportsCreate(location, 'codex')).toBe(true)
-      expect(host.supportsCreate(location, 'claude')).toBe(true)
-    } finally {
-      __setWindowsProcessTreeLoaderForTests()
-      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
-    }
   })
 })

@@ -4,7 +4,6 @@ import {
   getDesktopPlatformFromUserAgent,
   getGeneralPaneSearchEntries,
   getTabOrderControlSearchKeywords,
-  shouldShowProjectRuntimeSection,
   updateAutoSaveDelayDraftState
 } from './GeneralPane'
 import { matchesSettingsSearch } from './settings-search'
@@ -102,25 +101,5 @@ describe('GeneralPane search entries', () => {
     expect(matchesSettingsSearch('default project runtime', entries)).toBe(false)
     expect(matchesSettingsSearch('windows host', entries)).toBe(false)
     expect(matchesSettingsSearch('wsl', entries)).toBe(false)
-  })
-})
-
-describe('GeneralPane project runtime section visibility', () => {
-  const entries = getGeneralPaneSearchEntries()
-
-  it('hides the section on non-Windows hosts even with an empty search query', () => {
-    // Regression: matchesSettingsSearch returns true for an empty query, so the
-    // platform gate is what keeps the orphaned header off macOS/Linux.
-    expect(shouldShowProjectRuntimeSection(false, '', [])).toBe(false)
-    expect(shouldShowProjectRuntimeSection(undefined, '', [])).toBe(false)
-  })
-
-  it('shows the section on Windows-capable hosts when entries match', () => {
-    expect(shouldShowProjectRuntimeSection(true, '', entries)).toBe(true)
-    expect(shouldShowProjectRuntimeSection(true, 'wsl', entries)).toBe(true)
-  })
-
-  it('hides the section when a search query excludes the runtime entries', () => {
-    expect(shouldShowProjectRuntimeSection(true, 'zzz-no-match', entries)).toBe(false)
   })
 })

@@ -1,16 +1,8 @@
 import { withFreshOmpLaunch } from '../../shared/omp-fresh-launch'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  piBuildPtyEnvMock,
-  spawnMock,
-  wslUncDirectoryExistsAsyncMock
-} from './pty-ipc-mock-registry'
+import { piBuildPtyEnvMock, spawnMock } from './pty-ipc-mock-registry'
 import { TEST_CODEX_HOME } from './pty-ipc-test-constants'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
-import { LocalPtyProvider } from '../providers/local-pty-provider'
-import { __resetPersistedWindowsPathCacheForTests } from '../pty/windows-environment-path'
-import { __setWindowsPathRegistryLoaderForTests } from '../pty/windows-path-registry-reader'
-import { wslHookRelayManager } from '../agent-hooks/wsl-hook-relay-manager'
 import { registerPtyHandlers } from './pty/register-handlers'
 import { buildPtyHostEnv } from './pty/host-env/assembly'
 import { buildJcodeRuntimeDir, shouldInjectJcodeRuntimeDir } from '../../shared/jcode-runtime-dir'
@@ -227,33 +219,6 @@ describe('registerPtyHandlers', () => {
       expect(env.BROWSER).toBe('custom-browser %s')
     })
 
-    it('uses the registered WSL CLI name for headless browser launches', () => {
-      const inheritedBrowser = process.env.BROWSER
-      delete process.env.BROWSER
-      try {
-        const env = buildPtyHostEnv(
-          'pty-headless-wsl',
-          {},
-          {
-            isPackaged: true,
-            userDataPath: '/tmp/orca-user-data',
-            selectedCodexHomePath: null,
-            isWsl: true,
-            agentStatusHooksEnabled: false,
-            routeBrowserOpensToClient: true
-          }
-        )
-
-        expect(env.BROWSER).toBe('orca-ide open-url --url %s')
-      } finally {
-        if (inheritedBrowser === undefined) {
-          delete process.env.BROWSER
-        } else {
-          process.env.BROWSER = inheritedBrowser
-        }
-      }
-    })
-
     describe('Codex terminal clipboard on headless runtimes (#23530)', () => {
       const buildEnv = (launchAgent: 'codex' | 'claude', routeBrowserOpensToClient: boolean) =>
         buildPtyHostEnv(
@@ -288,90 +253,6 @@ describe('registerPtyHandlers', () => {
       )
     })
 
-    it('passes the PTY-resolved Codex home to the WSL relay lane', () => {
-      const runtimeHome =
-        '\\\\wsl.localhost\\Ubuntu\\home\\jin\\.local\\share\\orca\\codex-runtime-home\\home'
-      const ensureForDistro = vi
-        .spyOn(wslHookRelayManager, 'ensureForDistro')
-        .mockImplementation(async () => {})
-
-      try {
-        buildPtyHostEnv(
-          'pty-wsl',
-          {},
-          {
-            isPackaged: true,
-            userDataPath: '/tmp/orca-user-data',
-            selectedCodexHomePath: runtimeHome,
-            isWsl: true,
-            wslDistro: 'Ubuntu',
-            agentStatusHooksEnabled: true
-          }
-        )
-        expect(ensureForDistro).toHaveBeenCalledExactlyOnceWith('Ubuntu', runtimeHome, undefined)
-      } finally {
-        ensureForDistro.mockRestore()
-      }
-    })
-
-    it('refreshes the outer Windows PATH for a WSL spawn without forwarding it', async () => {
-      const originalPlatform = process.platform
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      __setWindowsPathRegistryLoaderForTests(() => ({
-        HK: { LM: 1, CU: 2 },
-        getRegistryKey: (root) => ({
-          Path: {
-            type: 1,
-            value:
-              root === 1
-                ? 'C:\\Windows\\System32'
-                : 'C:\\Python314;C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps'
-          }
-        })
-      }))
-      __resetPersistedWindowsPathCacheForTests()
-      wslUncDirectoryExistsAsyncMock.mockResolvedValue(true)
-
-      try {
-        const provider = new LocalPtyProvider({
-          buildSpawnEnv: (id, baseEnv, context) =>
-            buildPtyHostEnv(id, baseEnv, {
-              isPackaged: true,
-              userDataPath: '/tmp/orca-user-data',
-              selectedCodexHomePath: null,
-              agentStatusHooksEnabled: false,
-              isWsl: context?.isWsl,
-              wslDistro: context?.wslDistro
-            })
-        })
-        await provider.spawn({
-          cols: 80,
-          rows: 24,
-          cwd: '\\\\wsl.localhost\\Ubuntu\\home\\me\\repo',
-          shellOverride: 'wsl.exe',
-          terminalWindowsWslDistro: 'Ubuntu',
-          env: {
-            PATH: 'C:\\Orca\\bin;C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps',
-            WSLENV: 'ORCA_TERMINAL_HANDLE/u'
-          }
-        })
-        const [file, , options] = spawnMock.mock.calls.at(-1)!
-
-        expect(file).toBe('wsl.exe')
-        expect(options.env.PATH).toBe(
-          'C:\\Orca\\bin;C:\\Windows\\System32;C:\\Python314;C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps'
-        )
-        const forwardedKeys = options.env.WSLENV.split(':').map((entry) =>
-          entry.split('/')[0]!.toLowerCase()
-        )
-        expect(options.env.WSLENV).toContain('ORCA_TERMINAL_HANDLE/u')
-        expect(forwardedKeys).not.toContain('path')
-      } finally {
-        __resetPersistedWindowsPathCacheForTests()
-        __setWindowsPathRegistryLoaderForTests()
-        Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
-      }
-    })
     it('publishes a lifecycle signal after a successful renderer spawn', async () => {
       await spawnAndGetEnv()
 

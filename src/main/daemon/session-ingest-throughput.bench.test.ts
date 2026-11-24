@@ -69,7 +69,6 @@ function makeSubprocess(): SubprocessHandle & { emit: (data: string) => void } {
     write: () => {},
     resize: () => {},
     kill: () => {},
-    terminateOwnedTree: () => 'unavailable' as const,
     forceKill: () => {},
     signal: () => {},
     onData: (cb) => {

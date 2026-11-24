@@ -16,11 +16,7 @@ import {
   getErrorCode,
   gitExecOptions
 } from './worktree-operation-options'
-import {
-  areWorktreePathsEqual,
-  resolveRevParsePath,
-  translateWorktreePath
-} from './worktree-path-comparison'
+import { areWorktreePathsEqual, resolveRevParsePath } from './worktree-path-comparison'
 import { gitExecFileAsync } from './runner'
 
 const PRUNABLE_EXISTENCE_PROBE_CONCURRENCY = 8
@@ -245,7 +241,6 @@ export async function readWorktreeList(
           // stale registrations; a harmless backstop on 2.31–2.35 where parseWorktreeList already set it (#8389).
           return annotatePrunableByExistence(
             await annotateWorktreeLocksFromAdmin(repoPath, normalized, options),
-            repoPath,
             options
           )
         },
@@ -256,7 +251,6 @@ export async function readWorktreeList(
 
 async function annotatePrunableByExistence(
   worktrees: GitWorktreeInfo[],
-  repoPath: string,
   options: GitWorktreeExecOptions = {}
 ): Promise<GitWorktreeInfo[]> {
   const annotated = [...worktrees]
@@ -279,7 +273,7 @@ async function annotatePrunableByExistence(
         continue
       }
       try {
-        await stat(translateWorktreePath(worktree.path, repoPath, options))
+        await stat(worktree.path)
       } catch (err) {
         if (getErrorCode(err) === 'ENOENT') {
           annotated[index] = { ...worktree, prunable: true }
@@ -301,8 +295,5 @@ export async function readTranslatedWorktreeGraph(
   repoPath: string,
   options: GitWorktreeExecOptions = {}
 ): Promise<GitWorktreeInfo[]> {
-  return (await readWorktreeList(repoPath, options)).map((worktree) => {
-    const translatedPath = translateWorktreePath(worktree.path, repoPath, options)
-    return translatedPath === worktree.path ? worktree : { ...worktree, path: translatedPath }
-  })
+  return readWorktreeList(repoPath, options)
 }

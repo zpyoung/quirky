@@ -6,7 +6,6 @@ import type { Repo } from '../../../shared/repo-types'
 import type { ProjectGroupImportResult } from '../../../shared/project-group-types'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../../shared/constants'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
 import { isGitRepoAsync, getRepoName } from '../../git/repo'
 import {
   createNestedProjectGroupResolver,
@@ -70,7 +69,6 @@ export function registerNestedRepoImportHandler(mainWindow: BrowserWindow, store
             results.push({ path: repoPath, status: 'failed', error: 'Not a valid git repository' })
             continue
           }
-          await awaitWindowsHostGitEnvironmentReady({ cwd: repoPath })
           if (!(await isGitRepoAsync(repoPath))) {
             results.push({
               path: repoPath,

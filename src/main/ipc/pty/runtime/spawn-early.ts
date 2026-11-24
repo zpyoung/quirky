@@ -2,7 +2,6 @@ import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { getAppPtyId } from '../provider/registry'
 import { allocatePtyLifecycleSequence } from '../host-env/types'
 import { snapshotCodexPaneHomeRoutes, codexReattachedHomeRouteField } from '../host-env/codex-home'
-import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import type { CodexPaneHomeRoute } from '../../../codex/codex-pane-account-registry'
 import type { RuntimePtySpawnState } from './spawn-state'
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
@@ -56,10 +55,6 @@ export function adoptMaterializedRuntimePtySpawn(
       leafId: ctx.preAdoptedStablePane.owner.leafId
     }
   }
-  ensureWslHookRelayForReattach(
-    { isReattach: true, wslDistro: ctx.preAdoptedStablePane.result.wslDistro },
-    args.connectionId
-  )
   if (!args.connectionId) {
     ctx.deps.options?.onCodexHomePtySpawned?.({
       id: ctx.result.id,

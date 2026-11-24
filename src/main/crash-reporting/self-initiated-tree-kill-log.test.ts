@@ -26,7 +26,6 @@ import {
   admitProcessTreeKill,
   setProcessTreeKillGate
 } from '@orca/process-host/process-tree-kill-gate'
-import { terminateWindowsProcessTree } from '../windows-process-tree-kill'
 import { installMainProcessTreeKillGate } from '../own-chromium-tree-kill-guard'
 import { _resetTracerForTests, setActiveSink } from '../observability/tracer'
 
@@ -85,12 +84,10 @@ afterEach(() => {
 describe('self-initiated tree kill breadcrumb', () => {
   it('separates an Orca-issued tree kill from an external kill of the same shape', async () => {
     // Arm A — Orca issues the kill through its own taskkill choke point.
-    await terminateWindowsProcessTree(4242, {
-      execFileImpl: ((_program, _args, _options, done) => {
-        ;(done as () => void)()
-        return undefined as never
-      }) as never,
-      site: 'pty-descendant-sweep'
+    recordSelfInitiatedTreeKill({
+      pid: 4242,
+      site: 'pty-descendant-sweep',
+      scope: 'win-taskkill-tree'
     })
     const selfKilled = await recordKilledRenderer()
 
@@ -119,12 +116,10 @@ describe('self-initiated tree kill breadcrumb', () => {
   })
 
   it('records a durable breadcrumb so the kill survives into the diagnostic bundle', async () => {
-    await terminateWindowsProcessTree(777, {
-      execFileImpl: ((_program, _args, _options, done) => {
-        ;(done as () => void)()
-        return undefined as never
-      }) as never,
-      site: 'codex-app-server-teardown'
+    recordSelfInitiatedTreeKill({
+      pid: 777,
+      site: 'codex-app-server-teardown',
+      scope: 'win-taskkill-tree'
     })
 
     expect(getCrashBreadcrumbSnapshot()).toEqual([

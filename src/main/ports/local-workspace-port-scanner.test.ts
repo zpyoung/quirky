@@ -2,11 +2,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import path from 'node:path'
 import { scanWorkspacePorts } from './local-workspace-port-scanner'
 import { attributePortToWorkspace, isContainerProcess } from './local-workspace-port-attribution'
-import {
-  parseLsofListeningOutput,
-  parseNetstatListeningOutput,
-  parseProcNetTcp
-} from './local-workspace-platform-port-scanner'
+import { parseLsofListeningOutput, parseProcNetTcp } from './local-workspace-platform-port-scanner'
 import { resetWorkspacePortScanTimeoutBackoffForTests } from './local-workspace-port-scan-state'
 import { PortScanCommandTimeoutError } from './port-scan-command-protocol'
 
@@ -88,35 +84,6 @@ describe('local workspace port scanner parsing', () => {
       { pid: 123, processName: 'node', host: '127.0.0.1', port: 5173 },
       { pid: 123, processName: 'node', host: '127.0.0.1', port: 55173 }
     ])
-  })
-
-  it('parses Windows netstat listening rows', () => {
-    const ports = parseNetstatListeningOutput(
-      [
-        'Proto  Local Address          Foreign Address        State           PID',
-        'TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       4242',
-        'TCP    [::]:5173              [::]:0                 LISTENING       5151'
-      ].join('\n')
-    )
-
-    expect(ports).toEqual([
-      { host: '127.0.0.1', port: 3000, pid: 4242 },
-      { host: '::', port: 5173, pid: 5151 }
-    ])
-  })
-
-  it('parses Windows netstat rows without whitespace regex splitting', () => {
-    const splitSpy = vi.spyOn(String.prototype, 'split')
-    const ports = parseNetstatListeningOutput(
-      'TCP    127.0.0.1:3000         0.0.0.0:0              LISTENING       4242'
-    )
-    const usedWhitespaceFieldSplit = splitSpy.mock.calls.some(
-      ([separator]) => separator instanceof RegExp && separator.source.includes('\\s+')
-    )
-    splitSpy.mockRestore()
-
-    expect(ports).toEqual([{ host: '127.0.0.1', port: 3000, pid: 4242 }])
-    expect(usedWhitespaceFieldSplit).toBe(false)
   })
 
   it('parses Linux proc tcp listeners', () => {

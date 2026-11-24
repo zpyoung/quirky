@@ -160,10 +160,6 @@ export function UpdateCard(): React.JSX.Element | null {
     onRecheck: () => void window.api.updater.check({ includePrerelease: false }),
     onInstallRetry: handleInstallRetry
   })
-  const linuxPackageRecovery =
-    status.state === 'error' && status.recovery?.kind === 'linux-package-install'
-      ? { recovery: status.recovery, diagnostic: status.message }
-      : null
   const handleDismissWithAnimation = (): void => {
     if (prefersReducedMotion) {
       handleClose()
@@ -214,7 +210,6 @@ export function UpdateCard(): React.JSX.Element | null {
       status={status}
       changelog={changelog}
       errorCard={errorCard}
-      linuxPackageRecovery={linuxPackageRecovery}
       isLocalBuild={isLocalBuild}
       hasStartedDownload={hasStartedDownload.current}
       prefersReducedMotion={prefersReducedMotion}

@@ -7,7 +7,6 @@ import type {
   RemoteServerUpdateSupport
 } from '../../shared/remote-server-update'
 import { hasServeUpdateSupervisor } from '../serve-update-handoff'
-import { getLinuxPackageType } from '../linux-update-package-type'
 import { UpdaterBuildSelection } from './updater-build-selection'
 import type { UpdateInstallMode } from './updater-state'
 
@@ -50,13 +49,7 @@ export abstract class UpdaterRemoteStatus extends UpdaterBuildSelection {
         reason: 'updater-unavailable'
       }
     }
-    const linuxPackageType = getLinuxPackageType()
-    if (
-      this.updateInstallMode === 'unsupported-headless-serve' ||
-      linuxPackageType === 'deb' ||
-      linuxPackageType === 'rpm' ||
-      linuxPackageType === 'unusable'
-    ) {
+    if (this.updateInstallMode === 'unsupported-headless-serve') {
       return {
         installMode: this.updateInstallMode,
         automatic: false,

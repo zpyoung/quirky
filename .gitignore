@@ -28,14 +28,6 @@ out/
 /build/
 release/
 native/**/.build/
-native/windows-cli-launcher/target/
-native/windows-agent-hook/target/
-# node-gyp output for the Windows native addons; generated per host and ABI.
-native/windows-registry/build/
-native/windows-registry/bin/
-native/windows-security/build/
-native/windows-security/bin/
-.build/windows-security/
 
 # pnpm
 .pnpm-store/

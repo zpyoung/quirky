@@ -135,19 +135,6 @@ vi.mock('../host/deferred-secret-protection-report', () => ({
 }))
 vi.mock('../ssh/ssh-host-key-store', () => ({ initSshHostKeyStoreFile: vi.fn() }))
 vi.mock('../pty/legacy-terminal-shim-dir', () => ({ neutralizeLegacyTerminalShimDir: vi.fn() }))
-vi.mock('./windows-shell-path-hydration', () => ({
-  createWindowsShellPathHydration: () => ({
-    configure: vi.fn(),
-    whenReady: Promise.resolve()
-  })
-}))
-vi.mock('../git/runner', () => ({
-  configureWindowsHostGitEnvironmentReadiness: vi.fn(),
-  setDefaultWslDistroOverride: vi.fn()
-}))
-vi.mock('../agent-hooks/wsl-hook-relay-manager', () => ({
-  wslHookRelayManager: { setManagedHookSettingsResolver: vi.fn() }
-}))
 vi.mock('../app-icon', () => ({ applyAppIcon: vi.fn() }))
 vi.mock('./dev-education-suppression', () => ({
   shouldSuppressDevEducation: () => false,
@@ -204,12 +191,6 @@ vi.mock('../crash-reporting/durable-crash-breadcrumb', () => ({
 }))
 vi.mock('./main-window-actions', () => ({ syncMacMenuBarIcon: vi.fn() }))
 vi.mock('./gpu-lifecycle', () => ({ updateGpuAccelerationAboutPanel: vi.fn() }))
-vi.mock('../cli/wsl-cli-registration-reconciliation', () => ({
-  reconcileManagedWslCliRegistrations: vi.fn(async () => [])
-}))
-vi.mock('./wsl-cli-reconciliation-startup-barrier', () => ({
-  createWslCliReconciliationStartupBarrier: () => Promise.resolve()
-}))
 vi.mock('../agent-hooks/managed-agent-hook-controls', () => ({
   isAgentStatusHooksEnabled: vi.fn()
 }))

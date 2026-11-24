@@ -26,7 +26,6 @@ import { parseLinuxProcessState } from '../daemon/daemon-incarnation-evidence'
 import { readDaemonPidRecord } from '../daemon/daemon-endpoint-incarnation'
 import { readLinuxStat } from '../daemon/daemon-process-inspection'
 import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
-import type { WindowsProcessIdentityRow } from '../windows/windows-process-table'
 import type { spawnProcess } from '@orca/process-host'
 
 const EXIT_WAIT_MS = 10_000
@@ -127,46 +126,40 @@ export async function killChildAndWait(child: ReturnType<typeof spawnProcess>): 
   await exited
 }
 
+export type ProcessTableRow = {
+  pid: number
+  ppid: number
+  name: string
+  creationTimeMs?: number
+}
+
 type ProfileDaemonRecord = {
   /** Daemon pid to the creation time of the first process seen holding it. */
   pids: Map<number, number | undefined>
-  descendants: Map<string, WindowsProcessIdentityRow>
+  descendants: Map<string, ProcessTableRow>
 }
 
 const recordedProfiles = new Map<string, ProfileDaemonRecord>()
 
-async function readWindowsProcessTable(): Promise<WindowsProcessIdentityRow[] | null> {
-  if (process.platform !== 'win32') {
-    return null
-  }
-  try {
-    const table = await import('../windows/windows-process-table')
-    return table.isWindowsProcessTableAvailable()
-      ? await table.readWindowsProcessIdentityTableFresh()
-      : null
-  } catch {
-    return null
-  }
-}
+const readNoProcessTable = async (): Promise<ProcessTableRow[] | null> => null
 
-let readProcessTable = readWindowsProcessTable
+let readProcessTable = readNoProcessTable
 
 /** Test-only: substitute the process table the daemon tree is read from. */
 export function __setDaemonProcessTableReaderForTests(
-  reader?: () => Promise<WindowsProcessIdentityRow[] | null>
+  reader?: () => Promise<ProcessTableRow[] | null>
 ): void {
-  readProcessTable = reader ?? readWindowsProcessTable
+  readProcessTable = reader ?? readNoProcessTable
 }
 
-const identityKey = (row: WindowsProcessIdentityRow): string =>
-  `${row.pid}:${row.creationTimeMs ?? ''}`
+const identityKey = (row: ProcessTableRow): string => `${row.pid}:${row.creationTimeMs ?? ''}`
 
 /** Descendants of a daemon, skipping any row created before its claimed parent (a reused ppid). */
 function collectDaemonDescendants(
-  index: ProcessTableIndexOf<WindowsProcessIdentityRow>,
+  index: ProcessTableIndexOf<ProcessTableRow>,
   daemonPid: number,
   daemonCreationTimeMs: number | undefined
-): WindowsProcessIdentityRow[] {
+): ProcessTableRow[] {
   const holderCreated = index.byPid.get(daemonPid)?.creationTimeMs
   // A different process now holds the daemon's pid: the daemon's own children predate it.
   const reusedAt =
@@ -221,7 +214,7 @@ async function recordDaemonTree(daemonDir: string): Promise<ProfileDaemonRecord>
 }
 
 /** Requires each recorded descendant's exit; a reused pid has a different creation time. */
-async function waitForDescendantExit(rows: WindowsProcessIdentityRow[]): Promise<void> {
+async function waitForDescendantExit(rows: ProcessTableRow[]): Promise<void> {
   const deadline = Date.now() + EXIT_WAIT_MS
   let remaining = rows
   while (remaining.length > 0) {

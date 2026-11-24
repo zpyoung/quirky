@@ -16,7 +16,6 @@ import {
   type StructuredAgentCommandSettings
 } from '../native-chat/structured-agent-command-resolution'
 import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
-import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-table'
 import { sessionIdFromFileName } from '../ai-vault/session-scanner-accumulator'
 import {
   PI_RPC_SESSION_ENV_TO_DELETE,
@@ -140,9 +139,6 @@ export function piRpcLaunchPart(
 ): StructuredAgentLaunchPartResolver<PiRpcResolvedLaunch> {
   return async (basis) => {
     const { record } = basis
-    if (process.platform === 'win32' && !isWindowsProcessStartTimeAvailable()) {
-      throw new Error('Pi structured sessions require Windows process creation-time proof')
-    }
     const accountHome = requireLegacyAgentSessionAccountHome(record.accountHome)
     const cwd = await basis.launchDirectory()
     const { env, command } = await resolvePiRpcInvocation({

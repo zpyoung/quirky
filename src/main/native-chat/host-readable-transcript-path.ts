@@ -6,11 +6,6 @@ import {
   wslHomeSessionDirs,
   type SessionHomeAgent
 } from '../ai-vault/session-scanner-roots'
-import { getWslHomeAsync, listRunningWslHomeDirsAsync } from '../wsl'
-import {
-  filterPathsToRunningWslDistrosAsync,
-  filterPathsToWslDistros
-} from '../wsl-running-path-filter'
 import { wslGatedAccess } from './wsl-transcript-fs-access'
 import { WslTranscriptFsError, wslTranscriptFsRefusal } from './wsl-transcript-fs-gate'
 
@@ -51,11 +46,7 @@ export type WslTranscriptResolutionSnapshot = {
 }
 
 async function snapshotHomeDirs(snapshot: WslTranscriptResolutionSnapshot): Promise<string[]> {
-  if (snapshot.homeDirs) {
-    return snapshot.homeDirs
-  }
-  const homes = await Promise.all(snapshot.runningDistros.map((distro) => getWslHomeAsync(distro)))
-  return homes.filter((home): home is string => home !== null)
+  return snapshot.homeDirs ?? []
 }
 
 export type HostReadableTranscriptPathDeps = {
@@ -115,12 +106,8 @@ export function hostAdditionalCodexHomePaths(): string[] {
   return (getAdditionalCodexHomePaths?.() ?? []).filter((home) => !isWslUncPath(home))
 }
 
-async function defaultListWslHomeDirs(): Promise<string[]> {
-  return listRunningWslHomeDirsAsync()
-}
-
 function resolveWslHomeDirs(load?: () => Promise<string[]>): Promise<string[]> {
-  return load ? wslHomeDirs(load) : defaultListWslHomeDirs()
+  return load ? wslHomeDirs(load) : Promise.resolve([])
 }
 
 async function wslHomeDirs(load: () => Promise<string[]>): Promise<string[]> {
@@ -182,33 +169,12 @@ export async function toHostReadableTranscriptPath(
     const candidate = needsWslHostTranslation(path, platform)
       ? toWindowsWslPath(path, exactWslDistro)
       : path
-    // Keep the running-distro guard for attested paths as well. An exact
-    // provider claim does not imply that the guest share is still available.
-    if (
-      isWslUncPath(candidate) &&
-      (deps.wslSnapshot
-        ? filterPathsToWslDistros([candidate], deps.wslSnapshot.runningDistros)
-        : await filterPathsToRunningWslDistrosAsync([candidate])
-      ).length === 0
-    ) {
-      return null
-    }
     return (await pathExists(candidate)) ? candidate : null
   }
   // Why: classify BEFORE probing — Win32 resolves a bare `/home/…` against the
   // current drive (`C:\home\…`), so a probe first could bind chat to a local
   // look-alike file instead of the real WSL transcript.
   if (!needsWslHostTranslation(path, platform)) {
-    if (
-      platform === 'win32' &&
-      isWslUncPath(path) &&
-      (deps.wslSnapshot
-        ? filterPathsToWslDistros([path], deps.wslSnapshot.runningDistros)
-        : await filterPathsToRunningWslDistrosAsync([path])
-      ).length === 0
-    ) {
-      return null
-    }
     return (await pathExists(path)) ? path : null
   }
 
@@ -268,16 +234,11 @@ export async function wslAgentSessionsDirs(
     return []
   }
   const additionalHomes = agent === 'codex' ? (getAdditionalCodexHomePaths?.() ?? []) : []
-  const [homeDirs, runningAdditionalHomes] = await Promise.all([
-    deps.wslSnapshot
-      ? snapshotHomeDirs(deps.wslSnapshot)
-      : resolveWslHomeDirs(deps.listWslHomeDirs),
-    deps.wslSnapshot
-      ? filterPathsToWslDistros(additionalHomes, deps.wslSnapshot.runningDistros)
-      : filterPathsToRunningWslDistrosAsync(additionalHomes)
-  ])
+  const homeDirs = deps.wslSnapshot
+    ? await snapshotHomeDirs(deps.wslSnapshot)
+    : await resolveWslHomeDirs(deps.listWslHomeDirs)
   const dirs = wslHomeSessionDirs(agent, homeDirs, joinUnderWslHome)
-  for (const home of runningAdditionalHomes) {
+  for (const home of additionalHomes) {
     if (parseWslUncPath(home)) {
       dirs.push(joinUnderWslHome(home, 'sessions'))
     }

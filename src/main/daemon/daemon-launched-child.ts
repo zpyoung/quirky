@@ -1,5 +1,4 @@
 import type { ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
 import { isDurableDaemonScopeSupported } from './daemon-cgroup-scope'
 import { DAEMON_EXIT_ENDPOINT_OCCUPIED } from './daemon-endpoint-ownership'
 import type { DaemonEndpointIdentity } from './daemon-hello-protocol'
@@ -37,43 +36,7 @@ export type LaunchedDaemonChild = {
 export async function launchDaemonChild(
   options: DaemonChildSpawnOptions
 ): Promise<LaunchedDaemonChild> {
-  // Why once: the probe is a synchronous systemd-run spawn; the AppImage fallbacks must not repeat it.
-  const scopeSupported = isDurableDaemonScopeSupported()
-  const appImageRungs = [
-    ...(options.extractedGeneration
-      ? [{ from: 'the extracted AppImage copy', options: { ...options, appImage: undefined } }]
-      : []),
-    ...(options.appImage
-      ? [{ from: 'the AppImage', options: { ...options, extractedGeneration: undefined } }]
-      : [])
-  ]
-  for (const rung of appImageRungs) {
-    try {
-      // Why a fresh nonce: it names the scope unit, and a failed attempt's unit may still hold its
-      // FUSE server when the next rung registers the original name.
-      return await launchDaemonChildAttempt(
-        { ...rung.options, launchNonce: randomUUID() },
-        scopeSupported
-      )
-    } catch (error) {
-      if (
-        error instanceof DaemonEndpointUnavailableError ||
-        error instanceof DaemonStartupCleanupError
-      ) {
-        throw error
-      }
-      // Why: a pruned copy, a missing/replaced AppImage or a refused FUSE mount must not cost the
-      // daemon; the next rung, and finally the in-mount launch, still work while this window lives.
-      console.warn(
-        `[daemon] Launch from ${rung.from} failed, ${rung === appImageRungs.at(-1) ? 'retrying from the current mount' : 'falling back'}:`,
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-  }
-  return launchDaemonChildInEitherScope(
-    { ...options, appImage: undefined, extractedGeneration: undefined },
-    scopeSupported
-  )
+  return launchDaemonChildInEitherScope(options, isDurableDaemonScopeSupported())
 }
 
 /**

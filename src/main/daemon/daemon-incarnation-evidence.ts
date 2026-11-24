@@ -1,17 +1,15 @@
 import { parseLinuxStartTicks, readBootIdentity } from '../agent-hooks/managed-hook-owner-identity'
 import { commandLineMatchesDaemon } from './daemon-pid-identity'
 import { startTimesWithinTolerance } from './daemon-process-start-time'
-import {
-  WINDOWS_CREATION_TIME_TOLERANCE_MS,
-  type DaemonEvidenceSources,
-  type DaemonProcessEvidence,
-  type DaemonProcessProbeDependencies,
-  type ExactDaemonIncarnation,
-  type ProcessSignalEvidence
+import type {
+  DaemonEvidenceSources,
+  DaemonProcessEvidence,
+  DaemonProcessProbeDependencies,
+  ExactDaemonIncarnation,
+  ProcessSignalEvidence
 } from './daemon-incarnation-evidence-types'
 import {
   inspectProcessSignal,
-  queryWindowsProcess,
   readLinuxProcessStartedAtMs,
   readLinuxStat,
   readMacosProcessStartedAtMs,
@@ -20,15 +18,13 @@ import {
 
 export {
   DAEMON_GONE_PROOFS,
-  WINDOWS_CREATION_TIME_TOLERANCE_MS,
   type DaemonEvidenceSource,
   type DaemonEvidenceSources,
   type DaemonProcessEvidence,
   type DaemonProcessProbeDependencies,
   type ExactDaemonIncarnation,
   type LinuxStatEvidence,
-  type ProcessSignalEvidence,
-  type WindowsProcessEvidence
+  type ProcessSignalEvidence
 } from './daemon-incarnation-evidence-types'
 
 const POSIX_START_TIME_TOLERANCE_MS = 1_500
@@ -42,20 +38,17 @@ export async function probeDaemonProcessIdentity(
     return unknown('exact_identity_unavailable', ['pid_record'])
   }
   const platform = dependencies.platform ?? process.platform
-  if (platform !== 'linux' && platform !== 'darwin' && platform !== 'win32') {
+  if (platform !== 'linux' && platform !== 'darwin') {
     return unknown('inspection_failed', ['process_signal'])
   }
   const signalProcess = dependencies.signalProcess ?? inspectProcessSignal
   const signal = signalProcess(exactIncarnation.identity.pid)
-  if (platform !== 'win32' && signal === 'missing') {
+  if (signal === 'missing') {
     return gone('pid_missing', ['process_signal', 'endpoint_identity'], exactIncarnation)
   }
 
   if (platform === 'linux') {
     return await probeLinuxProcess(exactIncarnation, endpoint, signal, dependencies)
-  }
-  if (platform === 'win32') {
-    return await probeWindowsProcess(exactIncarnation, endpoint, signal, dependencies)
   }
   return await probeMacosProcess(exactIncarnation, endpoint, signal, dependencies)
 }
@@ -191,49 +184,6 @@ async function probeMacosProcess(
         'endpoint_identity'
       ])
     : unknown('macos_start_time_mismatch', ['process_start_time', 'endpoint_identity'])
-}
-
-async function probeWindowsProcess(
-  exactIncarnation: ExactDaemonIncarnation,
-  endpoint: { socketPath: string; tokenPath: string },
-  signal: ProcessSignalEvidence,
-  dependencies: DaemonProcessProbeDependencies
-): Promise<DaemonProcessEvidence> {
-  const identity = await (dependencies.queryWindowsProcess ?? queryWindowsProcess)(
-    exactIncarnation.identity.pid
-  )
-  if (identity.status === 'missing') {
-    return gone('windows_process_missing', ['windows_cim', 'endpoint_identity'], exactIncarnation)
-  }
-  if (identity.status === 'unavailable') {
-    return unknown(signal === 'permission_denied' ? 'permission_denied' : 'inspection_failed', [
-      'windows_cim',
-      'process_signal'
-    ])
-  }
-  if (identity.startedAtMs === null) {
-    return unknown('windows_process_start_time_unavailable', ['windows_cim'])
-  }
-  if (
-    !startTimesWithinTolerance(
-      identity.startedAtMs,
-      exactIncarnation.identity.startedAtMs,
-      WINDOWS_CREATION_TIME_TOLERANCE_MS
-    )
-  ) {
-    return gone(
-      'windows_creation_time_mismatch',
-      ['windows_cim', 'endpoint_identity'],
-      exactIncarnation
-    )
-  }
-  return present(
-    'windows_identity_match',
-    identity.commandLine &&
-      commandLineMatchesDaemon(identity.commandLine, endpoint.socketPath, endpoint.tokenPath)
-      ? ['windows_cim', 'process_command_line', 'endpoint_identity']
-      : ['windows_cim', 'endpoint_identity']
-  )
 }
 
 export function parseLinuxProcessState(statLine: string): string | null {

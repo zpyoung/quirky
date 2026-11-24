@@ -1,20 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import type * as WindowsProcessTableModule from '../windows/windows-process-table'
 import {
   mergeProcessLivenessVerdict,
-  queryWindowsProcess,
   readLinuxProcessStartedAtMs,
   readMacosProcessStartedAtMs,
   readProcessCommandLine
 } from './daemon-process-inspection'
-
-const { readWindowsProcessCreationTime } = vi.hoisted(() => ({
-  readWindowsProcessCreationTime: vi.fn((_pid: number): number | null => null)
-}))
-vi.mock('../windows/windows-process-table', async (importOriginal) => ({
-  ...(await importOriginal<typeof WindowsProcessTableModule>()),
-  readWindowsProcessCreationTime
-}))
 
 // btime 1699000000 with 1000 start ticks: 10s after boot at 100Hz, 1s at 1000Hz.
 const readProcStat = async (path: string): Promise<string> =>
@@ -40,54 +30,6 @@ describe('daemon process inspection', () => {
       'node\0daemon-entry'
     )
     expect(runCommand).not.toHaveBeenCalled()
-  })
-
-  it('reads the Windows process from the process table, not a PowerShell spawn', async () => {
-    const runCommand = vi.fn()
-    const readProcessTable = vi.fn(async () => [
-      { pid: 42, ppid: 1, name: 'node.exe', command: 'daemon', creationTimeMs: 7 }
-    ])
-
-    await expect(queryWindowsProcess(42, { runCommand, readProcessTable })).resolves.toEqual({
-      status: 'present',
-      commandLine: 'daemon',
-      startedAtMs: 7
-    })
-    expect(runCommand).not.toHaveBeenCalled()
-  })
-
-  it('falls back to the single-PID creation time when the snapshot row has none', async () => {
-    readWindowsProcessCreationTime.mockReturnValueOnce(9)
-    const readProcessTable = vi.fn(async () => [
-      { pid: 42, ppid: 1, name: 'node.exe', command: 'daemon' }
-    ])
-
-    await expect(queryWindowsProcess(42, { readProcessTable })).resolves.toEqual({
-      status: 'present',
-      commandLine: 'daemon',
-      startedAtMs: 9
-    })
-    expect(readWindowsProcessCreationTime).toHaveBeenCalledWith(42)
-  })
-
-  it('keeps an unreadable process table indeterminate instead of proving the process gone', async () => {
-    const readProcessTable = vi.fn(async () => {
-      throw new Error('windows process table is unreadable')
-    })
-
-    await expect(queryWindowsProcess(42, { readProcessTable })).resolves.toEqual({
-      status: 'unavailable'
-    })
-  })
-
-  it('reports absence only from a table that was read and lacks the PID', async () => {
-    const readProcessTable = vi.fn(async () => [
-      { pid: 7, ppid: 1, name: 'other.exe', command: '' }
-    ])
-
-    await expect(queryWindowsProcess(42, { readProcessTable })).resolves.toEqual({
-      status: 'missing'
-    })
   })
 
   it('reads the macOS start time through an async spawn', async () => {
@@ -178,16 +120,4 @@ describe('daemon process inspection', () => {
       })
     })
   })
-
-  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, Number.NaN])(
-    'rejects unsafe Windows pid %s before reading the process table',
-    async (pid) => {
-      const readProcessTable = vi.fn(async () => [])
-
-      await expect(queryWindowsProcess(pid, { readProcessTable })).resolves.toEqual({
-        status: 'unavailable'
-      })
-      expect(readProcessTable).not.toHaveBeenCalled()
-    }
-  )
 })

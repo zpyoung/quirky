@@ -521,7 +521,7 @@
       "invariant": "An ended tracked task stays pending until its wake-up and finishing turn end; missing wake-ups expire only after 60 idle seconds. Cancellation remains owned by the executing host, duplicate delivery cannot create a fresh completion veto, and fresh native rest can recover a lost finishing Stop.",
       "oracle": "Replay captured hook ordering through production HTTP entry points and native ready bytes through the actual automation observer. Check local/relay state, cancellation/new-turn fencing, fresh versus retained rest, bounded task/timer ownership, and zero global status reads during indexed runtime waits.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/tui-idle-hook-lane-runtime.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/wsl-guest/agent-hook-interrupt-reconciliation.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts"
+        "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/tui-idle-hook-lane-runtime.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts"
       ],
       "testFiles": [
         "src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts",
@@ -530,7 +530,6 @@
         "src/shared/claude-owed-notification-resource-contract.test.ts",
         "src/shared/agent-hook-listener-claude-task-notification.test.ts",
         "src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts",
-        "src/wsl-guest/agent-hook-interrupt-reconciliation.test.ts",
         "src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts"
       ],
       "assertionRefs": [
@@ -563,7 +562,8 @@
           "command": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/tui-idle-hook-lane-runtime.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/wsl-guest/agent-hook-interrupt-reconciliation.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts",
           "result": "passed",
           "durationSeconds": 8.62,
-          "summary": "Exact stored command with repository Vitest configuration passes 148 tests across eight files including out-of-order launch/end/delivery controls. Includes real HTTP/relay ingress, 12 blank/padded Agent/Bash/Monitor IDs, captured-native-rest automation completion, duplicate/cancellation controls, owner/phase gates, timer/task bounds and indexed reads. Three upstream interrupt suites pass 28 more tests separately. This dated receipt is unchanged; command now names the relocated test selector, not a new run. Original 2026-10-06 command: ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/claude-task-wakeup-indexed-read.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/wsl-guest/agent-hook-interrupt-reconciliation.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts"
+          "summary": "Exact stored command with repository Vitest configuration passes 148 tests across eight files including out-of-order launch/end/delivery controls. Includes real HTTP/relay ingress, 12 blank/padded Agent/Bash/Monitor IDs, captured-native-rest automation completion, duplicate/cancellation controls, owner/phase gates, timer/task bounds and indexed reads. Three upstream interrupt suites pass 28 more tests separately. This dated receipt is unchanged; command now names the relocated test selector, not a new run. Original 2026-10-06 command: ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/claude-task-wakeup-indexed-read.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/wsl-guest/agent-hook-interrupt-reconciliation.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts src/main/agent-hooks/server-claude-task-wakeup-lifecycle.test.ts src/main/runtime/tui-idle-claude-task-wakeup.test.ts src/main/runtime/tui-idle-hook-lane-runtime.test.ts src/shared/claude-owed-notification-resource-contract.test.ts src/shared/agent-hook-listener-claude-task-notification.test.ts src/shared/agent-hook-listener-claude-reordered-task-notification.test.ts src/main/ssh/ssh-agent-hook-interrupt-reconciliation.test.ts"
         }
       ],
       "runtimeBudget": {
@@ -9591,7 +9591,7 @@
       "invariant": "PreCompact is never registered and may never move a pane, because it fires before the compact is validated and an aborted compact emits it alone. Only a manual PostCompact may mark done, and it does so as a session boundary so completion-reactive consumers stay out of it; an automatic PostCompact claims nothing and writes no compact-scoped state, since its turn resumes and emits its own Stop. A completion either CLEARS a row or publishes nothing at all: it never creates a row, so a retired pane cannot be resurrected, and it never restates one it cannot clear, because a restated row loses restoredUnconfirmed and restarts the staleness clock. A manual /compact only completes at an idle prompt, so it retires a subagent that exists ONLY as a disk snapshot; live evidence -- a child observed in this runtime, an unclassifiable running background task, a registered session cron -- still holds the pane at working. A completion requires a valid provider prompt UUID, matches the pane owner by connection and provider session -- except on a restored row, which carries the previous connection and may carry no session at all -- and is applied at most once per compact. Ownership is enforced by the client that owns pane identity; a relay forwards and defers, so a cold relay cache cannot swallow the clearing event. A relay predating this contract forwards its own mapping, so ingest drops automatic envelopes, stamps the boundary on manual ones, carries the summarized turn label onto a promptless completion with or without a trigger, and classifies a trigger-stripped replay by payload state while still enforcing ownership. Kimi and other Claude-compatible vendors remain fail-closed.",
       "oracle": "Replay the measured Claude compact streams through a harness gated on the real CLAUDE_EVENTS, plus local HTTP, relay, SSH, and persisted-restore transports. Require the successful manual stream to end done with sessionBoundary set, and require the aborted stream (PreCompact alone) to leave both an idle and a working pane exactly as it found them. Drive the restart shape end to end over loopback HTTP from a hydrated row: a pane held only by a snapshot child must reach done with an empty roster, while a pane a runtime child still owns must emit NOTHING and keep its row object identical, so receivedAt and restoredUnconfirmed both survive. Deliver the restored-row cases with the hydrated row still cached at completion time and assert the summarizer published nothing, so the restored-row branch is the branch under test. Require rejection of an automatic completion, a completion with absent prompt UUID, a foreign provider session, a duplicate, and a completion for a pane with no cached row; require an automatic completion to leave the consumed-compact map untouched. Require a relay with a COLD cache to forward the completion while the client still refuses to mint a row it never had. Require ingest to drop legacy automatic envelopes, stamp the boundary on legacy manual ones, carry the summarized turn label onto a promptless completion with and without a trigger, and leave a FINISHED pane finished when a trigger-stripped working replay arrives. Require the consumed-compact map to be empty after each pane-scoped teardown route and to follow a pane move. Assert registration membership, emitted event order, and the authoritative lastStatusByPaneKey snapshot.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/claude/compact-status-registration.test.ts src/main/agent-hooks/manual-compact-hook-stream.test.ts src/main/agent-hooks/manual-compact-status-cleanup.test.ts src/shared/agent-hook-listener-claude-turn-state.test.ts src/shared/agent-hook-listener-claude-compatible-vendors.test.ts src/shared/agent-hook-relay.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-claude-normalization.test.ts src/main/agent-hooks/server-last-status-write.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/claude/compact-status-registration.test.ts src/main/agent-hooks/manual-compact-hook-stream.test.ts src/main/agent-hooks/manual-compact-status-cleanup.test.ts src/shared/agent-hook-listener-claude-turn-state.test.ts src/shared/agent-hook-listener-claude-compatible-vendors.test.ts src/shared/agent-hook-relay.test.ts src/main/agent-hooks/server-claude-normalization.test.ts src/main/agent-hooks/server-last-status-write.test.ts --reporter=dot",
         "Manual Claude Code interactive compact under a PTY: register every hook to a logging script, run one turn then /compact to observe the abort stream, then seven turns and /compact to observe the success stream; compare source, trigger, session_id, and prompt_id across both"
       ],
       "testFiles": [
@@ -9601,7 +9601,6 @@
         "src/shared/agent-hook-listener-claude-turn-state.test.ts",
         "src/shared/agent-hook-listener-claude-compatible-vendors.test.ts",
         "src/shared/agent-hook-relay.test.ts",
-        "src/wsl-guest/agent-hook-server.test.ts",
         "src/main/agent-hooks/server-claude-normalization.test.ts",
         "src/main/agent-hooks/server-last-status-write.test.ts"
       ],
@@ -9624,8 +9623,6 @@
           "assertions": [
             "the measured local HTTP stream settles once and rejects a duplicate completion",
             "a hydrated restart-stuck pane reaches done with an empty roster, and a pane a runtime child owns emits nothing and keeps its row object identical",
-            "the relay forwards the completion and preserves its compact identity in the replay cache so the client re-runs ownership before applying the clearing row",
-            "a relay with a cold cache still forwards the completion, and the client still refuses to mint a row it never had",
             "a legacy relay's manual envelope is stamped as a session boundary and its automatic envelope is dropped instead of minting working",
             "a promptless completion keeps the summarized turn's label with and without a trigger on the envelope",
             "a trigger-stripped replay is classified by payload state, leaves a FINISHED pane finished, and is still rejected on an owner mismatch",
@@ -9638,15 +9635,6 @@
         }
       ],
       "evidenceRuns": [
-        {
-          "date": "2026-08-18",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/claude/compact-status-registration.test.ts src/main/agent-hooks/manual-compact-hook-stream.test.ts src/main/agent-hooks/manual-compact-status-cleanup.test.ts src/shared/agent-hook-listener-claude-turn-state.test.ts src/shared/agent-hook-listener-claude-compatible-vendors.test.ts src/shared/agent-hook-relay.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-claude-normalization.test.ts src/main/agent-hooks/server-last-status-write.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 3.28,
-          "summary": "Ten files and 116 tests passed across registration, listener, local HTTP, relay, SSH, persistence, and cleanup. Reverting only the four source files to the merge base first turned 12 of 21 registration-gated tests and 8 of 12 relay/ingest tests red, so the suite observes its own failure rather than passing over unreachable code. Every assertion was additionally mutation-tested: 18 of 18 targeted mutations -- including reaping runtime children as well as snapshot ones, restating a pane live evidence still holds, re-enforcing compact ownership on the relay, and dropping the consumed-compact map from any one teardown route -- are caught."
-        },
         {
           "date": "2026-08-17",
           "runner": "manual",
@@ -9917,7 +9905,7 @@
         "pnpm exec vitest run --config config/vitest.config.ts tests/e2e/completed-worker-retirement-resume.unit.test.ts --reporter=verbose",
         "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/lib/resume-sleeping-agent-session.test.ts src/main/providers/local-pty-provider-spawn-session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/ipc/pty-pane-materialization-race.test.ts src/main/ipc/pty-persisted-incarnation-repair.test.ts src/main/ipc/pty-pane-reservation-settlement.test.ts src/main/runtime/orca-runtime.test.ts src/renderer/src/lib/pane-manager/pane-fit.test.ts src/renderer/src/components/terminal-pane/pty-connection-hidden-replay.test.ts src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-host-session-launch.test.ts",
         "pnpm exec electron-vite build --mode e2e && SKIP_BUILD=1 pnpm exec playwright test tests/e2e/live-background-terminal-mount-authority.spec.ts --config tests/playwright.config.ts --project electron-headless --workers=1",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/structured-agent-cli-writers.test.ts src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts src/main/providers/agent-foreground-process-git-bash.win32.test.ts"
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/structured-agent-cli-writers.test.ts src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts"
       ],
       "testFiles": [
         "src/renderer/src/lib/resume-sleeping-agent-session.test.ts",
@@ -9934,8 +9922,7 @@
         "src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-host-session-launch.test.ts",
         "tests/e2e/live-background-terminal-mount-authority.spec.ts",
         "src/main/runtime/structured-agent-cli-writers.test.ts",
-        "src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts",
-        "src/main/providers/agent-foreground-process-git-bash.win32.test.ts"
+        "src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts"
       ],
       "assertionRefs": [
         {
@@ -9948,10 +9935,6 @@
         {
           "file": "src/main/runtime/rpc/methods/structured-agent-session-adoption-replay.test.ts",
           "assertions": ["captures source before routing (unary=%s)"]
-        },
-        {
-          "file": "src/main/providers/agent-foreground-process-git-bash.win32.test.ts",
-          "assertions": ["sets aside a detached ssh-agent for adoption, but not a background job"]
         },
         {
           "file": "tests/e2e/completed-worker-retirement-resume.unit.test.ts",
@@ -11374,213 +11357,6 @@
       "demotionRule": "Cannot promote without deterministic user-visible oracle, failure artifacts, and stable runtime history."
     },
     {
-      "id": "terminal-session.windows-main-crash-survival",
-      "title": "A Windows main-process crash preserves and reattaches daemon terminals",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "terminal-platform",
-      "layer": "windows-packaged-electron-daemon",
-      "surfaces": [
-        "Electron main-process crash",
-        "detached terminal daemon",
-        "ConPTY shell survival",
-        "packaged relaunch reattach"
-      ],
-      "platforms": ["windows"],
-      "providers": ["daemon"],
-      "coveredPlatforms": ["windows"],
-      "coveredProviders": ["daemon"],
-      "coverageNotes": "A packaged Windows CI run force-kills the launched instance's real Electron main without tree-killing, then proves the same scoped daemon and interactive PowerShell survive, no FailFast event is observed, and relaunch input reaches the same shell. Focused cross-platform unit tests fail closed on unavailable event-log or PID-liveness evidence, stale or ambiguous daemon identity, and incomplete reattach assertions.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/issues/7742",
-        "https://github.com/stablyai/orca/pull/9311"
-      ],
-      "invariant": "On packaged Windows, abrupt death of Orca's Electron main process must not terminate or replace the userData-scoped terminal daemon or its live ConPTY shell, and a relaunch must adopt that exact daemon and route terminal input to that exact surviving shell without a PowerShell 0xE9 FailFast.",
-      "oracle": "Resolve the launched instance's real main PID from inside Electron, force-kill only that PID, require it to die, require one command-line-scoped daemon PID and the stamped interactive shell PID to remain live, relaunch with persisted state, require the daemon PID to remain identical, read the exact shell PID and a per-shell environment sentinel back through the exact restored tab, then require a successful Windows Application event-log query with zero matching pwsh FailFast events across the full crash-to-input window.",
-      "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts config/scripts/win-crash-survival-e2e.test.mjs",
-        "node tests/tools/win-crash-survival-e2e/run.mjs --expect survival --exe-path \"$env:ORCA_EXE\" --soak-seconds 8"
-      ],
-      "testFiles": [
-        "config/scripts/win-crash-survival-e2e.test.mjs",
-        "tests/tools/win-crash-survival-e2e/run.mjs"
-      ],
-      "assertionRefs": [
-        {
-          "file": "config/scripts/win-crash-survival-e2e.test.mjs",
-          "assertions": [
-            "survival requires the crash antecedent, daemon and shell liveness, unchanged daemon identity, zero FailFast events, and same-shell reattach",
-            "event-log query failure cannot be converted into zero FailFast events",
-            "malformed event-log and PID-liveness evidence fails closed",
-            "stale, missing, or ambiguous userData-scoped daemon identity fails closed",
-            "the packaged survival proof remains wired to targeted pull requests without a duplicate branch-push run"
-          ]
-        },
-        {
-          "file": "tests/tools/win-crash-survival-e2e/run.mjs",
-          "assertions": [
-            "force-killing only the real Electron main leaves the exact scoped daemon and stamped interactive shell alive",
-            "packaged relaunch adopts the unchanged daemon and reads the survivor shell's environment sentinel through the restored terminal"
-          ]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-07-18",
-          "runner": "ci",
-          "platform": "windows",
-          "command": "node tests/tools/win-crash-survival-e2e/run.mjs --expect survival --exe-path \"$env:ORCA_EXE\" --soak-seconds 8",
-          "result": "passed",
-          "durationSeconds": 61,
-          "summary": "The packaged branch build's real main died; the same daemon and shell PIDs survived; the event-log scan found zero FailFast events; relaunch adopted the unchanged daemon; and terminal input read the survivor shell sentinel back."
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 120,
-        "scope": "installed-app crash/relaunch harness, excluding installer build and dependency setup"
-      },
-      "flakeHistory": {
-        "status": "unknown",
-        "evidence": "One green packaged Windows CI run is recorded; the durable pull-request trigger must accumulate repeated history before promotion."
-      },
-      "redGreenEvidence": {
-        "status": "partial",
-        "evidence": "The inverse orphaned profile failed against the fixed packaged build because the daemon stayed live and no FailFast occurred. A genuinely pre-relocation packaged build has not yet been retained as a CI red fixture."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "Production code is unchanged. The harness has bounded 500ms liveness polls, one 8-second crash soak, two scoped daemon identity scans plus teardown rediscovery, a 60-second cap on every synchronous PowerShell probe, a 5-second cap on Electron main-PID resolution, cleared and unreferenced close deadlines, a 50-minute job timeout, concurrency cancellation, and targeted production-path filtering that excludes source tests and benchmarks. The installer cache is keyed by every production build input; the job also restores the pnpm store and restores Electron/NSIS downloads only when an installer rebuild is required. The measured packaged harness completed in 61 seconds."
-      },
-      "promotionCriteria": [
-        "Collect at least 100 consecutive targeted Windows PR or soak passes over 14 days with zero unexplained flakes.",
-        "Retain a pre-relocation packaged red fixture or equivalent fault injection that makes the survival profile fail for daemon death and shell loss.",
-        "Keep the live oracle fail-closed for crash delivery, event-log access, daemon identity, and same-shell reattach."
-      ],
-      "knownGaps": [
-        "The packaged journey proves one terminal end to end; concurrent restoration across the user's multi-terminal, multi-worktree layout is not exercised live.",
-        "The gate covers a Windows local daemon-backed PowerShell terminal; WSL-backed shells are not exercised.",
-        "SSH, remote-runtime, relay, mobile, macOS, and Linux paths are unaffected by the Windows relocated ConPTY host contract and are not exercised here.",
-        "The Application event-log query is machine-wide, so an unrelated PowerShell crash on a non-isolated runner can false-fail the gate.",
-        "Standalone daemon self-crash and renderer-only crash containment remain separate invariants."
-      ],
-      "demotionRule": "Keep experimental or quarantine with a linked harness defect if the Windows job flakes; never weaken the crash, identity, event-log, or same-shell reattach oracle to obtain a pass."
-    },
-    {
-      "id": "terminal-platform.windows-conpty-liveness",
-      "title": "Windows ConPTY terminals stay input-live, render-live, and geometry-live",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "terminal-platform",
-      "layer": "windows-electron-conpty",
-      "surfaces": [
-        "Windows ConPTY",
-        "PowerShell and cmd",
-        "keyboard protocol",
-        "CJK repaint",
-        "cursor and resize"
-      ],
-      "platforms": ["windows"],
-      "providers": ["local", "daemon", "wsl"],
-      "coveredPlatforms": ["windows"],
-      "coveredProviders": ["daemon"],
-      "coverageNotes": "Issue #8048 now has deterministic wrapper and cold-restore re-anchor tests plus a Windows PR-CI harness that drives the built daemon through 25 real ConPTY workspace-close races while an unrelated witness PTY stays alive. A Windows-only patched-node-pty test injects EAGAIN on one ConPTY input pipe and requires only that PTY to close while an unrelated PTY remains writable; a daemon-level classifier test keeps the native exception backstop narrow. Keyboard reset, CJK repaint, WSL, and full visible Electron coverage remain gaps.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/pull/6541",
-        "https://github.com/stablyai/orca/pull/6858",
-        "https://github.com/stablyai/orca/pull/6876",
-        "https://github.com/stablyai/orca/pull/6968",
-        "https://github.com/stablyai/orca/pull/6970",
-        "https://github.com/stablyai/orca/pull/6999",
-        "https://github.com/stablyai/orca/issues/8048",
-        "https://github.com/stablyai/orca/issues/17027"
-      ],
-      "invariant": "Windows local and daemon terminals must spawn with the intended shell, survive overlapping graceful/forced workspace teardown without affecting unrelated PTYs, contain an asynchronous ConPTY input-pipe failure to the affected terminal without killing the daemon, retain recovered scrollback across the fresh daemon's first checkpoint, accept normal Enter/Backspace/Arrow input after agent or TUI exit, render cursor/CJK/wide-glyph redraws without stale cells, and converge to nonzero applied size.",
-      "oracle": "The issue #8048 slice asserts one node-pty ConPTY close for a graceful-then-force sequence, atomically seeds recovered history before fresh shell output and re-anchoring, preserves recovery after seed failure plus adapter restart, and runs 25 built-daemon close races while checking victim session/PID reaping, a stable daemon PID, and a live witness PTY. The EAGAIN slice emits an error from one real patched node-pty Windows input socket, requires its terminal to become unwritable and run the normal per-PTY kill path, then writes through an unrelated PTY without an uncaught exception. A broader Windows live gate still needs shell input, resize, cursor, and CJK/wide-glyph pixel evidence.",
-      "commands": [
-        "pnpm vitest run src/main/daemon/pty-subprocess.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/node-pty-windows-input-error.win32.test.ts src/main/daemon/daemon-native-pty-exception.test.ts",
-        "pnpm build:electron-vite && node config/scripts/windows-daemon-workspace-close-repro.mjs",
-        "node config/scripts/windows-daemon-workspace-close-repro.mjs"
-      ],
-      "testFiles": [
-        "src/main/daemon/pty-subprocess.test.ts",
-        "src/main/daemon/daemon-pty-adapter.test.ts",
-        "src/main/daemon/node-pty-windows-input-error.win32.test.ts",
-        "src/main/daemon/daemon-native-pty-exception.test.ts",
-        "config/scripts/windows-daemon-workspace-close-repro.mjs"
-      ],
-      "assertionRefs": [
-        {
-          "file": "src/main/daemon/pty-subprocess.test.ts",
-          "assertions": [
-            "graceful kill followed by force and dispose invokes Windows node-pty kill exactly once and never retries the dead child PID"
-          ]
-        },
-        {
-          "file": "src/main/daemon/daemon-pty-adapter.test.ts",
-          "assertions": [
-            "the first checkpoint orders recovered scrollback before synchronously emitted fresh-shell startup output",
-            "a failed atomic history seed remains non-authoritative across adapter restart and cannot overwrite the recovery files"
-          ]
-        },
-        {
-          "file": "src/main/daemon/node-pty-windows-input-error.win32.test.ts",
-          "assertions": [
-            "an EAGAIN event retires only the affected patched node-pty terminal while a witness remains writable"
-          ]
-        },
-        {
-          "file": "src/main/daemon/daemon-native-pty-exception.test.ts",
-          "assertions": [
-            "the daemon suppresses native PTY errno failures while rejecting non-Error and unrelated logic failures"
-          ]
-        },
-        {
-          "file": "config/scripts/windows-daemon-workspace-close-repro.mjs",
-          "assertions": [
-            "all 25 victim sessions and OS PIDs are reaped while the built daemon PID and an unrelated witness PowerShell remain alive"
-          ]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-07-10",
-          "runner": "local",
-          "platform": "windows",
-          "command": "node config/scripts/windows-daemon-workspace-close-repro.mjs",
-          "result": "passed",
-          "durationSeconds": 7.6,
-          "summary": "All 25 victim sessions and OS PIDs were reaped while the built daemon and witness PTY survived the real ConPTY workspace-close races. The double-close, history ordering, and seed-failure restart regressions produced intentional red failures before their fixes and passed afterward."
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 90,
-        "scope": "Windows focused Electron ConPTY gate"
-      },
-      "flakeHistory": {
-        "status": "unknown",
-        "evidence": "The built-daemon issue #8048 harness passed locally once and is wired into Windows PR CI; it needs repeated CI history before promotion."
-      },
-      "redGreenEvidence": {
-        "status": "partial",
-        "evidence": "The ConPTY double-close and cold-restore re-anchor assertions were each observed failing before the fix and passing afterward. Keyboard protocol, shell resolution, resize, and CJK repaint still need red/green proof."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "Must include input latency and no broad session listing while typing or switching terminals."
-      },
-      "promotionCriteria": [
-        "Start as Windows nightly/soak because Windows Electron E2E has been flaky.",
-        "Use deterministic PTY markers for input/resize and reserve screenshots for repaint diagnostics.",
-        "Split shell parity, keyboard reset, and CJK repaint into smaller gates if a combined gate is flaky."
-      ],
-      "knownGaps": [
-        "Real IME composition may require a separate lower-layer/native-text-forwarding gate.",
-        "The EAGAIN oracle injects the real input socket event rather than inducing kernel resource exhaustion on a packaged Windows host.",
-        "The built-daemon harness proves process/session liveness but not renderer pixels; visible shell input, resize, cursor, and CJK repaint remain uncovered."
-      ],
-      "demotionRule": "Cannot promote while Windows E2E is flaky, silently skipped, or screenshot-only."
-    },
-    {
       "id": "terminal-performance.cold-restore-replay-budget",
       "title": "Daemon cold restore keeps replay work and retained payloads bounded",
       "maturity": "experimental",
@@ -12517,14 +12293,13 @@
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/pty-renderer-inflight-credit.test.ts src/main/ipc/pty-global-renderer-credit.test.ts src/main/ipc/pty-output-batching-drain.test.ts src/main/ipc/pty-pending-output-cap.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime-path-candidate-history.test.ts",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/orca-runtime-tail-wait-memo.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/wsl-guest/protocol-backpressure.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/wsl-guest/dispatcher.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts src/wsl-guest/dispatcher-client-writer.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ssh/ssh-multiplexer-transport-writer.test.ts src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/persistence-ssh-targets-and-pane-keys.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts --reporter=dot"
-        // Historical evidence commands; the override is ignored after the always-on transition.
+        "pnpm exec vitest run --config config/vitest.config.ts --reporter=dot"
       ],
       "testFiles": [
         "src/main/ipc/pty-renderer-inflight-credit.test.ts",
@@ -12534,14 +12309,10 @@
         "src/main/runtime/orca-runtime-path-candidate-history.test.ts",
         "src/main/runtime/orca-runtime.test.ts",
         "src/main/runtime/orca-runtime-tail-wait-memo.test.ts",
-        "src/wsl-guest/protocol-backpressure.test.ts",
-        "src/wsl-guest/dispatcher.test.ts",
         "src/main/ssh/ssh-multiplexer-transport-writer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer.test.ts",
         "src/main/ssh/ssh-channel-multiplexer-backpressure.test.ts",
-        "src/main/persistence-ssh-targets-and-pane-keys.test.ts",
-        "src/wsl-guest/dispatcher-client-writer.test.ts",
-        "src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts"
+        "src/main/persistence-ssh-targets-and-pane-keys.test.ts"
       ],
       "assertionRefs": [
         {
@@ -12593,19 +12364,6 @@
           ]
         },
         {
-          "file": "src/wsl-guest/dispatcher.test.ts",
-          "assertions": [
-            "a saturated legacy primary remains required backpressure and is never detached as an additional subscriber"
-          ]
-        },
-        {
-          "file": "src/wsl-guest/protocol-backpressure.test.ts",
-          "assertions": [
-            "relay decoder accepts one maximum frame plus 1 MiB partial input and rejects one extra byte",
-            "a throwing continuation clears retained input, releases one pause epoch, and publishes one typed ownership error"
-          ]
-        },
-        {
           "file": "src/main/ssh/ssh-multiplexer-transport-writer.test.ts",
           "assertions": [
             "write(false) owns one frame and later ordinary traffic waits for drain",
@@ -12627,33 +12385,9 @@
           "assertions": [
             "self-imposed writer saturation suppresses false death and rebases both health clocks on drain"
           ]
-        },
-        {
-          "file": "src/wsl-guest/dispatcher-client-writer.test.ts",
-          "assertions": [
-            "encoded producer frames stay below high-water-minus-reserve capacity",
-            "one fixed-size filesystem compatibility frame is admitted only on an empty sink",
-            "control remains reserved while producer retention stays bounded"
-          ]
-        },
-        {
-          "file": "src/main/agent-hooks/wsl-hook-relay-sentinel.test.ts",
-          "assertions": [
-            "WSL stdin forwards write(false), callback settlement, and drain without claiming a live WSL topology"
-          ]
         }
       ],
       "evidenceRuns": [
-        {
-          "date": "2026-07-03",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/pty-renderer-inflight-credit.test.ts src/main/ipc/pty-global-renderer-credit.test.ts src/main/ipc/pty-output-batching-drain.test.ts src/main/ipc/pty-ipc-producer-flow-control.test.ts",
-          "result": "passed",
-          "durationSeconds": 1.5,
-          "summary": "1 test file(s) passed, 209 tests passed on main@1282f5c2d in a clean checkout.",
-          "currentCommand": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/pty-renderer-inflight-credit.test.ts src/main/ipc/pty-global-renderer-credit.test.ts src/main/ipc/pty-output-batching-drain.test.ts src/main/ipc/pty-pending-output-cap.test.ts"
-        },
         {
           "date": "2026-07-10",
           "runner": "local",
@@ -12671,15 +12405,6 @@
           "result": "passed",
           "durationSeconds": 21.33,
           "summary": "2 test files passed, 609 tests passed on pushed commit 4fb14eac3897."
-        },
-        {
-          "date": "2026-07-29",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/wsl-guest/protocol-backpressure.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 2.24,
-          "summary": "Sixteen deterministic SSH relay/session/source/decoder files passed 192 tests, including exit-sealed private recovery, retained stale-transfer cancellation authority, exact private-frame proof watermarks, one retirement record across 10,000 same-PTY token rotations, stale-owner fallback, and scheduler rejection isolation; no live topology was exercised."
         },
         {
           "date": "2026-07-29",
@@ -13602,66 +13327,6 @@
       "demotionRule": "Keep experimental or demote if rejected input can remain silent, the signal stops short of a remount, a legacy or un-negotiated client receives an unknown opcode, a liveness probe fabricates an answer for a `remote:` id, a stale failure recovers a replacement pane, or the deterministic contract flakes without an identified product or harness bug."
     },
     {
-      "id": "terminal-provider.wsl-restore-contract",
-      "title": "WSL terminals preserve launch identity, liveness, and restore boundaries",
-      "maturity": "experimental",
-      "protection": "none",
-      "owner": "terminal-provider",
-      "layer": "windows-provider-contract",
-      "surfaces": [
-        "WSL",
-        "Windows host boundary",
-        "cwd identity",
-        "startup command",
-        "provider liveness",
-        "restore"
-      ],
-      "platforms": ["windows"],
-      "providers": ["wsl"],
-      "coveredPlatforms": [],
-      "coveredProviders": [],
-      "coverageNotes": "Registered gap only; no executable coverage is wired yet.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/pull/6801",
-        "https://github.com/stablyai/orca/pull/6830",
-        "https://github.com/stablyai/orca/pull/6866",
-        "https://github.com/stablyai/orca/pull/6951"
-      ],
-      "invariant": "WSL terminal restore must preserve Windows-host and Linux-guest path/cwd identity, shell launch args, startup command delivery, provider liveness semantics, and saved session ownership without being treated as ordinary local Windows ConPTY or generic SSH.",
-      "oracle": "No executable slice yet. Promotion needs a Windows provider contract plus one focused live WSL smoke proving cwd/path mapping, shell echo, startup command delivery, targeted liveness unknown handling, and restore without duplicate panes or destructive false-dead cleanup.",
-      "commands": [],
-      "testFiles": [],
-      "assertionRefs": [],
-      "evidenceRuns": [],
-      "runtimeBudget": {
-        "p95Seconds": 90,
-        "scope": "Windows WSL provider contract plus focused live smoke"
-      },
-      "flakeHistory": {
-        "status": "not-started",
-        "evidence": "WSL is split out from SSH/remote planning so it cannot be mistaken for covered provider behavior."
-      },
-      "redGreenEvidence": {
-        "status": "missing",
-        "evidence": "Needs intentional-break evidence for path/cwd mapping, startup command delivery, liveness unknown handling, and restore ownership."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "WSL restore and liveness checks must avoid broad provider scans on typing, focus, switch, render, or resize hot paths."
-      },
-      "promotionCriteria": [
-        "Start with deterministic provider contracts for path/cwd mapping and launch args.",
-        "Add one focused Windows live WSL smoke after provider contracts are stable.",
-        "Keep WSL separate from SSH and local ConPTY evidence in PR descriptions."
-      ],
-      "knownGaps": [
-        "No manifest command yet.",
-        "No live Windows WSL CI evidence.",
-        "No provider contract yet separates Windows host paths from Linux guest cwd identity."
-      ],
-      "demotionRule": "Cannot promote while WSL restore is inferred from SSH, local ConPTY, or remote-runtime gates."
-    },
-    {
       "id": "terminal-output.scrollback-replay-fifo",
       "title": "Replay, scrollback, and hidden-output restore preserve ordering and clear semantics",
       "maturity": "experimental",
@@ -14130,358 +13795,6 @@
       "demotionRule": "Cannot promote if success is based only on DOM text without PTY byte/cell evidence."
     },
     {
-      "id": "terminal-input.windows-conpty-keyboard-reset",
-      "title": "Windows ConPTY resets keyboard protocol state after agents and TUIs exit",
-      "maturity": "experimental",
-      "protection": "none",
-      "owner": "terminal-platform",
-      "layer": "windows-electron-conpty",
-      "surfaces": [
-        "Windows ConPTY",
-        "keyboard protocol",
-        "agent exit",
-        "TUI exit",
-        "standard key input"
-      ],
-      "platforms": ["windows"],
-      "providers": ["local", "daemon", "wsl"],
-      "coveredPlatforms": [],
-      "coveredProviders": [],
-      "coverageNotes": "Registered gap only; no executable coverage is wired yet.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/pull/6999",
-        "https://github.com/stablyai/orca/pull/6858"
-      ],
-      "invariant": "After an agent or TUI exits on Windows ConPTY, ordinary Enter, Backspace, Arrow, paste, and printable keys must be delivered as standard shell input, not stale Kitty/CSI-u or application-mode bytes.",
-      "oracle": "A Windows gate records PTY input bytes before and after agent/TUI exit, submits real shell commands, and proves standard keys work without protocol leakage.",
-      "commands": [],
-      "testFiles": [],
-      "assertionRefs": [],
-      "evidenceRuns": [],
-      "runtimeBudget": {
-        "p95Seconds": 60,
-        "scope": "Windows provider-contract or focused Electron gate"
-      },
-      "flakeHistory": {
-        "status": "not-started",
-        "evidence": "Gate is registered as a known Windows ConPTY gap; no command is wired."
-      },
-      "redGreenEvidence": {
-        "status": "missing",
-        "evidence": "Needs intentional-break proof for stale keyboard-protocol mode after agent/TUI exit."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "Must not add per-key global session listing or repeated protocol reset work on the typing hot path."
-      },
-      "promotionCriteria": [
-        "Use byte-level PTY input evidence, not only screenshots.",
-        "Start as Windows soak until skip and flake behavior is known.",
-        "Fail promotion on silent Windows environment skips."
-      ],
-      "knownGaps": [
-        "No manifest command yet.",
-        "Real Windows ConPTY execution is not covered by macOS/Linux CI."
-      ],
-      "demotionRule": "Cannot promote if standard-key behavior is inferred without PTY byte evidence."
-    },
-    {
-      "id": "terminal-input.windows-modified-enter-routing",
-      "title": "Windows modified Enter routes agent-compatible bytes to the active pane",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "terminal-input",
-      "layer": "main-provider-renderer-unit-and-windows-electron",
-      "surfaces": [
-        "terminal input",
-        "Windows modified Enter",
-        "agent identity",
-        "split panes",
-        "SSH",
-        "WSL",
-        "remote runtime"
-      ],
-      "platforms": ["macos", "linux", "windows"],
-      "providers": ["local", "daemon", "ssh", "wsl", "remote-runtime"],
-      "coveredPlatforms": ["macos"],
-      "coveredProviders": [],
-      "coverageNotes": "Deterministic main/renderer tests run on macOS and exercise simulated Windows plus POSIX/Linux process-confirmation behavior. They cover exact local-ConPTY membership, detached-child rejection, SSH and paired-runtime host-platform routing including legacy runtime PTY IDs, active-PTY ownership after worktree host changes, Windows-to-WSL routing, unknown-metadata fallback, production handler composition, KKP authorization on every host, process-confirmed Droid routing and launch-triggered confirmation, typed-alias and forged-OSC isolation, shells without OSC 133, split/detach ownership with preserved shell classification, stale PTY exit/rebind rejection, command-generation revocation, daemon v21 warm-reattach identity, unavailable inspection, and lazy subprocess/RPC callback counts. A live linux-arm64 Docker target additionally proved real relay deployment, SSH PTY host detection, and exact inactive/active KKP bytes. The Electron byte test runs only on Windows; live Windows evidence remains uncollected. Test failures report exact expected bytes; no product telemetry or raw terminal logging is added.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/issues/7620",
-        "https://github.com/stablyai/orca/pull/7668"
-      ],
-      "invariant": "Shift+Enter key recognition follows the client OS, while emitted bytes follow the active application and PTY host: active Kitty keyboard protocol authorizes CSI-u on every host; otherwise Windows hosts use Esc+CR except when allowlisted Droid ownership or fresh routing-trusted Droid process evidence authorizes CSI-u, and non-Windows hosts use Esc+CR. The active SSH connection, remote-runtime PTY owner, or live local session outranks later worktree ownership changes, and missing host-platform metadata falls back to the client. Every new command and PTY replacement revokes stale agent routing until current evidence settles; split or reused panes cannot inherit sibling or prior-PTY authority; unrelated keys perform no host, agent, protocol, or ConPTY lookup.",
-      "oracle": "Renderer tests assert exact bytes across client/PTY-host combinations, including Kitty keyboard protocol active and inactive on Windows and non-Windows hosts, and prove SSH identity, the environment encoded in an active remote-runtime PTY id, and live local-session identity outrank current worktree ownership, while unavailable platform metadata falls back to the client. A live linux-arm64 SSH PTY independently captured Esc+CR with KKP inactive and CSI-u with KKP active. Fresh Windows process evidence authorizes Droid bytes only after a recognized global candidate is intersected with the exact ConPTY console process list; detached descendants, helper failure/timeout/root-only fallback, stale PTY exit/rebind results, typed text, and hook/OSC output fail closed. A new OSC 133;C immediately publishes a routing-neutral generation, including during D-to-C races. In cmd.exe/Git Bash/custom shells without OSC 133, accepted inferred commands start the same fresh generation; accepted submit/interrupt, title exit, focus, and visibility revoke trusted Droid bytes while one bounded confirmation runs. Detach preserves the live PTY's source shell override so WSL/native classification cannot change with the current default. Ordinary fast shell commands use cached/no-scan paths; routing-relevant confirmation bypasses cached process snapshots and keeps the bounded three-read ladder. Daemon protocol v21 persists only an allowlisted launchAgent; warm reattach uses it as a display/confirmation hint and restores routing only after current process proof. The Windows Electron test focuses the real xterm textarea and records exact renderer-to-main PTY writes.",
-      "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/daemon-pty-router.test.ts src/main/daemon/daemon-server.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts src/main/daemon/pty-subprocess-foreground-scan-cadence.test.ts src/main/daemon/pty-subprocess.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts src/main/providers/windows-console-attached-processes.test.ts src/main/providers/windows-pty-job-membership.test.ts src/renderer/src/components/terminal-pane/pane-foreground-agent-tracker.test.ts src/renderer/src/components/terminal-pane/pty-connection-completion-and-notification.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent.test.ts src/renderer/src/components/terminal-pane/pty-transport-reattach-admission.test.ts src/renderer/src/components/terminal-pane/terminal-pane-tab-detach.test.ts src/renderer/src/components/terminal-pane/terminal-shortcut-policy.test.ts src/renderer/src/components/terminal-pane/terminal-windows-shift-enter.test.ts src/renderer/src/store/slices/store-active-worktree-terminal-creation.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/shared/agent-process-recognition.test.ts src/shared/process-table-snapshot.test.ts tests/e2e/terminal-foreground-confirmation.unit.test.ts",
-        "pnpm run test:e2e -- tests/e2e/terminal-shortcuts.spec.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/renderer/src/components/terminal-pane/keyboard-handlers.test.ts src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-pane-handle-resolution.test.ts src/renderer/src/components/terminal-pane/terminal-input-host-platform.test.ts"
-      ],
-      "testFiles": [
-        "src/main/daemon/daemon-foreground-confirmation-protocol.test.ts",
-        "src/main/daemon/daemon-pty-adapter.test.ts",
-        "src/main/daemon/daemon-pty-router.test.ts",
-        "src/main/daemon/daemon-server.test.ts",
-        "src/main/daemon/degraded-daemon-pty-provider.test.ts",
-        "src/main/daemon/pty-subprocess-foreground-scan-cadence.test.ts",
-        "src/main/daemon/pty-subprocess.test.ts",
-        "src/main/ipc/pty-runtime-kill-and-exit.test.ts",
-        "src/main/providers/agent-foreground-process.test.ts",
-        "src/main/providers/local-pty-provider-foreground-process.test.ts",
-        "src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts",
-        "src/main/providers/windows-console-attached-processes.test.ts",
-        "src/main/providers/windows-pty-job-membership.test.ts",
-        "src/renderer/src/components/terminal-pane/pane-foreground-agent-tracker.test.ts",
-        "src/renderer/src/components/terminal-pane/keyboard-handlers.test.ts",
-        "src/renderer/src/components/terminal-pane/pty-connection-completion-and-notification.test.ts",
-        "src/renderer/src/components/terminal-pane/pty-connection-foreground-agent.test.ts",
-        "src/renderer/src/components/terminal-pane/pty-transport-reattach-admission.test.ts",
-        "src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-pane-handle-resolution.test.ts",
-        "src/renderer/src/components/terminal-pane/terminal-pane-tab-detach.test.ts",
-        "src/renderer/src/components/terminal-pane/terminal-input-host-platform.test.ts",
-        "src/renderer/src/components/terminal-pane/terminal-shortcut-policy.test.ts",
-        "src/renderer/src/components/terminal-pane/terminal-windows-shift-enter.test.ts",
-        "src/renderer/src/store/slices/store-active-worktree-terminal-creation.test.ts",
-        "src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts",
-        "src/shared/agent-process-recognition.test.ts",
-        "src/shared/process-table-snapshot.test.ts",
-        "tests/e2e/terminal-foreground-confirmation.unit.test.ts",
-        "tests/e2e/terminal-shortcuts.spec.ts"
-      ],
-      "assertionRefs": [
-        {
-          "file": "src/shared/process-table-snapshot.test.ts",
-          "assertions": [
-            "a fresh request bypasses a same-tick TTL cache and any scan already in flight before the request",
-            "same-turn fresh requests and ordinary cache misses share one later scan while requests arriving after it starts queue behind it"
-          ]
-        },
-        {
-          "file": "src/main/providers/agent-foreground-process.test.ts",
-          "assertions": [
-            "successful root-present Windows enumeration and failed, blank, malformed, or root-missing enumeration remain distinct evidence states",
-            "an observed shell root with no children is authoritative while a snapshot omitting that root is unavailable",
-            "an attached Droid candidate is authorized only when exact ConPTY membership contains it, while a detached Start-Process descendant is rejected",
-            "a Windows process-table scan with no recognized agent performs zero ConPTY membership helper forks",
-            "fresh POSIX scan failure or a snapshot missing the PTY root is unavailable rather than shell proof",
-            "the compatibility process-name API still preserves its existing fallback contract for other consumers"
-          ]
-        },
-        {
-          "file": "src/main/providers/windows-console-attached-processes.test.ts",
-          "assertions": [
-            "the fixed node-pty helper returns validated integer console membership containing the PTY root",
-            "root-only fallback, malformed/missing-root messages, spawn errors, and a silent helper timeout all fail closed",
-            "the bounded timeout kills the child helper exactly once"
-          ]
-        },
-        {
-          "file": "src/main/providers/windows-pty-job-membership.test.ts",
-          "assertions": [
-            "never spawns a child process to answer",
-            "refuses an answer that does not contain the shell",
-            "is asked with the pty handle, because a bare pid cannot find the job"
-          ]
-        },
-        {
-          "file": "src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts",
-          "assertions": [
-            "stops holding a dead agent once the job answer is only a superset",
-            "restores the idle refresh backoff once the dead identity is gone",
-            "never expires an identity while scans stay degraded",
-            "never expires an identity while the job answer is unverifiable"
-          ]
-        },
-        {
-          "file": "src/main/providers/local-pty-provider-foreground-process.test.ts",
-          "assertions": [
-            "a delayed foreground confirmation is discarded after the owning PTY exits"
-          ]
-        },
-        {
-          "file": "src/main/daemon/daemon-pty-adapter.test.ts",
-          "assertions": [
-            "new daemon sessions and warm reattach results carry the same minimal allowlisted launchAgent"
-          ]
-        },
-        {
-          "file": "src/main/daemon/daemon-server.test.ts",
-          "assertions": [
-            "daemon protocol v21 persists allowlisted launchAgent across reattach and drops unknown identity strings"
-          ]
-        },
-        {
-          "file": "src/main/daemon/pty-subprocess.test.ts",
-          "assertions": [
-            "Windows daemon foreground lookup can return PowerShell synchronously before async process-tree enrichment resolves the agent",
-            "the enriched agent result is served by a later foreground read",
-            "fresh confirmation awaits a post-request scan instead of serving cached PowerShell and returns null when inspection is unavailable"
-          ]
-        },
-        {
-          "file": "tests/e2e/terminal-foreground-confirmation.unit.test.ts",
-          "assertions": [
-            "the real daemon handle and pane tracker keep restored Droid identity when confirmation resolves after the old cache window",
-            "one fresh command-finish scan confirms real shell exit, while unavailable inspection performs exactly three bounded reads and never claims shell"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/keyboard-handlers.test.ts",
-          "assertions": [
-            "the production keyboard-policy boundary requires active-host routing and composes macOS Shift+Enter with Windows PTY bytes"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/remote-runtime-pty-transport-pane-handle-resolution.test.ts",
-          "assertions": [
-            "a legacy remote PTY id retains the transport's captured runtime environment identity"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/terminal-input-host-platform.test.ts",
-          "assertions": [
-            "SSH terminals use remote-platform metadata and execution-host identity when the active transport has not captured a connection id",
-            "encoded and legacy active remote-runtime PTY identities plus a live local PTY session outrank later worktree host changes",
-            "a live WSL session normalizes to a Linux terminal host",
-            "missing SSH/runtime platform metadata and local terminals fall back to the client platform"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/terminal-shortcut-policy.test.ts",
-          "assertions": [
-            "Windows defaults and non-Droid agents preserve Esc+CR while explicit Droid capability selects CSI-u",
-            "Windows and non-Windows PTYs reached cross-OS use CSI-u only with active Kitty keyboard protocol unless trusted Windows Droid evidence independently authorizes it",
-            "unrelated keys invoke neither host, agent, nor protocol callbacks"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/terminal-windows-shift-enter.test.ts",
-          "assertions": [
-            "only routing-trusted current process identity overrides launch evidence and confirmed shell foreground clears stale identity",
-            "a newer untrusted or neutral command generation blocks stale launch ownership until confirmation",
-            "only allowlisted fresh process or pane-scoped launch ownership selects Droid's CSI-u capability",
-            "forged hook or OSC-derived Droid status cannot change the Windows byte encoding",
-            "after split and original-pane close, a sole surviving sibling cannot inherit the original pane's Droid launch identity"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/pane-foreground-agent-tracker.test.ts",
-          "assertions": [
-            "manual and restored local agent identity is published from bounded foreground-process reads",
-            "a delayed read cannot publish after the pane rebinds to a replacement PTY id",
-            "every new command publishes a routing-neutral generation before confirmation",
-            "typed agent text only widens the confirmation window and never becomes published or routable identity",
-            "unavailable typed-command confirmation stays on legacy routing through the three-read ladder and then fails closed",
-            "ordinary fast OSC 133;C-to-D command pairs publish shell without a fresh confirmation scan",
-            "command-start and visible launch recovery use at most three reads across the bounded 350 ms, 1.2 s, and 6 s ladder",
-            "null and rejected reads participate in the same bounded known-identity ladder",
-            "command-finished accepts one fresh recognized shell scan when agent evidence exists, while unavailable final evidence retires routing without claiming shell"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/pty-connection-completion-and-notification.test.ts",
-          "assertions": [
-            "a still-running Droid process republishes Droid instead of being overwritten with shell-foreground evidence",
-            "typed Droid input cannot replace live Antigravity process or pane-scoped launch identity inside another TUI",
-            "typed Droid input on SSH or remote-runtime panes never writes local process evidence",
-            "Droid routing survives a fresh command-finish scan that still sees Droid and retires after one fresh shell result",
-            "a D-to-C transition immediately routes legacy bytes while the new command generation is pending",
-            "unavailable command-finish evidence resolves deferred cleanup, returns legacy routing, and does not assert shell foreground"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/pty-connection-foreground-agent.test.ts",
-          "assertions": [
-            "typing droid does not route CSI-u until fresh process evidence confirms Droid",
-            "null and rejected command-start reads never promote typed Droid text to process evidence",
-            "a manually typed Droid in a shell without OSC 133 gains routing only after accepted-input fresh confirmation",
-            "accepted no-OSC exit or interrupt input immediately revokes trusted Droid bytes and confirms the returned shell"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/pty-connection-foreground-agent.test.ts",
-          "assertions": [
-            "after detach remount, pane-key launch/process identity forces a leaked nested OSC 133;D through foreground confirmation",
-            "an identityless visible-read versus OSC 133;D race cancels stale sampling and fails closed to shell",
-            "daemon-returned allowlisted launchAgent requests warm-reattach confirmation without restoring stale byte authority or the original args/env payload, while missing identity fails closed",
-            "an unknown persisted wrapper cannot spoof launch identity and confirmed shell state prevents repeat focus scans"
-          ]
-        },
-        {
-          "file": "src/renderer/src/components/terminal-pane/pty-transport-reattach-admission.test.ts",
-          "assertions": [
-            "allowlisted daemon launchAgent reaches PtyConnectResult on reattach",
-            "unknown launch identity is dropped at the renderer transport boundary"
-          ]
-        },
-        {
-          "file": "src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts",
-          "assertions": [
-            "pane-to-tab detach moves only the detached leaf's launch and process identity to its new pane key",
-            "pane-to-tab detach preserves the source PTY shell override across native PowerShell and WSL classifications",
-            "the source hook snapshot is retired rather than copied to a key the running PTY cannot emit",
-            "the detached Droid keeps CSI-u while the source sibling keeps its own legacy encoding"
-          ]
-        },
-        {
-          "file": "src/shared/agent-process-recognition.test.ts",
-          "assertions": [
-            "Droid's process name resolves to the allowlisted Droid agent identity without substring matching"
-          ]
-        },
-        {
-          "file": "tests/e2e/terminal-shortcuts.spec.ts",
-          "assertions": [
-            "on Windows the focused terminal sends CSI-u bytes for a Droid pane and Esc+CR bytes after switching that same pane to Antigravity identity",
-            "the byte oracle observes the real renderer-to-main PTY write path rather than terminal DOM state"
-          ]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-08-25",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/daemon-pty-router.test.ts src/main/daemon/daemon-server.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts src/main/daemon/pty-subprocess-foreground-scan-cadence.test.ts src/main/daemon/pty-subprocess.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts src/main/providers/windows-console-attached-processes.test.ts src/main/providers/windows-pty-job-membership.test.ts src/renderer/src/components/terminal-pane/pane-foreground-agent-tracker.test.ts src/renderer/src/components/terminal-pane/pty-connection-command-finished-cleanup.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-routing.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent-sampling.test.ts src/renderer/src/components/terminal-pane/pty-transport-reattach-admission.test.ts src/renderer/src/components/terminal-pane/terminal-pane-tab-detach.test.ts src/renderer/src/components/terminal-pane/terminal-shortcut-policy.test.ts src/renderer/src/components/terminal-pane/terminal-windows-shift-enter.test.ts src/renderer/src/store/slices/store-active-worktree-terminal-creation.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/shared/agent-process-recognition.test.ts src/shared/process-table-snapshot.test.ts tests/e2e/terminal-foreground-confirmation.unit.test.ts",
-          "result": "passed",
-          "durationSeconds": 3.88,
-          "summary": "Twenty-six focused test files passed (489 tests) on the PR head, covering fresh-scan ordering/deduplication, exact ConPTY membership and detached-child rejection, stale PTY guards, daemon v21 launch ownership with current-process confirmation, no-OSC command/exit recovery, preserved detach shell classification, unavailable evidence, routing-neutral command generations, exact shortcut bytes, and the composed daemon-plus-tracker contract; the Windows Electron byte test remains platform-gated and is not counted as local macOS evidence.",
-          "currentCommand": "pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/daemon-pty-router.test.ts src/main/daemon/daemon-server.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts src/main/daemon/pty-subprocess-foreground-scan-cadence.test.ts src/main/daemon/pty-subprocess.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts src/main/providers/windows-console-attached-processes.test.ts src/main/providers/windows-pty-job-membership.test.ts src/renderer/src/components/terminal-pane/pane-foreground-agent-tracker.test.ts src/renderer/src/components/terminal-pane/pty-connection-completion-and-notification.test.ts src/renderer/src/components/terminal-pane/pty-connection-foreground-agent.test.ts src/renderer/src/components/terminal-pane/pty-transport-reattach-admission.test.ts src/renderer/src/components/terminal-pane/terminal-pane-tab-detach.test.ts src/renderer/src/components/terminal-pane/terminal-shortcut-policy.test.ts src/renderer/src/components/terminal-pane/terminal-windows-shift-enter.test.ts src/renderer/src/store/slices/store-active-worktree-terminal-creation.test.ts src/renderer/src/store/slices/terminal-pane-detach-agent-identity.test.ts src/shared/agent-process-recognition.test.ts src/shared/process-table-snapshot.test.ts tests/e2e/terminal-foreground-confirmation.unit.test.ts"
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 90,
-        "scope": "focused renderer units plus the Windows Electron terminal-shortcut spec"
-      },
-      "flakeHistory": {
-        "status": "unknown",
-        "evidence": "The deterministic units are stable locally; the Windows-only Electron byte path needs CI or nightly soak history before promotion."
-      },
-      "redGreenEvidence": {
-        "status": "partial",
-        "evidence": "Reverting to the previous unconditional Windows Esc+CR branch fails the Droid byte assertion, while resolving launch metadata from any key other than the active pane fails the split-survivor isolation assertion. Saved intentional-break artifacts and live Windows history are still missing."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "Callback-count tests prove unrelated ordinary keys invoke neither host, agent, nor Kitty-protocol resolution. Host and agent callbacks are created once per keyboard effect, so printable input adds no per-key allocations or store reads. Shift+Enter performs bounded synchronous active-transport and indexed store lookups, plus at most one pane-keyed protocol-mode lookup when trusted Windows Droid evidence does not already authorize CSI-u, with no IPC, RPC, subprocess, polling, listener, or timer. Typed text performs no routing write. Ordinary fast OSC 133;C-to-D shell commands perform no fresh confirmation RPC or process scan. An accepted submit/interrupt while trusted Droid is current, a typed allowlisted agent command, title exit, focus, visibility transition, or an idle burst after trusted Droid Shift+Enter can schedule the bounded confirmation ladder; each event cancels/deduplicates prior work and no timer recurs after settling. Windows confirmation performs one fresh process-table scan and forks exact ConPTY membership only after a recognized agent candidate appears; no recognized candidate makes zero helper calls. Same-turn fresh requests share one scan and later arrivals queue at most one successor. Recovery remains three bounded one-shot reads (350 ms, 1.2 s, 6 s). No polling loop, provider fanout, persistent listener, hidden-pane wake loop, or per-printable-key work is added."
-      },
-      "promotionCriteria": [
-        "Run the exact PTY-byte Electron oracle on Windows without silent platform skips.",
-        "Collect stable runtime and flake history for local and daemon Windows ConPTY while retaining deterministic host-routing assertions for SSH, WSL, and remote runtime.",
-        "Attach saved intentional-break evidence for Droid capability removal and split-sibling identity leakage."
-      ],
-      "knownGaps": [
-        "No Windows runner or live Windows PTY evidence is attached; the Electron byte test skips on macOS and Linux, while a live Linux SSH PTY covers only the remote Linux host path.",
-        "Droid agent-specific CSI-u authorization is available only from trusted pane evidence; without it, Windows and non-Windows PTY hosts depend on the application's Kitty keyboard protocol state.",
-        "The Electron test injects allowlisted pane identity rather than launching the real Droid and Antigravity binaries.",
-        "If both Windows process-enumeration backends remain unavailable through the bounded ladder, routing fails closed to the legacy Esc+CR path; no live Droid artifact covers that degraded host configuration.",
-        "Protocol v21 restarts older daemons because the minimal persisted launchAgent is a new contract; sessions preserved by pre-v21 daemons cannot supply warm-reattach launch ownership and fail closed until current process confirmation or restart.",
-        "No live daemon, WSL, remote-runtime, paired-web, or restore/replay byte artifact has been collected; SSH is covered only by a macOS-client-to-Linux-host relay run.",
-        "A running PTY keeps its spawn-time ORCA_PANE_KEY after pane-to-tab detach. This change transfers launch/process routing evidence and retires the stale hook snapshot, but does not redesign future hook reattribution across tab IDs."
-      ],
-      "demotionRule": "Keep non-blocking or demote to protection none if the Windows byte test silently skips, flakes without an actionable artifact, routes bytes using tab/title/terminal-output heuristics, or adds any ordinary-key lookup, IPC, polling, scan, or lifecycle leak."
-    },
-    {
       "id": "terminal-input.guarded-agent-send-authorization",
       "title": "Guarded agent sends authorize only the confirmed exact PTY",
       "maturity": "experimental",
@@ -14505,7 +13818,7 @@
       "oracle": "A quarter-circle Claude task title authorizes without a provider lookup only on the exact PTY incarnation carrying verified managed-Claude launch identity; the same title in a bare pane, with an unverified launch hint, or after PTY incarnation replacement is refused while current Claude activity remains a working signal. Fresh explicit state plus ordinary PowerShell plus confirmed recognized agent is sendable on the same PTY. Confirmed shell/non-agent, unavailable confirmation, PTY exit, handle rebind, or a callback PTY mismatch returns a refusal or not-writable result and writes zero bytes.",
       "commands": [
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/quarter-circle-title-send-authorization.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts src/main/providers/windows-console-attached-processes.test.ts src/main/providers/windows-pty-job-membership.test.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/pty-subprocess.test.ts src/renderer/src/lib/active-agent-note-send-explicit-target.test.ts src/renderer/src/components/browser-pane/annotate/BrowserAnnotationSendMenuContent.test.tsx"
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/pty-subprocess.test.ts src/renderer/src/lib/active-agent-note-send-explicit-target.test.ts src/renderer/src/components/browser-pane/annotate/BrowserAnnotationSendMenuContent.test.tsx"
       ],
       "testFiles": [
         "src/main/runtime/quarter-circle-title-send-authorization.test.ts",
@@ -14514,9 +13827,6 @@
         "src/main/ipc/pty-runtime-kill-and-exit.test.ts",
         "src/main/providers/agent-foreground-process.test.ts",
         "src/main/providers/local-pty-provider-foreground-process.test.ts",
-        "src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts",
-        "src/main/providers/windows-console-attached-processes.test.ts",
-        "src/main/providers/windows-pty-job-membership.test.ts",
         "src/main/daemon/daemon-foreground-confirmation-protocol.test.ts",
         "src/main/daemon/pty-subprocess.test.ts",
         "src/renderer/src/lib/active-agent-note-send-explicit-target.test.ts",
@@ -14567,13 +13877,6 @@
           "assertions": ["fresh confirmation is discarded when its owning local PTY exits"]
         },
         {
-          "file": "src/main/providers/windows-console-attached-processes.test.ts",
-          "assertions": [
-            "exact ConPTY console membership comes from the fixed node-pty helper",
-            "malformed, incomplete, timed-out, and spawn-error membership reads fail closed"
-          ]
-        },
-        {
           "file": "src/main/daemon/daemon-foreground-confirmation-protocol.test.ts",
           "assertions": [
             "daemons from before the fresh-confirmation RPC are rejected by protocol version"
@@ -14606,15 +13909,6 @@
           "result": "passed",
           "durationSeconds": 20.9,
           "summary": "The focused file passed 9 tests, including current-incarnation managed-Claude authorization with zero foreground calls and fail-closed bare, unverified, and replacement-incarnation quarter-circle titles."
-        },
-        {
-          "date": "2026-08-25",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/terminal-send.test.ts src/main/ipc/pty-runtime-kill-and-exit.test.ts src/main/providers/agent-foreground-process.test.ts src/main/providers/local-pty-provider-foreground-process.test.ts src/main/daemon/pty-subprocess-foreground-degraded-scan.test.ts src/main/providers/windows-console-attached-processes.test.ts src/main/providers/windows-pty-job-membership.test.ts src/main/daemon/daemon-foreground-confirmation-protocol.test.ts src/main/daemon/pty-subprocess.test.ts src/renderer/src/lib/active-agent-note-send-explicit-target.test.ts src/renderer/src/components/browser-pane/annotate/BrowserAnnotationSendMenuContent.test.tsx",
-          "result": "passed",
-          "durationSeconds": 13.74,
-          "summary": "Twelve focused test files passed (1351 tests, 1 skipped), covering runtime confirmation and PTY revalidation, guarded RPC zero-write behavior, PTY controller routing, local/daemon fresh scans, exact ConPTY membership, and unchanged renderer note routing."
         }
       ],
       "runtimeBudget": {
@@ -15986,61 +15280,6 @@
       "demotionRule": "Keep experimental or demote if release can overlap exact reuse, close a conflicting lease, lose immutable output, retain reset archives, fan out per worker, or any focused ordering test flakes without a product or harness defect."
     },
     {
-      "id": "terminal-render.windows-cjk-repaint",
-      "title": "Windows ConPTY wide glyphs and cursor rewrites repaint without stale cells",
-      "maturity": "experimental",
-      "protection": "none",
-      "owner": "terminal-rendering",
-      "layer": "windows-electron-conpty",
-      "surfaces": [
-        "Windows ConPTY",
-        "CJK",
-        "emoji",
-        "wide glyphs",
-        "cursor repaint",
-        "rewrite output"
-      ],
-      "platforms": ["windows"],
-      "providers": ["local", "daemon", "wsl"],
-      "coveredPlatforms": [],
-      "coveredProviders": [],
-      "coverageNotes": "Registered gap only; no executable coverage is wired yet.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/pull/6876",
-        "https://github.com/stablyai/orca/pull/6968",
-        "https://github.com/stablyai/orca/pull/6970"
-      ],
-      "invariant": "Windows terminal repaint must not leave stale cells, clipped wide glyphs, or hidden cursor state after CJK, emoji, or cursor-rewrite output.",
-      "oracle": "A Windows gate combines xterm buffer assertions with bounded screenshot/canvas evidence for representative CJK, emoji, and rewrite sequences.",
-      "commands": [],
-      "testFiles": [],
-      "assertionRefs": [],
-      "evidenceRuns": [],
-      "runtimeBudget": {
-        "p95Seconds": 90,
-        "scope": "Windows focused Electron render gate"
-      },
-      "flakeHistory": {
-        "status": "not-started",
-        "evidence": "Gate is registered as a known Windows rendering gap; no command is wired."
-      },
-      "redGreenEvidence": {
-        "status": "missing",
-        "evidence": "Needs intentional-break proof for stale wide-glyph repaint or cursor restore."
-      },
-      "performanceBudget": {
-        "required": true,
-        "evidence": "Must record refresh count or frame budget so repaint fixes do not mask excessive redraw churn."
-      },
-      "promotionCriteria": [
-        "Use buffer/cell evidence as the primary oracle and screenshots as diagnostics.",
-        "Keep stress cases non-blocking until Windows runtime history is stable.",
-        "Fail promotion on silent Windows environment skips."
-      ],
-      "knownGaps": ["No manifest command yet.", "No Windows CJK/emoji repaint command is wired."],
-      "demotionRule": "Cannot promote if the oracle is screenshot-only or environment-skipped."
-    },
-    {
       "id": "terminal-render.foreground-repair-span",
       "title": "A forced foreground repaint covers every row the write changed",
       "maturity": "experimental",
@@ -16123,63 +15362,6 @@
         "SSH/WSL/remote providers were not exercised live; the span is transport-independent by construction."
       ],
       "demotionRule": "Demote or block if a narrowing condition is added without a matching convergence case, if the corpus stops asserting that each case changes at least one row, or if a repaint regression is reported for in-place agent redraws."
-    },
-    {
-      "id": "terminal-shell.windows-resolution-parity",
-      "title": "Windows local and daemon providers resolve shells and startup commands consistently",
-      "maturity": "experimental",
-      "protection": "none",
-      "owner": "terminal-platform",
-      "layer": "provider-contract-windows",
-      "surfaces": [
-        "shell resolution",
-        "startup command",
-        "cwd",
-        "environment",
-        "local provider",
-        "daemon provider"
-      ],
-      "platforms": ["windows"],
-      "providers": ["local", "daemon", "wsl"],
-      "coveredPlatforms": [],
-      "coveredProviders": [],
-      "coverageNotes": "Registered gap only; no executable coverage is wired yet.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/pull/6541",
-        "https://github.com/stablyai/orca/pull/6858"
-      ],
-      "invariant": "Windows local and daemon terminals must resolve equivalent shell paths, args, cwd, env, startup command delivery, and fallback behavior for PowerShell 5/7, cmd, Git Bash, WSL, and missing pwsh.",
-      "oracle": "Provider-contract fixtures compare resolved command descriptors and live shell markers for supported Windows shells across local and daemon providers.",
-      "commands": [],
-      "testFiles": [],
-      "assertionRefs": [],
-      "evidenceRuns": [],
-      "runtimeBudget": {
-        "p95Seconds": 60,
-        "scope": "Windows provider-contract gate"
-      },
-      "flakeHistory": {
-        "status": "not-started",
-        "evidence": "Gate is registered as a known Windows shell parity gap; no command is wired."
-      },
-      "redGreenEvidence": {
-        "status": "missing",
-        "evidence": "Needs intentional-break proof for mismatched daemon/local shell resolution or lost startup command."
-      },
-      "performanceBudget": {
-        "required": false,
-        "evidence": "Required if resolution adds probing or PATH scans on hot startup paths."
-      },
-      "promotionCriteria": [
-        "Start with provider-contract fixtures before live Electron coverage.",
-        "Cover missing-shell fallback explicitly.",
-        "Fail promotion on silent Windows environment skips."
-      ],
-      "knownGaps": [
-        "No manifest command yet.",
-        "No local-vs-daemon Windows shell parity command is wired."
-      ],
-      "demotionRule": "Cannot promote if local and daemon provider behavior are tested separately without parity assertions."
     },
     {
       "id": "terminal-performance.input-throughput",
@@ -17911,13 +17093,13 @@
       "commands": [
         "pnpm exec vitest run --config config/vitest.config.ts src/main/runtime/rpc/methods/files-watch-cleanup.test.ts --reporter=dot",
         "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-unsubscribe-timeout.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity-wait.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-pending-assignment.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/shared/promise-settlement-waiters.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity-wait.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-pending-assignment.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/shared/promise-settlement-waiters.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
+        "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts",
         "pnpm run build:electron-vite",
         "node config/scripts/runtime-file-watcher-resource-probe.mjs",
         "node config/scripts/runtime-file-watcher-fault-harness.mjs",
@@ -17941,7 +17123,6 @@
         "src/main/ipc/parcel-watcher-process-entry.test.ts",
         "src/main/ipc/parcel-watcher-event-delivery.test.ts",
         "src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts",
-        "src/main/ipc/filesystem-watcher-wsl.test.ts",
         "src/main/ipc/worktrees-delete-pty-teardown.test.ts",
         "src/main/ipc/worktrees-orphan-directory-cleanup.test.ts",
         "src/main/ipc/worktrees-remove-preflight.test.ts",
@@ -18113,14 +17294,6 @@
             "Windows drive and UNC watcher ownership is found across path casing and separator variants",
             "Windows event payloads retain the physical root spelling instead of the comparison key",
             "failed local worktree removal restores every live renderer listener and emits overflow"
-          ]
-        },
-        {
-          "file": "src/main/ipc/filesystem-watcher-wsl.test.ts",
-          "assertions": [
-            "unsubscribe and startup abort remain pending until the WSL watcher process physically closes",
-            "a termination timeout or rejected kill retains the WSL watcher owner for later physical-exit proof",
-            "WSL watcher processes consume the shared eight-child reservation until physical close, including synchronous startup-write cleanup"
           ]
         },
         {
@@ -18323,37 +17496,10 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity-wait.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-pending-assignment.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/shared/promise-settlement-waiters.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 11.98,
-          "summary": "Thirty-nine watcher, cancellation, desktop/serve, paired-web, WSL, SSH/relay, removal, and PTY physical-exit files passed with 2,008 tests. Capacity, quarantine, runtime-root, relay, and SSH setup layers each prove that 10,000 aborted callers detach while one anchor remains and zero waiters remain after settlement."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts src/main/ipc/parcel-watcher-child-registry.test.ts src/main/ipc/parcel-watcher-child-launch.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-supervisor-capacity.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/main/runtime/rpc/methods/files-watch-cancellation.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/shared/physical-exit-tracker.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/daemon-pty-adapter.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 11.59,
-          "summary": "Thirty-four watcher, cancellation, desktop/serve, paired-web, WSL, removal, PTY physical-exit, provider, renderer, and path files passed with 1,999 tests; paired-web cancellation now owns a server token before ready and aborts pending setup without a late native install."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
           "command": "node config/scripts/runtime-file-watcher-resource-probe.mjs",
           "result": "passed",
           "durationSeconds": 0.58,
           "summary": "Five healthy roots shared one child at 50,688 KiB RSS and 4.9% sampled CPU; four quarantine children totaled 202,368 KiB RSS and 29.5% sampled CPU, all budgets and the eight-child cap passed, and exact-PID cleanup was true."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher.test.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/pty-subprocess.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts --reporter=dot",
-          "result": "passed",
-          "durationSeconds": 10.01,
-          "summary": "Twenty-seven watcher, WSL, desktop/serve removal, local/daemon/SSH PTY physical-exit, provider ownership, RPC, renderer, relay PTY admission, and cross-platform path files passed with 1,886 tests. The suite includes nested removal fencing, renderer/runtime cwd-only admission, legacy provider rows, rejected kill retries, transient WSL capacity, and synchronous-startup reservation cleanup."
         },
         {
           "date": "2026-07-13",
@@ -18404,15 +17550,6 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/providers/local-pty-provider-shutdown.test.ts src/main/providers/local-pty-provider-session-inventory.test.ts src/main/daemon/session.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
-          "result": "passed",
-          "durationSeconds": 9.12,
-          "summary": "Twenty-five watcher, WSL, desktop/serve removal, local/daemon/SSH PTY physical-exit, provider ownership, RPC, renderer, relay PTY admission, and cross-platform path files passed with 1,762 tests. The suite covers operations joining in-flight termination, kill failures retaining ownership, bounded timeouts, atomic relay spawn/revive caps, and PTY-removal admission."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
           "command": "node config/scripts/runtime-file-watcher-resource-probe.mjs",
           "result": "passed",
           "durationSeconds": 0.56,
@@ -18458,15 +17595,6 @@
           "date": "2026-07-13",
           "runner": "local",
           "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts src/main/ipc/pty-spawn-cwd-fallback.test.ts src/main/ipc/pty-listener-teardown-and-orphans.test.ts src/main/daemon/terminal-host.test.ts src/main/daemon/terminal-host-session-reaping-leak.test.ts",
-          "result": "passed",
-          "durationSeconds": 9.03,
-          "summary": "Twenty-three watcher, desktop/serve removal, terminal-spawn gate, daemon/SSH physical PTY exit, provider ownership, RPC, renderer, and cross-platform path files passed with 1,630 tests. The suite includes same-turn watcher replacement, authoritative SSH teardown before Git, bounded kill-without-exit failures that retain ownership, and local/SSH deletion fail-closed behavior."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
           "command": "node config/scripts/runtime-file-watcher-resource-probe.mjs",
           "result": "passed",
           "durationSeconds": 0.55,
@@ -18480,15 +17608,6 @@
           "result": "passed",
           "durationSeconds": 9.79,
           "summary": "Six relay registry, filesystem/Git handler, bundled subprocess, install, and package contract files passed with 225 tests, including terminal removal notification and recursive deletion fencing."
-        },
-        {
-          "date": "2026-07-13",
-          "runner": "local",
-          "platform": "macos",
-          "command": "pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/parcel-watcher-process.test.ts src/main/ipc/parcel-watcher-disconnect-termination.test.ts src/main/ipc/runtime-watcher-process-pool.test.ts src/main/ipc/parcel-watcher-process-entry.test.ts src/main/ipc/parcel-watcher-event-delivery.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-wsl.test.ts src/main/ipc/worktrees-delete-pty-teardown.test.ts src/main/ipc/worktrees-orphan-directory-cleanup.test.ts src/main/ipc/worktrees-remove-preflight.test.ts src/main/ipc/worktrees-remove-archive-hooks.test.ts src/main/ipc/watcher-removal-gate.test.ts src/main/runtime/file-watcher-host.test.ts src/main/runtime/orca-runtime-files-watch.test.ts src/main/runtime/worktree-teardown.test.ts src/main/runtime/orca-runtime.test.ts src/main/runtime/rpc/methods/files.test.ts src/renderer/src/runtime/runtime-file-client.test.ts src/renderer/src/web/web-runtime-client.test.ts src/shared/cross-platform-path.test.ts",
-          "result": "passed",
-          "durationSeconds": 8.85,
-          "summary": "18 focused supervisor, disconnect termination, pool, child-entry, delivery, desktop/WSL cleanup and IPC removal, removal-gate, runtime-host/commands and physical PTY teardown, RPC, SSH ownership, renderer/paired-web clients, and cross-platform path files passed with 1,193 tests."
         },
         {
           "date": "2026-07-12",
@@ -18902,17 +18021,15 @@
       "invariant": "After packaged foreground headless serve publishes structured readiness, one SIGINT or SIGTERM exits successfully without an Electron fatal trap or core evidence, releases the exact listener and owned Xvfb/process tree, and leaves an unrelated process identity untouched.",
       "oracle": "First start the original, readable-and-executable AppImage once in a fresh restricted Ubuntu 26.04 container through dbus-run-session -- xvfb-run -a --appimage-extract-and-run with ORCA_STARTUP_DIAGNOSTICS=1, and require the exact updater-setup-done marker within 90 seconds while fencing the launcher and owned Xvfb by PID start ticks. For each signal, start a separate unprivileged container with disposable profile and runtime directories, a random loopback port, DISPLAY unset, software GL, and the extracted AppImage in a fresh session. Wait for orca_server_ready schema version 1, record the listener owner, process tree, owned Xvfb, and unrelated canary identities, deliver SIGINT to the foreground process group or the documented KillMode=mixed graceful SIGTERM to the AppRun PID, then require wait status zero, no Failed to shutdown, SIGTRAP, core, listener, recorded descendant, profile/AppImage/Xvfb residue, or changed canary identity. The 30-second bounds are failure deadlines, never success conditions.",
       "commands": [
-        "shellcheck config/docker/headless-serve-shutdown/run-signal-case.sh",
-        "shellcheck config/docker/headless-serve-shutdown/run-appimage-desktop-startup-case.sh",
+        "shellcheck",
+        "shellcheck",
         "node config/scripts/run-headless-serve-shutdown-docker.mjs --appimage dist/orca-linux.AppImage",
         "node config/scripts/run-headless-serve-shutdown-docker.mjs --appimage dist/orca-linux.AppImage --platform linux/amd64",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/startup/ensure-virtual-display.test.ts --maxWorkers=2 --reporter=dot"
       ],
       "testFiles": [
         "src/main/startup/ensure-virtual-display.test.ts",
-        "config/scripts/run-headless-serve-shutdown-docker.mjs",
-        "config/docker/headless-serve-shutdown/run-signal-case.sh",
-        "config/docker/headless-serve-shutdown/run-appimage-desktop-startup-case.sh"
+        "config/scripts/run-headless-serve-shutdown-docker.mjs"
       ],
       "assertionRefs": [
         {
@@ -18934,22 +18051,6 @@
             "the exact AppImage SHA-256, entrypoint, and signal target are published",
             "the read-only AppImage bind is checked for read and execute permissions before extraction",
             "the launcher exec overlay isolates the related STA-4017 signal boundary"
-          ]
-        },
-        {
-          "file": "config/docker/headless-serve-shutdown/run-signal-case.sh",
-          "assertions": [
-            "SIGINT reaches the isolated foreground process group while owned Xvfb stays in its own group",
-            "SIGTERM reaches the exact AppRun PID under the documented systemd KillMode=mixed policy",
-            "target and descendant identities are fenced by PID start ticks before signaling and residue checks"
-          ]
-        },
-        {
-          "file": "config/docker/headless-serve-shutdown/run-appimage-desktop-startup-case.sh",
-          "assertions": [
-            "the original AppImage emits the exact updater-setup-done startup marker within 90 seconds",
-            "launcher and owned Xvfb identities are fenced by PID start ticks",
-            "cleanup sends bounded TERM then KILL signals and preserves failure logs"
           ]
         }
       ],
@@ -19001,105 +18102,6 @@
         "The harness exercises foreground headless Linux shutdown and does not replace desktop, updater, SSH, or detached PTY lifecycle coverage."
       ],
       "demotionRule": "Keep experimental or demote if either signal traps, returns nonzero, retains its listener/Xvfb/run-owned process identity, touches the unrelated canary, or the focused gate flakes without an identified product or harness defect."
-    },
-    {
-      "id": "runtime.linux-cli-launch-contract",
-      "title": "Packaged Linux CLI commands run without FUSE, user namespaces, or a display",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "runtime-platform",
-      "layer": "appimage-cli-entrypoint",
-      "surfaces": [
-        "packaged Linux AppImage",
-        "bundled CLI launcher",
-        "extracted direct binary",
-        "desktop launch diagnosis"
-      ],
-      "platforms": ["linux"],
-      "providers": ["local-daemon"],
-      "coveredPlatforms": ["linux"],
-      "coveredProviders": ["local-daemon"],
-      "coverageNotes": "A restricted Ubuntu container stages the extracted AppImage payload with no /dev/fuse and with unprivileged user namespaces denied, then runs eight CLI cases across the bundled launcher and the extracted direct binary. x64 only, because PR CI builds only --x64.",
-      "motivatingLinks": [
-        "https://github.com/stablyai/orca/issues/13719",
-        "https://github.com/stablyai/orca/issues/14229"
-      ],
-      "invariant": "On a host without FUSE and without unprivileged user namespaces, every packaged CLI entrypoint either completes its command or reports a diagnosis, and never terminates on a signal.",
-      "oracle": "Build the image, stage the AppImage payload, and run each case in the restricted container. Assert the preconditions first: unshare -Ur must fail and /dev/fuse must be absent, so a relaxed runner fails the job rather than silently skipping. For each case require the exact expected exit status and an expected substring of the command's own output, with the harness RESULT/CRASHED/PRECONDITION_FAILED control lines excluded so a case name can never satisfy its own assertion. Any status of 128 or above is a crash and fails immediately. The per-case timeout is a failure deadline, never a success condition.",
-      "commands": [
-        "node config/scripts/run-linux-cli-launch-contract-docker.mjs --appimage dist/orca-linux.AppImage",
-        "shellcheck config/docker/cli-launch-contract/run-cli-case.sh"
-      ],
-      "testFiles": [
-        "config/scripts/run-linux-cli-launch-contract-docker.mjs",
-        "config/docker/cli-launch-contract/run-cli-case.sh"
-      ],
-      "assertionRefs": [
-        {
-          "file": "config/scripts/run-linux-cli-launch-contract-docker.mjs",
-          "assertions": [
-            "the bundled launcher serves --help, --version, status, skills --help, and worktree list without Chromium",
-            "a direct binary launch reaching JavaScript runs the command instead of booting a GUI",
-            "a desktop launch with no display reports the missing-display diagnosis instead of trapping",
-            "a stale DISPLAY is diagnosed rather than trusted",
-            "expected output is matched against the command's own output, not the harness control lines"
-          ]
-        },
-        {
-          "file": "config/docker/cli-launch-contract/run-cli-case.sh",
-          "assertions": [
-            "the container refuses to run unless unprivileged user namespaces are denied and /dev/fuse is absent",
-            "an exit status of 128 or above is reported as a crash rather than compared to the expected status"
-          ]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-08-31",
-          "runner": "ci",
-          "platform": "linux",
-          "command": "node config/scripts/run-linux-cli-launch-contract-docker.mjs --appimage dist/orca-linux.AppImage",
-          "result": "passed",
-          "durationSeconds": 40,
-          "summary": "PR package job https://github.com/stablyai/orca/actions/runs/33360129768/job/99389831915 ran all eight cases to ok on ubuntu-latest. The unshare and /dev/fuse preconditions held under moby's default seccomp profile rather than tripping."
-        },
-        {
-          "date": "2026-09-01",
-          "runner": "local",
-          "platform": "linux",
-          "command": "node config/scripts/run-linux-cli-launch-contract-docker.mjs --appimage dist/orca-linux.AppImage",
-          "result": "passed",
-          "durationSeconds": 60,
-          "summary": "All eight cases passed on Ubuntu 24.04 amd64 hardware against an AppImage built from the stack tip, invoked against a copy of that artifact outside dist/."
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 300,
-        "scope": "eight CLI launch cases in one restricted Ubuntu container"
-      },
-      "flakeHistory": {
-        "status": "not-started",
-        "evidence": "The harness is new; soak history is not yet available."
-      },
-      "redGreenEvidence": {
-        "status": "complete",
-        "evidence": "The same harness run against a stock release AppImage failed four of eight cases: nofuse-userns-bundled-version at status 93, and all three direct-binary cases crashed at status 133 (SIGTRAP, the uv_close abort of #13719 and #14229). The stack-tip AppImage passed all eight. Corroborated at artifact level: the stack-tip runtime is a static-pie ELF with no PT_INTERP, the stock runtime is dynamically linked. Caveat: the two skills cases previously asserted a substring that the harness's own RESULT line contained, so they passed independently of command output; both now assert the rendered help header, and the green runs above predate that change."
-      },
-      "performanceBudget": {
-        "required": false,
-        "evidence": "The gate is CI-only and adds no product code path."
-      },
-      "promotionCriteria": [
-        "Collect 30 consecutive CI passes or 14 days without an unexplained flake.",
-        "Extend the matrix to arm64 once PR CI builds that architecture.",
-        "Re-run red/green against a stock AppImage after any change to the launcher entrypoint."
-      ],
-      "knownGaps": [
-        "The preconditions depend on moby's default seccomp profile denying unshare(CLONE_NEWUSER) and on /dev/fuse being absent. A runner with a relaxed profile or a mounted /dev/fuse trips PRECONDITION_FAILED and fails the job rather than skipping.",
-        "x64 only: PR CI builds only --x64, so the arm64 launcher path is unexercised.",
-        "The harness covers CLI entrypoints only; it does not exercise a full desktop session."
-      ],
-      "demotionRule": "Keep experimental or demote if any case terminates on a signal, the preconditions stop holding on the CI runner, or an assertion can be satisfied by anything other than the command's own output."
     },
     {
       "id": "terminal-history.daemon-checkpoint-session-isolation",
@@ -19862,90 +18864,6 @@
         "Codex replay artifact evidence uses a deterministic remote TUI on Linux CI; real-service, macOS/Windows clients and cross-version replay remain separate coverage gaps."
       ],
       "demotionRule": "Keep experimental while any recovery reproduction fails or any teardown, identity, resource-count, or rendered oracle flakes; never promote by extending sleeps or retries."
-    },
-    {
-      "id": "terminal.windows-wsl-launch-and-paste",
-      "title": "Real WSL terminal agent launch and paste ownership",
-      "maturity": "experimental",
-      "protection": "partial",
-      "owner": "terminal-runtime",
-      "layer": "electron-windows-wsl",
-      "surfaces": ["agent tab launch", "keyboard paste", "terminal runtime retention"],
-      "platforms": ["windows"],
-      "providers": ["wsl1", "wsl2"],
-      "coveredPlatforms": ["windows"],
-      "coveredProviders": ["wsl1"],
-      "coverageNotes": "Real WSL1 coverage: three scenarios each passed three times with no skips or retries; exact JSON report verified. Latest PR routing and installer-checksum follow-ups await CI. WSL2 remains untested.",
-      "motivatingLinks": ["https://github.com/stablyai/orca/actions/runs/34030832614"],
-      "invariant": "An agent launched into WSL runs in the guest; keyboard paste reaches exactly one owning PTY and preserves Linux content even after the default shell changes.",
-      "oracle": "Run the existing real WSL launch and two paste cases three times; require nine passes and zero skipped, unexpected, or flaky results in the Playwright JSON report.",
-      "commands": [
-        "gh workflow run windows-wsl-e2e.yml",
-        "pnpm exec playwright test tests/e2e/golden-tab-bar-agent-launch.spec.ts tests/e2e/terminal-windows-shell-paste-ownership.spec.ts --config tests/playwright.config.ts --project=electron-headless --workers=1",
-        "node_modules/.bin/vitest run --config config/vitest.config.ts config/scripts/wsl-e2e-lane-contract.test.mjs config/scripts/verify-wsl-e2e-participation.test.mjs",
-        "gh run view 34031806291 --log"
-      ],
-      "testFiles": [
-        "tests/e2e/golden-tab-bar-agent-launch.spec.ts",
-        "tests/e2e/terminal-windows-shell-paste-ownership.spec.ts",
-        "config/scripts/wsl-e2e-lane-contract.test.mjs",
-        "config/scripts/verify-wsl-e2e-participation.test.mjs"
-      ],
-      "assertionRefs": [
-        {
-          "file": "tests/e2e/golden-tab-bar-agent-launch.spec.ts",
-          "assertions": ["requires a distro-only marker from the launched agent"]
-        },
-        {
-          "file": "tests/e2e/terminal-windows-shell-paste-ownership.spec.ts",
-          "assertions": [
-            "requires exact Linux pasted content and exactly one PTY write",
-            "retains WSL paste ownership after changing the default shell"
-          ]
-        },
-        {
-          "file": "config/scripts/verify-wsl-e2e-participation.test.mjs",
-          "assertions": ["rejects skipped, missing, substituted and retried scenarios"]
-        }
-      ],
-      "evidenceRuns": [
-        {
-          "date": "2026-09-06",
-          "runner": "ci",
-          "platform": "windows",
-          "result": "passed",
-          "command": "gh run view 34031806291 --log",
-          "durationSeconds": 210,
-          "summary": "Immutable run34031806291 at92fc5152: WSL1 launch3 and paste6 passed after reader-readiness correction; named-scenario verifier accepted actual JSON report with0skips0retries. Command retrieves recorded evidence; workflow_dispatch command above reruns current coverage."
-        }
-      ],
-      "runtimeBudget": {
-        "p95Seconds": 1800,
-        "scope": "CI job timeout; measured p95 is not established"
-      },
-      "flakeHistory": {
-        "status": "soaking",
-        "evidence": "Initial permanent-lane diagnostic8passed1failed on missing PTY before changing settings. After requiring guest-reader readiness before mutation, run34031806291 passed9/9. Two earlier setup validations also passed9/9. Long-term CI history remains missing."
-      },
-      "redGreenEvidence": {
-        "status": "partial",
-        "evidence": "Verifier rejects actual8pass1fail CI report and accepts actual9pass report. Unit contracts reject skips, missing or substituted scenarios and retried passes. No full application fault-mutation proof."
-      },
-      "performanceBudget": {
-        "required": false,
-        "evidence": "CI-only provisioning and routing; no application runtime changes."
-      },
-      "promotionCriteria": [
-        "Require all nine real WSL executions on the final workflow head.",
-        "Demonstrate missing or skipped WSL execution fails participation.",
-        "Collect repeated CI history before adding this experimental lane to required verification."
-      ],
-      "knownGaps": [
-        "WSL2 is not provisioned.",
-        "No SSH, folder-only workspace, packaged mixed-version, or live-service claim.",
-        "The new PR lane is outside verify until reliability is established."
-      ],
-      "demotionRule": "Keep experimental if provisioning or an execution flakes; never promote by skipping a case, raising timeouts, or retrying until green."
     },
     {
       "id": "browser.packaged-mixed-version-placement",
@@ -20786,29 +19704,26 @@
       "oracle": "Send a full Claude child roster, interleave Codex review lifecycle/tool/approval/completion hooks, and require identical snapshots plus zero publications. A later Claude child event must retain the original prompt and roster, and a real child completion must shrink it. After Claude Stop, keep its mobile transcript and saved resume identity while its identified process remains live or unverifiable; accept the first provider replacement after confirmed exit or suspension. Replay must admit records in order, retain the file on failed admission, and concurrent starts, stop during replay, or a second stop during a queued restart must not leave a listener. Pending owner probes cannot publish or accept an old request after stop, restart, or status disable/re-enable; interrupted replay stays durable.",
       "commands": [
         "SKIP_BUILD=1 ORCA_BACKGROUND_LAUNCH=1 xvfb-run -a pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts src/wsl-guest/relay-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 ORCA_E2E_RECORD_VIDEO=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1 --repeat-each=3",
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec playwright test --config tests/playwright.config.ts tests/e2e/nested-agent-idle-session-owner.spec.ts --project=electron-headless --workers=1",
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts --maxWorkers=2",
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts --maxWorkers=2",
         "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts --maxWorkers=2"
       ],
       "testFiles": [
         "src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts",
-        "src/wsl-guest/relay-http-owner-probe-lifecycle.test.ts",
         "src/shared/agent-hook-spool-drain.test.ts",
         "src/main/agent-hooks/server-startup-lifecycle.test.ts",
         "src/main/agent-hooks/server-start-failure-lifecycle.test.ts",
         "src/main/agent-hooks/server-idle-process-owner.test.ts",
-        "src/wsl-guest/relay-idle-process-owner.test.ts",
         "tests/e2e/nested-agent-idle-owner.unit.test.ts",
         "tests/e2e/nested-agent-idle-session-owner.spec.ts",
         "src/main/agent-hooks/server-status-listener-fanout.test.ts",
         "src/main/agent-hooks/terminal-handle-row-identity.test.ts",
-        "src/wsl-guest/agent-hook-provider-normalization.test.ts",
         "src/main/agent-hooks/server-nested-agent-boundaries.test.ts",
         "src/main/agent-hooks/server-nested-agent-consumers.test.ts",
         "src/renderer/src/store/slices/agent-status-entry-contracts.test.ts",
@@ -20840,7 +19755,7 @@
           "runner": "local",
           "platform": "macos",
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts src/wsl-guest/relay-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
-          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts src/wsl-guest/relay-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/main/agent-hooks/server-http-owner-probe-lifecycle.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 75.69,
           "summary": "197 tests across 24 files pass after adversarial review. New regressions cover pending HTTP and process-probe publication after stop/restart/status disable/re-enable, fixed-token relay restarts, interrupted spool durability, and a second stop while a restart is queued."
@@ -20859,7 +19774,7 @@
           "runner": "local",
           "platform": "macos",
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
-          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts src/wsl-guest/relay-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/wsl-guest/relay-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-idle-process-owner.test.ts tests/e2e/nested-agent-idle-owner.unit.test.ts src/shared/agent-process-presence-probe.test.ts src/shared/agent-hook-spool-drain.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-start-failure-lifecycle.test.ts src/main/agent-hooks/server-startup-lifecycle.test.ts src/main/agent-hooks/spool.test.ts src/shared/agent-hook-spool-read.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 8.34,
           "summary": "187 tests across 22 files pass on the final follow-up, covering idle process ownership, stale suspension/resume/unavailable/exit, legacy hosts, relay cache isolation, saved resume records, concurrent startup and durable ordered spool replay."
@@ -20878,7 +19793,7 @@
           "runner": "local",
           "platform": "macos",
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/renderer/src/store/slices/agent-status-nested-resume.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
-          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts src/wsl-guest/agent-hook-provider-normalization.test.ts --maxWorkers=2",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-boundaries.test.ts src/main/agent-hooks/server-nested-agent-consumers.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/main/agent-hooks/server-turn-started-at.test.ts src/main/agent-hooks/server-status-listener-fanout.test.ts src/main/agent-hooks/terminal-handle-row-identity.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/renderer/src/store/slices/agent-status-provider-session.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 8.75,
           "summary": "132 tests across 13 files passed after review and CI boundary fixes, including actual mobile transcript selection, renderer Claude resume argv, host/workspace collision replacement, WSL transport equivalence, legacy unstamped local renderer entries, Pi identity-only boundaries, clock rollback and provider-isolated relay HTTP/spool/reconnect/teardown."
@@ -20888,7 +19803,7 @@
           "runner": "local",
           "platform": "macos",
           "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-tool-assistant-fields.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
-          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts src/wsl-guest/agent-hook-server.test.ts --maxWorkers=2",
+          "currentCommand": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/agent-hooks/server-nested-agent-roster.test.ts src/main/agent-hooks/server-nested-agent-model.test.ts src/main/agent-hooks/server-ingest-remote.test.ts src/main/agent-hooks/server-agent-presence.test.ts src/renderer/src/store/slices/agent-status-entry-contracts.test.ts src/main/agent-hooks/server-hook-http-ingest.test.ts --maxWorkers=2",
           "result": "passed",
           "durationSeconds": 91.45,
           "summary": "97 tests across seven files passed, including full 32-child local and relay HTTP flows, legacy remote snapshots, model isolation, owner process contracts and renderer ownership. Finished/stale replacement controls added afterward are validated separately."

@@ -1,5 +1,5 @@
 import type { Event as WatcherEvent } from '@parcel/watcher'
-import type { WatchedRoot } from './filesystem-watcher-wsl'
+import type { WatchedRoot } from './filesystem-watcher-lifecycle-state'
 
 export type DebouncedBatch = {
   events: WatcherEvent[]

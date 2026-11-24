@@ -1,14 +1,10 @@
 import { homedir } from 'node:os'
-import { posix as pathPosix } from 'node:path'
 import type { Repo } from '../../../shared/repo-types'
 import {
-  POSIX_SKILL_PATH_SEMANTICS,
   nativeSkillPathSemantics,
   type SkillPathSemantics
 } from '../../../shared/skill-path-containment'
-import { toWindowsWslPath } from '../../../shared/wsl-paths'
 import { discoverClaudePluginSkillSources } from '../claude-plugin-skill-sources'
-import { discoverClaudePluginSkillSourcesInWsl } from '../claude-plugin-skill-sources-wsl'
 import { buildSkillDiscoverySources, type SkillScanRoot } from '../skill-discovery-sources'
 import type { ResolvedSkillDiscoveryTarget } from '../skill-discovery-target'
 import type { SkillProviderRootOverrides } from '../skill-provider-destinations'
@@ -32,28 +28,6 @@ export async function buildSkillDeleteRootSet(input: {
   providerRootOverrides?: SkillProviderRootOverrides
   homeDir?: string
 }): Promise<SkillDeleteRootSet> {
-  if (input.target.kind === 'wsl') {
-    const { distro, homeDir } = input.target
-    const cwd = input.target.cwd ?? homeDir
-    return {
-      roots: [
-        ...buildSkillDiscoverySources({
-          homeDir,
-          cwd,
-          repos: [],
-          pathApi: pathPosix,
-          providerRootOverrides: input.providerRootOverrides
-        }),
-        // Why tolerated: plugin metadata is enrichment. A failed read must not
-        // turn every skill on the host into `unowned`.
-        ...(await discoverClaudePluginSkillSourcesInWsl({ distro, homeDir, cwd }).catch(() => []))
-      ],
-      // A WSL runtime is POSIX and case-sensitive even though the process is win32.
-      semantics: POSIX_SKILL_PATH_SEMANTICS,
-      toFilesystemPath: (path) => toWindowsWslPath(path, distro)
-    }
-  }
-
   const home = input.homeDir ?? homedir()
   const cwd = input.target.cwd
   return {

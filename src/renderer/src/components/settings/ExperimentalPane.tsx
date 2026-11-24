@@ -12,8 +12,6 @@ import { NativeChatExperimentalSetting } from './NativeChatExperimentalSetting'
 import { TerminalDockExperimentalSetting } from './fork-terminal-dock/TerminalDockExperimentalSetting'
 import { AgentDashboardExperimentalSetting } from './AgentDashboardExperimentalSetting'
 import { EphemeralVmsExperimentalSetting } from './EphemeralVmsExperimentalSetting'
-import { WslHostsExperimentalSetting } from './WslHostsExperimentalSetting'
-import { wslHostsAvailable } from '../sidebar/use-wsl-hosts-enabled'
 import {
   MAX_AGENT_HIBERNATION_IDLE_MS,
   MIN_AGENT_HIBERNATION_IDLE_MS,
@@ -277,10 +275,6 @@ export function ExperimentalPane({
       ) : null}
 
       <EphemeralVmsExperimentalSetting settings={settings} updateSettings={updateSettings} />
-
-      {wslHostsAvailable() ? (
-        <WslHostsExperimentalSetting settings={settings} updateSettings={updateSettings} />
-      ) : null}
 
       {hiddenExperimentalUnlocked ? <HiddenExperimentalGroup /> : null}
     </div>

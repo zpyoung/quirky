@@ -5,7 +5,6 @@ const execLocal = vi.fn()
 vi.mock('../ipc/preflight-command-exec', () => ({
   execLocalPreflightCommandOrThrow: (command: string, args: string[]) =>
     execLocal(command, args) as Promise<{ stdout: string; stderr: string }>,
-  execCommandInWslOrThrow: vi.fn(),
   shellQuote: (value: string) => `'${value}'`
 }))
 

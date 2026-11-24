@@ -32,7 +32,6 @@ import type { createCodexSessionMigrationScheduler } from '../codex/codex-sessio
 import type { getDevInstanceIdentity } from './dev-instance-identity'
 import type { createServeDesktopActivationGate } from './serve-desktop-activation'
 import type { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
-import type { createWindowsShellPathHydration } from './windows-shell-path-hydration'
 import type { ServeOptions } from './main-process-serve'
 import type { HangDetectionMarker } from '../hang-watchdog/hang-detection-marker'
 import { ServeReadinessPublisher } from '../server/serve-readiness'
@@ -149,7 +148,6 @@ export const mainProcessState = {
   startupDiagnosticsEnabled: false,
   desktopActivationGate: null as ReturnType<typeof createServeDesktopActivationGate> | null,
   activeOrcaProfile: null as ReturnType<typeof ensureActiveOrcaProfile> | null,
-  windowsShellPathHydration: null as ReturnType<typeof createWindowsShellPathHydration> | null,
   shellPathReady: Promise.resolve(),
   hangDetection: null as HangDetectionMarker | null,
   serveOptions: null as ServeOptions | null,

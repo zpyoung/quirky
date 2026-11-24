@@ -16,9 +16,6 @@ import {
 } from './daemon-launched-child'
 import { getDaemonEntryPath, probeDaemonSocket as probeSocket } from './daemon-launch-paths'
 import { materializeRelocatedDaemonHost, pruneDaemonHostStaging } from './daemon-host-relocation'
-import { appImageDaemonIdentityPath, resolveAppImageDaemonLaunch } from './daemon-appimage-launch'
-import { resolveAppImageGenerationDaemonLaunch } from './daemon-appimage-generation-launch'
-import { waitForAppImageCopyPreExtraction } from '../cli/appimage-copy-pre-extraction'
 import { launchMacDaemonFromStableBundle } from './macos-daemon-launchd'
 import { DAEMON_RECOVERY_BUDGET_MS, daemonRecoveryProbeTimeoutMs } from './daemon-recovery-budget'
 import { cleanupDaemonForProtocol } from './daemon-protocol-cleanup'
@@ -123,23 +120,11 @@ export function createOutOfProcessLauncher(
     }
     try {
       const environment = getAppEnvironment()
-      const appImage = resolveAppImageDaemonLaunch({
-        entryPath,
-        appPath: environment.getAppPath(),
-        appVersion: environment.getVersion()
-      })
-      const resolveGeneration = (): ReturnType<typeof resolveAppImageGenerationDaemonLaunch> =>
-        resolveAppImageGenerationDaemonLaunch({ entryPath, appVersion: environment.getVersion() })
-      let generation = resolveGeneration()
-      const extractedGeneration = generation && 'launch' in generation ? generation.launch : null
       const preservedHandle = await prepareDaemonReplacement({
         runtimeDir,
         socketPath,
         tokenPath,
-        // Why: must equal the identity the AppImage daemon records, or a survivor never matches.
-        entryPath:
-          extractedGeneration?.identityPath ??
-          (appImage ? appImageDaemonIdentityPath(appImage) : entryPath),
+        entryPath,
         recoveryDeadlineMs,
         releaseAdoptionClient,
         preserveDaemon,
@@ -149,17 +134,6 @@ export function createOutOfProcessLauncher(
         return preservedHandle
       }
 
-      // Why only once launching: the first start of a release unpacks its copy in the background,
-      // and a short wait lets this new daemon run from it instead of a mount it would outlive.
-      if (
-        generation &&
-        'fallback' in generation &&
-        generation.fallback === 'no-extracted-copy' &&
-        (await waitForAppImageCopyPreExtraction())
-      ) {
-        generation = resolveGeneration()
-      }
-      const launchGeneration = generation && 'launch' in generation ? generation.launch : null
       const userDataPath = environment.getPath('userData')
       const macHandle = await launchMacDaemonFromStableBundle(
         {
@@ -183,19 +157,12 @@ export function createOutOfProcessLauncher(
       pruneDaemonHostStaging()
       // Fork the relocated entry when available; otherwise the install-dir entry.
       const forkEntryPath = relocatedHost ? relocatedHost.entryPath : entryPath
-      if (generation && 'fallback' in generation) {
-        console.warn(
-          `[daemon] AppImage daemon host fallback reason=${generation.fallback}: starting it on Electron, ${appImage ? 'from its own mount' : 'from the current mount'}`
-        )
-      }
       let launched
       try {
         launched = await launchDaemonChild({
           entryPath,
           forkEntryPath,
           relocatedExecPath: relocatedHost?.execPath,
-          appImage: relocatedHost ? undefined : (appImage ?? undefined),
-          extractedGeneration: launchGeneration ?? undefined,
           userDataPath,
           socketPath,
           tokenPath,

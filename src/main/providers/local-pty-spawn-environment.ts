@@ -71,9 +71,7 @@ export function buildLocalPtySpawnEnvironment(args: {
     launchAgent: spawn.launchAgent,
     codexHomePathOverride: spawn.codexHomePathOverride,
     cwd: plan.cwd,
-    shellPath: plan.shellPath,
-    isWsl: plan.isWslShell,
-    wslDistro: plan.launchWslDistro
+    shellPath: plan.shellPath
   })
 }
 

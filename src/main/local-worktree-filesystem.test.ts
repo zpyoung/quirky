@@ -25,20 +25,9 @@ import {
   toHostFilesystemPath,
   toHostRemovalPath
 } from './local-worktree-filesystem'
-import { isWorktreePathMissing } from './worktree-removal-safety'
 
 function completeExecFile(stdout = ''): void {
   runProcessMock.mockResolvedValue({ code: 0, signal: null, stdout, stderr: '', timedOut: false })
-}
-
-function failExecFile(exitCode: number, stderr = 'missing'): void {
-  runProcessMock.mockResolvedValue({
-    code: exitCode,
-    signal: null,
-    stdout: '',
-    stderr,
-    timedOut: false
-  })
 }
 
 async function withPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T>): Promise<T> {
@@ -167,120 +156,6 @@ describe('local worktree filesystem runtime access', () => {
 
       await expect(removeLocalWorktreePath('/repo/feature')).rejects.toBe(error)
       expect(rmMock).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  it('uses the selected WSL distro for stat, read, and removal on Windows', async () => {
-    await withPlatform('win32', async () => {
-      completeExecFile('regular file')
-      const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
-      await expect(access.statPath('/home/me/repo/.git')).resolves.toEqual({ type: 'file' })
-
-      completeExecFile('gitdir: /home/me/repo/.git/worktrees/feature\n')
-      await expect(access.readPath('/home/me/repo/.git')).resolves.toBe(
-        'gitdir: /home/me/repo/.git/worktrees/feature\n'
-      )
-
-      completeExecFile()
-      await removeLocalWorktreePath('C:\\Users\\me\\repo feature', { wslDistro: 'Ubuntu' })
-
-      expect(runProcessMock).toHaveBeenCalledTimes(3)
-      expect(runProcessMock).toHaveBeenNthCalledWith(
-        1,
-        expect.objectContaining({
-          program: 'wsl.exe',
-          args: expect.arrayContaining(['-d', 'Ubuntu']),
-          // Why a concrete directory (#16463): the guest path is inside the
-          // command, and these run while a worktree is being removed -- which is
-          // the cwd an omitted one would inherit.
-          cwd: expect.any(String)
-        })
-      )
-      const removeArgs = runProcessMock.mock.calls[2]?.[0].args as string[]
-      expect(removeArgs.at(-1)).toContain('rm -rf --')
-      expect(removeArgs.at(-1)).toContain(String.raw`rm -rf -- '/mnt/c/Users/me/repo feature'`)
-      expect(rmMock).not.toHaveBeenCalled()
-    })
-  })
-
-  it('never starts a login or interactive shell for filesystem reads', async () => {
-    await withPlatform('win32', async () => {
-      completeExecFile('file')
-      await getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).statPath('/home/me/repo/.git')
-
-      // Why: a login/interactive shell is what puts the distro's rc banner on the
-      // stdout these callers parse. cat/stat/rm need nothing from the user's PATH,
-      // so the shell mode is the fix rather than filtering what it prints.
-      const args = runProcessMock.mock.calls[0]?.[0].args as string[]
-      expect(args).toContain('-c')
-      expect(args).not.toContain('-lc')
-      expect(args).not.toContain('-ilc')
-      expect(args.at(-1)).not.toContain('getent passwd')
-    })
-  })
-
-  // Captured verbatim from live hosts: GNU coreutils 9.4 (Ubuntu 24.04) and BusyBox v1.36.1.
-  it.each([
-    ['GNU', "stat: cannot statx '/mnt/c/repo/missing/.git': No such file or directory\n"],
-    ['GNU', "stat: cannot statx '/mnt/c/repo/missing/.git': Not a directory\n"],
-    ['BusyBox', "stat: can't stat '/mnt/c/repo/missing/.git': No such file or directory\n"],
-    ['BusyBox', "stat: can't stat '/mnt/c/repo/missing/.git': Not a directory\n"]
-  ])('reports a missing WSL stat target as ENOENT on %s userland', async (_userland, stderr) => {
-    await withPlatform('win32', async () => {
-      failExecFile(1, stderr)
-      const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
-
-      await expect(access.statPath('/mnt/c/repo/missing/.git')).rejects.toMatchObject({
-        code: 'ENOENT'
-      })
-      await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
-        true
-      )
-    })
-  })
-
-  it.each([
-    ['GNU', "stat: cannot statx '/mnt/c/repo/locked': Permission denied\n"],
-    ['BusyBox', "stat: can't stat '/mnt/c/repo/locked': Permission denied\n"]
-  ])(
-    'does not treat an unreadable WSL stat target as missing on %s userland',
-    async (_userland, stderr) => {
-      await withPlatform('win32', async () => {
-        failExecFile(1, stderr)
-        const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
-
-        await expect(access.statPath('/mnt/c/repo/locked')).rejects.toThrow('Permission denied')
-        // A delete that did not happen still has to look like a failure, or cleanup silently "succeeds".
-        await expect(isWorktreePathMissing('/mnt/c/repo/locked', access.statPath)).resolves.toBe(
-          false
-        )
-      })
-    }
-  )
-
-  it('pins the stat probe to the C locale so its error text stays English', async () => {
-    await withPlatform('win32', async () => {
-      completeExecFile('directory')
-      await getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' }).statPath('/mnt/c/repo/feature')
-
-      const args = runProcessMock.mock.calls[0]?.[0].args as string[]
-      expect(args.at(-1)).toContain('LC_ALL=C stat -c %F --')
-    })
-  })
-
-  it('reports a translated stat failure as a failure rather than as absence', async () => {
-    await withPlatform('win32', async () => {
-      // Synthetic: no host available here ships a non-English locale, and the probe pins LC_ALL=C
-      // anyway. The point is the direction it errs if that pin ever comes off.
-      failExecFile(1, "stat: <translated verb> '/mnt/c/repo/missing': <translated errno>\n")
-      const access = getLocalWorktreePathAccess({ wslDistro: 'Ubuntu' })
-
-      await expect(access.statPath('/mnt/c/repo/missing')).rejects.not.toMatchObject({
-        code: 'ENOENT'
-      })
-      await expect(isWorktreePathMissing('/mnt/c/repo/missing', access.statPath)).resolves.toBe(
-        false
-      )
     })
   })
 })

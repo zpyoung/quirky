@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { existsSync, linkSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { grantDirAcl, isPermissionError } from '../win32-utils'
 import { nodeFileContentsEqualSync } from '../../shared/node-file-content-equality'
 import {
   copyFileWithWindowsRetry,
@@ -22,27 +20,6 @@ export function writeFileAtomically(
     renameFileWithWindowsRetry(tmpPath, targetPath)
   } catch (error) {
     rmSync(tmpPath, { force: true })
-    // Why: on Windows, Chromium's renderer initialization calls
-    // SetNamedSecurityInfo on the userData folder with a Protected DACL
-    // that propagates empty inherited ACEs to child directories, causing
-    // EPERM on all writes. Grant an explicit ACL on the parent directory
-    // and retry once so the write succeeds even if Chromium reset the DACL
-    // after our startup fix ran.
-    if (isPermissionError(error) && process.platform === 'win32') {
-      try {
-        grantDirAcl(dirname(targetPath))
-        const retryTmpPath = `${targetPath}.${process.pid}.${randomUUID()}.tmp`
-        try {
-          writeFileSync(retryTmpPath, contents, { encoding: 'utf-8', mode: options?.mode })
-          renameFileWithWindowsRetry(retryTmpPath, targetPath)
-          return
-        } catch {
-          rmSync(retryTmpPath, { force: true })
-        }
-      } catch {
-        // a failed grant is not actionable; re-throw the original EPERM
-      }
-    }
     throw error
   }
 }
@@ -53,15 +30,7 @@ export function writeFileAtomicallyIfUnchanged(
   contents: string,
   options?: { mode?: number }
 ): boolean {
-  try {
-    return attemptGuardedAtomicWrite(targetPath, expectedContents, contents, options)
-  } catch (error) {
-    if (!isPermissionError(error) || process.platform !== 'win32') {
-      throw error
-    }
-    grantDirAcl(dirname(targetPath))
-    return attemptGuardedAtomicWrite(targetPath, expectedContents, contents, options)
-  }
+  return attemptGuardedAtomicWrite(targetPath, expectedContents, contents, options)
 }
 
 export function removeFileAtomicallyIfUnchanged(
@@ -182,18 +151,6 @@ export function publishFileWithoutOverwrite(sourcePath: string, targetPath: stri
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
       return false
-    }
-    if (isPermissionError(error) && process.platform === 'win32') {
-      grantDirAcl(dirname(targetPath))
-      try {
-        linkSync(sourcePath, targetPath)
-        return true
-      } catch (retryError) {
-        if ((retryError as NodeJS.ErrnoException).code === 'EEXIST') {
-          return false
-        }
-        throw retryError
-      }
     }
     throw error
   }

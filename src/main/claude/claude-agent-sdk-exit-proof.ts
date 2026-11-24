@@ -4,7 +4,6 @@ import {
   type DescendantTreeVerdict
 } from '../pty-descendant-exit-verification'
 import { captureDescendantSnapshot, type DescendantSnapshot } from '../pty-descendant-termination'
-import { terminateWindowsProcessTree } from '../windows-process-tree-kill'
 import { mergeClaudeDescendantSnapshots } from './claude-child-tree-snapshot'
 import { terminateClaudeRoot } from './claude-child-root-termination'
 import {
@@ -242,9 +241,7 @@ export function createClaudeChildTreeReaper(
       // The root's pid left with it, so its tree can no longer be addressed.
       return 'unverifiable'
     }
-    const terminateTree =
-      deps.terminateWindowsTree ??
-      ((pid: number) => terminateWindowsProcessTree(pid, { site: 'claude-structured-child-close' }))
+    const terminateTree = deps.terminateWindowsTree ?? (async () => false)
     const terminated = await terminateTree(rootPid).catch(() => false)
     terminateClaudeRoot({ child, exited })
     // Only taskkill's clean exit reports the whole tree terminated.

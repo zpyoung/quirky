@@ -439,25 +439,6 @@ describe('UpdateCard visibility gates', () => {
     ).toBe('visible')
   })
 
-  it('shows an initial package recovery before any version was cached', () => {
-    expect(
-      computeVisibility({
-        status: {
-          state: 'error',
-          message: 'Quit Orca before running the system package install command.',
-          recovery: {
-            kind: 'linux-package-install',
-            packageType: 'deb',
-            reason: 'manual-install-required',
-            version: '1.2.0'
-          }
-        },
-        dismissedVersion: null,
-        cachedVersion: null
-      })
-    ).toBe('visible')
-  })
-
   it('shows an initial versioned download error before any version was cached', () => {
     expect(
       computeVisibility({

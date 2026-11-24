@@ -4,7 +4,6 @@ import type { Repo } from '../../../shared/repo-types'
 import { isFolderRepo } from '../../../shared/repo-kind'
 import { DEFAULT_REPO_BADGE_COLOR } from '../../../shared/constants'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
 import {
   inspectGitRepoForRegistrationAsync,
   getGitRepoRootAsync,
@@ -22,9 +21,6 @@ export async function addLocalRepoFromPath(
   displayName?: string
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const repoKind = kind === 'folder' ? 'folder' : 'git'
-  if (repoKind === 'git') {
-    await awaitWindowsHostGitEnvironmentReady({ cwd: path })
-  }
   const gitInfo = repoKind === 'git' ? await inspectGitRepoForRegistrationAsync(path) : null
   if (gitInfo && !gitInfo.isRepo) {
     return { error: `Not a valid git repository: ${path}` }

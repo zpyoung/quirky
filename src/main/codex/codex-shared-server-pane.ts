@@ -7,7 +7,6 @@ import {
   type ProcessIdentityRow
 } from '../../shared/process-table-index'
 import { getProcessTableSnapshot } from '../../shared/process-table-snapshot-reader'
-import { readWindowsProcessTable } from '../windows/windows-process-table'
 import { fishArgsSkipConfig } from '../fish-xdg-data-dirs-handoff'
 import { getSystemCodexHomePath } from './codex-home-paths'
 import { getCodexPaneAccount } from './codex-pane-account-registry'
@@ -96,8 +95,7 @@ export async function findPaneCodexOnSharedServer(
   if (!codexHome) {
     return null
   }
-  const rows: readonly CommandRow[] =
-    process.platform === 'win32' ? await readWindowsProcessTable() : await getProcessTableSnapshot()
+  const rows: readonly CommandRow[] = await getProcessTableSnapshot()
   const codex = findPaneCodex(rows, rootPid)
   return codex &&
     codexCommandLineJoinsSharedServer(codex.command) &&

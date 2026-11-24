@@ -1,9 +1,7 @@
-import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
-import { buildPosixCommandPathLookupScript } from '../../shared/posix-command-path-lookup'
 import { getSystemCliInstallDirectories } from '../../shared/system-cli-install-dirs'
 import { runProcess } from '@orca/process-host'
 import {
@@ -12,12 +10,9 @@ import {
   listLocalCommandPaths
 } from './command-path-resolver'
 import { buildLocalPreflightEnv } from './preflight-local-env'
-import { runPreflightCommandInWsl } from './preflight-wsl-command'
-import type { WslPreflightTarget } from './preflight-wsl-agent-detection'
 
 const execFileAsync = promisify(execFile)
 export const PREFLIGHT_COMMAND_TIMEOUT_MS = 5000
-const WSL_COMMAND_PATH_SENTINEL = '__ORCA_PREFLIGHT_COMMAND_PATH__'
 
 export type PreflightCommandResult = { stdout: string; stderr: string }
 
@@ -93,20 +88,6 @@ export async function execLocalPreflightCommandOrThrow(
   })
 
   return withPreflightTimeout(command, commandPromise, timeoutMs)
-}
-
-// Throws on any failure — a distro that is booting/unreachable throws the
-// same way a command that genuinely doesn't exist does. Callers must not
-// collapse both into "absent"; see docs/reference/wsl-probe-failure-semantics.md.
-export async function execCommandInWslOrThrow(
-  target: WslPreflightTarget,
-  command: string
-): Promise<PreflightCommandResult> {
-  const commandPromise = runPreflightCommandInWsl(target, command, PREFLIGHT_COMMAND_TIMEOUT_MS)
-  // Label only (runPreflightCommandInWsl owns the actual wsl.exe invocation) —
-  // not the literal 'wsl.exe' so the wsl-invocation-boundary guard doesn't
-  // mistake this string for a spawn site.
-  return withPreflightTimeout('wsl command', commandPromise)
 }
 
 const PREFLIGHT_LOCAL_PROBE_LIMIT = 4
@@ -215,58 +196,11 @@ async function probeRunnableLocalCommand(command: string): Promise<LocalCommandP
   }
 }
 
-export async function isCommandAvailable(
-  command: string,
-  wslTarget?: WslPreflightTarget
-): Promise<boolean> {
-  if (!wslTarget) {
-    return (await findRunnableLocalCommand(command)).status === 'available'
-  }
-  try {
-    await execCommandInWslOrThrow(wslTarget, `${quotePosixShell(command)} --version`)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export async function isCommandOnPath(
-  command: string,
-  wslTarget?: WslPreflightTarget
-): Promise<boolean> {
-  if (!wslTarget) {
-    // Why (#9297): resolve against PATH with fs instead of spawning one
-    // where/which subprocess per probe — privilege-management software gates
-    // each spawn and stalls startup. buildLocalPreflightEnv() supplies the same
-    // registry-merged PATH the child process previously saw (undefined = posix
-    // process.env), so the found/not-found result is identical.
-    return isCommandOnLocalPath(command, { env: buildLocalPreflightEnv() })
-  }
-  try {
-    // Why: preflight must validate the executable on PATH, not a shell alias or function.
-    const { stdout } = await execCommandInWslOrThrow(
-      wslTarget,
-      [
-        // Same skip as agent detection: without it this branch answers "yes"
-        // for a Windows binary reached through interop, so preflight and the
-        // detector disagree about the same distro.
-        buildPosixCommandPathLookupScript(
-          { kind: 'literal', value: command },
-          { skipWindowsMountDirs: true }
-        ),
-        'if [ -n "$resolved" ]; then',
-        `printf '${WSL_COMMAND_PATH_SENTINEL}%s\\n' "$resolved"`,
-        'fi'
-      ].join('\n')
-    )
-    // Why: WSL startup chatter can contain unrelated absolute paths.
-    return stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith(WSL_COMMAND_PATH_SENTINEL))
-      .map((line) => line.slice(WSL_COMMAND_PATH_SENTINEL.length))
-      .some((line) => path.posix.isAbsolute(line))
-  } catch {
-    return false
-  }
+export async function isCommandOnPath(command: string): Promise<boolean> {
+  // Why (#9297): resolve against PATH with fs instead of spawning one
+  // where/which subprocess per probe — privilege-management software gates
+  // each spawn and stalls startup. buildLocalPreflightEnv() supplies the same
+  // registry-merged PATH the child process previously saw (undefined = posix
+  // process.env), so the found/not-found result is identical.
+  return isCommandOnLocalPath(command, { env: buildLocalPreflightEnv() })
 }

@@ -164,7 +164,7 @@ export function spawnManagedProviderProcess(
   const rootVerdict = (): DescendantTreeVerdict =>
     observed ? 'exited' : child.pid === undefined ? 'unverifiable' : 'live'
   const terminateTree = (): Promise<ProviderProcessTeardownVerdict> =>
-    terminateProviderProcessTree(child, { site: options.site, platform })
+    terminateProviderProcessTree(child, { site: options.site })
 
   return {
     child,

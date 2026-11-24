@@ -4,7 +4,6 @@ import {
 } from '../runtime/agent-status-observed-pane-identity'
 import { OPEN_CODE_WRITER_TOPOLOGY } from './server/cli-writer-observation'
 import { toAgentStatusIpcPayload } from './server/server-status-identity'
-import { buildRelayHookEnvelope } from '../../wsl-guest/agent-hook-envelope-build'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from './server'
 import { buildBody, PANE, postHookEvent } from './server.test-fixtures'
@@ -110,11 +109,7 @@ describe('OpenCode writer observation', () => {
       restoredUnconfirmed: snapshot.restoredUnconfirmed ? (true as const) : undefined,
       payload: { state: 'done' as const, prompt: '', agentType: 'opencode2' }
     }
-    for (const value of [
-      event,
-      toAgentStatusIpcPayload(event),
-      buildRelayHookEnvelope(event, 'opencode2')
-    ]) {
+    for (const value of [event, toAgentStatusIpcPayload(event)]) {
       expect(JSON.stringify(value)).not.toContain('pane-owned')
       expect(Object.getOwnPropertySymbols(structuredClone(value).providerSession ?? {})).toEqual([])
     }

@@ -21,7 +21,6 @@ const {
 }))
 
 vi.mock('node-pty', () => ({ spawn: spawnMock }))
-vi.mock('../pwsh', () => ({ isPwshAvailable: isPwshAvailableMock }))
 
 vi.mock('../providers/local-pty-utils', async (importOriginal) => {
   const actual = await importOriginal<typeof LocalPtyUtils>()
@@ -40,11 +39,6 @@ vi.mock('../providers/agent-foreground-process', () => ({
       ? value
       : { available: true, processName: value }
   }
-}))
-
-vi.mock('../providers/windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: () => new Set([12345]),
-  isWindowsPtyJobReadable: () => true
 }))
 
 import { createPtySubprocess } from './pty-subprocess'

@@ -11,7 +11,6 @@ import { ClaudeAccountService } from './claude-accounts/service'
 import { getInitialCodexRateLimitTarget } from './rate-limits/codex-rate-limit-target'
 import { getInitialClaudeRateLimitTarget } from './rate-limits/claude-rate-limit-target'
 import { getKimiRuntimeTarget, resolveKimiHome } from './kimi/kimi-runtime-home'
-import { isWslDistroRunningForBackgroundWork } from './wsl-background-distro-gate'
 import { readMiniMaxSessionCookie } from './minimax/minimax-cookie-store'
 import { readMiniMaxApiKey } from './minimax/minimax-api-key-store'
 import { readZcodePlanApiKey } from './zcode/zcode-plan-api-key-store'
@@ -47,13 +46,7 @@ export function createProviderAccountServices(
   )
   const claudeRuntimeAuth = new ClaudeRuntimeAuthService(store)
   const claudeAccounts = new ClaudeAccountService(store, rateLimits, claudeRuntimeAuth)
-  // Why: quota polls are background work and must not boot a stopped distro; user-driven
-  // resets call prepareForRateLimitFetch directly.
-  rateLimits.setCodexHomePathResolver(async (target) =>
-    target?.runtime === 'wsl' && !(await isWslDistroRunningForBackgroundWork(target.wslDistro))
-      ? { kind: 'skip' }
-      : codexRuntimeHome.prepareForRateLimitFetch(target)
-  )
+  rateLimits.setCodexHomePathResolver((target) => codexRuntimeHome.prepareForRateLimitFetch(target))
   rateLimits.setCodexFetchTarget(getInitialCodexRateLimitTarget(store.getSettings()))
   // Why: Kimi's CLI refreshes its OAuth token in whichever runtime it runs in, so the
   // usage fetch must read the WSL-side credentials when that's the configured runtime (#12370).

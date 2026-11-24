@@ -2,8 +2,6 @@ import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
 import { spawnWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { ptyIncarnationById } from '../provider/ownership-state'
 import { tryGetProviderForPty } from '../provider/registry'
-import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
-import { noteWslDistrosRunning } from '../../../wsl-background-distro-gate'
 import {
   agentSessionOwners,
   assertSpawnReplyWasLive,
@@ -214,13 +212,8 @@ export async function executeRuntimePtySpawn(ctx: RuntimePtySpawnState): Promise
         ctx.snapshotKittyFlagsCoverReconciledSeq = false
       }
     }
-    ensureWslHookRelayForReattach(ctx.result)
     const spawnedWslDistro =
       ctx.result.wslDistro === undefined ? ctx.expectedWslDistro : ctx.result.wslDistro
-    if (spawnedWslDistro && !args.connectionId) {
-      // A local WSL terminal is user-initiated, so background work held for this distro may run.
-      noteWslDistrosRunning([spawnedWslDistro])
-    }
     ctx.deps.runtime?.preparePtyExecutionContext?.(ctx.result.id, spawnedWslDistro)
   } catch (err) {
     throw failPtySpawnExecute(ctx, err, {

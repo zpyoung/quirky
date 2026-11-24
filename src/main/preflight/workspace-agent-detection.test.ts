@@ -19,7 +19,6 @@ import {
   resolveWorkspaceAgentDetectionHost,
   type WorkspaceAgentDetectionStore
 } from './workspace-agent-detection'
-import { _resetWslCachesForTests, _setWslCachesForTests } from '../wsl'
 
 const { detectInstalledMock, refreshMock } = vi.hoisted(() => ({
   detectInstalledMock: vi.fn(),
@@ -38,22 +37,6 @@ const originalPlatform = process.platform
 
 function repo(overrides: Partial<Repo> & Pick<Repo, 'id' | 'path'>): Repo {
   return { displayName: overrides.id, badgeColor: 'blue', addedAt: 1, ...overrides }
-}
-
-function project(
-  id: string,
-  repoIds: string[],
-  preference?: Project['localWindowsRuntimePreference']
-): Project {
-  return {
-    id,
-    displayName: id,
-    badgeColor: 'blue',
-    sourceRepoIds: repoIds,
-    createdAt: 1,
-    updatedAt: 1,
-    ...(preference ? { localWindowsRuntimePreference: preference } : {})
-  }
 }
 
 const GROUP: ProjectGroup = {
@@ -103,15 +86,6 @@ function store(args: {
   }
 }
 
-function wslContext(distro: string, projectId: string, reason: string) {
-  return {
-    projectRuntime: {
-      status: 'resolved',
-      runtime: expect.objectContaining({ kind: 'wsl', distro, projectId, reason })
-    }
-  }
-}
-
 // Stands in for the runtime, which reads the worktree's host and path from its own list.
 function resolveFor(s: WorkspaceAgentDetectionStore, workspaceId: string, hostId?: string) {
   const scope = parseWorkspaceKey(workspaceId)
@@ -139,7 +113,6 @@ describe('resolveWorkspaceAgentDetectionHost on a Windows host', () => {
   })
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: originalPlatform })
-    _resetWslCachesForTests()
   })
 
   it('keeps the host default for a workspace no repo row owns', () => {
@@ -173,51 +146,7 @@ describe('resolveWorkspaceAgentDetectionHost on a Windows host', () => {
     }
   })
 
-  it('probes inside the distro of a WSL-share workspace with no saved runtime', () => {
-    const s = store({ repos: [repo({ id: 'r1', path: WSL_REPO_PATH })] })
-    expect(resolveFor(s, `r1::${WSL_REPO_PATH}`)).toEqual({
-      kind: 'local',
-      context: wslContext('Ubuntu-24.04', 'r1', 'project-override')
-    })
-  })
-
   // A `\\wsl$` path proves its distro exists, and the cached list can be stale.
-  it("trusts a WSL-share workspace's distro over a stale cached list", () => {
-    _setWslCachesForTests({ available: true, distros: ['Debian'] })
-    const s = store({ repos: [repo({ id: 'r1', path: WSL_REPO_PATH })] })
-    expect(resolveFor(s, `r1::${WSL_REPO_PATH}`)).toEqual({
-      kind: 'local',
-      context: wslContext('Ubuntu-24.04', 'r1', 'project-override')
-    })
-  })
-
-  it('follows the global WSL default for a project that inherits it', () => {
-    const s = store({
-      repos: [repo({ id: 'r1', path: 'C:\\src\\r1' })],
-      projects: [project('p1', ['r1'])],
-      globalDefault: { kind: 'wsl', distro: 'Ubuntu' }
-    })
-    expect(resolveFor(s, 'r1::C:\\src\\r1')).toEqual({
-      kind: 'local',
-      context: wslContext('Ubuntu', 'p1', 'global-default')
-    })
-  })
-
-  it("lets the project's own runtime win over a WSL-share path", () => {
-    const s = store({
-      repos: [repo({ id: 'r1', path: WSL_REPO_PATH })],
-      projects: [project('p1', ['r1'], { kind: 'windows-host' })]
-    })
-    expect(resolveFor(s, `r1::${WSL_REPO_PATH}`)).toEqual({
-      kind: 'local',
-      context: {
-        projectRuntime: {
-          status: 'resolved',
-          runtime: expect.objectContaining({ kind: 'windows-host', reason: 'project-override' })
-        }
-      }
-    })
-  })
 
   it('routes an SSH workspace to its target, under either ownership spelling', () => {
     const s = store({
@@ -236,35 +165,7 @@ describe('resolveWorkspaceAgentDetectionHost on a Windows host', () => {
     })
   })
 
-  it('resolves a local folder workspace through its only repo', () => {
-    const s = store({
-      repos: [repo({ id: 'r1', path: WSL_REPO_PATH, projectGroupId: 'g1' })],
-      projectGroups: [GROUP],
-      folderWorkspaces: [FOLDER]
-    })
-    expect(resolveFor(s, folderWorkspaceKey('f1'))).toEqual({
-      kind: 'local',
-      context: wslContext('Ubuntu-24.04', 'r1', 'project-override')
-    })
-  })
   // The agent list reads the folder's own host, as main does; only launches also read its group's.
-  it("keeps a folder's repo runtime when only its group names another host", () => {
-    _setWslCachesForTests({ available: true, distros: ['Ubuntu'] })
-    const s = store({
-      repos: [
-        repo({ id: 'r1', path: 'C:\\src\\r1', executionHostId: 'local', projectGroupId: 'g1' })
-      ],
-      projects: [project('p1', ['r1'], { kind: 'wsl', distro: 'Ubuntu' })],
-      projectGroups: [{ ...GROUP, executionHostId: 'runtime:paired' }],
-      folderWorkspaces: [{ ...FOLDER, folderPath: 'C:\\work' }]
-    })
-    expect(resolveFor(s, folderWorkspaceKey('f1'))).toMatchObject({
-      kind: 'local',
-      context: {
-        projectRuntime: { status: 'resolved', runtime: { kind: 'wsl', distro: 'Ubuntu' } }
-      }
-    })
-  })
   it('refuses a folder whose candidate repos live on different SSH hosts', () => {
     const s = store({
       repos: [
@@ -317,37 +218,6 @@ describe('preflight.detectAgents resolves the workspace on the host', () => {
     } as unknown as OrcaRuntimeService
     return new RpcDispatcher({ runtime, methods: PREFLIGHT_METHODS })
   }
-
-  it('#19885: a paired client naming a WSL-hosted workspace gets the distro probe', async () => {
-    const dispatcher = dispatcherFor(store({ repos: [repo({ id: 'r1', path: WSL_REPO_PATH })] }))
-    const response = await dispatcher.dispatch({
-      id: '1',
-      authToken: 't',
-      method: 'preflight.detectAgents',
-      params: { worktreeId: `r1::${WSL_REPO_PATH}` }
-    })
-    expect(detectInstalledMock).toHaveBeenCalledWith(
-      wslContext('Ubuntu-24.04', 'r1', 'project-override')
-    )
-    expect(response).toMatchObject({ ok: true, result: ['claude', 'codex'] })
-  })
-
-  it('#18666: a project on the global WSL default is probed in that distro', async () => {
-    const dispatcher = dispatcherFor(
-      store({
-        repos: [repo({ id: 'r1', path: 'C:\\src\\r1' })],
-        projects: [project('p1', ['r1'])],
-        globalDefault: { kind: 'wsl', distro: 'Ubuntu' }
-      })
-    )
-    await dispatcher.dispatch({
-      id: '1',
-      authToken: 't',
-      method: 'preflight.refreshAgents',
-      params: { worktreeId: 'r1::C:\\src\\r1' }
-    })
-    expect(refreshMock).toHaveBeenCalledWith(wslContext('Ubuntu', 'p1', 'global-default'))
-  })
 
   it('#13752: a paired client naming a workspace another runtime owns gets a refusal', async () => {
     const dispatcher = dispatcherFor(

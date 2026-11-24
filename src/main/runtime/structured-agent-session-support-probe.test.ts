@@ -5,15 +5,6 @@ import {
   setStructuredAgentSessionHost
 } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 
-const { isWindowsProcessStartTimeAvailable } = vi.hoisted(() => ({
-  isWindowsProcessStartTimeAvailable: vi.fn(() => true)
-}))
-
-vi.mock('../windows/windows-process-table', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  isWindowsProcessStartTimeAvailable
-}))
-
 const originalPlatform = process.platform
 
 function setPlatform(platform: NodeJS.Platform): void {
@@ -96,8 +87,6 @@ async function expectSupportWithoutInstall(input: {
 describe('structured agent-session create-support probe', () => {
   afterEach(() => {
     setPlatform(originalPlatform)
-    isWindowsProcessStartTimeAvailable.mockReset()
-    isWindowsProcessStartTimeAvailable.mockReturnValue(true)
     setStructuredAgentSessionHost(null)
     vi.restoreAllMocks()
   })
@@ -110,25 +99,6 @@ describe('structured agent-session create-support probe', () => {
         location: { executionHostId: 'local', wslDistro: null },
         expected: { supported: true },
         repetitions: 3
-      })
-    }
-  )
-
-  it.each([
-    ['codex', true],
-    ['codex', false],
-    ['claude', true],
-    ['claude', false]
-  ] as const)(
-    'answers native Windows %s support whether or not process creation times are readable (%s)',
-    async (agent, creationTimesReadable) => {
-      setPlatform('win32')
-      isWindowsProcessStartTimeAvailable.mockReturnValue(creationTimesReadable)
-
-      await expectSupportWithoutInstall({
-        agent,
-        location: { executionHostId: 'local', wslDistro: null },
-        expected: { supported: true }
       })
     }
   )

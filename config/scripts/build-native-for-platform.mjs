@@ -1,18 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { resolvePnpmCliInvocation } from './pnpm-cli-invocation.mjs'
-
-if (process.platform === 'win32') {
-  runNodeScript('config/scripts/build-windows-cli-launcher.mjs')
-  runNodeScript('config/scripts/build-windows-agent-hook.mjs')
-  process.exit(0)
-}
-
-if (process.platform === 'linux') {
-  runNodeScript('config/scripts/build-wayland-clipboard.mjs')
-  process.exit(0)
-}
 
 if (process.platform !== 'darwin') {
   console.log(`[native-build] no macOS native computer build required on ${process.platform}`)
@@ -197,14 +186,4 @@ function pipePrefixed(stream, label, target) {
       target.write(`[${label}] ${buffer}\n`)
     }
   })
-}
-
-function runNodeScript(scriptPath) {
-  const result = spawnSync(process.execPath, [scriptPath], { stdio: 'inherit' })
-  if (result.signal) {
-    process.kill(process.pid, result.signal)
-  }
-  if (result.status !== 0 || result.error) {
-    process.exit(result.status ?? 1)
-  }
 }

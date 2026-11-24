@@ -21,12 +21,6 @@ import {
   type AgentForegroundProcessResolution,
   type AgentForegroundResolutionOptions
 } from '../../providers/agent-foreground-process'
-import { readWindowsPtyJobProcessIds } from '../../providers/windows-pty-job-membership'
-import { ptyShellProcessId } from '../../windows/windows-pty-job'
-import {
-  readWindowsProcessIdentityTable,
-  readWindowsProcessIdentityTableFresh
-} from '../../windows/windows-process-table'
 
 export function ptyProcessNameIsSpawnFile(proc: IPty): boolean {
   return 'processNameIsSpawnFile' in proc && proc.processNameIsSpawnFile === true
@@ -36,7 +30,7 @@ export function createPtyForegroundResolver(
   proc: IPty
 ): typeof resolveAgentForegroundProcessWithAvailability {
   return ptyProcessNameIsSpawnFile(proc)
-    ? (_pid, fallback, options) => resolveSpawnFileForegroundProcess(proc, fallback, options)
+    ? (_pid, _fallback, options) => resolveSpawnFileForegroundProcess(proc, options)
     : resolveAgentForegroundProcessWithAvailability
 }
 
@@ -80,45 +74,13 @@ export function resolveSpawnFileForegroundFromRows(
 
 export async function resolveSpawnFileForegroundProcess(
   proc: IPty,
-  fallbackProcess: string | null,
   options: AgentForegroundResolutionOptions = {}
 ): Promise<AgentForegroundProcessResolution> {
   try {
-    if (process.platform !== 'win32') {
-      const rows = options.fresh
-        ? await getFreshProcessTableSnapshot()
-        : await getProcessTableSnapshot()
-      return resolveSpawnFileForegroundFromRows(rows, proc.pid)
-    }
-    const resolution = await resolveAgentForegroundProcessWithAvailability(
-      proc.pid,
-      fallbackProcess,
-      options
-    )
-    if (!resolution.available || recognizeAgentProcess(resolution.processName)) {
-      return resolution
-    }
-    const members = readWindowsPtyJobProcessIds(proc)
-    const shellPid = ptyShellProcessId(proc)
-    if (!members || shellPid === undefined) {
-      return { available: false, processName: null }
-    }
-    if (members.size === 1) {
-      return { available: true, processName: fallbackProcess }
-    }
     const rows = options.fresh
-      ? await readWindowsProcessIdentityTableFresh()
-      : await readWindowsProcessIdentityTable()
-    const candidate = collectDescendantsFromIndex(getProcessTableIndex(rows), shellPid)
-      .filter((row) => members.has(row.pid))
-      .sort((left, right) => right.depth - left.depth)[0]
-    // Only the agent resolver can grant an identity after ambiguity and console checks.
-    if (candidate && recognizeAgentProcess(candidate.name)) {
-      return resolution
-    }
-    return candidate
-      ? { available: true, processName: candidate.name, processId: candidate.pid }
-      : { available: false, processName: null }
+      ? await getFreshProcessTableSnapshot()
+      : await getProcessTableSnapshot()
+    return resolveSpawnFileForegroundFromRows(rows, proc.pid)
   } catch {
     return { available: false, processName: null }
   }

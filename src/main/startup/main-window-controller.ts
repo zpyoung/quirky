@@ -6,12 +6,6 @@ import {
 } from '../crash-reporting/crash-breadcrumb-store'
 import { recordDurableCrashBreadcrumb } from '../crash-reporting/durable-crash-breadcrumb'
 import { shouldRecoverRendererAfterProcessGone } from '../crash-reporting/process-gone-classification'
-import { ensureWindowsUserDataAclGrant } from './windows-user-data-acl'
-import { probeWindowsInstallDirAcl } from './windows-install-dir-acl-probe'
-import {
-  noteWindowsInstallDirAclProbePending,
-  startWindowsInstallDirAclRepairIfPoisoned
-} from './windows-install-dir-acl-recovery'
 import { logStartupMilestone } from './startup-diagnostics'
 import { notifyMainWindowBecameVisible } from '../window/main-window-visibility'
 import { setTrayAttention } from '../tray/system-tray'
@@ -58,34 +52,6 @@ export function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}
     claudeRuntimeAuth: state.claudeRuntimeAuth,
     keybindings: state.keybindings
   })
-  if (process.platform === 'win32') {
-    logStartupMilestone('acl-grant-start')
-    ensureWindowsUserDataAclGrant(app.getPath('userData'), {
-      onDone: (result) => {
-        logStartupMilestone('acl-grant-done', { mode: result.mode })
-        if (result.mode === 'failed') {
-          console.warn('[win32-acl] userData ACL grant failed:', result.reason)
-        }
-      }
-    })
-    // Why here: read-only, and the install DACL is the one thing a 0x80000003
-    // child death cannot tell us about itself. See electron/electron#51761.
-    const probeDispatched = probeWindowsInstallDirAcl({
-      isServeMode: state.isServeMode,
-      onDone: (data) =>
-        startWindowsInstallDirAclRepairIfPoisoned(data, {
-          isServeMode: state.isServeMode,
-          userDataPath: app.getPath('userData'),
-          appVersion: app.getVersion()
-        })
-    })
-    // Why gated on the dispatch: the probe is once-per-process while openMainWindow
-    // re-runs on every reopen, so arming this again would wait on a verdict that
-    // already landed — and drop every GPU crash for the grace window.
-    if (probeDispatched) {
-      noteWindowsInstallDirAclProbePending()
-    }
-  }
   const window = createMainWindow(store, {
     getIsQuitting: () => state.isQuitting,
     onQuitAborted: () => {

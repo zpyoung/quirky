@@ -1,8 +1,6 @@
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import { AgentHookServer, _internals } from './server'
 import { createRuntimeAutomationRunTerminalObserver } from '../automations/runtime-terminal-run-observer'
 import {
@@ -33,51 +31,26 @@ beforeEach(() => {
 })
 afterEach(() => vi.useRealTimers())
 
-async function host(remote: boolean, launchToken?: string) {
+async function host(launchToken?: string) {
   const desktop = new AgentHookServer()
-  const dir = mkdtempSync(join(tmpdir(), 'orca-task-wakeup-'))
-  const relay = remote
-    ? new RelayAgentHookServer({
-        endpointDir: dir,
-        forward: (envelope) => desktop.ingestRemote(envelope, 'ssh-owner')
-      })
-    : null
-  const unsubscribeInterrupt = relay
-    ? desktop.subscribeRemoteInterruptRequests(({ request }) => relay.inferInterrupt(request))
-    : null
   await desktop.start({ env: 'production' })
-  await relay?.start({ publishEndpoint: false })
   const post = async (payload: Record<string, unknown>) => {
     const body = buildBody({ session_id: SESSION, ...payload }, { launchToken })
-    const response = relay
-      ? await fetch(`http://127.0.0.1:${relay.getCoordinates().port}/hook/claude`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            // Advancing fake time can expire a pooled HTTP socket before the next post.
-            Connection: 'close',
-            'X-Orca-Agent-Hook-Token': relay.getCoordinates().token
-          },
-          body: JSON.stringify(body)
-        })
-      : await postHookEvent(desktop, body)
+    const response = await postHookEvent(desktop, body)
     expect(response.status).toBe(204)
   }
   const row = () => desktop.getStatusSnapshotForPane(PANE)[0]
   const stop = () => {
-    unsubscribeInterrupt?.()
-    relay?.stop()
     desktop.stop()
-    rmSync(dir, { recursive: true, force: true })
   }
   return { desktop, post, row, stop }
 }
 
-describe.each([false, true])('Claude wake-up production ingress remote=%s', (remote) => {
+describe('Claude wake-up production ingress', () => {
   it.each(['Agent', 'Bash', 'Monitor'])(
     'rejects a blank %s launch without phantom debt',
     async (tool) => {
-      const server = await host(remote)
+      const server = await host()
       try {
         await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'launch' })
         await server.post({
@@ -105,7 +78,7 @@ describe.each([false, true])('Claude wake-up production ingress remote=%s', (rem
   it.each(['Agent', 'Bash', 'Monitor'])(
     'matches a padded %s launch to its canonical wake-up',
     async (tool) => {
-      const server = await host(remote)
+      const server = await host()
       try {
         await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'launch' })
         await server.post({
@@ -151,7 +124,7 @@ describe.each([false, true])('Claude wake-up production ingress remote=%s', (rem
     'subagent-with-own-shell',
     'two-shells-together'
   ])('%s never exposes completion before the final captured wake-up', async (scenario) => {
-    const server = await host(remote)
+    const server = await host()
     const records = hooks.filter((record) => record.scenario === scenario && record.payload)
     const finalWakeup = records.findLastIndex(
       (record) =>
@@ -170,17 +143,14 @@ describe.each([false, true])('Claude wake-up production ingress remote=%s', (rem
       }
       // Every status subscriber must avoid a false whole-pane completion.
       expect(prematureCompletion).toEqual([])
-      expect(server.row()).toMatchObject({
-        state: 'done',
-        connectionId: remote ? 'ssh-owner' : null
-      })
+      expect(server.row()).toMatchObject({ state: 'done', connectionId: null })
     } finally {
       server.stop()
     }
   })
 
   it('does not reopen notification debt for a duplicate child-end post', async () => {
-    const server = await host(remote)
+    const server = await host()
     try {
       await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'delegate' })
       await server.post({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
@@ -213,7 +183,7 @@ describe.each([false, true])('Claude wake-up production ingress remote=%s', (rem
       shouldAdvanceTime: true,
       toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout']
     })
-    const server = await host(remote)
+    const server = await host()
     try {
       await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'delegate then finish' })
       await server.post({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
@@ -243,7 +213,7 @@ describe.each([false, true])('Claude wake-up production ingress remote=%s', (rem
   })
 })
 
-describe.each([false, true])('Claude cancellation with an owed wake-up remote=%s', (remote) => {
+describe('Claude cancellation with an owed wake-up', () => {
   it.each([false, true])(
     'keeps cancellation bounded unless a new prompt opens a turn: %s',
     async (newTurn) => {
@@ -251,7 +221,7 @@ describe.each([false, true])('Claude cancellation with an owed wake-up remote=%s
         shouldAdvanceTime: true,
         toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout']
       })
-      const server = await host(remote)
+      const server = await host()
       try {
         await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'delegate' })
         await server.post({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
@@ -304,7 +274,7 @@ describe.each([false, true])('Claude cancellation with an owed wake-up remote=%s
   )
 })
 
-describe.each([false, true])('real automation Claude wake-up oracle remote=%s', (remote) => {
+describe('real automation Claude wake-up oracle', () => {
   it.each([
     'stop',
     'missing-notification',
@@ -318,7 +288,7 @@ describe.each([false, true])('real automation Claude wake-up oracle remote=%s', 
   ])(
     'waits on captured ready bytes through task finishing or missing wake-up expiry: %s',
     async (ending) => {
-      const server = await host(remote, 'transcript-launch')
+      const server = await host('transcript-launch')
       const controller = new AbortController()
       const ready = readFileSync(
         join(import.meta.dirname, '../runtime/__fixtures__/claude-ready-task-wakeup.txt'),
@@ -329,8 +299,7 @@ describe.each([false, true])('real automation Claude wake-up oracle remote=%s', 
           paneTitle: 'Terminal',
           foregroundProcess: 'claude',
           data: '',
-          launchAgent: 'claude',
-          ...(remote ? { connectionId: 'ssh-owner' } : {})
+          launchAgent: 'claude'
         },
         { getAgentStatusSnapshot: () => server.desktop.getStatusSnapshot() }
       )
@@ -479,7 +448,7 @@ describe('Claude finishing turn permission restoration', () => {
   it.each(['lead', 'child'])(
     'retains the cycle through a %s question and clears it on Stop or a fresh prompt',
     async (owner) => {
-      const server = await host(false)
+      const server = await host()
       try {
         await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'delegate' })
         await server.post({ hook_event_name: 'SubagentStart', agent_id: 'a1' })
@@ -533,7 +502,7 @@ describe('Claude finishing turn permission restoration', () => {
   )
 
   it('pairs a sticky child permission with the current lead cycle instead of retaining a stale phase', async () => {
-    const server = await host(false)
+    const server = await host()
     try {
       await server.post({ hook_event_name: 'UserPromptSubmit', prompt: 'delegate' })
       await server.post({ hook_event_name: 'SubagentStart', agent_id: 'a1' })

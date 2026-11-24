@@ -42,9 +42,9 @@ type CodexAccountRegistrationDependencies = {
 export class CodexAccountRegistration {
   constructor(private readonly dependencies: CodexAccountRegistrationDependencies) {}
 
-  async add(target?: CodexAccountAddTarget): Promise<CodexRateLimitAccountsState> {
+  async add(_target?: CodexAccountAddTarget): Promise<CodexRateLimitAccountsState> {
     const accountId = randomUUID()
-    const managedHome = await this.dependencies.managedHomes.create(accountId, target)
+    const managedHome = this.dependencies.managedHomes.create(accountId)
     const { managedHomePath } = managedHome
     try {
       this.prepareManagedHomeForLogin(managedHomePath, accountId)
@@ -58,10 +58,10 @@ export class CodexAccountRegistration {
 
   async addFromHome(
     sourceHome: string,
-    target?: CodexAccountAddTarget
+    _target?: CodexAccountAddTarget
   ): Promise<CodexRateLimitAccountsState> {
     const accountId = randomUUID()
-    const managedHome = await this.dependencies.managedHomes.create(accountId, target)
+    const managedHome = this.dependencies.managedHomes.create(accountId)
     const { managedHomePath } = managedHome
     try {
       this.prepareManagedHomeForLogin(managedHomePath, accountId)

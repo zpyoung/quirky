@@ -3,7 +3,6 @@ import { lstat } from 'node:fs/promises'
 import type { SshMutationExpectation } from '../../../shared/ssh-types'
 import { assertSshMutationExpectation } from '../../ssh/connection/ssh-connection-generation'
 import { SshHostNotServedError } from '../../providers/ssh-host-not-served-error'
-import { tryDeleteWslUncPath } from '../../wsl-unc-delete'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
 import {
   resolveDesktopAuthorizedPath,
@@ -83,10 +82,6 @@ export function registerFilesystemWriteHandlers(context: FilesystemHandlerContex
       const targetPath = await resolveDesktopAuthorizedPath(args.targetPath, store, {
         preserveSymlink: true
       })
-      // Why: WSL UNC targets have no Recycle Bin (shell.trashItem throws), so hard-delete via `rm` inside the distro (issue #6415).
-      if (await tryDeleteWslUncPath(targetPath, { recursive: args.recursive })) {
-        return
-      }
       // Why: swallow ENOENT so an external delete racing this UI delete stays idempotent (design §7.1).
       try {
         await shell.trashItem(targetPath)

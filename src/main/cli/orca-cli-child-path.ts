@@ -16,8 +16,6 @@
 import { delimiter, dirname, join } from 'node:path'
 import { getAppEnvironment, hasAppEnvironment } from '../../shared/app-environment'
 import { readInheritedPath } from '../ipc/pty/host-env/path'
-import { resolvePathEnvKey } from '../pty/windows-environment-path'
-import { ensureLinuxTerminalOrcaCliShimDir } from './linux-terminal-orca-cli-shim'
 import { getBundledLauncherPath } from './bundled-cli-launcher-path'
 import { DEV_COMMAND_NAME } from './cli-install-constants'
 
@@ -50,7 +48,7 @@ export function prependOrcaCliDirToChildPath(
     const inheritedEntries = readInheritedPath(env, platform)
       .split(pathDelimiter)
       .filter((entry) => entry.length > 0 && entry !== binDir)
-    env[resolvePathEnvKey(env, platform)] = [binDir, ...inheritedEntries].join(pathDelimiter)
+    env.PATH = [binDir, ...inheritedEntries].join(pathDelimiter)
     if (platform !== 'win32') {
       env.ORCA_CLI_BIN_DIR = binDir
     }
@@ -66,21 +64,8 @@ export function prependOrcaCliDirToChildPath(
     }
     const inheritedPath = readInheritedPath(env, platform)
     // Why: an empty PATH segment resolves as `.` in some shells (commands run from cwd); avoid a trailing delimiter.
-    env[resolvePathEnvKey(env, platform)] = inheritedPath
-      ? `${devCliBin}${pathDelimiter}${inheritedPath}`
-      : devCliBin
+    env.PATH = inheritedPath ? `${devCliBin}${pathDelimiter}${inheritedPath}` : devCliBin
     return join(devCliBin, platform === 'win32' ? `${DEV_COMMAND_NAME}.cmd` : DEV_COMMAND_NAME)
-  } else if (platform === 'linux') {
-    // Why: bare-`orca` shim scoped to Orca PTYs — Linux CLI installs as `orca-ide` to avoid shadowing GNOME's /usr/bin/orca screen reader (stablyai/orca#7904).
-    const shimDir = ensureLinuxTerminalOrcaCliShimDir({ userDataPath: opts.userDataPath })
-    if (shimDir) {
-      env.ORCA_CLI_BIN_DIR = shimDir
-      const inheritedEntries = readInheritedPath(env, platform)
-        .split(pathDelimiter)
-        .filter((entry) => entry.length > 0 && entry !== shimDir)
-      env.PATH = [shimDir, ...inheritedEntries].join(pathDelimiter)
-      return join(shimDir, 'orca')
-    }
   } else if (opts.resourcesPath && (platform === 'darwin' || platform === 'win32')) {
     // Why: global CLI registration is optional, but agents in Orca-managed PTYs must always reach this app's bundled CLI.
     const bundledCliBin = join(opts.resourcesPath, 'bin')
@@ -88,9 +73,7 @@ export function prependOrcaCliDirToChildPath(
       env.ORCA_CLI_BIN_DIR = bundledCliBin
     }
     const inheritedPath = readInheritedPath(env, platform)
-    env[resolvePathEnvKey(env, platform)] = inheritedPath
-      ? `${bundledCliBin}${pathDelimiter}${inheritedPath}`
-      : bundledCliBin
+    env.PATH = inheritedPath ? `${bundledCliBin}${pathDelimiter}${inheritedPath}` : bundledCliBin
     // Why the native launcher on Windows: `orca.cmd` refuses message bodies cmd.exe would mangle.
     return getBundledLauncherPath(platform, opts.resourcesPath)
   }

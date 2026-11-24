@@ -7,7 +7,6 @@ import { getRepoKindLabel, isFolderRepo } from '../../../../shared/repo-kind'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { Label } from '../ui/label'
 import { Separator } from '../ui/separator'
-import { useShallow } from 'zustand/react/shallow'
 import { RepositoryHooksSection } from './RepositoryHooksSection'
 import { McpConfigSection } from './McpConfigSection'
 import { WorktreeSymlinksSection } from './WorktreeSymlinksSection'
@@ -26,12 +25,10 @@ import { RepoSettingsDraftInput } from './RepositorySettingsDraftInput'
 import { RepositoryForkSyncSection } from './RepositoryForkSyncSection'
 import { RepositoryGitHubAccountSection } from './RepositoryGitHubAccountSection'
 import { translate } from '@/i18n/i18n'
-import { RepositoryWindowsRuntimeSection } from './RepositoryWindowsRuntimeSection'
 import { matchesRepositoryIdentitySearch } from './repository-identity-search'
 import { RepositoryWorktreeDefaultsSection } from './RepositoryWorktreeDefaultsSection'
 import { RepositoryJiraProjectSection } from './RepositoryJiraProjectSection'
 import { RepositoryLedgerSection } from './RepositoryLedgerSection'
-import { getProjectRuntimeSessionSummary } from './repository-runtime-session-summary'
 import { getRepoOwnerWorktreeVisibilityDefaults } from '../../store/worktree-visibility-defaults-by-host'
 export { getRepositoryPaneSearchEntries }
 export { matchesRepositoryIdentitySearch } from './repository-identity-search'
@@ -44,8 +41,6 @@ type RepositoryPaneRepoUpdate = Omit<
   externalWorktreeVisibility?: Repo['externalWorktreeVisibility'] | null
   ghAccount?: GhAccountBinding | null
 }
-
-const EMPTY_WSL_DISTROS: string[] = []
 
 type RepositoryPaneProps = {
   repo: Repo
@@ -82,16 +77,11 @@ export function RepositoryPane({
   mayNeedUpdate,
   updateRepo,
   removeProject,
-  project = null,
   selectedProjectSetupId,
   settingsSelectionKey,
   settingsEntryRepoIds,
   removalScope = 'project',
-  isLocalWindowsProject = false,
-  wslAvailable = false,
-  wslDistros = EMPTY_WSL_DISTROS,
-  wslCapabilitiesLoading = false,
-  updateProject
+  isLocalWindowsProject = false
 }: RepositoryPaneProps): React.JSX.Element {
   const isFolder = isFolderRepo(repo)
   // Why: this pane renders the switcher-selected host's repo row. Bind every
@@ -120,9 +110,6 @@ export function RepositoryPane({
       }
     : null
   const fetchWorktrees = useAppStore((state) => state.fetchWorktrees)
-  const runtimeSessionSummary = useAppStore(
-    useShallow((state) => getProjectRuntimeSessionSummary(state, repo.id))
-  )
   const [copiedTemplate, setCopiedTemplate] = useState(false)
   const copiedTemplateResetTimerRef = useRef<number | null>(null)
   // Why: clipboard IPC can resolve after settings navigation; avoid starting
@@ -207,7 +194,6 @@ export function RepositoryPane({
   const symlinkEntries = allEntries.filter((entry) => entry.title === 'Worktree Shared Paths')
   const sourceControlAiEntries = allEntries.filter((entry) => entry.title === 'Git AI Author')
   const hostSetupEntries = allEntries.filter((entry) => entry.title === 'Available Hosts')
-  const projectRuntimeEntries = allEntries.filter((entry) => entry.title === 'Project Runtime')
   const ledgerStalenessEntries = allEntries.filter((entry) => entry.title === 'Ledger Staleness')
 
   const hooksSection =
@@ -326,21 +312,6 @@ export function RepositoryPane({
               forceVisible={forceFullPaneForRepoMatch}
               searchQuery={searchQuery}
               searchEntries={hostSetupEntries}
-            />
-
-            <RepositoryWindowsRuntimeSection
-              repoDisplayName={repo.displayName}
-              project={project}
-              settings={settings}
-              isLocalWindowsProject={isLocalWindowsProject}
-              wslAvailable={wslAvailable}
-              wslDistros={wslDistros}
-              wslCapabilitiesLoading={wslCapabilitiesLoading}
-              runtimeSessionSummary={runtimeSessionSummary}
-              updateProject={updateProject}
-              forceVisible={forceFullPaneForRepoMatch}
-              searchQuery={searchQuery}
-              searchEntries={projectRuntimeEntries}
             />
 
             <RepositoryForkSyncSection

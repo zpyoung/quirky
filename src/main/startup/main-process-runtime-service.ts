@@ -27,7 +27,6 @@ import { getPreferredPairedRuntimeConnection } from '../../shared/runtime-enviro
 import { fingerprintOrchestrationPeer } from '../runtime/orchestration/environment-transport'
 import { callRuntimeEnvironment } from '../ipc/runtime-environments/runtime-environment-transport-routing'
 import { mainProcessState as state } from './main-process-state'
-import { installWslOrcadAccountShim } from './wsl-orcad-account-env-wiring'
 import { forwardRuntimeAskEventsToRenderer } from '../fork-ask-question-tool/ask-ipc-forward'
 import { startHeimdall } from '../fork-heimdall/registration'
 import { wireHeimdallFleetWindows } from '../fork-heimdall/fleet-ipc-forward'
@@ -190,7 +189,6 @@ export function configureRuntimeServices(runtime: OrcaRuntimeService): void {
     throw new Error('Account services must be initialized before runtime wiring')
   }
   runtime.setAccountServices({ claudeAccounts, codexAccounts, rateLimits })
-  installWslOrcadAccountShim(store)
   runtime.setCommitMessageAgentEnvironmentResolvers({
     // Why: Codex hooks/auth live in Orca's managed runtime home even for the default path, so every launch must resolve CODEX_HOME via runtime-home.
     prepareForCodexLaunch: prepareCodexRuntimeHomeForLaunch,

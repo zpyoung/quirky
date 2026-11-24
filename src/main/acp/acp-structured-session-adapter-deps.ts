@@ -62,5 +62,4 @@ export type AcpStructuredSessionAdapterDeps = {
   stopGraceMs?: number
   /** Bounds a pick's wait for the agent's answer; past it the pick fails. */
   optionWriteTimeoutMs?: number
-  isWindowsProcessStartTimeAvailable?: () => boolean
 }

@@ -48,7 +48,6 @@ function spawn(): MockSubprocess {
     resize: vi.fn(),
     kill: () => exited?.(0),
     forceKill: () => exited?.(137),
-    terminateOwnedTree: () => 'unavailable',
     signal: vi.fn(),
     onData: vi.fn(),
     onExit: (callback) => {

@@ -1,4 +1,10 @@
 {
+  "accounts": {
+    "wslAccountNotApplied": {
+      "description": "Agents there use the distro's default Claude and Codex accounts until Orca in WSL is updated.",
+      "title": "Account selection not applied in {{distro}}"
+    }
+  },
   "agentsSidebarIntro": {
     "migrated": {
       "action": "Open Agents"
@@ -642,6 +648,22 @@
           "a4f8c2d91e": "Hide from sidebar",
           "b7e3d1c84a": "Show in sidebar"
         },
+        "WindowsFirewallNotice": {
+          "allow": "Allow phone connections",
+          "blocked-description": "An existing inbound Block rule can override the pairing exception. Repair removes conflicting TCP rules for this Orca app, then allows port {{port}} on Private networks.",
+          "blocked-title": "Windows may be blocking Orca Mobile",
+          "missing-description": "Windows may block the pairing server. Add a rule for this Orca app and TCP port {{port}} on Private networks.",
+          "missing-title": "Allow phone connections through Windows Firewall",
+          "open-settings": "Open network settings",
+          "public-description": "Change this trusted Wi-Fi network to Private before allowing Orca Mobile connections.",
+          "public-title": "Windows marks this network as public",
+          "relay-note": "Pairing still works over Orca Relay — allowing this only adds the faster local connection.",
+          "repair": "Repair firewall access",
+          "repair-failed": "Could not update the Windows Firewall rules",
+          "repair-success": "Windows Firewall now allows Orca Mobile on private networks",
+          "repair-unverified": "Windows Firewall access could not be verified",
+          "waiting": "Waiting for Windows…"
+        },
         "mobile": {
           "platform": {
             "copy": {
@@ -686,6 +708,32 @@
         },
         "ThemeStep": {
           "ad19e5c916": "Importing…"
+        },
+        "WindowsTerminalStep": {
+          "commandPrompt": "Command Prompt",
+          "commandPromptDescription": "Opens new terminal panes with classic cmd.exe behavior.",
+          "defaultShell": "Default Shell",
+          "defaultShellDescription": "Choose the shell Orca opens for new Windows terminal panes.",
+          "gitBash": "Git Bash",
+          "gitBashDescription": "Uses Git for Windows bash.exe for Unix-style shell workflows.",
+          "gitBashUnavailable": "Selected, but Git Bash was not detected on this machine.",
+          "loading": "Loading terminal settings...",
+          "loadingDistros": "Loading distributions",
+          "powerShell": "PowerShell",
+          "powerShellInbox": "Uses the Windows PowerShell available on every supported Windows install.",
+          "powerShellPwsh": "Uses PowerShell 7+ when available, with Windows PowerShell as fallback.",
+          "rightClickBehavior": "Right-click behavior",
+          "rightClickBehaviorDescription": "Pick the terminal mouse behavior that matches your Windows muscle memory.",
+          "rightClickMenu": "Open context menu",
+          "rightClickMenuDescription": "Right-click opens the terminal menu. Paste from the menu or keyboard.",
+          "rightClickPaste": "Paste on right-click",
+          "rightClickPasteDescription": "Right-click pastes the clipboard. Ctrl+right-click opens the context menu.",
+          "windowsDefault": "Windows default",
+          "wsl": "WSL",
+          "wslDescription": "Starts new terminal panes inside your Windows Subsystem for Linux default.",
+          "wslDistribution": "WSL Distribution",
+          "wslDistributionDescription": "Use the Windows default distribution or choose a specific installed distro.",
+          "wslUnavailable": "Selected, but WSL was not detected on this machine."
         },
         "mac": {
           "notification": {
@@ -1189,9 +1237,15 @@
         "CliSkillRuntimeSetup": {
           "04325573f8": "WSL",
           "0c9f3cf9da": "Choose where Orca checks and installs global agent skills.",
+          "0ed08febc5": "Failed to register the WSL shell command.",
+          "3728a94fb6": "WSL shell command needs attention",
+          "775a4cfbb8": "WSL shell command registration is unavailable",
           "7c776ff9d8": "wsl",
           "a58ba464ad": "Skill location",
-          "f00d6aa9b5": "WSL is not available on this machine."
+          "f00d6aa9b5": "WSL is not available on this machine.",
+          "fc0fcf72fd": "Register the WSL shell command before skill setup.",
+          "refreshCliRegistration": "Refresh CLI registration status and try again.",
+          "windowsPathUnknown": "WSL shell command PATH could not be checked"
         },
         "CloudVmSetupGuide": {
           "createWorkspace": "Create a workspace and select that recipe under Run on.",
@@ -1209,6 +1263,16 @@
           "4b65070096": "darwin",
           "4d03dec2d0": "Read app interface trees and perform requested actions.",
           "6b5a2cd3a5": "Accessibility"
+        },
+        "DefaultWindowsProjectRuntimeSetting": {
+          "defaultRuntime": "Default project runtime",
+          "distroRequired": "Choose a WSL distro before projects can inherit WSL.",
+          "selectDistro": "Select distro",
+          "windows": "Windows",
+          "windowsDescription": "Projects inherit Windows unless a project overrides it.",
+          "wsl": "WSL",
+          "wslDescription": "Projects inherit {{value0}} via WSL unless a project overrides it.",
+          "wslUnavailable": "WSL is not available. Projects that inherit WSL will need repair."
         },
         "EphemeralVmRuntimesSection": {
           "cleaned": "Cleaned up temporary VM runtime.",
@@ -1234,6 +1298,10 @@
           "newWorktreeCardStyle": {
             "copy": "Preview updated worktree-card layout, metadata placement, card-display menu options, and status presentation."
           }
+        },
+        "GeneralPane": {
+          "projectRuntime": "Project Runtime",
+          "projectRuntimeDescription": "Default runtime for local Windows projects that do not override it."
         },
         "GeneralRemoteServerUpdates": {
           "reviewUpdateOne": "1 update available",
@@ -1416,10 +1484,25 @@
         "ProjectWindowsRuntimeSetting": {
           "activeTaskPlural": "{{count}} active tasks",
           "activeTaskSingular": "{{count}} active task",
+          "applyRuntimeChange": "Apply runtime change",
+          "cancel": "Cancel",
+          "defaultRuntime": "Default ({{value0}})",
           "distroMissing": "{{value0}} is not installed in WSL. Choose an installed distro or switch this project to Windows.",
           "distroRequired": "Choose a WSL distro or switch this project to Windows.",
+          "inheritedWindows": "No project override. General settings select Windows.",
+          "inheritedWsl": "No project override. General settings select {{value0}} via WSL.",
           "liveTerminalPlural": "{{count}} live terminals",
           "liveTerminalSingular": "{{count}} live terminal",
+          "pendingRuntimeChange": "Runtime change pending. New project work will use the selected runtime after you apply.",
+          "projectRuntime": "Project runtime",
+          "projectWindows": "This project runs on Windows.",
+          "projectWsl": "This project runs in {{value0}} via WSL.",
+          "runtimeChangeHelp": "Runtime changes apply to new terminals, agent checks, and skill discovery for this project. Existing terminals keep their current runtime.",
+          "runtimeSessionJoin": "{{value0}} and {{value1}}",
+          "runtimeSessionWarning": "{{value0}} will keep running in the current runtime. Let tasks finish or restart terminals before continuing.",
+          "selectDistro": "Select distro",
+          "windows": "Windows",
+          "wsl": "WSL",
           "wslUnavailable": "WSL is not available. Switch this project to Windows or repair WSL."
         },
         "QuickCommandsPane": {
@@ -1456,6 +1539,8 @@
         "RepositoryPane": {
           "createPendingSetup": "Track setup",
           "creatingPendingSetup": "Creating...",
+          "projectRuntime": "Project Runtime",
+          "projectRuntimeDescription": "Choose whether this project runs on Windows or WSL.",
           "settingUpHost": "Importing...",
           "setupExistingFolder": "Import existing folder",
           "setupExistingFolderHelp": "Make this project available on another host by linking a checkout that already exists there.",
@@ -1659,28 +1744,44 @@
         "TerminalPane": {
           "003df129fe": "Split Horizontally",
           "05efc0bada": "true",
+          "09bf02de9a": "Shell used when opening a new terminal pane. Takes effect for new terminals.",
+          "0f1b8669e6": "Command Prompt",
           "1158f8fd55": "New Tab",
           "219aaa59f4": "WSL Distribution",
           "21f8da2078": "Workspace Setup Script",
           "2503f1e86b": "Used for new WSL terminal panes and local agent detection when the active workspace is not already inside WSL.",
+          "27e301f22c": "Default Shell",
           "29154326bb": "on",
           "332e8a2872": "Split Vertically",
           "348246b06f": "false",
           "34a0dfa06e": "Where the repository setup script runs when a new workspace is created.",
+          "3d88af864d": "Choose whether the PowerShell shell option launches Windows PowerShell or PowerShell 7+ for new terminal panes.",
           "5936387ddd": "auto",
+          "5ed5c95344": "Choose between Windows PowerShell and PowerShell 7+ for new terminal panes.",
           "5fe79a5e56": "Choose which WSL distribution new WSL terminals and local agent scans use.",
           "623e62df99": "Split horizontally",
           "691ce810e0": "Split vertically",
           "6c6a054a1c": "Run in a new tab",
+          "822f62ddcd": "Download PowerShell 7+",
+          "87e678a8af": "Windows Shell",
+          "96be03b8eb": "PowerShell 7+",
+          "a016ffbeed": "Auto uses Windows PowerShell now and switches to PowerShell 7+ when installed.",
+          "a55eee649f": "Default shell for new terminal panes on Windows.",
           "a9d47451d1": "\"New Tab\" opens the setup command in a background tab titled \"Setup\" without stealing focus.",
           "ab20575a8a": "off",
           "ab3a1f9068": "wsl.exe",
           "adbafefe56": "custom",
           "ask_before_closing_running_terminals_description": "Show a confirmation before closing a terminal that has a running command or agent.",
           "ask_before_closing_running_terminals_title": "Ask Before Closing Running Terminals",
+          "b637dd57a7": "WSL",
+          "bd68f3170d": "Choose the default shell for new terminal panes on Windows.",
           "cc8c5ca224": "Windows default",
           "d23b43c5be": "Setup Script Location",
-          "d78fc4fdef": "Loading distributions"
+          "d26174e1dd": "Windows PowerShell",
+          "d78fc4fdef": "Loading distributions",
+          "eb7fc4d98a": "PowerShell",
+          "f61ac77f16": "Git Bash",
+          "fe20f79dd1": "PowerShell Version"
         },
         "TerminalSettingsPreview": {
           "d06664e889": "dark"
@@ -1701,9 +1802,31 @@
           "import_theme_other": "Import {{value0}} Themes"
         },
         "WslCliRegistration": {
+          "0307677bb9": "Checking WSL CLI registration...",
+          "119fef6cd2": "Target path:",
+          "1dbb0377d9": "Existing launcher target:",
+          "26b4b3b00f": "Failed to load WSL CLI status.",
+          "290bfff3ab": "Register",
           "41a1480d3e": "install",
+          "4598b18464": "Removing...",
+          "4c4a9178a3": "Registering...",
+          "52d990420e": "Failed to remove `{{value0}}` from WSL.",
+          "554305956d": "Command path:",
+          "61ac55278e": "Remove `{{value0}}` from WSL?",
+          "6f91ad1333": "Failed to register `{{value0}}` in WSL.",
+          "7aa456a460": "Register `orca-ide` in ~/.local/bin inside WSL.",
           "7c3bb36706": "remove",
-          "e2b0ee267f": "stale"
+          "7ee4e52b99": "Orca will register {{value0}} so the command works from WSL terminals.",
+          "89c7414cf5": "Removed `{{value0}}` from WSL.",
+          "951536dda5": "Registered `{{value0}}` in WSL.",
+          "9b6627522c": "Refresh",
+          "ab6b022a5c": "Refresh WSL CLI status",
+          "c6f6f89d7c": "Cancel",
+          "d8216eb22e": "This removes the WSL shell command. Orca itself remains installed on Windows.",
+          "d9c6880dbd": "WSL shell command",
+          "e2b0ee267f": "stale",
+          "e49688f67f": "Register `{{value0}}` in WSL?",
+          "f951f85196": "Remove"
         },
         "ZcodePlanAccountsSection": {
           "keyRequired": "GLM Coding Plan API key is required."
@@ -1914,6 +2037,9 @@
           "outcome": {
             "activeServer": "Not done: this server is the default host for new projects. Choose another one in Advanced before stopping it."
           },
+          "row": {
+            "update": "Update"
+          },
           "title": "Orca on your SSH hosts"
         },
         "mobile": {
@@ -1996,12 +2122,30 @@
           "windows": {
             "search": {
               "02c772582a": "linux",
+              "04994f6929": "default",
+              "07ec155fb6": "bash.exe",
+              "12519edb5d": "command prompt",
+              "13715f9d23": "Default Shell",
               "1f402b3651": "WSL Distribution",
+              "28ff08ed35": "windows",
               "2b4a340ce0": "distribution",
+              "2d99cd91be": "powershell",
+              "41a69bc24d": "Choose whether the PowerShell shell option launches Windows PowerShell or PowerShell 7+ for new terminal panes.",
+              "4af2f7526e": "version",
               "4ee2579c32": "ubuntu",
               "5074ad8b5f": "distro",
+              "591912177b": "git bash",
+              "5a2db98d23": "bash",
+              "6cd20b9e64": "cmd",
               "6e3adf4cba": "wsl",
+              "713c4a2f92": "Choose the default shell for new terminal panes on Windows.",
+              "768613e483": "powershell 7",
+              "7c7056940a": "shell",
+              "860e0e6402": "PowerShell Version",
               "978457945b": "Choose which WSL distribution new WSL terminals and local agent scans use.",
+              "d414022016": "pwsh",
+              "d57f870938": "advanced",
+              "f9162f0b8e": "windows powershell",
               "fc564eadaf": "debian"
             }
           }
@@ -2034,7 +2178,23 @@
           "over_limit_other": "Importing these themes would exceed the {{value0}} custom terminal theme limit. Deselect {{value1}} new themes and try again."
         },
         "wslHosts": {
-          "remove": "Remove"
+          "add": "Add WSL distro",
+          "chip": "WSL",
+          "connect": "Connect",
+          "description": "Orca runs a server inside each distro. A stopped distro starts only when you open one of its projects or connect it here.",
+          "experimental": "Experimental",
+          "forceUpdate": "Force update",
+          "remove": "Remove",
+          "title": "WSL hosts",
+          "turnOn": "Turn on in Experimental"
+        },
+        "wslHostsExperimental": {
+          "description": "Add a WSL 2 distro as a host. Orca runs its server inside the distro, so git, files and terminals in new projects there run natively in Linux.",
+          "keywordDistro": "distro",
+          "keywordLinux": "linux",
+          "keywordWsl": "wsl",
+          "title": "WSL distros as hosts",
+          "toggleLabel": "Toggle WSL distros as hosts"
         }
       },
       "shared": {
@@ -2078,6 +2238,27 @@
         "AddRepoSteps": {
           "04a4c4e84a": "Clone location"
         },
+        "AddWslHostDialogBody": {
+          "added": "{{value0}} added."
+        },
+        "AddWslHostFormPanel": {
+          "add": "Add host",
+          "added": "Already a host",
+          "adding": "Setting up…",
+          "addingHint": "Installing and starting the Orca server in the distro. The first time can take a minute.",
+          "description": "Orca runs its server inside the distro, so git, files and terminals run natively in Linux. Use it for new projects; projects you opened through \\\\wsl.localhost keep working as they are.",
+          "distro": "Distro",
+          "loading": "Looking for WSL distros…",
+          "none": "No WSL distros found. Install one with: wsl --install",
+          "placeholder": "Choose a distro",
+          "refresh": "Refresh",
+          "running": "Running",
+          "startAndAdd": "Start and add",
+          "stopped": "Stopped",
+          "stoppedHint": "{{value0}} is stopped. Adding it starts it.",
+          "title": "Add WSL distro",
+          "wsl1": "WSL 1 · not supported"
+        },
         "CacheTimer": {
           "07729cc155": "expired"
         },
@@ -2090,6 +2271,9 @@
           "createFailed": "Failed to create folder workspace.",
           "noRepos": "Add a Git project under this folder to attach GitHub or GitLab tasks.",
           "sourceProject": "Task Source"
+        },
+        "HostRemoveDialog": {
+          "wslHostEndsTerminals": "Removes {{value0}} from Orca, ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched."
         },
         "HostSectionHeaderMenu": {
           "63f36455cc": "Reconnect"
@@ -2249,6 +2433,12 @@
             }
           }
         },
+        "addRepoWslHostFolderPicker": {
+          "otherDistro": "That folder is in {{value0}}, not {{value1}}.",
+          "outsideDistro": "Pick a folder inside {{value0}}.",
+          "underDistro": "This host can only add folders under \\\\wsl.localhost\\{{value0}}.",
+          "windowsDrive": "Folders on a Windows drive stay on this computer. Choose this computer as the host to add one."
+        },
         "index": {
           "b826a98b6f": "busy"
         },
@@ -2282,6 +2472,9 @@
         "worktreeIssueDisplacement": {
           "3f61c0a8d2": "Linear {{value}}",
           "9c4b7e1f60": "GitHub #{{value}}"
+        },
+        "wslHostRemoval": {
+          "partial": "The host was removed, but something in the distro is still running: {{value0}}"
         }
       },
       "skills": {
@@ -3430,6 +3623,42 @@
         "probeAgain": "Check again",
         "probeSkippedHosts": "Hosts routed without the connection check (Try anyway):",
         "title": "Browse through SSH workspace hosts"
+      }
+    },
+    "terminal": {
+      "windows": {
+        "administratorApproval": "Windows will ask for approval. Use your usual account.",
+        "administratorDialogScope": "This changes permissions for the whole app. SSH and WSL keep their own permissions.",
+        "administratorDocumentation": "Read the guide",
+        "administratorLabel": "Administrator mode",
+        "administratorPromptCancellation": "Canceling Windows’ prompt reopens Orca with its retained terminals. SSH and WSL permissions stay controlled on their hosts.",
+        "administratorRestartConsequences": "Save your work first. After approval, terminals and agents on the current local terminal host close. Restored tabs open new administrator shells.",
+        "administratorRestartFailed": "Orca could not restart. Try again or use the manual instructions.",
+        "administratorScope": "Permissions for the Orca app. Existing terminals may differ.",
+        "administratorSearchDescription": "See Orca’s Windows permissions or restart with administrator approval.",
+        "administratorStatus": "Administrator",
+        "cancelAdministratorRestart": "Cancel",
+        "checkingAdministrator": "Checking…",
+        "closeAdministratorHelp": "Close",
+        "closeLocalSessions": "Save your work, close all local terminal sessions, then exit Orca.",
+        "confirmAdministratorRestart": "Restart as administrator?",
+        "keywordAdmin": "admin",
+        "keywordAdministrator": "administrator",
+        "keywordElevated": "elevated",
+        "keywordPermissions": "permissions",
+        "keywordRestart": "restart",
+        "keywordUac": "uac",
+        "launchAdministrator": "In the Windows Start menu, right-click Orca and choose Run as administrator. Approve the Windows prompt using your usual account.",
+        "launchStandard": "Open Orca normally from the Windows Start menu.",
+        "manualAdministratorHelp": "Manual instructions",
+        "openManageSessions": "Open Manage Sessions",
+        "restartAdministrator": "Restart as administrator",
+        "restartingAdministrator": "Restarting…",
+        "retainedTerminalPermissions": "If new terminals still use the previous permissions, open Manage Sessions and choose Restart daemon. This closes local terminals and their running commands.",
+        "returnStandardHelp": "Standard mode guide",
+        "runAdministratorHelp": "Administrator guide",
+        "standardStatus": "Standard user",
+        "unknownAdministrator": "Unable to determine"
       }
     }
   },

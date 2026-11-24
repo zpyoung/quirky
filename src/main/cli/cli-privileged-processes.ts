@@ -1,6 +1,4 @@
 import { runProcess } from '@orca/process-host'
-import { quotePowerShellLiteral } from '../../shared/powershell-native-argument'
-import { WINDOWS_PATH_WRITE_TIMEOUT_MS } from './cli-install-constants'
 
 export async function runMacPrivilegedCommand(command: string): Promise<void> {
   const result = await runProcess({
@@ -16,29 +14,6 @@ export async function runMacPrivilegedCommand(command: string): Promise<void> {
 
 function quoteAppleScript(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`
-}
-
-export async function writeWindowsUserPath(value: string): Promise<void> {
-  await runWindowsPathCommand([
-    '-NoProfile',
-    '-Command',
-    `[Environment]::SetEnvironmentVariable('Path', ${quotePowerShellLiteral(value)}, 'User')`
-  ])
-}
-
-export async function runWindowsPathCommand(args: string[]): Promise<string> {
-  const result = await runProcess({
-    program: 'powershell',
-    args,
-    timeoutMs: WINDOWS_PATH_WRITE_TIMEOUT_MS
-  })
-  if (result.timedOut) {
-    throw new Error(`Windows PATH command timed out after ${WINDOWS_PATH_WRITE_TIMEOUT_MS}ms.`)
-  }
-  if (result.code !== 0) {
-    throw processFailure('powershell', result)
-  }
-  return result.stdout
 }
 
 function processFailure(

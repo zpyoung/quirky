@@ -9,8 +9,6 @@ import {
 import { getMacUpdateRunningInstances } from '../macos-update-running-instances'
 import { commitServeSupervisorPark } from './serve-supervisor-install-park'
 import { armUpdateInstallExitWatchdog } from '../update-install-exit-watchdog'
-import { getLinuxPackageType } from '../linux-update-package-type'
-import { LINUX_PACKAGE_MARKER_UNUSABLE_MESSAGE } from '../linux-package-downloaded-status'
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
 import { requestServeUpdateHandoff, failServeUpdateHandoff } from '../serve-update-handoff'
 import { UpdaterMacInstallPreflight } from './updater-mac-install-preflight'
@@ -31,31 +29,6 @@ export abstract class UpdaterInstallExecution extends UpdaterMacInstallPreflight
 
     const pendingVersion = this.getPendingInstallVersion()
     if (this.deferHeadlessServeInstall('install', pendingVersion)) {
-      return
-    }
-    const linuxPackageType = getLinuxPackageType()
-    if (linuxPackageType === 'deb' || linuxPackageType === 'rpm') {
-      recordUpdaterLifecycle('linux_package_manual_install_required', {
-        packageType: linuxPackageType,
-        version: pendingVersion || null
-      })
-      // The preload prepares renderer state before invoking; explicitly release it when main refuses.
-      this.mainWindowRef?.webContents.send('updater:quitAndInstallAborted')
-      return
-    }
-    if (linuxPackageType === 'unusable') {
-      recordUpdaterLifecycle(
-        'linux_package_marker_unusable',
-        { version: pendingVersion || null },
-        { level: 'warn', message: 'Linux package marker is unusable; native install blocked' }
-      )
-      // The preload prepares renderer state before invoking; release it when the marker is unknown.
-      this.mainWindowRef?.webContents.send('updater:quitAndInstallAborted')
-      this.sendInstallFailureStatus({
-        state: 'error',
-        message: LINUX_PACKAGE_MARKER_UNUSABLE_MESSAGE,
-        ...(pendingVersion ? { version: pendingVersion } : {})
-      })
       return
     }
     this.finishActiveUpdateCheckAttempt()

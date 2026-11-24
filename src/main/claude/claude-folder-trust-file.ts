@@ -9,13 +9,12 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs'
-import { dirname, join, posix, resolve, win32 } from 'node:path'
+import { posix, resolve, win32 } from 'node:path'
 import { homedir } from 'node:os'
 import { lock } from 'proper-lockfile'
 import { renameFileWithWindowsRetry } from '../codex-accounts/fs-utils'
 import { runKeyedSerializedOperation } from '../cli/keyed-promise-queue'
 import { parseWslUncPath } from '../../shared/wsl-paths'
-import { runWslProcess } from '../wsl/wsl-runner'
 import type { ClaudeRuntimeAuthPreparation } from '../claude-accounts/runtime-auth/runtime-auth-types'
 
 export type ClaudeTrustPathStyle = 'posix' | 'win32'
@@ -152,30 +151,13 @@ type ReplacementFile = { target: string; path: string }
  * renaming it over `target` can never widen them.
  */
 async function createReplacementFile(target: string): Promise<ReplacementFile> {
-  const suffix = `.orca-trust-${randomUUID()}.tmp`
-  const path = `${target}${suffix}`
-  const guestFile = parseWslUncPath(target)
+  const path = `${target}.orca-trust-${randomUUID()}.tmp`
   try {
-    if (guestFile) {
-      // Why: Windows sees a synthetic 0o666 for a guest file and cannot set its bits, and the
-      // guest gives a file made through \\wsl.localhost its default 0644; only the guest can copy them.
-      writeFileSync(path, '', { flag: 'wx' })
-      const copied = await runWslProcess({
-        distro: guestFile.distro,
-        loginPath: 'none',
-        program: 'chmod',
-        args: [`--reference=${guestFile.linuxPath}`, '--', `${guestFile.linuxPath}${suffix}`]
-      })
-      if (copied.code !== 0) {
-        throw new Error(`could not copy the guest mode of ${target}: ${copied.stderr.trim()}`)
-      }
-    } else {
-      const mode = statSync(target).mode & 0o777
-      writeFileSync(path, '', { flag: 'wx', mode })
-      if (process.platform !== 'win32') {
-        // Why: umask may narrow the requested mode; the replacement must match the original exactly.
-        chmodSync(path, mode)
-      }
+    const mode = statSync(target).mode & 0o777
+    writeFileSync(path, '', { flag: 'wx', mode })
+    if (process.platform !== 'win32') {
+      // Why: umask may narrow the requested mode; the replacement must match the original exactly.
+      chmodSync(path, mode)
     }
   } catch (error) {
     rmSync(path, { force: true })
@@ -321,25 +303,7 @@ export function resolveLocalClaudeTrustConfig(args: {
 }): ClaudeTrustConfigTarget | null {
   const { claudeAuth } = args
   if (claudeAuth?.runtime === 'wsl' || args.wslDistro || parseWslUncPath(args.workspacePath)) {
-    // Why: a WSL guest reads its own config, reachable only through the auth prep's UNC dir;
-    // without a guest config dir, the prep's `configDir` is the Windows host's own file.
-    if (
-      claudeAuth?.runtime !== 'wsl' ||
-      !claudeAuth.wslLinuxConfigDir ||
-      !parseWslUncPath(args.workspacePath)
-    ) {
-      return null
-    }
-    const legacyFile = join(claudeAuth.configDir, '.config.json')
-    return {
-      configFile: existsSync(legacyFile)
-        ? legacyFile
-        : claudeAuth.envPatch.CLAUDE_CONFIG_DIR
-          ? join(claudeAuth.configDir, '.claude.json')
-          : join(dirname(claudeAuth.configDir), '.claude.json'),
-      keyStyle: 'posix',
-      toClaudePath: (hostPath) => parseWslUncPath(hostPath)?.linuxPath ?? null
-    }
+    return null
   }
   const style = process.platform === 'win32' ? 'win32' : 'posix'
   const homeDir = (style === 'win32' ? args.env.USERPROFILE : args.env.HOME) || homedir()

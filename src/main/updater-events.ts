@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import type { UpdateStatus } from '../shared/update-status-types'
 import {
   isMacInstallerReady,
   registerMacUpdaterEvents,
@@ -7,17 +8,23 @@ import {
 import { compareVersions } from './updater-fallback'
 import type { UpdaterHandlerContext } from './updater-handler-context'
 import { recordUpdaterLifecycle } from './updater-lifecycle-diagnostics'
-import {
-  getRetainedLinuxPackageManualInstallStatus,
-  resolveLinuxPackageDownloadedStatus,
-  shouldIgnoreDownloadedUpdateEvent
-} from './linux-package-downloaded-status'
-import { isExternallyManagedLinuxInstall } from './linux-update-package-type'
-import * as linuxPackageRecovery from './linux-package-update-recovery'
-import { preExtractDownloadedAppImageUpdate } from './cli/appimage-copy-pre-extraction'
 
 const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000
 const AUTO_UPDATE_RETRY_INTERVAL_MS = 60 * 60 * 1000
+
+function shouldIgnoreDownloadedUpdateEvent(
+  status: UpdateStatus,
+  infoVersion: string,
+  pendingVersion: string
+): boolean {
+  const activeDownloadVersion =
+    status.state === 'downloading' || status.state === 'downloaded' ? status.version : null
+  return (
+    activeDownloadVersion === null ||
+    infoVersion !== activeDownloadVersion ||
+    (pendingVersion !== '' && infoVersion !== pendingVersion)
+  )
+}
 
 export function registerAutoUpdaterHandlers({
   autoUpdater,
@@ -113,18 +120,9 @@ export function registerAutoUpdaterHandlers({
           scheduleAutomaticUpdateCheck(AUTO_UPDATE_CHECK_INTERVAL_MS)
         }
       }
-      sendStatus(
-        getRetainedLinuxPackageManualInstallStatus() ?? {
-          state: 'not-available',
-          userInitiated: wasUserInitiated || undefined
-        }
-      )
+      sendStatus({ state: 'not-available', userInitiated: wasUserInitiated || undefined })
       return
     }
-
-    // Why: only a genuinely newer offer supersedes the retained package; a publishing-window blip that
-    // momentarily resolves an older tag must not destroy a still-valid recovery path.
-    linuxPackageRecovery.clearTrackedLinuxPackageArtifactForOtherVersion(info.version)
 
     markUpdateAvailableEventPending(attemptId)
     void (async () => {
@@ -154,15 +152,7 @@ export function registerAutoUpdaterHandlers({
           }
         }
 
-        sendStatus(
-          getRetainedLinuxPackageManualInstallStatus() ?? {
-            state: 'available',
-            version: info.version,
-            changelog: null,
-            // Why: the offer is real, but this host can never apply it — say so before a download is offered.
-            ...(isExternallyManagedLinuxInstall() ? { externallyManaged: true } : {})
-          }
-        )
+        sendStatus({ state: 'available', version: info.version, changelog: null })
       } finally {
         clearUpdateAvailableEventPending(attemptId)
       }
@@ -175,7 +165,6 @@ export function registerAutoUpdaterHandlers({
     }
     clearBackgroundCheckLaunchPending()
     resetMacInstallState()
-    const retainedStatus = getRetainedLinuxPackageManualInstallStatus()
     const missingManifestFallback = consumeMissingManifestPrereleaseFallbackResult()
     const publishingWindowLastGoodCheck = getPublishingWindowLastGoodCheck()
     const wasUserInitiated = missingManifestFallback?.userInitiated ?? getUserInitiatedCheck()
@@ -196,11 +185,7 @@ export function registerAutoUpdaterHandlers({
         }
       }
     }
-    // Why: a later check can report no newer release while a verified deb/rpm is still waiting for
-    // the user to install it outside Orca. Keep both the artifact and its recovery card reachable.
-    sendStatus(
-      retainedStatus ?? { state: 'not-available', userInitiated: wasUserInitiated || undefined }
-    )
+    sendStatus({ state: 'not-available', userInitiated: wasUserInitiated || undefined })
     if (localBuildCheck || pinnedBuildCheck) {
       restoreReleaseUpdateSource()
     }
@@ -209,7 +194,6 @@ export function registerAutoUpdaterHandlers({
   autoUpdater.on('download-progress', (progress) => {
     clearBackgroundCheckLaunchPending()
     const version = getPendingInstallVersion()
-    linuxPackageRecovery.clearTrackedLinuxPackageArtifactForOtherVersion(version)
     sendStatus({
       state: 'downloading',
       percent: Math.round(progress.percent),
@@ -236,21 +220,11 @@ export function registerAutoUpdaterHandlers({
       compareVersions(info.version, app.getVersion()) <= 0
     ) {
       clearAvailableUpdateContext()
-      linuxPackageRecovery.clearTrackedLinuxPackageArtifact()
       sendStatus({ state: 'not-available' })
       return
     }
     const macInstallerReady = process.platform === 'darwin' ? isMacInstallerReady() : true
     recordUpdaterLifecycle('update_downloaded', { version: info.version, macInstallerReady })
-    // Why: the first daemon after this update should run from its unpacked copy, not the mount.
-    void preExtractDownloadedAppImageUpdate(info.downloadedFile, (filePath) =>
-      linuxPackageRecovery.isInUpdaterPendingCache(filePath)
-    )
-    const linuxPackageStatus = resolveLinuxPackageDownloadedStatus(info)
-    if (linuxPackageStatus) {
-      sendStatus(linuxPackageStatus)
-      return
-    }
     // On macOS, defer 'downloaded' until Squirrel.Mac finishes processing; other platforms are ready immediately.
     if (process.platform === 'darwin' && !macInstallerReady && !isMacStagingDeferredToInstall()) {
       // Keep the UI at 100% downloaded while Squirrel processes, to avoid a premature "ready to install".

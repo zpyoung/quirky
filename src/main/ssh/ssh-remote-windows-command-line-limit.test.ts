@@ -1,6 +1,6 @@
 import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../providers/windows-shell-args'
+import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../../shared/windows-command-line-budget'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
 import { tryStealInstallLockCommand } from '../managed-server/install/remote-install-lock-commands'
 import { decodeRemotePowerShellScript, powerShellCommand } from './ssh-remote-powershell'

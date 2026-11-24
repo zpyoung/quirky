@@ -1,7 +1,6 @@
 import { readFile, readdir, readlink } from 'node:fs/promises'
 import { LSOF_NONBLOCKING_ARGS } from '../../shared/lsof-nonblocking-args'
 import { getProcessOutputFields } from '../../shared/process-output-field-scanner'
-import { readWindowsProcessTable } from '../windows/windows-process-table'
 import { runPortScanCommand } from './port-scan-command-client'
 import {
   partitionListenersNeedingMetadata,
@@ -49,27 +48,6 @@ export function parseLsofListeningOutput(output: string): RawListeningPort[] {
   return dedupeRawPorts(ports)
 }
 
-export function parseNetstatListeningOutput(output: string): RawListeningPort[] {
-  const ports: RawListeningPort[] = []
-  for (const line of output.split('\n')) {
-    const fields = getProcessOutputFields(line, 6)
-    if (fields[0]?.toUpperCase() !== 'TCP') {
-      continue
-    }
-    const stateIndex = fields.findIndex((field) => field.toUpperCase() === 'LISTENING')
-    if (stateIndex < 2) {
-      continue
-    }
-    const parsed = parseAddressWithPort(fields[1])
-    const pid = Number.parseInt(fields[stateIndex + 1] ?? '', 10)
-    if (!parsed) {
-      continue
-    }
-    ports.push({ ...parsed, pid: Number.isFinite(pid) ? pid : undefined })
-  }
-  return dedupeRawPorts(ports)
-}
-
 export function parseProcNetTcp(content: string): { host: string; port: number; inode: number }[] {
   const results: { host: string; port: number; inode: number }[] = []
   const lines = content.split('\n')
@@ -108,9 +86,6 @@ async function dispatchPlatformListeningPortScan(
   if (process.platform === 'darwin') {
     return scanDarwinLsofPorts(options)
   }
-  if (process.platform === 'win32') {
-    return scanWindowsNetstatPorts(options)
-  }
   throw new Error(`Port scanning is not supported on ${process.platform}`)
 }
 
@@ -140,23 +115,6 @@ async function scanDarwinLsofPorts(
   const metadata = await loadDarwinProcessMetadata(pidsNeedingMetadata)
   return {
     ports: hydrated.map((port) => ({ ...metadata.get(port.pid ?? -1), ...port })),
-    metadataAvailable: true
-  }
-}
-
-async function scanWindowsNetstatPorts(
-  options: WorkspacePortScanOptions
-): Promise<PlatformListeningPortScan> {
-  const { stdout, spawnMs } = await runPortScanCommand('netstat', ['-ano', '-p', 'tcp'])
-  const ports = parseNetstatListeningOutput(stdout)
-  if (shouldSkipMetadataCommands(spawnMs, options)) {
-    return { ports, metadataAvailable: false }
-  }
-  const metadata = await loadWindowsProcessMetadata(
-    new Set(ports.flatMap((p) => (p.pid ? [p.pid] : [])))
-  )
-  return {
-    ports: ports.map((port) => ({ ...metadata.get(port.pid ?? -1), ...port })),
     metadataAvailable: true
   }
 }
@@ -296,32 +254,6 @@ async function loadDarwinProcessMetadata(pids: Set<number>): Promise<Map<number,
     result.set(pid, { ...result.get(pid), commandLine: match[2].trim() || undefined })
   }
 
-  return result
-}
-
-async function loadWindowsProcessMetadata(
-  pids: Set<number>
-): Promise<Map<number, ProcessMetadata>> {
-  const result = new Map<number, ProcessMetadata>()
-  if (pids.size === 0) {
-    return result
-  }
-  try {
-    // Why the native snapshot: attributing ports used to fork a powershell.exe
-    // per scan just to turn PIDs into names. That is a ~700ms cold start, a
-    // conhost window, and one more thing a Group Policy can block -- for data
-    // the panel treats as optional anyway.
-    for (const row of await readWindowsProcessTable()) {
-      if (pids.has(row.pid)) {
-        result.set(row.pid, {
-          processName: row.name,
-          commandLine: row.command || undefined
-        })
-      }
-    }
-  } catch {
-    // Process metadata is optional; port rows still render without attribution.
-  }
   return result
 }
 

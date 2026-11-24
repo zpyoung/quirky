@@ -9,24 +9,11 @@ import {
 import { WatcherProcessSupervisor } from '../ipc/parcel-watcher-process-supervisor'
 import { resolveWatcherProcessEntryPath } from '../ipc/parcel-watcher-entry-path'
 import { resolveOrcadInstallRoot } from './orcad-app-paths'
-import {
-  isWindowsProcessTableAvailable,
-  isWindowsProcessStartTimeAvailable,
-  readWindowsProcessCreationTime,
-  readWindowsProcessIdentityTableFresh
-} from '../windows/windows-process-table'
-import { WindowsProcessTableTimeoutError } from '../windows/windows-process-table-timeout-error'
-
-// A cold first conpty spawn on a slow (arm64, AV-scanned) Windows host can outlast the steady-state budget.
-const WINDOWS_FIRST_PTY_PROBE_TIMEOUT_MS = 15_000
 
 /** The candidate process owns disposable PTY and watcher probes before it touches user state. */
 export async function preflightOrcadNativeRuntime(
   options: { nativeFeatures?: boolean } = {}
 ): Promise<void> {
-  if (process.platform === 'win32') {
-    await preflightWindowsProcessIdentity()
-  }
   // Runtime health checks can degrade independently; artifact qualification remains strict.
   if (options.nativeFeatures === false) {
     return
@@ -63,7 +50,7 @@ export async function preflightOrcadNativeRuntime(
           resolveDelivery()
         }
       },
-      process.platform === 'win32' ? { backend: 'windows' } : {},
+      {},
       { signal: cancellation.signal, subscribeTimeoutMs: 5_000, onTerminalError: rejectDelivery }
     )
     await writeFile(join(directory, 'ready'), '')
@@ -81,45 +68,12 @@ export async function preflightOrcadNativeRuntime(
 
 /** Retries once only after a timeout; a spawn error or non-zero exit fails immediately. */
 async function probePtySpawn(): Promise<void> {
-  const firstTimeoutMs =
-    process.platform === 'win32' ? WINDOWS_FIRST_PTY_PROBE_TIMEOUT_MS : PTY_SPAWN_HEALTH_TIMEOUT_MS
   try {
-    await runPtySpawnHealthProbe(firstTimeoutMs)
+    await runPtySpawnHealthProbe(PTY_SPAWN_HEALTH_TIMEOUT_MS)
   } catch (error) {
     if (!(error instanceof PtySpawnHealthTimeoutError)) {
       throw error
     }
     await runPtySpawnHealthProbe(PTY_SPAWN_HEALTH_TIMEOUT_MS)
-  }
-}
-
-async function preflightWindowsProcessIdentity(): Promise<void> {
-  if (!isWindowsProcessTableAvailable() || !isWindowsProcessStartTimeAvailable()) {
-    throw new Error('The bundled Windows process table must support process creation times')
-  }
-  let created: number | null | undefined
-  try {
-    const rows = await readWindowsProcessIdentityTableFresh()
-    created = rows.find((row) => row.pid === process.pid)?.creationTimeMs
-  } catch (error) {
-    // Only slowness falls back: an unreadable table (EDR hook, restricted token) must still
-    // fail qualification, or every later liveness verdict on this host reads unverifiable.
-    if (!(error instanceof WindowsProcessTableTimeoutError)) {
-      throw error
-    }
-    // The addon's one-PID query proves this runtime can identify a process without a snapshot.
-    created = readWindowsProcessCreationTime(process.pid)
-    if (created === null) {
-      throw error
-    }
-  }
-  if (
-    created === undefined ||
-    created === null ||
-    !Number.isFinite(created) ||
-    created <= 0 ||
-    created > Date.now()
-  ) {
-    throw new Error('The bundled Windows process table could not identify this process')
   }
 }

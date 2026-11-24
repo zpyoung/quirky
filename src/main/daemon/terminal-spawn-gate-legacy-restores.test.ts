@@ -28,7 +28,6 @@ describe('the host records the legacy restores it refuses', () => {
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(() => onExit?.(0)),
-        terminateOwnedTree: () => 'unavailable' as const,
         forceKill: vi.fn(() => onExit?.(137)),
         signal: vi.fn(),
         onData: vi.fn(),

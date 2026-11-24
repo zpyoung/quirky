@@ -30,7 +30,6 @@ import { MANAGED_DATA_ACCOUNT_POSIX_RESTORE } from '../shared/managed-data-accou
  * hook restores zsh option semantics for the body at call time.
  */
 import { getPosixOmpShellWrapper } from './pty/omp-shell-wrapper'
-import { WSL_MANAGED_CLI_PATH_RESTORE } from './wsl-managed-cli-path-restore'
 import { getPosixCodexShellLaunchPreflight } from '../shared/codex-shell-function'
 import { getPosixClaudeShellFunction } from '../shared/claude-shell-function'
 import {
@@ -48,8 +47,6 @@ import {
 
 /** Runtime values the hook re-exports after the user's own startup files ran. */
 export type ZshWrapperRestoreSpec = {
-  /** The managed WSL CLI dir onto PATH — local wrappers only; a no-op outside WSL. */
-  managedWslCli: boolean
   /** Orca's agent-teams shim dir back onto PATH. */
   agentTeamsPath: boolean
   /** Remote CLI bin dir onto PATH — relay hosts only. */
@@ -182,7 +179,6 @@ ${indentBlock(getZshShellReadyMarkerRegistrationBlock(spec.readyMarkerEscaped, t
 ${ZSH_DEFERRED_LINE_INIT_RETIRE_BLOCK}
 ${permanentPrecmd}
 ${joinBlocks([
-  spec.restores.managedWslCli ? indentBlock(WSL_MANAGED_CLI_PATH_RESTORE, '  ') : null,
   indentBlock(ORCA_CLI_POSIX_PATH_RESTORE, '  ').replace(/\n$/, ''),
   featureGuard('overlay', getOverlayRestoreBlocks(spec)),
   // Why outside the overlay guard: a system-default Codex home carries no overlay key.

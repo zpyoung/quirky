@@ -8,7 +8,7 @@ import {
   type ExecutionHostId
 } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
-import { gitExecFileAsync, awaitWindowsHostGitEnvironmentReady } from '../git/runner'
+import { gitExecFileAsync } from '../git/runner'
 import { getRepoName, inspectGitRepoForRegistrationAsync } from '../git/repo'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
 import { isENOENT } from '../ipc/filesystem-path-containment'
@@ -38,9 +38,6 @@ export class RuntimeRepositoryRegistrationController {
     const store = this.requireStore()
     if (!isAbsolute(path)) {
       throw new Error('Project path must be an absolute path')
-    }
-    if (kind === 'git') {
-      await awaitWindowsHostGitEnvironmentReady({ cwd: path })
     }
     const gitInfo = kind === 'git' ? await inspectGitRepoForRegistrationAsync(path) : null
     if (gitInfo && !gitInfo.isRepo) {

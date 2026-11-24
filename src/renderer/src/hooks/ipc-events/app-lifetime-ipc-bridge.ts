@@ -31,8 +31,6 @@ import { registerUpdaterStatusIpcBridge } from './updater-status-ipc-bridge'
 import { createWorktreeEventRuntime } from './worktree-event-runtime'
 import { registerWorkspaceShortcutIpcBridge } from './workspace-shortcut-ipc-bridge'
 import { registerZoomIpcBridge } from './zoom-ipc-bridge'
-import { registerWslAccountNoticeIpcBridge } from './wsl-account-notice-ipc-bridge'
-import { registerWslHostIpcBridge } from './wsl-host-ipc-bridge'
 import { wireAskIpcEvents } from '@/components/fork-ask-question-tool/wire-ask-ipc-events'
 import { wireHeimdallIpcEvents } from '@/fork-heimdall/wire-heimdall-ipc-events'
 import { wireLoopsIpcEvents } from '@/fork-loops/wire-loops-ipc-events'
@@ -82,7 +80,6 @@ export function installAppLifetimeIpcEvents(): () => void {
   }
   const unsubscribeRuntimeEnvironmentStore = registerRuntimeClientIpcBridge(unsubs, worktreeRuntime)
   registerBackgroundWorktreeRemovalBridge(unsubs)
-  registerWslHostIpcBridge(unsubs)
   registerProjectCatalogIpcBridge(
     unsubs,
     worktreeRuntime.worktreeChangeRefreshQueue,
@@ -92,7 +89,6 @@ export function installAppLifetimeIpcEvents(): () => void {
   registerSettingsAndSidebarIpcBridge(unsubs)
   registerWorkspaceShortcutIpcBridge(unsubs)
   registerOsMarkdownFileOpenBridge(unsubs)
-  registerWslAccountNoticeIpcBridge(unsubs)
   unsubs.push(
     window.api.ui.onActivateWorktree(
       ({ repoId, worktreeId, setup, startup, defaultTabs, providesInitialSurface }) => {

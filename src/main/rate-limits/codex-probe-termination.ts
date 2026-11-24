@@ -1,5 +1,3 @@
-import { terminateWindowsProcessTree, type WindowsTreeKiller } from '../windows-process-tree-kill'
-
 // Why: Codex OAuth uses rotating refresh tokens. Hard-killing a probe's
 // app-server mid-refresh can strand auth.json between rotations and permanently
 // invalidate the stored credential, so termination always requests shutdown
@@ -22,9 +20,6 @@ export type TerminatableProbeChild = {
 export type TerminateCodexProbeOptions = {
   drainMs?: number
   hardKillWaitMs?: number
-  // Why: injectable so the Windows branch is testable from POSIX CI hosts.
-  platform?: NodeJS.Platform
-  killWindowsProcessTree?: WindowsTreeKiller
 }
 
 function hasExited(child: TerminatableProbeChild): boolean {
@@ -67,45 +62,25 @@ export async function terminateCodexProbeChild(
   if (hasExited(child)) {
     return
   }
-  const platform = options?.platform ?? process.platform
-  // Why: stdin EOF is the graceful stop for a stdio JSON-RPC server and the
-  // only non-forceful request Windows has; SIGTERM backs it up where signals
-  // are real (Node's kill() on Windows is always TerminateProcess).
+  // Why: stdin EOF is the graceful stop for a stdio JSON-RPC server; SIGTERM backs it up.
   try {
     child.stdin?.end()
   } catch {
     // stdin may already be destroyed; the signal/kill path still applies.
   }
-  if (platform !== 'win32') {
-    try {
-      child.kill('SIGTERM')
-    } catch {
-      // Already-exited children can race the kill; the exit wait handles it.
-    }
+  try {
+    child.kill('SIGTERM')
+  } catch {
+    // Already-exited children can race the kill; the exit wait handles it.
   }
   if (await waitForExit(child, options?.drainMs ?? CODEX_PROBE_SHUTDOWN_DRAIN_MS)) {
     return
-  }
-  if (platform === 'win32' && child.pid) {
-    try {
-      // npm-installed Codex runs beneath a launcher (node, or cmd.exe for an unresolved
-      // shim); killing only that wrapper can leave app-server alive after the lock is released.
-      await (options?.killWindowsProcessTree ?? terminateWindowsProcessTree)(child.pid, {
-        site: 'codex-rate-limit-probe'
-      })
-    } catch {
-      // The direct-child fallback still applies if an injected killer rejects.
-    }
   }
   if (hasExited(child)) {
     return
   }
   try {
-    if (platform === 'win32') {
-      child.kill()
-    } else {
-      child.kill('SIGKILL')
-    }
+    child.kill('SIGKILL')
   } catch {
     // Already-exited children can race the kill; the exit wait handles it.
   }

@@ -3,12 +3,10 @@ import {
   isWindowsSignatureCheckUnavailableFailure,
   isWindowsSignatureMismatchFailure
 } from '../../shared/updater-windows-signature-check'
-import { redactLinuxPackageInstallText } from '../linux-package-install-diagnostic'
-import { getTrackedLinuxPackageArtifact } from '../linux-package-update-recovery'
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
 import { disarmUpdateInstallExitWatchdog } from '../update-install-exit-watchdog'
 import { resetMacInstallState } from '../updater-mac-install'
-import type { LinuxPackageInstallRecovery, UpdateStatus } from '../../shared/update-status-types'
+import type { UpdateStatus } from '../../shared/update-status-types'
 import { compareVersions } from '../updater-fallback'
 import { PRE_QUIT_CLEANUP_TIMEOUT_MS, REQUIRED_PRE_QUIT_CLEANUP_TIMEOUT_MS } from './updater-state'
 import { UpdaterCheckState } from './updater-check-state'
@@ -35,12 +33,6 @@ export abstract class UpdaterInstallSupport extends UpdaterCheckState {
     }
     if (this.currentStatus.state === 'downloading' || this.currentStatus.state === 'downloaded') {
       return this.currentStatus.version
-    }
-    if (
-      this.currentStatus.state === 'error' &&
-      this.currentStatus.recovery?.kind === 'linux-package-install'
-    ) {
-      return this.currentStatus.recovery.version
     }
     return ''
   }
@@ -111,16 +103,11 @@ export abstract class UpdaterInstallSupport extends UpdaterCheckState {
 
   /**
    * Appends the updater's own text to the generic install-failure copy. Without it the only record of
-   * why the install never started is destroyed — on Linux that text carries the exact `dpkg -i <path>`
-   * command the user has to run by hand, and remote clients get nothing but "it didn't come back".
+   * why the install never started is destroyed, and remote clients get nothing but "it didn't come back".
    */
   protected withInstallFailureCause(baseMessage: string, error: unknown): string {
     const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : ''
-    // Why: the retained-package card runs its text through this same sanitizer, so a home directory,
-    // user name, or terminal escape must not reach the card merely because no artifact was tracked.
-    const redacted =
-      redactLinuxPackageInstallText(raw, getTrackedLinuxPackageArtifact()?.path ?? null) ?? ''
-    const cause = redacted.slice(0, this.installFailureCauseMaxLength)
+    const cause = raw.trim().slice(0, this.installFailureCauseMaxLength)
     if (!cause || cause === 'Unknown error') {
       return baseMessage
     }
@@ -198,6 +185,4 @@ export abstract class UpdaterInstallSupport extends UpdaterCheckState {
       }
     }
   }
-
-  protected abstract getActiveLinuxPackageRecovery(): LinuxPackageInstallRecovery | null
 }

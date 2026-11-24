@@ -3,7 +3,7 @@ import type { Event as WatcherEvent } from '@parcel/watcher'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { getLocalWatcherRoot } from './filesystem-watcher-paths'
-import type { WatchedRoot } from './filesystem-watcher-wsl'
+import type { WatchedRoot } from './filesystem-watcher-lifecycle-state'
 
 /**
  * Main-process consumers of the renderer-driven local watchers. Observers ride

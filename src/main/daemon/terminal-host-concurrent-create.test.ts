@@ -25,7 +25,6 @@ function mockSubprocess(
     kill: vi.fn(() => setTimeout(() => onExitCb?.(0), 1)),
     forceKill: vi.fn(() => onExitCb?.(137)),
     signal: vi.fn(),
-    terminateOwnedTree: () => 'unavailable' as const,
     onData(cb) {
       onDataCb = cb
     },

@@ -23,12 +23,7 @@ import { registerStatsHandlers } from '../stats'
 import { registerMemoryHandlers } from '../memory'
 import { registerRateLimitHandlers } from '../rate-limits'
 import { registerRuntimeHandlers } from '../runtime'
-import {
-  invalidateRuntimeEnvironmentTransport,
-  registerRuntimeEnvironmentHandlers
-} from '../runtime-environments/runtime-environments'
-import { registerWslHostHandlers } from '../wsl-host-handlers'
-import { registerWslMoveHandlers } from '../wsl-move-handlers'
+import { registerRuntimeEnvironmentHandlers } from '../runtime-environments/runtime-environments'
 import { registerLedgerHandlers } from '../ledger'
 import { registerEphemeralVmHandlers } from '../ephemeral-vm'
 import { registerAiVaultHandlers } from '../ai-vault'
@@ -252,12 +247,6 @@ export function registerCoreHandlers(
   registerRuntimeHandlers(runtime)
   registerLedgerHandlers(runtime, { userDataPath: app.getPath('userData') })
   registerRuntimeEnvironmentHandlers(store)
-  registerWslHostHandlers({
-    store,
-    getUserDataPath: () => app.getPath('userData'),
-    invalidateTransport: invalidateRuntimeEnvironmentTransport
-  })
-  registerWslMoveHandlers(() => app.getPath('userData'))
   registerEphemeralVmHandlers(store, pluginService)
   // Session history and terminal resume are not chats; a refused host leaves nothing to check.
   const ensureStructuredSessionOwnership = () =>

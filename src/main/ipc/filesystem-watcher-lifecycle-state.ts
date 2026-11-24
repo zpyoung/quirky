@@ -1,9 +1,20 @@
 import type { WebContents } from 'electron'
-import type { WatchedRoot } from './filesystem-watcher-wsl'
+import type { DebouncedBatch } from './filesystem-watcher-batch-control'
 import type { RemoteWatcherEventBatch } from './remote-watcher-event-batch'
 
 // ── Per-root watcher state ───────────────────────────────────────────
-// WatchedRoot/WatcherSubscription live in filesystem-watcher-wsl.ts so native and WSL watchers share one shape.
+export type WatcherSubscription = {
+  unsubscribe(): Promise<void>
+}
+
+export type WatchedRoot = {
+  subscription: WatcherSubscription
+  listeners: Map<number, WebContents>
+  batch: DebouncedBatch
+  // Why: the real on-disk path. Never substitute the watcher's rootKey — that is
+  // a comparison key (case/Unicode folded) and would reach the renderer as a path.
+  rootPath: string
+}
 
 // ── Module state ─────────────────────────────────────────────────────
 

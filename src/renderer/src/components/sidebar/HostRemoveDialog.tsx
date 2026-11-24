@@ -21,15 +21,13 @@ import { clearHostRename } from './host-rename-remove'
 import type { HostRemovalTarget } from './host-rename-remove'
 import { resolveSshHostRemoval } from './ssh-host-remove-resolution'
 import { clearSshHostWorkspaces } from './ssh-host-remove-workspaces'
-import { removeWslHost } from './wsl-host-removal'
 
 type HostRemoveDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   hostId: ExecutionHostId
   label: string
-  /** `wsl`: a WSL host, removed in place (Settings → Orca servers → WSL hosts). */
-  target: NonNullable<HostRemovalTarget> | { kind: 'wsl'; environmentId: string }
+  target: NonNullable<HostRemovalTarget>
 }
 
 export function HostRemoveDialog({
@@ -127,12 +125,7 @@ export function HostRemoveDialog({
           return
         }
       }
-      if (target.kind === 'wsl') {
-        await removeWslHost(target.environmentId)
-        dropOverridesForHost()
-      } else {
-        await removeSshTarget(target.targetId)
-      }
+      await removeSshTarget(target.targetId)
       if (mountedRef.current) {
         onOpenChange(false)
       }
@@ -169,27 +162,21 @@ export function HostRemoveDialog({
         )
 
   const description =
-    target.kind === 'wsl'
+    target.kind === 'runtime'
       ? translate(
-          'auto.components.sidebar.HostRemoveDialog.wslHostEndsTerminals',
-          'Removes {{value0}} from Orca, ends its open terminals and stops Orca’s server in that distro. Files in the distro are untouched.',
-          { value0: label }
+          'auto.components.sidebar.HostRemoveDialog.4d5e6f7a8b',
+          'This opens the Orca servers settings where you can remove this server.'
         )
-      : target.kind === 'runtime'
+      : hasWorkspaces
         ? translate(
-            'auto.components.sidebar.HostRemoveDialog.4d5e6f7a8b',
-            'This opens the Orca servers settings where you can remove this server.'
+            'auto.components.sidebar.HostRemoveDialog.hostHasWorkspacesDefault',
+            'Removes {{value0}} and its credentials from this computer. Its {{value1}} stay in Orca — remote files are not touched.',
+            { value0: label, value1: workspaceCountLabel }
           )
-        : hasWorkspaces
-          ? translate(
-              'auto.components.sidebar.HostRemoveDialog.hostHasWorkspacesDefault',
-              'Removes {{value0}} and its credentials from this computer. Its {{value1}} stay in Orca — remote files are not touched.',
-              { value0: label, value1: workspaceCountLabel }
-            )
-          : translate(
-              'auto.components.sidebar.HostRemoveDialog.5e6f7a8b9c',
-              'This removes the saved SSH host and its credentials from this computer. Remote files are not deleted.'
-            )
+        : translate(
+            'auto.components.sidebar.HostRemoveDialog.5e6f7a8b9c',
+            'This removes the saved SSH host and its credentials from this computer. Remote files are not deleted.'
+          )
 
   // The destructive opt-in wording depends on whether we delete remote files or
   // only forget Orca's records (offline/ghost host).

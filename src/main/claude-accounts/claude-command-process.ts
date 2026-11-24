@@ -4,10 +4,7 @@ import {
   buildWindowsHostInteractiveLoginSpawn,
   type WindowsHostInteractiveLoginSpawn
 } from '../../shared/windows-interactive-login-spawn'
-import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
-import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import { resolveClaudeCommand } from '../codex-cli/command'
-import { resolveWslExecutablePath } from '../wsl/wsl-executable-path'
 import { buildWindowsCommandInvocation } from './windows-command-invocation'
 import { terminateClaudeProcess } from './claude-login-process-termination'
 
@@ -196,17 +193,6 @@ function claudeConfigDirEnv(configDir: string, browser: string | undefined): Nod
     : { CLAUDE_CONFIG_DIR: configDir }
 }
 
-function wslClaudeCommand(linuxPath: string, args: string[], browser: string | undefined): string {
-  const claude = `claude ${args.map(quotePosixShell).join(' ')}`
-  const configDir = `CLAUDE_CONFIG_DIR=${quotePosixShell(linuxPath)}`
-  if (!browser) {
-    return `exec env ${configDir} ${claude}`
-  }
-  // Why chmod here: a file Orca writes over \\wsl$ arrives without an exec bit; a failure must not stop the login.
-  const helper = quotePosixShell(browser)
-  return `chmod 700 ${helper}; exec env ${configDir} BROWSER=${helper} ${claude}`
-}
-
 function resolveClaudeInvocation(
   args: string[],
   configDir: ClaudeCommandConfig,
@@ -224,34 +210,22 @@ function resolveClaudeInvocation(
         }),
         windowsVerbatimArguments: false
       }
-    : configDir.linuxPath && configDir.wslDistro
+    : process.platform === 'win32'
       ? {
-          // Same login as the CLI's WSL sign-in: the distro's login shell finds an nvm/mise claude.
-          command: resolveWslExecutablePath(),
-          args: buildWslExecArgs(configDir.wslDistro, [
-            '/bin/sh',
-            '-c',
-            buildWslLoginShellCommand(wslClaudeCommand(configDir.linuxPath, args, browser))
-          ]),
-          env: process.env,
+          ...buildWindowsCommandInvocation(hostClaudeCommand(), args),
+          env: withCliRuntimeOnPath(hostClaudeCommand(), {
+            ...process.env,
+            ...claudeConfigDirEnv(configDir.windowsPath, browser)
+          })
+        }
+      : {
+          command: hostClaudeCommand(),
+          args,
+          env: withCliRuntimeOnPath(hostClaudeCommand(), {
+            ...process.env,
+            ...claudeConfigDirEnv(configDir.windowsPath, browser)
+          }),
           windowsVerbatimArguments: false
         }
-      : process.platform === 'win32'
-        ? {
-            ...buildWindowsCommandInvocation(hostClaudeCommand(), args),
-            env: withCliRuntimeOnPath(hostClaudeCommand(), {
-              ...process.env,
-              ...claudeConfigDirEnv(configDir.windowsPath, browser)
-            })
-          }
-        : {
-            command: hostClaudeCommand(),
-            args,
-            env: withCliRuntimeOnPath(hostClaudeCommand(), {
-              ...process.env,
-              ...claudeConfigDirEnv(configDir.windowsPath, browser)
-            }),
-            windowsVerbatimArguments: false
-          }
   return spawnConfig
 }

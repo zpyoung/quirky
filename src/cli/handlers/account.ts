@@ -35,7 +35,6 @@ import {
   type InteractiveLoginSession,
   withInteractiveLoginCleanup
 } from './interactive-login-interruption'
-import { getWslAccountTarget } from './account-wsl-location'
 import { addDataAccount, listDataAccounts, mutateDataAccount } from './data-account-commands'
 import { formatAccountsBlock, formatDataAccounts } from './account-list-format'
 
@@ -141,10 +140,10 @@ async function runAgentLoginInTerminal(
 }
 
 /** Signs in to a new account folder the host created, then registers it (superset AddAccountDialog). */
-async function addClaudeAccount({ client, cwd, json }: HandlerContext): Promise<void> {
+async function addClaudeAccount({ client, json }: HandlerContext): Promise<void> {
   const { result: signIn } = await client.call<ClaudeAccountSignIn>(
     'accounts.beginClaudeSignIn',
-    getWslAccountTarget(cwd) ?? {},
+    {},
     { timeoutMs: 300_000 }
   )
   const session: InteractiveLoginSession = {
@@ -193,7 +192,7 @@ async function addClaudeAccount({ client, cwd, json }: HandlerContext): Promise<
 }
 
 /** Logs into a Codex account in a temp CODEX_HOME, then registers it with the local runtime. */
-async function addCodexAccount({ client, cwd, json }: HandlerContext): Promise<void> {
+async function addCodexAccount({ client, json }: HandlerContext): Promise<void> {
   const codexHome = mkdtempSync(join(tmpdir(), 'orca-account-add-codex-'))
   const session: InteractiveLoginSession = {
     child: null,
@@ -217,8 +216,7 @@ async function addCodexAccount({ client, cwd, json }: HandlerContext): Promise<v
       )
       session.registering = true
       return client.call<CodexRateLimitAccountsState>('accounts.addCodexFromHome', {
-        sourceHome: codexHome,
-        ...getWslAccountTarget(cwd)
+        sourceHome: codexHome
       })
     }
   )

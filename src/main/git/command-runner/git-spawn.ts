@@ -3,9 +3,7 @@ import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe
 import { startGitSpan } from '../../observability/instrumentation'
 import { createAbortError } from './abort-error'
 import { resolveGitCommand } from './git-command-resolution'
-import { pendingWslDriveCheckoutGitRouting } from '../wsl-drive-checkout-git-routing'
 import { untranslatedGitOutputEnv } from './git-process-env'
-import { prepareWindowsHostGitEnvironment } from './windows-host-git-environment'
 import type { GitAdmissionTier } from './git-exec-options'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { classifyGitCommand } from '../../../shared/git-command-classification'
@@ -28,17 +26,7 @@ export async function gitSpawnAfterWindowsEnvironmentReady(
   if (options.signal?.aborted) {
     throw createAbortError()
   }
-  const lineEndingsReady = pendingWslDriveCheckoutGitRouting(args, options)
-  if (lineEndingsReady) {
-    await lineEndingsReady
-  }
-  const resolved = resolveGitCommand(args, {
-    cwd: options.cwd,
-    ...(options.wslDistro ? { wslDistro: options.wslDistro } : {}),
-    ...(options.env ? { env: options.env } : {})
-  })
-  const env = await (prepareWindowsHostGitEnvironment(resolved, options.env, options.signal) ??
-    options.env)
+  const env = options.env
   if (options.signal?.aborted) {
     throw createAbortError()
   }
@@ -116,12 +104,8 @@ export async function withGitAdmission(
 }
 
 export function gitSpawn(args: string[], options: GitSpawnOptions): ChildProcess {
-  const { wslDistro, admissionTier: _admissionTier, ...spawnOptions } = options
-  const resolved = resolveGitCommand(args, {
-    cwd: options.cwd,
-    ...(wslDistro ? { wslDistro } : {}),
-    ...(spawnOptions.env ? { env: spawnOptions.env } : {})
-  })
+  const { wslDistro: _wslDistro, admissionTier: _admissionTier, ...spawnOptions } = options
+  const resolved = resolveGitCommand(args, { cwd: options.cwd })
   const spawnStartedAt = performance.now()
   const child = spawn(resolved.binary, resolved.args, {
     ...spawnOptions,

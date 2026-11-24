@@ -2,9 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildWslSkillDiscoveryCommand } from '../skill-discovery-wsl'
 import { findSkillFiles } from '../skill-root-file-walk'
-import { isSkillStagingEntryName, skillDeleteStagedName, SKILL_STAGING_GLOB } from './staging-names'
+import { isSkillStagingEntryName, skillDeleteStagedName } from './staging-names'
 
 const roots: string[] = []
 
@@ -52,24 +51,5 @@ describe('native walker', () => {
     await mkdir(real)
     await writeFile(join(real, 'SKILL.md'), '---\nname: demo\n---\n')
     expect(await findSkillFiles(root, 4)).toEqual([join(real, 'SKILL.md')])
-  })
-})
-
-describe('WSL guest scan', () => {
-  it('prunes the same staging shapes the native walker skips', () => {
-    // The runner receives the script directly, so assert on its find expression.
-    const command = buildWslSkillDiscoveryCommand([
-      {
-        id: 'home-agents',
-        label: 'Agent skills home',
-        path: '/home/u/.agents/skills',
-        sourceKind: 'home',
-        providers: ['agent-skills'],
-        owner: null
-      }
-    ])
-    expect(command).toContain(`-name '${SKILL_STAGING_GLOB}' -prune`)
-    // The prune must gate the print, not sit beside it.
-    expect(command).toContain("-prune \\) -o \\( -type f -name 'SKILL.md' -print0 \\)")
   })
 })

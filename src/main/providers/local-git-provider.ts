@@ -5,7 +5,7 @@ import { checkoutBranch, listLocalBranches } from '../git/checkout'
 import { getHistory } from '../git/history'
 import { gitFastForward, gitFetch, gitPull, gitPullRebaseFromBase, gitPush } from '../git/remote'
 import { getRemoteCommitUrl, getRemoteFileUrl, isGitRepo } from '../git/repo'
-import { awaitWindowsHostGitEnvironmentReady, gitExecFileAsync } from '../git/runner'
+import { gitExecFileAsync } from '../git/runner'
 import {
   abortMerge,
   abortRebase,
@@ -140,13 +140,8 @@ export function createLocalGitProvider(options: LocalGitProviderOptions = {}): L
         ...(execOptions?.signal ? { signal: execOptions.signal } : {}),
         ...(execOptions?.timeoutMs === undefined ? {} : { timeout: execOptions.timeoutMs })
       }),
-    getRemoteFileUrl: async (worktreePath, relativePath, line) => {
-      await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
-      return getRemoteFileUrl(worktreePath, relativePath, line)
-    },
-    getRemoteCommitUrl: async (worktreePath, sha) => {
-      await awaitWindowsHostGitEnvironmentReady({ cwd: worktreePath })
-      return getRemoteCommitUrl(worktreePath, sha)
-    }
+    getRemoteFileUrl: async (worktreePath, relativePath, line) =>
+      getRemoteFileUrl(worktreePath, relativePath, line),
+    getRemoteCommitUrl: async (worktreePath, sha) => getRemoteCommitUrl(worktreePath, sha)
   }
 }

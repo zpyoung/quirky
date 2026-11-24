@@ -1,17 +1,11 @@
-import { posix as pathPosix } from 'node:path'
-import { parseWslUncPath, toLinuxPath, toWindowsWslUncPath } from '../../shared/wsl-paths'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
-import { getDefaultWslDistro, getWslHome } from '../wsl'
-import { isWslDistroRunning } from '../wsl-background-distro-gate'
 import {
   getSystemCodexHomePath,
   resolveOrcaManagedCodexHomePath,
-  syncCodexGlobalInstructionsIntoManagedHome,
   syncSystemCodexResourcesIntoManagedHome
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
 import {
-  getWslSelectionKey,
   normalizeCodexRuntimeSelection,
   type CodexAccountSelectionTarget
 } from './runtime-selection'
@@ -81,13 +75,10 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
     return resolved.homePath
   }
 
-  /** Trust-gates host previews without changing WSL routing or durable account state. */
+  /** Trust-gates host previews without changing durable account state. */
   resolveCodexManagedAccountHomeForInactiveFetch(
     account: CodexManagedAccount
   ): { kind: 'ready'; homePath: string } | { kind: 'skip' } {
-    if (account.managedHomeRuntime === 'wsl' || this.getWslManagedHomePath(account)) {
-      return { kind: 'ready', homePath: account.managedHomePath }
-    }
     const resolved = this.resolveSelfContainedManagedHome(account)
     return resolved.kind === 'owned'
       ? { kind: 'ready', homePath: resolved.homePath }
@@ -113,7 +104,7 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
       const account = settings.codexManagedAccounts.find(
         (candidate) => candidate.id === record.accountId
       )
-      if (!account || this.getWslManagedHomePath(account)) {
+      if (!account) {
         continue
       }
       const homePath = this.getTrustedSelfContainedManagedHomePath(account)
@@ -171,106 +162,10 @@ export abstract class CodexRuntimeHomeRouting extends CodexRuntimeHomeManagedHom
     }
   }
 
-  /** Preserve refreshed auth from retained legacy WSL panes before restart. */
-  async syncActiveWslSelectionsBeforeRestart(): Promise<void> {
-    if (process.platform !== 'win32') {
-      return
-    }
-    const settings = this.store.getSettings()
-    const drains: Promise<void>[] = []
-    for (const [selectedDistroKey, accountId] of Object.entries(
-      normalizeCodexRuntimeSelection(settings).wsl
-    )) {
-      if (!accountId) {
-        continue
-      }
-      const account = this.getActiveAccount(settings.codexManagedAccounts, accountId)
-      if (!account || account.managedHomeRuntime !== 'wsl') {
-        continue
-      }
-      const distro =
-        selectedDistroKey === getWslSelectionKey(null)
-          ? account.wslDistro?.trim() || null
-          : selectedDistroKey.trim() || null
-      if (distro) {
-        // Why: a stopped distro has no live legacy pane to drain, and the next launch prep drains anyway.
-        drains.push(
-          isWslDistroRunning(distro).then((running) =>
-            running
-              ? this.startLegacyWslAuthDrain({ runtime: 'wsl', wslDistro: distro })
-              : undefined
-          )
-        )
-      }
-    }
-    await Promise.all(drains)
-  }
-
-  protected getWslSystemCodexHomePath(target: CodexAccountSelectionTarget): string | null {
-    if (process.platform !== 'win32') {
-      return null
-    }
-    const distro = target.wslDistro?.trim() || getDefaultWslDistro()
-    if (!distro) {
-      return null
-    }
-    const home = getWslHome(distro)
-    if (home && /^[A-Za-z]:[\\/]/.test(home)) {
-      const linuxHome = toLinuxPath(home).trim()
-      return linuxHome.startsWith('/')
-        ? toWindowsWslUncPath(pathPosix.join(linuxHome, '.codex'), distro)
-        : null
-    }
-    return home ? this.joinWslPath(home, '.codex') : null
-  }
-
-  protected finishWslLaunchPreparation(
-    target: CodexAccountSelectionTarget,
-    homePath: string | null
-  ): void {
-    this.syncWslConfigAndGlobalInstructionsForLaunch(target, homePath)
-    this.startWslSessionBridgeForLaunch(target, homePath)
-  }
-
-  protected syncWslConfigAndGlobalInstructionsForLaunch(
-    target: CodexAccountSelectionTarget,
-    runtimeHomePath: string | null
-  ): void {
-    if (!runtimeHomePath) {
-      return
-    }
-    const distro =
-      parseWslUncPath(runtimeHomePath)?.distro || target.wslDistro?.trim() || getDefaultWslDistro()
-    if (!distro) {
-      return
-    }
-    const systemHomePath = this.getWslSystemCodexHomePath({ runtime: 'wsl', wslDistro: distro })
-    if (!systemHomePath || systemHomePath === runtimeHomePath) {
-      return
-    }
-    // Why: WSL uses a distro-local CODEX_HOME, so host resource mirroring can't provide the distro user's global instructions.
-    syncCodexGlobalInstructionsIntoManagedHome({
-      systemHomePath,
-      managedHomePath: runtimeHomePath
-    })
-    syncSystemConfigIntoManagedCodexHome({
-      runtimeHomePath,
-      systemHomePath,
-      systemConfigDir: toLinuxPath(systemHomePath)
-    })
-  }
-
   // Why: `null` is a real value here — it means "use the system-default lane".
   // A skipped poll needs its own channel or the fetcher silently retargets the
   // user's real ~/.codex (#STA-4422).
-  prepareForRateLimitFetch(target?: CodexAccountSelectionTarget): CodexRateLimitHomeResolution {
-    if (target?.runtime === 'wsl') {
-      const wslTarget = this.resolveWslDefaultTarget(target)
-      return {
-        kind: 'ready',
-        codexHomePath: this.getPreparedWslRateLimitHomePath(wslTarget)
-      }
-    }
+  prepareForRateLimitFetch(_target?: CodexAccountSelectionTarget): CodexRateLimitHomeResolution {
     const selfContainedAccount = this.getSelfContainedManagedHostAccount()
     if (selfContainedAccount) {
       const resolved = this.resolveSelfContainedManagedHome(selfContainedAccount)

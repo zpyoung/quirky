@@ -5,14 +5,8 @@ import { parseLinuxBootTimeSeconds, parseLinuxProcStartTicks } from './daemon-pr
 import type {
   LinuxStatEvidence,
   ProcessLivenessVerdict,
-  ProcessSignalEvidence,
-  WindowsProcessEvidence
+  ProcessSignalEvidence
 } from './daemon-incarnation-evidence-types'
-import {
-  readWindowsProcessCreationTime,
-  readWindowsProcessTableFresh,
-  type WindowsProcessRow
-} from '../windows/windows-process-table'
 
 const execFileAsync = promisify(execFile)
 
@@ -21,7 +15,6 @@ type InspectionCommandRunner = (file: string, args: string[], timeoutMs: number)
 export type DaemonProcessInspectionDependencies = {
   readTextFile?: (path: string) => Promise<string>
   runCommand?: InspectionCommandRunner
-  readProcessTable?: () => Promise<WindowsProcessRow[]>
 }
 
 export function inspectProcessSignal(pid: number): ProcessSignalEvidence {
@@ -103,31 +96,6 @@ export async function readProcessCommandLine(
     return stdout.trim() || undefined
   } catch {
     return undefined
-  }
-}
-
-// Only a table that was read and lacks the PID proves absence; the reader rejects a truncated one.
-export async function queryWindowsProcess(
-  pid: number,
-  dependencies: DaemonProcessInspectionDependencies = {}
-): Promise<WindowsProcessEvidence> {
-  if (!Number.isSafeInteger(pid) || pid <= 0) {
-    return { status: 'unavailable' }
-  }
-  let rows: WindowsProcessRow[]
-  try {
-    rows = await (dependencies.readProcessTable ?? readWindowsProcessTableFresh)()
-  } catch {
-    return { status: 'unavailable' }
-  }
-  const row = rows.find((candidate) => candidate.pid === pid)
-  if (!row) {
-    return { status: 'missing' }
-  }
-  return {
-    status: 'present',
-    commandLine: row.command || null,
-    startedAtMs: row.creationTimeMs ?? readWindowsProcessCreationTime(pid)
   }
 }
 

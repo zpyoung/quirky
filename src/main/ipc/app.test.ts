@@ -13,8 +13,7 @@ const {
   showOpenDialogMock,
   trustFloatingWorkspaceDirectoryMock,
   registerRendererShutdownCheckpointHandlerMock,
-  registerMacKeyboardLayoutChangeNotificationsMock,
-  prepareWindowsAdministratorRestartMock
+  registerMacKeyboardLayoutChangeNotificationsMock
 } = vi.hoisted(() => ({
   handlers: new Map<string, (_event: unknown, args?: unknown) => unknown>(),
   appExitMock: vi.fn(),
@@ -26,8 +25,7 @@ const {
   showOpenDialogMock: vi.fn(),
   trustFloatingWorkspaceDirectoryMock: vi.fn(),
   registerRendererShutdownCheckpointHandlerMock: vi.fn(),
-  registerMacKeyboardLayoutChangeNotificationsMock: vi.fn(),
-  prepareWindowsAdministratorRestartMock: vi.fn()
+  registerMacKeyboardLayoutChangeNotificationsMock: vi.fn()
 }))
 
 vi.mock('node:child_process', () => ({
@@ -105,10 +103,6 @@ vi.mock('../app-relaunch', async (importOriginal) => ({
   relaunchApp: relaunchAppMock
 }))
 
-vi.mock('../windows/windows-administrator-restart', () => ({
-  prepareWindowsAdministratorRestart: prepareWindowsAdministratorRestartMock
-}))
-
 vi.mock('./floating-workspace-directory', () => ({
   ensureDefaultFloatingWorkspacePath: vi.fn(),
   trustFloatingWorkspaceDirectory: trustFloatingWorkspaceDirectoryMock,
@@ -121,25 +115,6 @@ vi.mock('./renderer-shutdown-checkpoint', () => ({
 
 vi.mock('./macos-keyboard-layout-change-notifications', () => ({
   registerMacKeyboardLayoutChangeNotifications: registerMacKeyboardLayoutChangeNotificationsMock
-}))
-
-const windowsProbes = vi.hoisted(() => ({
-  isWslAvailableAsync: vi.fn(async () => true),
-  listWslDistros: vi.fn(() => ['Ubuntu']),
-  listWslDistrosAsync: vi.fn(async () => ['Ubuntu']),
-  isPwshAvailable: vi.fn(() => true),
-  isPwshAvailableAsync: vi.fn(async () => true)
-}))
-
-vi.mock('../wsl', () => ({
-  isWslAvailableAsync: windowsProbes.isWslAvailableAsync,
-  listWslDistros: windowsProbes.listWslDistros,
-  listWslDistrosAsync: windowsProbes.listWslDistrosAsync
-}))
-
-vi.mock('../pwsh', () => ({
-  isPwshAvailable: windowsProbes.isPwshAvailable,
-  isPwshAvailableAsync: windowsProbes.isPwshAvailableAsync
 }))
 
 import { registerAppHandlers } from './app'
@@ -160,14 +135,10 @@ describe('registerAppHandlers', () => {
     destroySystemTrayMock.mockReset()
     relaunchAppMock.mockReset()
     relaunchAppMock.mockImplementation(() => appRelaunchMock())
-    prepareWindowsAdministratorRestartMock.mockReset()
     showOpenDialogMock.mockReset()
     trustFloatingWorkspaceDirectoryMock.mockReset()
     registerRendererShutdownCheckpointHandlerMock.mockReset()
     registerMacKeyboardLayoutChangeNotificationsMock.mockReset()
-    for (const probe of Object.values(windowsProbes)) {
-      probe.mockClear()
-    }
     processKillSpy = vi.spyOn(process, 'kill').mockReturnValue(true)
     Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true })
   })
@@ -189,43 +160,6 @@ describe('registerAppHandlers', () => {
       undefined
     )
     expect(registerMacKeyboardLayoutChangeNotificationsMock).toHaveBeenCalledOnce()
-  })
-
-  it('checkpoints before scheduling the native administrator restart and quits normally', async () => {
-    const plan = { execPath: 'C:\\Orca\\resources\\bin\\orca.exe', args: ['restart'] }
-    prepareWindowsAdministratorRestartMock.mockReturnValue(plan)
-    let finishCleanup!: () => void
-    const onBeforeRelaunch = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          finishCleanup = resolve
-        })
-    )
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this handler never reads the store.
-    registerAppHandlers({} as never, { onBeforeRelaunch })
-    const pending = Promise.resolve(handlers.get('app:restartAsAdministrator')?.(null))
-    await vi.advanceTimersByTimeAsync(150)
-    expect(relaunchAppMock).not.toHaveBeenCalled()
-    finishCleanup()
-    await pending
-    await vi.advanceTimersByTimeAsync(150)
-    expect(relaunchAppMock).toHaveBeenCalledWith('windows-administrator', undefined, plan)
-    expect(appQuitMock).toHaveBeenCalledOnce()
-    expect(appExitMock).not.toHaveBeenCalled()
-  })
-
-  it('keeps the desktop open if the native restart is unavailable', async () => {
-    prepareWindowsAdministratorRestartMock.mockImplementation(() => {
-      throw new Error('Unavailable')
-    })
-    const onBeforeRelaunch = vi.fn()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this handler never reads the store.
-    registerAppHandlers({} as never, { onBeforeRelaunch })
-    await expect(handlers.get('app:restartAsAdministrator')?.(null)).rejects.toThrow('Unavailable')
-    await vi.advanceTimersByTimeAsync(150)
-    expect(onBeforeRelaunch).not.toHaveBeenCalled()
-    expect(relaunchAppMock).not.toHaveBeenCalled()
-    expect(appQuitMock).not.toHaveBeenCalled()
   })
 
   it('marks relaunch as expected shutdown before exiting', async () => {
@@ -496,21 +430,5 @@ describe('registerAppHandlers', () => {
       properties: ['openDirectory']
     })
     expect(trustFloatingWorkspaceDirectoryMock).toHaveBeenCalledWith(store, '/Users/kaylee/notes')
-  })
-
-  // Why: the renderer reads these on every Windows capability refresh; the sync probes
-  // execFileSync wsl.exe/pwsh.exe and would stall the main event loop for up to 5s each.
-  it('answers the Windows shell capability channels without a blocking spawn', async () => {
-    registerAppHandlers({} as never)
-
-    await expect(handlers.get('wsl:isAvailable')?.(null)).resolves.toBe(true)
-    await expect(handlers.get('wsl:listDistros')?.(null)).resolves.toEqual(['Ubuntu'])
-    await expect(handlers.get('pwsh:isAvailable')?.(null)).resolves.toBe(true)
-
-    expect(windowsProbes.isWslAvailableAsync).toHaveBeenCalledTimes(1)
-    expect(windowsProbes.listWslDistrosAsync).toHaveBeenCalledTimes(1)
-    expect(windowsProbes.isPwshAvailableAsync).toHaveBeenCalledTimes(1)
-    expect(windowsProbes.listWslDistros).not.toHaveBeenCalled()
-    expect(windowsProbes.isPwshAvailable).not.toHaveBeenCalled()
   })
 })

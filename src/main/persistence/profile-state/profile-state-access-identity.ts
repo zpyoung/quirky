@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs'
 import { runProcessSync } from '@orca/process-host'
 import { parseLinuxProcStartTicks } from '../../daemon/daemon-process-start-time'
 import { getPsProcessIdentity } from '../../daemon/daemon-process-identity-query'
-import { loadWindowsNativeRegistry, WINDOWS_REG_SZ } from '../../windows-native-registry'
-import { readWindowsProcessCreationTime } from '../../windows/windows-process-table'
 
 let bootIdentity: string | null | undefined
 let machineIdentity: string | null | undefined
@@ -19,21 +17,6 @@ export function profileStateAccessMachineIdentity(): string | null {
     if (process.platform === 'linux') {
       const value = readFileSync('/etc/machine-id', 'utf8').trim()
       machineIdentity = /^[a-f0-9]{32}$/.test(value) && !/^0+$/.test(value) ? value : null
-    } else if (process.platform === 'win32') {
-      const registry = loadWindowsNativeRegistry()
-      const values = registry.getRegistryKey(registry.HK.LM, 'SOFTWARE\\Microsoft\\Cryptography')
-      const entry = Object.entries(values ?? {}).find(
-        ([name]) => name.toLowerCase() === 'machineguid'
-      )?.[1]
-      const value =
-        entry?.type === WINDOWS_REG_SZ && typeof entry.value === 'string'
-          ? entry.value.trim().toLowerCase()
-          : ''
-      machineIdentity =
-        /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value) &&
-        value !== '00000000-0000-0000-0000-000000000000'
-          ? `win32-machine-guid:${value}`
-          : null
     } else if (process.platform === 'darwin') {
       // Why not `sysctl kern.hostuuid`: that OID does not exist on macOS (#29259).
       const result = runProcessSync({
@@ -98,10 +81,6 @@ export function profileStateAccessProcessIdentity(pid: number): string | null {
 }
 
 function readProcessIdentity(pid: number): string | null {
-  if (process.platform === 'win32') {
-    const startedAtMs = readWindowsProcessCreationTime(pid)
-    return startedAtMs === null ? null : `win32-creation-ms:${startedAtMs}`
-  }
   if (process.platform === 'linux') {
     try {
       const ticks = parseLinuxProcStartTicks(readFileSync(`/proc/${pid}/stat`, 'utf8'))

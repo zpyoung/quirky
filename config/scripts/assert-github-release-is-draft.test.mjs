@@ -109,9 +109,6 @@ describe('release draft workflow contract', () => {
     )
     const electronBuilderConfig = require('../electron-builder.config.cjs')
     const cutCheckout = releaseWorkflow.jobs.cut.steps.find((step) => step.name === 'Checkout ref')
-    const linuxDraftStep = releaseWorkflow.jobs.build.steps.find(
-      (step) => step.name === 'Verify release remains draft after artifact upload'
-    )
     const publishRelease = releaseWorkflow.jobs['publish-release'].steps.find(
       (step) => step.name === 'Publish release'
     )
@@ -130,9 +127,6 @@ describe('release draft workflow contract', () => {
     expect(cutCheckout.with['fetch-depth']).toBe(0)
     expect(cutCheckout.with.filter).toBe('blob:none')
     expect(cutCheckout.with['fetch-tags']).toBe(true)
-    expect(linuxDraftStep.shell).toBe('bash')
-    expect(linuxDraftStep.run).toContain('assert-github-release-is-draft.mjs')
-    expect(linuxDraftStep.run).toContain('needs.cut.outputs.tag')
     expect(publishRelease.run).toContain('gh release edit')
     expect(publishRelease.run).toContain('--draft=false')
     expect(macSteps.indexOf(abortParentStep)).toBeLessThan(macSteps.indexOf(macPublishStep))
@@ -143,25 +137,13 @@ describe('release draft workflow contract', () => {
     expect(macDraftStep.run).toContain('inputs.tag')
     expect(macPublishStep.with.command).toContain('-c.publish.releaseType=draft')
 
-    const linuxCommands = releaseWorkflow.jobs.build.strategy.matrix.include
-      .filter((entry) => String(entry.platform).startsWith('linux'))
-      .map((entry) => entry.release_command)
-    expect(linuxCommands.length).toBe(2)
-    for (const command of linuxCommands) {
-      expect(command).toContain('-c.publish.releaseType=draft')
-    }
-
     const createRestore = releaseWorkflow.jobs['create-release'].steps.find(
       (step) => step.name === 'Restore draft-release scripts from the workflow ref'
-    )
-    const buildRestore = releaseWorkflow.jobs.build.steps.find(
-      (step) => step.name === 'Restore draft-publish scripts from the workflow ref'
     )
     const macRestore = macSteps.find(
       (step) => step.name === 'Restore draft-publish scripts from the workflow ref'
     )
     expect(createRestore.run).toContain('create-draft-release.mjs')
-    expect(buildRestore.run).toContain('assert-github-release-is-draft.mjs')
     expect(macRestore.run).toContain('assert-github-release-is-draft.mjs')
   })
 })

@@ -1,4 +1,3 @@
-import { win32 as pathWin32 } from 'node:path'
 import type { SFTPWrapper } from 'ssh2'
 import type { AgentHookInstallStatus } from '../../shared/agent-hook-types'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
@@ -24,20 +23,7 @@ import {
 } from './codex-hook-hash-lookup'
 import { reconcileCodexHooks } from './codex-hook-reconcile'
 import { cleanupLegacyManagedHookRepresentations } from './codex-hook-legacy-cleanup'
-import { removeStaleWslRuntimeManagedHookTrustEntries } from './codex-hook-trust-cleanup'
 import { runExclusivelyForRuntimeAndSystemTrustConfig } from './codex-hook-trust-queue'
-import {
-  getWslHookReconciliationAction,
-  getWslReconciliationKey,
-  installManagedHooksIntoWslRuntime,
-  refreshWslRuntimeUserHooks
-} from './codex-hook-wsl-runtime'
-import {
-  createCodexWslRuntimeHookInstallPlan,
-  type CodexWslRuntimeHookTarget,
-  type WslCanonicalPathSettlement
-} from './codex-wsl-hook-install-plan'
-
 /**
  * Lane-scoped so the hooks-on install never joins the hooks-off refresh, and a
  * Codex launch never joins a plain terminal's run that went ahead without Codex's answer.
@@ -54,151 +40,19 @@ export class CodexHookService {
     await refreshManagedScriptIfPresent(getManagedScriptPath(), getManagedScript())
   }
 
-  private readonly wslReconciliationGeneration = new Map<string, number>()
-  private readonly wslInstallsInFlight = new Map<string, Promise<AgentHookInstallStatus | null>>()
   private readonly launchPrepInFlight = new Map<string, Promise<AgentHookInstallStatus>>()
-
-  private supersedeWslReconciliation(runtimeHomePath: string | null | undefined): number {
-    if (!runtimeHomePath) {
-      return 0
-    }
-    const key = getWslReconciliationKey(runtimeHomePath)
-    const generation = (this.wslReconciliationGeneration.get(key) ?? 0) + 1
-    this.wslReconciliationGeneration.set(key, generation)
-    return generation
-  }
-
-  async installForRuntimeHome(
-    runtimeHomePath: string | null | undefined,
-    target?: CodexWslRuntimeHookTarget
-  ): Promise<AgentHookInstallStatus | null> {
-    const generation = this.supersedeWslReconciliation(runtimeHomePath)
-    let installedTrustConfigPath: string | null = null
-    let installSucceeded = false
-    // Why: the install below now awaits a codex app-server session, so a
-    // settlement callback can land mid-install. This gate keeps reconciliation
-    // reading the finished install's flags, as it did when the install was
-    // synchronous and no callback could interleave with it.
-    let markPrimaryInstallSettled!: () => void
-    let reconciliationChain = new Promise<void>((resolve) => {
-      markPrimaryInstallSettled = resolve
-    })
-    const reconcileSettledWslCanonicalPath = async (
-      settlement: WslCanonicalPathSettlement
-    ): Promise<void> => {
-      if (!runtimeHomePath) {
-        return
-      }
-      const key = getWslReconciliationKey(runtimeHomePath)
-      const resolvedPlan =
-        settlement.status === 'resolved'
-          ? createCodexWslRuntimeHookInstallPlan(
-              runtimeHomePath,
-              target,
-              () => settlement.canonicalPath
-            )
-          : null
-      const action = getWslHookReconciliationAction({
-        settlement,
-        isCurrentGeneration: this.wslReconciliationGeneration.get(key) === generation,
-        installedTrustConfigPath,
-        resolvedTrustConfigPath: resolvedPlan?.trustConfigPath ?? null,
-        installSucceeded
-      })
-      if (action === 'none') {
-        return
-      }
-      if (action === 'remove') {
-        try {
-          removeStaleWslRuntimeManagedHookTrustEntries(
-            pathWin32.join(runtimeHomePath, 'config.toml'),
-            []
-          )
-        } catch (error) {
-          console.warn('[codex-hook-service] failed to revoke stale WSL hook trust', error)
-        }
-        return
-      }
-      if (!resolvedPlan) {
-        return
-      }
-      const status = await installManagedHooksIntoWslRuntime(resolvedPlan)
-      if (status.state === 'error') {
-        console.warn('[codex-hook-service] failed to reconcile WSL hook path', status.detail)
-        return
-      }
-      installedTrustConfigPath = resolvedPlan.trustConfigPath
-      installSucceeded = status.state === 'installed'
-    }
-    const onCanonicalPathSettled = (settlement: WslCanonicalPathSettlement): void => {
-      const run = (): Promise<void> => reconcileSettledWslCanonicalPath(settlement)
-      reconciliationChain = reconciliationChain.then(run, run)
-      void reconciliationChain.catch((error: unknown) => {
-        console.warn('[codex-hook-service] failed to reconcile WSL hook path', error)
-      })
-    }
-    const wslPlan = createCodexWslRuntimeHookInstallPlan(
-      runtimeHomePath,
-      target,
-      undefined,
-      onCanonicalPathSettled
-    )
-    installedTrustConfigPath = wslPlan?.trustConfigPath ?? null
-    try {
-      const status = wslPlan ? await installManagedHooksIntoWslRuntime(wslPlan) : null
-      installSucceeded = status?.state === 'installed'
-      return status
-    } finally {
-      markPrimaryInstallSettled()
-    }
-  }
-
-  installForRuntimeHomeSerialized(
-    runtimeHomePath: string | null | undefined,
-    target?: CodexWslRuntimeHookTarget
-  ): Promise<AgentHookInstallStatus | null> {
-    if (!runtimeHomePath) {
-      return Promise.resolve(null)
-    }
-    const targetKey = target?.runtime === 'wsl' ? target.wslDistro?.trim().toLowerCase() : ''
-    return dedupeInFlightRun(
-      this.wslInstallsInFlight,
-      `${getWslReconciliationKey(runtimeHomePath)}\0${targetKey ?? ''}`,
-      () => this.installForRuntimeHome(runtimeHomePath, target)
-    )
-  }
 
   async prepareRuntimeHomeForLaunch(
     runtimeHomePath: string | null | undefined,
-    target: CodexWslRuntimeHookTarget | undefined,
     isHooksEnabled: () => boolean,
     launchesCodex: boolean
   ): Promise<AgentHookInstallStatus> {
     if (isHooksEnabled()) {
       // Why: a managed account's launch home is its self-contained CODEX_HOME,
       // so hooks/trust must install there rather than the shared mirror.
-      return (
-        (await this.installForRuntimeHomeSerialized(runtimeHomePath, target)) ??
-        (await this.installForLaunchPrep(
-          runtimeHomePath ?? undefined,
-          launchesCodex,
-          isHooksEnabled
-        ))
-      )
+      return this.installForLaunchPrep(runtimeHomePath ?? undefined, launchesCodex, isHooksEnabled)
     }
-    return (
-      this.refreshRuntimeUserHooksForRuntimeHome(runtimeHomePath, target) ??
-      (await this.refreshRuntimeUserHooksForLaunchPrep(runtimeHomePath ?? undefined))
-    )
-  }
-
-  refreshRuntimeUserHooksForRuntimeHome(
-    runtimeHomePath: string | null | undefined,
-    target?: CodexWslRuntimeHookTarget
-  ): AgentHookInstallStatus | null {
-    this.supersedeWslReconciliation(runtimeHomePath)
-    const wslPlan = createCodexWslRuntimeHookInstallPlan(runtimeHomePath, target)
-    return wslPlan ? refreshWslRuntimeUserHooks(wslPlan) : null
+    return this.refreshRuntimeUserHooksForLaunchPrep(runtimeHomePath ?? undefined)
   }
 
   /**
@@ -264,8 +118,7 @@ export class CodexHookService {
    * globally per Codex home, so activating a multi-pane worktree used to pay one
    * full hook install per pane back to back (measured ~790ms for 7 panes, and a
    * resumed Codex pane prepares twice). Spawns racing for the same home all want
-   * the same on-disk outcome, so they share one run — the same reason the WSL
-   * lane above shares `installForRuntimeHome`.
+   * the same on-disk outcome, so they share one run —
    *
    * Invalidation: `dedupeInFlightRun` drops the run the moment it settles, so the
    * next launch re-reads hooks.json and the user's trust state. Never widen this

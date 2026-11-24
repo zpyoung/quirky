@@ -42,7 +42,6 @@ import { registerRuntimeEnvironmentBrowserClientHostHandler } from './runtime-en
 import { advanceRuntimeEnvironmentCapabilityIncarnation } from './runtime-environment-capability-evidence'
 import { retireMobileDesktopRelayEnvironment } from './runtime-environment-mobile-relay-hosts'
 import { watchRuntimeEnvironmentPreference } from './runtime-environment-preference'
-import { isGatedOffWslHost } from '../../wsl/wsl-host-gate'
 import { resetDesktopBrowserBridgeEnvironment } from '../desktop-browser-bridge-reconcile'
 
 const remoteRuntimeSubscriptions = new Map<string, RetainedRemoteRuntimeSubscription>()
@@ -107,9 +106,7 @@ function reactivateRuntimeEnvironmentStatus(environmentId: string): void {
   const userDataPath = getUserDataPath()
   if (
     isRuntimeEnvironmentManuallyDisconnected(environmentId) ||
-    !listEnvironments(userDataPath).some(
-      (environment) => environment.id === environmentId && !isGatedOffWslHost(environment)
-    )
+    !listEnvironments(userDataPath).some((environment) => environment.id === environmentId)
   ) {
     return
   }
@@ -159,10 +156,7 @@ export function registerRuntimeEnvironmentHandlers(store: Store): void {
       forgetFailedManagedOrcadPairingRepair(getUserDataPath(), environmentId)
   })
   for (const environment of listEnvironments(getUserDataPath())) {
-    if (
-      !isRuntimeEnvironmentManuallyDisconnected(environment.id) &&
-      !isGatedOffWslHost(environment)
-    ) {
+    if (!isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
       getRuntimeEnvironmentStatusOwner(getUserDataPath(), environment.id).activate()
     }
   }

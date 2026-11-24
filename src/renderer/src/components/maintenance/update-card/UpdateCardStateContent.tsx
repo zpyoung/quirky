@@ -1,12 +1,7 @@
 import { Loader2 } from 'lucide-react'
-import type {
-  ChangelogData,
-  LinuxPackageInstallRecovery,
-  UpdateStatus
-} from '../../../../../shared/update-status-types'
+import type { ChangelogData, UpdateStatus } from '../../../../../shared/update-status-types'
 import { getReleaseNotesUrlForVersion } from '../../../../../shared/release-channel'
 import { UpdateErrorCardContent, type UpdateErrorCardModel } from '../../UpdateErrorCardContent'
-import { LinuxPackageInstallRecoveryCard } from '../../LinuxPackageInstallRecoveryCard'
 import { translate } from '@/i18n/i18n'
 import { UpdateCheckFeedback } from './UpdateCheckFeedback'
 import {
@@ -19,7 +14,6 @@ export function UpdateCardStateContent({
   status,
   changelog,
   errorCard,
-  linuxPackageRecovery,
   isLocalBuild,
   hasStartedDownload,
   prefersReducedMotion,
@@ -35,10 +29,6 @@ export function UpdateCardStateContent({
   status: UpdateStatus
   changelog: ChangelogData | null
   errorCard: UpdateErrorCardModel | null
-  linuxPackageRecovery: {
-    recovery: LinuxPackageInstallRecovery
-    diagnostic: string
-  } | null
   isLocalBuild: boolean
   hasStartedDownload: boolean
   prefersReducedMotion: boolean
@@ -64,21 +54,6 @@ export function UpdateCardStateContent({
       <UpdateCheckFeedback
         icon="check"
         text={translate('auto.components.UpdateCard.ea2a41adbe', "You're on the latest version.")}
-      />
-    )
-  }
-  if (linuxPackageRecovery) {
-    return (
-      <LinuxPackageInstallRecoveryCard
-        key={`${linuxPackageRecovery.recovery.packageType}:${linuxPackageRecovery.recovery.version}:${linuxPackageRecovery.recovery.reason}`}
-        recovery={linuxPackageRecovery.recovery}
-        diagnostic={linuxPackageRecovery.diagnostic}
-        releaseUrl={
-          isLocalBuild
-            ? undefined
-            : getReleaseNotesUrlForVersion(linuxPackageRecovery.recovery.version)
-        }
-        onClose={onCollapse}
       />
     )
   }

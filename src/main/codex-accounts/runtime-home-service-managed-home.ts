@@ -8,11 +8,7 @@ import {
 } from '../codex/codex-home-paths'
 import { syncSystemConfigIntoManagedCodexHome } from '../codex/codex-config-mirror'
 import { startCodexAccountSessionBridgeInBackground } from '../codex/codex-account-session-bridge'
-import {
-  resolveHostCodexSessionSourceHome,
-  resolveWslCodexSessionSourceHome
-} from '../codex/codex-session-source-home'
-import { parseWslUncPath } from '../../shared/wsl-paths'
+import { resolveHostCodexSessionSourceHome } from '../codex/codex-session-source-home'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import { normalizeCodexRuntimeSelection } from './runtime-selection'
 import {
@@ -22,9 +18,6 @@ import {
 import { hasCustomCodexHomeOverrideForLaunch } from '../codex/codex-real-home-path'
 import { resolveCodexSessionBackfillPaths } from '../codex/codex-session-backfill'
 import { hasCompletedCodexSessionBackfillMarker } from '../codex/codex-session-backfill-marker'
-import { getDefaultWslDistro } from '../wsl'
-import { startWslCodexSessionBridgeInBackground } from '../codex/wsl-codex-session-bridge'
-import type { CodexAccountSelectionTarget } from './runtime-selection'
 import type { CodexManagedAccount } from '../../shared/managed-account-types'
 import { CodexRuntimeHomeSync } from './runtime-home-service-sync'
 
@@ -32,17 +25,13 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
   // Why: a managed HOST account runs against its own self-contained CODEX_HOME
   // (codex-accounts/<id>/home) rather than the shared runtime mirror. Its
   // auth.json lives there and codex refreshes it in place, so two accounts never
-  // race one auth.json. WSL accounts keep their per-distro lane.
+  // race one auth.json.
   protected getSelfContainedManagedHostAccount(): CodexManagedAccount | null {
     const settings = this.store.getSettings()
-    const account = this.getActiveAccount(
+    return this.getActiveAccount(
       settings.codexManagedAccounts,
       normalizeCodexRuntimeSelection(settings).host
     )
-    if (!account || this.getWslManagedHomePath(account)) {
-      return null
-    }
-    return account
   }
 
   // Why: session discovery must surface every account's own rollouts wherever they live.
@@ -51,11 +40,6 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
     const homes: string[] = []
     let hostAccountsRootMissing: boolean | undefined
     for (const account of settings.codexManagedAccounts) {
-      const wslHome = this.getWslManagedHomePath(account)
-      if (wslHome) {
-        homes.push(wslHome)
-        continue
-      }
       // Why: no host home can be owned without the accounts root, so a lookup poll skips the
       // per-account ownership-marker reads (and their warnings) until one exists.
       hostAccountsRootMissing ??= this.isManagedAccountsRootDefinitivelyAbsent()
@@ -84,9 +68,6 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
     const settings = this.store.getSettings()
     const homes: string[] = []
     for (const account of settings.codexManagedAccounts) {
-      if (this.getWslManagedHomePath(account)) {
-        continue
-      }
       const trustedHome = this.getTrustedSelfContainedManagedHomePath(account)
       if (trustedHome) {
         homes.push(trustedHome)
@@ -267,31 +248,5 @@ export abstract class CodexRuntimeHomeManagedHome extends CodexRuntimeHomeSync {
       this.hostSystemDefaultSessionMigrationPending = true
     }
     return this.prepareHostSystemDefaultSessionMigrationPass()
-  }
-
-  protected startWslSessionBridgeForLaunch(
-    target: CodexAccountSelectionTarget,
-    runtimeHomePath: string | null
-  ): void {
-    if (process.platform !== 'win32' || !runtimeHomePath) {
-      return
-    }
-    const runtimeHomeWsl = parseWslUncPath(runtimeHomePath)
-    const distro = target.wslDistro?.trim() || runtimeHomeWsl?.distro || getDefaultWslDistro()
-    if (!distro) {
-      return
-    }
-    // Why: history-only override lets custom-CODEX_HOME users bridge from their real home; falls back to <wslHome>/.codex.
-    const systemCodexHomePath =
-      resolveWslCodexSessionSourceHome(this.store.getSettings(), distro) ??
-      this.getWslSystemCodexHomePath({ runtime: 'wsl', wslDistro: distro })
-    if (systemCodexHomePath && systemCodexHomePath !== runtimeHomePath) {
-      // Why: WSL history must be hardlinked inside the distro; host-side links can't bridge Windows and WSL filesystems in a resume-visible way.
-      void startWslCodexSessionBridgeInBackground({
-        distro,
-        systemCodexHomePath,
-        managedCodexHomePath: runtimeHomePath
-      })
-    }
   }
 }

@@ -3,16 +3,7 @@ import { spawnProcess } from '@orca/process-host'
 import type { SpawnedProcess } from '@orca/process-host/process-spec'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { removeChromiumDisabledSessionBus } from '../pty/chromium-session-bus-env'
-import {
-  appImageDaemonIdentityPath,
-  buildAppImageDaemonCommand,
-  type AppImageDaemonLaunch
-} from './daemon-appimage-launch'
 import { buildDurableDaemonScopeCommand } from './daemon-cgroup-scope'
-import {
-  buildAppImageGenerationDaemonCommand,
-  type AppImageGenerationDaemonLaunch
-} from './daemon-appimage-generation-launch'
 import { daemonLogArgs } from './daemon-launch-paths'
 import { TERMINAL_SPAWN_ADMISSION_ARG } from './terminal-spawn-gate'
 
@@ -20,10 +11,6 @@ export type DaemonChildSpawnOptions = {
   entryPath: string
   forkEntryPath: string
   relocatedExecPath?: string
-  /** Linux AppImage: exec the AppImage file so the daemon owns its mount. */
-  appImage?: AppImageDaemonLaunch
-  /** Linux AppImage: run the bundled Node inside the extracted copy, off every mount. */
-  extractedGeneration?: AppImageGenerationDaemonLaunch
   userDataPath: string
   socketPath: string
   tokenPath: string
@@ -39,16 +26,7 @@ export function buildDaemonScriptArgs(
   options: Omit<DaemonChildSpawnOptions, 'forkEntryPath' | 'relocatedExecPath'>,
   spawnerExecPath = process.execPath
 ): string[] {
-  const {
-    socketPath,
-    tokenPath,
-    pidPath,
-    launchNonce,
-    entryPath,
-    appImage,
-    extractedGeneration,
-    macosLoginSessionWatch
-  } = options
+  const { socketPath, tokenPath, pidPath, launchNonce, entryPath, macosLoginSessionWatch } = options
   return [
     '--socket',
     socketPath,
@@ -59,8 +37,7 @@ export function buildDaemonScriptArgs(
     '--launch-nonce',
     launchNonce,
     '--entry-path',
-    extractedGeneration?.identityPath ??
-      (appImage ? appImageDaemonIdentityPath(appImage) : entryPath),
+    entryPath,
     '--app-version',
     getAppEnvironment().getVersion(),
     '--spawner-exec-path',
@@ -88,14 +65,7 @@ export function spawnDaemonChildProcess(
   options: DaemonChildSpawnOptions,
   useDurableScope: boolean
 ): SpawnedProcess {
-  const {
-    forkEntryPath,
-    relocatedExecPath,
-    appImage,
-    extractedGeneration,
-    userDataPath,
-    launchNonce
-  } = options
+  const { forkEntryPath, relocatedExecPath, userDataPath, launchNonce } = options
   const scriptArgs = buildDaemonScriptArgs(options)
   // Why: run as plain Node so Electron's GPU/display init can't interfere with node-pty's posix_spawn of the spawn-helper.
   const daemonEnv: NodeJS.ProcessEnv = {
@@ -113,7 +83,7 @@ export function spawnDaemonChildProcess(
     detached: true,
     stdio: ['ignore', 'ignore', 'pipe', 'ipc']
   }
-  if (!useDurableScope && !appImage && !extractedGeneration) {
+  if (!useDurableScope) {
     return forkProcess({
       ...childOptions,
       modulePath: forkEntryPath,
@@ -123,23 +93,18 @@ export function spawnDaemonChildProcess(
       env: daemonEnv
     })
   }
-  const scopeArgs = useDurableScope ? ['--fresh-daemon-scope'] : []
-  const direct = extractedGeneration
-    ? buildAppImageGenerationDaemonCommand(
-        extractedGeneration,
-        [...scriptArgs, ...scopeArgs],
-        daemonEnv
-      )
-    : appImage
-      ? buildAppImageDaemonCommand(appImage, [...scriptArgs, ...scopeArgs], daemonEnv)
-      : {
-          command: relocatedExecPath ?? process.execPath,
-          args: [forkEntryPath, ...scriptArgs, ...scopeArgs],
-          env: daemonEnv
-        }
-  const scoped = useDurableScope
-    ? buildDurableDaemonScopeCommand(direct.command, direct.args, launchNonce, direct.env)
-    : direct
+  const scopeArgs = ['--fresh-daemon-scope']
+  const direct = {
+    command: relocatedExecPath ?? process.execPath,
+    args: [forkEntryPath, ...scriptArgs, ...scopeArgs],
+    env: daemonEnv
+  }
+  const scoped = buildDurableDaemonScopeCommand(
+    direct.command,
+    direct.args,
+    launchNonce,
+    direct.env
+  )
   return spawnProcess({
     ...childOptions,
     program: scoped.command,

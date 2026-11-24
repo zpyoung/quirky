@@ -12,7 +12,6 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentHookSource } from '../../shared/agent-hook-relay'
-import { grantDirAcl, isPermissionError } from '../win32-utils'
 import { resolveHooksJsonWritePath } from './hook-config-write-path'
 import { writeRollingFileBackup } from '../rolling-file-backup'
 import { renameOverLockedTarget } from './locked-executable-rename'
@@ -258,7 +257,7 @@ export function writeManagedScript(
 
   const tmpPath = join(dir, `.${Date.now()}-${randomUUID()}.tmp`)
   try {
-    writeScriptWithAclRetry(tmpPath, content)
+    writeFileSync(tmpPath, content, 'utf-8')
     // Why: chmod before rename so the canonical path is never visible non-executable, else the POSIX guard skips the hook.
     if (process.platform !== 'win32') {
       chmodSync(tmpPath, 0o755)
@@ -272,24 +271,6 @@ export function writeManagedScript(
         // best effort
       }
     }
-  }
-}
-
-// Why: a restrictive directory DACL makes writes fail with EPERM on Windows; grant an ACL and retry once.
-function writeScriptWithAclRetry(scriptPath: string, content: string | Buffer): void {
-  try {
-    writeFileSync(scriptPath, content, 'utf-8')
-  } catch (error) {
-    if (isPermissionError(error) && process.platform === 'win32') {
-      try {
-        grantDirAcl(dirname(scriptPath))
-        writeFileSync(scriptPath, content, 'utf-8')
-        return
-      } catch {
-        // a failed grant is not actionable; re-throw the original EPERM
-      }
-    }
-    throw error
   }
 }
 

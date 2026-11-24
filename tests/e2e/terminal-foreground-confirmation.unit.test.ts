@@ -7,14 +7,6 @@ const { spawnMock, resolveForegroundMock } = vi.hoisted(() => ({
 
 vi.mock('node-pty', () => ({ spawn: spawnMock }))
 vi.mock('../../src/main/pwsh', () => ({ isPwshAvailable: vi.fn(() => false) }))
-vi.mock('../../src/main/providers/windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: () =>
-    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-  resolveWindowsPowerShellSpawnChain: () => [
-    'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-  ],
-  getWindowsCmdPath: () => 'C:\\Windows\\System32\\cmd.exe'
-}))
 vi.mock('../../src/main/providers/agent-foreground-process', () => ({
   resolveAgentForegroundProcessWithAvailability: async (...args: unknown[]) => {
     const value = await resolveForegroundMock(...args)

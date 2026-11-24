@@ -17,10 +17,6 @@ const linkedLookup = vi.hoisted(() => ({ run: (): Promise<null> => Promise.resol
 vi.mock('electron', async () => (await import('./filesystem-test-harness')).electronMock)
 vi.mock('fs/promises', async () => (await import('./filesystem-test-harness')).fsPromisesMock)
 vi.mock(
-  '../wsl-unc-delete',
-  async () => (await import('./filesystem-test-harness')).wslUncDeleteMock
-)
-vi.mock(
   '../crash-reporting/crash-breadcrumb-store',
   async () => (await import('./filesystem-test-harness')).crashBreadcrumbMock
 )

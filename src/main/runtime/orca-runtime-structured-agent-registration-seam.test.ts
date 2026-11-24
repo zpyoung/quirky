@@ -76,8 +76,7 @@ describe('the structured agent registration list', () => {
       connect: () => {
         throw new Error('no connection')
       },
-      dataDirectory: '/orca-data',
-      isWindowsProcessStartTimeAvailable: () => true
+      dataDirectory: '/orca-data'
     })
     Object.assign(runtime, {
       resolveRuntimeFileTarget: vi.fn(async () => ({ worktree: { path: '/worktree' } }))

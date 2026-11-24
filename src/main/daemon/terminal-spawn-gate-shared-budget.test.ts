@@ -43,7 +43,6 @@ describe('one automatic-restore budget per execution host', () => {
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(() => exits.get(childPid)?.(0)),
-        terminateOwnedTree: () => 'unavailable' as const,
         forceKill: vi.fn(() => exits.get(childPid)?.(137)),
         signal: vi.fn(),
         onData: vi.fn(),

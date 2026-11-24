@@ -2,8 +2,12 @@ import type { Stats } from 'node:fs'
 import { lstat } from 'node:fs/promises'
 import type { ImportSkipReason } from '../../shared/filesystem-import-result-types'
 import { errorMessage } from '../../shared/error-message'
-import { isPermissionError } from '../win32-utils'
 import { isENOENT } from './filesystem-path-containment'
+
+function isPermissionError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  return code === 'EACCES' || code === 'EPERM'
+}
 
 export type ImportSourceRejection =
   | { sourcePath: string; status: 'skipped'; reason: ImportSkipReason }

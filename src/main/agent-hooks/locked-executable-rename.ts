@@ -1,6 +1,6 @@
 import { existsSync, renameSync, rmSync } from 'node:fs'
 import { rename, rm, stat } from 'node:fs/promises'
-import { isPermissionError } from '../win32-utils'
+import { isPermissionError } from '../../shared/permission-error'
 
 /**
  * Where a copy still running from the previous build is moved so the new file can take its name.

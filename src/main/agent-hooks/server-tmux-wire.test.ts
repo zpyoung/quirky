@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer, _internals } from './server'
 import { PANE } from './server.test-fixtures'
-import { buildRelayHookEnvelope } from '../../wsl-guest/agent-hook-envelope-build'
 
 const time = 1_800_000_000_000
 const envelope = {
@@ -57,21 +56,5 @@ describe('optional tmux projection wire metadata', () => {
       server.ingestRemote({ ...envelope, evidenceAgeMs: age }, 'connection')
     }
     expect(server.getStatusSnapshot()).toHaveLength(0)
-    const built = buildRelayHookEnvelope(
-      { ...envelope, hostEvidenceObservedAt: time - 1000 },
-      'opencode'
-    )
-    expect(built.evidenceAgeMs).toBe(1000)
-    expect(built).not.toHaveProperty('hostEvidenceObservedAt')
-    vi.setSystemTime(time + 1000)
-    expect(
-      buildRelayHookEnvelope(
-        { ...envelope, hostEvidenceObservedAt: time - 1000 },
-        'opencode',
-        undefined,
-        undefined,
-        { isReplay: true }
-      ).evidenceAgeMs
-    ).toBe(2000)
   })
 })

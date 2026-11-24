@@ -6,9 +6,7 @@ import { FinalCheckpointWaitExpiredError } from './daemon-pty-lifecycle-errors'
 import { DaemonPtySessionInput } from './daemon-pty-session-input'
 import { remainingDaemonRequestTimeoutMs } from './daemon-request-deadline'
 import type { ColdRestoreInfo } from './history-reader'
-import { normalizeWslColdRestoreCwd } from './wsl-cold-restore-cwd'
 import { SessionNotFoundError, type ListSessionsResult } from './types'
-import { resolveSafePtyDefaultCwd } from '../providers/pty-default-cwd'
 import type { PtySpawnResult } from '../providers/pty-provider-contract'
 
 export const LIVENESS_PROBE_TIMEOUT_MS = 2_000
@@ -143,20 +141,8 @@ export abstract class DaemonPtySessionControl extends DaemonPtySessionInput {
       if (!committed) {
         throw new FinalCheckpointWaitExpiredError(id)
       }
-      const wslDistro = this.wslDistrosBySessionId.get(id)
-      const detection = await this.historyReader?.detectColdRestoreState(id, { wslDistro })
-      const detected = detection?.status === 'restored' ? detection.restoreInfo : null
-      const restoreInfo = detected
-        ? {
-            ...detected,
-            cwd:
-              normalizeWslColdRestoreCwd({
-                recoveredCwd: detected.cwd,
-                requestedCwd: this.initialCwds.get(id) ?? resolveSafePtyDefaultCwd(),
-                wslDistro
-              }) ?? ''
-          }
-        : null
+      const detection = await this.historyReader?.detectColdRestoreState(id)
+      const restoreInfo = detection?.status === 'restored' ? detection.restoreInfo : null
       const coldRestore = restoreInfo ? this.buildColdRestorePayload(restoreInfo) : null
       if (coldRestore) {
         this.coldRestoreCache.set(id, coldRestore)

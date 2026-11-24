@@ -41,7 +41,6 @@ vi.mock('./claude/claude-folder-trust-file', async (importOriginal) => {
 })
 
 import { applyAgentWorkspaceTrust, type AgentTrustLaunchContext } from './agent-workspace-trust'
-import { clearWslHomeCache, rememberWslHome } from './wsl-home-cache'
 import {
   AGENT_TRUST_WRITE_DEADLINE_MS,
   SHORT_AGENT_TRUST_WRITE_DEADLINE_MS
@@ -182,52 +181,6 @@ describe('applyAgentWorkspaceTrust on this machine', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
-  })
-
-  it.each([
-    ['a WSL distro', { ...local, wslDistro: 'Ubuntu' }, WORKSPACE],
-    ['a WSL UNC workspace', local, '\\\\wsl.localhost\\Ubuntu\\home\\u\\wt']
-  ])('never writes the Windows home for %s', async (_label, context, workspacePath) => {
-    for (const preset of ['codex', 'cursor', 'copilot', 'qoder', 'antigravity'] as const) {
-      await applyAgentWorkspaceTrust(preset, workspacePath, context)
-    }
-    for (const writer of [mocks.codex, mocks.cursor, mocks.copilot, mocks.qoder]) {
-      expect(writer).not.toHaveBeenCalled()
-    }
-    expect(mocks.antigravity).not.toHaveBeenCalled()
-  })
-  describe('for Claude in a WSL guest', () => {
-    const wslAuth = {
-      configDir: '\\\\wsl.localhost\\Ubuntu\\home\\u\\.claude',
-      runtime: 'wsl',
-      wslDistro: 'Ubuntu',
-      wslLinuxConfigDir: '/home/u/.claude',
-      envPatch: {},
-      provenance: 'test'
-    } as const
-    const wsl = { ...local, claudeAuth: wslAuth, wslDistro: 'Ubuntu' }
-
-    afterEach(() => {
-      clearWslHomeCache()
-    })
-
-    it("writes nothing while the guest's home is unknown", async () => {
-      await applyAgentWorkspaceTrust('claude', '\\\\wsl.localhost\\Ubuntu\\home\\u\\wt', wsl)
-      expect(mocks.claudeGrant).not.toHaveBeenCalled()
-    })
-
-    it("never pre-trusts the guest's home, however the distro is spelled", async () => {
-      rememberWslHome('Ubuntu', '\\\\wsl.localhost\\Ubuntu\\home\\u')
-      await applyAgentWorkspaceTrust('claude', '\\\\wsl$\\ubuntu\\home\\u', wsl)
-      expect(mocks.claudeGrant).not.toHaveBeenCalled()
-    })
-
-    it("grants a folder under the guest's known home", async () => {
-      rememberWslHome('ubuntu', '\\\\wsl.localhost\\Ubuntu\\home\\u')
-      mocks.claudeGrant.mockResolvedValueOnce('unchanged')
-      await applyAgentWorkspaceTrust('claude', '\\\\wsl.localhost\\Ubuntu\\home\\u\\wt', wsl)
-      expect(mocks.claudeGrant).toHaveBeenCalledTimes(1)
-    })
   })
 })
 

@@ -27,8 +27,6 @@ import {
 import { getSshHostServerStatus, setSshHostServerStatus } from '../../ssh/ssh-host-server-status'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { connectionManager, getCurrentMainWindow } from '../ssh/ssh-ipc-context'
-import { getWslHostService } from '../../wsl/wsl-host-service-instance'
-import { assertWslHostReachable } from '../../wsl/wsl-host-gate'
 import { broadcastSshState } from '../ssh/ssh-renderer-broadcast'
 
 export async function resolveManagedRuntimeEnvironment(
@@ -36,17 +34,9 @@ export async function resolveManagedRuntimeEnvironment(
   selector: string
 ): Promise<ReturnType<typeof resolveEnvironment>> {
   const environment = resolveEnvironment(userDataPath, selector)
-  // Every call, subscription and status probe passes here, so a gated-off WSL host is never reached.
-  assertWslHostReachable(environment)
   const host = classifyRuntimeEnvironmentHost(environment)
-  switch (host.kind) {
-    case 'wsl':
-      // Reached over the wsl.exe bridge; connects only when an open project or terminal needs it.
-      await getWslHostService()?.ensureForRuntimeCall(environment.id)
-      break
-    case 'network':
-      await prepareNetworkServerForCall(userDataPath, environment)
-      break
+  if (host.kind === 'network') {
+    await prepareNetworkServerForCall(userDataPath, environment)
   }
   return resolveEnvironment(userDataPath, environment.id)
 }

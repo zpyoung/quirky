@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { grantDirAcl, isPermissionError } from '../win32-utils'
 import { durableWriteTempPath, writeFileDurableSync } from '../durable-file-write'
 import {
   assertBinding,
@@ -255,23 +254,11 @@ export class BrowserRoutePartitionBindingStore {
   }
 
   private writeDurably(contents: string): void {
-    try {
-      writeFileDurableSync(
-        durableWriteTempPath(this.options.filePath),
-        this.options.filePath,
-        contents
-      )
-    } catch (error) {
-      if (!isPermissionError(error) || process.platform !== 'win32') {
-        throw error
-      }
-      grantDirAcl(dirname(this.options.filePath))
-      writeFileDurableSync(
-        durableWriteTempPath(this.options.filePath),
-        this.options.filePath,
-        contents
-      )
-    }
+    writeFileDurableSync(
+      durableWriteTempPath(this.options.filePath),
+      this.options.filePath,
+      contents
+    )
   }
 }
 

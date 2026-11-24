@@ -14,6 +14,9 @@
  */
 export const MAX_COMMAND_LINE_CHARS = 30_000
 
+/** cmd.exe's own documented ceiling; callers that go through sshd budget below it. */
+export const CMD_EXE_COMMAND_LINE_MAX_CHARS = 8191
+
 /**
  * What `CreateProcess` will count.
  *

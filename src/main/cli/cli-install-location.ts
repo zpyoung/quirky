@@ -3,17 +3,7 @@ import { homedir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { CliInstallStatus } from '../../shared/cli-install-types'
-import {
-  hasAppImagePathEnvironment,
-  resolveAppImageRuntimeIdentity
-} from '../appimage-runtime-identity'
-import {
-  getAppImageCacheRootPath,
-  resolveAppImageExtractedRoot,
-  type AppImageExtractionOptions
-} from './appimage-extracted-root'
-import { resolveGenerationStableLauncherPath } from './appimage-generation-stable-launcher'
-import { getBundledLauncherPath, LINUX_CLI_COMMAND_NAME } from './bundled-cli-launcher-path'
+import { getBundledLauncherPath } from './bundled-cli-launcher-path'
 import { DEFAULT_MAC_COMMAND_PATH, DEV_COMMAND_NAME } from './cli-install-constants'
 import { ensureDevLauncher } from './cli-dev-launcher'
 import type { CliInstallerOptions, InstallSpec } from './cli-installer-contracts'
@@ -23,20 +13,13 @@ import {
   splitPathEntries,
   uniquePathEntries
 } from './cli-install-path-format'
-import { runMacPrivilegedCommand, writeWindowsUserPath } from './cli-privileged-processes'
-import {
-  invalidateWindowsUserPathRegistryCache,
-  readFreshWindowsUserPathRegistry,
-  readWindowsUserPathRegistry,
-  type WindowsUserPathReadResult
-} from './windows-user-path-registry'
+import { runMacPrivilegedCommand } from './cli-privileged-processes'
 
 export abstract class CliInstallLocation {
   protected abstract inspectSymlink(
     commandPath: string,
     launcherPath: string
   ): Promise<CliInstallStatus>
-  protected abstract isLinuxAppImage(): boolean
 
   protected readonly platform: NodeJS.Platform
   protected readonly isPackaged: boolean
@@ -45,29 +28,17 @@ export abstract class CliInstallLocation {
   protected readonly execPathValue: string
   protected readonly appPathValue: string
   protected readonly homePath: string
-  protected readonly localAppDataPath: string
   protected readonly processPathEnv: string | null
   protected readonly commandPathOverride: string | null
   protected readonly macCommandPath: string
   protected readonly privilegedRunner: (command: string) => Promise<void>
-  protected readonly userPathReader: () => Promise<WindowsUserPathReadResult>
-  protected readonly userPathMutationReader: () => Promise<WindowsUserPathReadResult>
-  protected readonly userPathWriter: (value: string) => Promise<void>
-  protected readonly userPathCacheInvalidator: () => void
-  protected readonly windowsEnvironment: NodeJS.ProcessEnv
-  protected readonly appImagePath: string | null
-  protected readonly hasUnverifiedAppImageRuntime: boolean
-  protected readonly appImageCacheRootPath: string
-  protected readonly appImageExtractRunner?: (appImagePath: string, cwd: string) => Promise<void>
-  protected readonly appImageDeadlineAt?: number
 
   protected get commandName(): string {
     if (!this.isPackaged && !this.commandPathOverride) {
       // Why: development builds must not claim the production shell command.
       return DEV_COMMAND_NAME
     }
-    // Why: packaged Linux uses `orca-ide` to avoid shadowing GNOME Orca's /usr/bin/orca.
-    return this.platform === 'linux' ? LINUX_CLI_COMMAND_NAME : 'orca'
+    return 'orca'
   }
 
   constructor(options: CliInstallerOptions = {}) {
@@ -78,10 +49,6 @@ export abstract class CliInstallLocation {
     this.execPathValue = options.execPath ?? process.execPath
     this.appPathValue = options.appPath ?? getAppEnvironment().getAppPath()
     this.homePath = options.homePath ?? homedir()
-    this.localAppDataPath =
-      options.localAppDataPath ??
-      process.env.LOCALAPPDATA ??
-      join(this.homePath, 'AppData', 'Local')
     this.processPathEnv = options.processPathEnv ?? process.env.PATH ?? process.env.Path ?? null
     this.commandPathOverride =
       options.commandPathOverride ?? process.env.ORCA_CLI_INSTALL_PATH ?? null
@@ -91,35 +58,6 @@ export abstract class CliInstallLocation {
       ? candidateMacPath
       : join(this.homePath, '.local', 'bin', 'orca')
     this.privilegedRunner = options.privilegedRunner ?? runMacPrivilegedCommand
-    this.userPathReader = options.userPathReader ?? readWindowsUserPathRegistry
-    this.userPathMutationReader =
-      options.userPathMutationReader ?? options.userPathReader ?? readFreshWindowsUserPathRegistry
-    this.userPathWriter = options.userPathWriter ?? ((value) => writeWindowsUserPath(value))
-    this.userPathCacheInvalidator =
-      options.userPathCacheInvalidator ?? invalidateWindowsUserPathRegistryCache
-    this.windowsEnvironment = options.windowsEnvironment ?? process.env
-    const hasExplicitAppImagePath = Object.hasOwn(options, 'appImagePath')
-    const runtimeAppImageIdentity = resolveAppImageRuntimeIdentity({
-      platform: this.platform,
-      execPath: this.execPathValue,
-      resourcesPath: this.resourcesPath
-    })
-    this.hasUnverifiedAppImageRuntime =
-      this.platform === 'linux' &&
-      this.isPackaged &&
-      !hasExplicitAppImagePath &&
-      hasAppImagePathEnvironment() &&
-      !runtimeAppImageIdentity
-    this.appImagePath =
-      this.platform === 'linux' && this.isPackaged
-        ? hasExplicitAppImagePath
-          ? (options.appImagePath ?? null)
-          : (runtimeAppImageIdentity?.appImagePath ?? null)
-        : null
-    this.appImageCacheRootPath =
-      options.appImageCacheRootPath ?? getAppImageCacheRootPath(this.homePath)
-    this.appImageExtractRunner = options.appImageExtractRunner
-    this.appImageDeadlineAt = options.appImageDeadlineAt
   }
 
   protected resolveInstallSpec(): InstallSpec | null {
@@ -128,17 +66,10 @@ export abstract class CliInstallLocation {
       return null
     }
 
-    if (this.platform === 'darwin' || this.platform === 'linux') {
+    if (this.platform === 'darwin') {
       return {
         commandPath,
         installMethod: 'symlink'
-      }
-    }
-
-    if (this.platform === 'win32') {
-      return {
-        commandPath,
-        installMethod: 'wrapper'
       }
     }
 
@@ -213,57 +144,21 @@ export abstract class CliInstallLocation {
       if (this.platform === 'darwin') {
         return `/usr/local/bin/${DEV_COMMAND_NAME}`
       }
-      if (this.platform === 'linux') {
-        return join(this.homePath, '.local', 'bin', DEV_COMMAND_NAME)
-      }
-      if (this.platform === 'win32') {
-        return join(this.localAppDataPath, 'Programs', 'Orca Dev', 'bin', `${DEV_COMMAND_NAME}.cmd`)
-      }
     }
 
     if (this.platform === 'darwin') {
       return this.macCommandPath
     }
 
-    if (this.platform === 'linux') {
-      // Why: Linux lacks a privileged global command flow; ~/.local/bin is the least-surprising user-scoped dir.
-      // Why `orca-ide`: GNOME Orca ships /usr/bin/orca, so avoid shadowing that screen reader.
-      return join(this.homePath, '.local', 'bin', LINUX_CLI_COMMAND_NAME)
-    }
-
-    if (this.platform === 'win32') {
-      // Why: NSIS /D installs can live outside LOCALAPPDATA, so use the packaged resources dir as authoritative.
-      return getBundledLauncherPath(this.platform, this.resourcesPath)
-    }
-
     return null
   }
 
   protected async resolveLauncherPath(): Promise<string | null> {
-    if (!['darwin', 'linux', 'win32'].includes(this.platform)) {
+    if (this.platform !== 'darwin') {
       return null
-    }
-
-    if (this.hasUnverifiedAppImageRuntime) {
-      return null
-    }
-
-    if (this.isLinuxAppImage()) {
-      if (!this.appImagePath || !existsSync(this.appImagePath)) {
-        return null
-      }
-      const extractionOptions = this.appImageExtractionOptions()
-      return extractionOptions
-        ? (resolveAppImageExtractedRoot(extractionOptions)?.stableLauncherPath ?? null)
-        : null
     }
 
     if (this.isPackaged) {
-      const stableLauncher =
-        this.platform === 'linux' ? resolveGenerationStableLauncherPath(this.resourcesPath) : null
-      if (stableLauncher) {
-        return stableLauncher
-      }
       const bundledPath = getBundledLauncherPath(this.platform, this.resourcesPath)
       return bundledPath && existsSync(bundledPath) ? bundledPath : null
     }
@@ -275,16 +170,5 @@ export abstract class CliInstallLocation {
       cliEntryPath: join(this.appPathValue, 'out', 'cli', 'index.js'),
       commandName: this.commandName
     })
-  }
-
-  protected appImageExtractionOptions(): AppImageExtractionOptions | null {
-    return this.appImagePath
-      ? {
-          appImagePath: this.appImagePath,
-          cacheRootPath: this.appImageCacheRootPath,
-          runExtract: this.appImageExtractRunner,
-          deadlineAt: this.appImageDeadlineAt
-        }
-      : null
   }
 }

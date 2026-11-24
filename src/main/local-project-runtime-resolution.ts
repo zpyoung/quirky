@@ -14,12 +14,6 @@ import {
   resolveProjectExecutionRuntime,
   type ProjectExecutionRuntimeResolution
 } from '../shared/project-execution-runtime'
-import {
-  getCachedWslAvailability,
-  getCachedWslDistros,
-  hasCachedWslAvailability,
-  hasCachedWslDistros
-} from './wsl'
 import { getRepoIdFromWorktreeId } from '../shared/worktree/id'
 import { projectMatchesRepo } from '../shared/project-repo-match'
 import {
@@ -64,21 +58,15 @@ function canResolveProjectRuntimeForWorktreeId(
 function resolveLocalProjectRuntime(
   store: ResolvableStore,
   project: Pick<Project, 'id' | 'localWindowsRuntimePreference'>,
-  settings: ReturnType<ResolvableStore['getSettings']> = store.getSettings(),
-  checkWslCache = true
+  settings: ReturnType<ResolvableStore['getSettings']> = store.getSettings()
 ): ProjectExecutionRuntimeResolution {
-  const wslAvailable =
-    checkWslCache && hasCachedWslAvailability()
-      ? (getCachedWslAvailability() ?? undefined)
-      : undefined
-  const availableWslDistros = checkWslCache && hasCachedWslDistros() ? getCachedWslDistros() : null
   return resolveProjectExecutionRuntime({
     appPlatform: process.platform,
     projectId: project.id,
     projectRuntimePreference: project.localWindowsRuntimePreference,
     globalWindowsRuntimeDefault: settings.localWindowsRuntimeDefault,
-    wslAvailable,
-    availableWslDistros
+    wslAvailable: undefined,
+    availableWslDistros: null
   })
 }
 
@@ -117,14 +105,10 @@ export function resolveLocalWorkspaceRuntime(
     project?.localWindowsRuntimePreference,
     workspacePath
   )
-  // A `\\wsl$` path proves its distro exists, and main's distro cache can be stale; the window
-  // checks such a path against no cache either.
-  return resolveLocalProjectRuntime(
-    store,
-    { id: project?.id ?? repo.id, localWindowsRuntimePreference: preference },
-    undefined,
-    Boolean(project?.localWindowsRuntimePreference) || preference.kind !== 'wsl'
-  )
+  return resolveLocalProjectRuntime(store, {
+    id: project?.id ?? repo.id,
+    localWindowsRuntimePreference: preference
+  })
 }
 
 /** The one local repo whose project runs a folder workspace on this machine; none for a folder

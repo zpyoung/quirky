@@ -5,11 +5,10 @@ import type { AcpLaunchSpec } from './acp-launch-specs'
 /** The execution host can supervise this ACP child and has its pinned build when one is required. */
 export function supportsAcpStructuredLocation(
   spec: AcpLaunchSpec,
-  location: AgentSessionExecutionLocation,
-  hasWindowsProcessStartTimeProof?: () => boolean
+  location: AgentSessionExecutionLocation
 ): boolean {
   return (
-    supportsSupervisedProviderChildLocation(location, hasWindowsProcessStartTimeProof) &&
+    supportsSupervisedProviderChildLocation(location) &&
     (!spec.managedRuntime || spec.managedRuntime.pin() !== null)
   )
 }

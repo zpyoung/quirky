@@ -20,7 +20,6 @@ import type {
 } from '../../shared/ai-vault-session-title'
 import { parseAiVaultListResult } from './session-list-result-validation'
 import { parseAiVaultSessionTitlesResult } from './session-title-result-validation'
-import { isGatedOffWslHost } from '../wsl/wsl-host-gate'
 import type { RuntimeAiVaultHostInfo } from '../ipc/ai-vault-runtime-scan'
 
 export type RuntimeAiVaultScanOptions = {
@@ -45,15 +44,13 @@ const aiVaultPrepareSessionResumeResultSchema = z.object({
 export function getSavedRuntimeAiVaultHostInfos(
   userDataPath: string
 ): readonly RuntimeAiVaultHostInfo[] {
-  return listEnvironments(userDataPath)
-    .filter((environment) => !isGatedOffWslHost(environment))
-    .map((environment) => ({
-      environmentId: environment.id,
-      executionHostId: toRuntimeExecutionHostId(environment.id),
-      ...(environment.connectionDependency
-        ? { connectionDependency: environment.connectionDependency }
-        : {})
-    }))
+  return listEnvironments(userDataPath).map((environment) => ({
+    environmentId: environment.id,
+    executionHostId: toRuntimeExecutionHostId(environment.id),
+    ...(environment.connectionDependency
+      ? { connectionDependency: environment.connectionDependency }
+      : {})
+  }))
 }
 
 export async function scanRuntimeAiVaultSessions(

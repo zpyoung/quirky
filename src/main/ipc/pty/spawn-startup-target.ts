@@ -1,21 +1,14 @@
 // Where a new PTY starts and in which shell/runtime, for both the window and the host spawn lane.
 
-import {
-  isWslShellName,
-  type LocalWindowsTerminalRuntimeOptions
-} from '../../../shared/local-windows-terminal-runtime'
+import type { LocalWindowsTerminalRuntimeOptions } from '../../../shared/local-windows-terminal-runtime'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type { TerminalStartupCwdMissingDirFallback } from '../../../shared/terminal-startup-cwd'
-import { isWslUncPath, toWindowsWslPath } from '../../../shared/wsl-paths'
 import type { CodexAccountSelectionTarget } from '../../codex-accounts/runtime-selection'
-import { resolveWslSessionContext } from '../../daemon/wsl-session-context'
 import {
   resolveLocalProjectRuntimeForWorktreeId,
   resolveLocalPtyOptions,
   type ProjectRuntimeResolutionStore
 } from '../../local-project-runtime-resolution'
-import { normalizeWindowsTerminalCwd } from '../../providers/windows-shell-args'
-import { wslUncDirectoryExistsAsync } from '../../wsl'
 import { getCodexSelectionTargetForPty } from './host-env/codex-home'
 
 // TEMPORARY (row 13b removes it): the window uses the renderer's runtime; the host reads the store.
@@ -67,15 +60,9 @@ export async function resolvePtySpawnStartupTarget(
       process.env.COMSPEC || 'powershell.exe'
     )
   const startup = args.missingCwdFallback
-    ? await resolveStartupCwdWithFallback(args, args.missingCwdFallback, terminalRuntimeOptions)
+    ? await resolveStartupCwdWithFallback(args, args.missingCwdFallback)
     : { cwd: args.resolveStartupCwd(args.worktreeId, args.cwd) }
-  const expectedWslDistro =
-    resolveWslSessionContext({
-      cwd: startup.cwd,
-      sessionId: args.sessionId,
-      shellOverride: terminalRuntimeOptions.shellOverride,
-      terminalWindowsWslDistro: terminalRuntimeOptions.terminalWindowsWslDistro
-    })?.distro ?? null
+  const expectedWslDistro = null
   return {
     ...startup,
     terminalRuntimeOptions,
@@ -90,48 +77,8 @@ export async function resolvePtySpawnStartupTarget(
 
 async function resolveStartupCwdWithFallback(
   { worktreeId, resolveStartupCwd, ...args }: PtySpawnStartupArgs,
-  fallback: { directoryExists: (path: string) => Promise<boolean> },
-  runtimeOptions: LocalWindowsTerminalRuntimeOptions
-): Promise<Pick<PtySpawnStartupTarget, 'cwd' | 'prevalidatedCwd' | 'startupCwdFallback'>> {
-  const isPosixStartupCwd = args.cwd?.startsWith('/') === true
-  const startupWorkspaceCwd = isPosixStartupCwd ? resolveStartupCwd(worktreeId, '.') : undefined
-  const initiallyResolvedStartupCwd = isPosixStartupCwd
-    ? resolveStartupCwd(worktreeId, args.cwd)
-    : undefined
-  // Only a Windows runtime's shell can put a POSIX cwd inside WSL.
-  const startupRuntime = process.platform === 'win32' ? runtimeOptions : undefined
-  const wslRuntimeOwnsStartupCwd =
-    isPosixStartupCwd &&
-    (isWslShellName(startupRuntime?.shellOverride) || isWslUncPath(startupWorkspaceCwd ?? ''))
-  const startupWslContext = wslRuntimeOwnsStartupCwd
-    ? resolveWslSessionContext({
-        cwd: startupWorkspaceCwd,
-        shellOverride: startupRuntime?.shellOverride,
-        terminalWindowsWslDistro: startupRuntime?.terminalWindowsWslDistro
-      })
-    : undefined
-  let prevalidatedCwd: string | undefined
-  let wslStartupCwdExists: boolean | null = null
-  let wslWorkspaceCwdExists: boolean | null = null
-  if (startupWslContext && initiallyResolvedStartupCwd) {
-    const validationCwd = toWindowsWslPath(initiallyResolvedStartupCwd, startupWslContext.distro)
-    wslStartupCwdExists = isWslUncPath(validationCwd)
-      ? await wslUncDirectoryExistsAsync(validationCwd)
-      : await fallback.directoryExists(validationCwd)
-    if (wslStartupCwdExists === true) {
-      prevalidatedCwd = validationCwd
-    }
-    if (wslStartupCwdExists === false && startupWorkspaceCwd) {
-      wslWorkspaceCwdExists = isWslUncPath(startupWorkspaceCwd)
-        ? await wslUncDirectoryExistsAsync(startupWorkspaceCwd)
-        : await fallback.directoryExists(startupWorkspaceCwd)
-      if (wslWorkspaceCwdExists === true) {
-        prevalidatedCwd = startupWorkspaceCwd
-      }
-    }
-  }
-  const allowMissingCwdFallback =
-    !wslRuntimeOwnsStartupCwd || (wslStartupCwdExists === false && wslWorkspaceCwdExists === true)
+  fallback: { directoryExists: (path: string) => Promise<boolean> }
+): Promise<Pick<PtySpawnStartupTarget, 'cwd' | 'startupCwdFallback'>> {
   let didFallbackToWorkspaceRootCwd = false
   const probedDirectories = new Map<string, boolean>()
   let unprobedDirectory: string | undefined
@@ -139,52 +86,33 @@ async function resolveStartupCwdWithFallback(
     onFallbackToWorkspaceRoot?: () => void
   ): TerminalStartupCwdMissingDirFallback => ({
     directoryExists: (path) => {
-      if (
-        startupWslContext &&
-        wslStartupCwdExists === false &&
-        path === initiallyResolvedStartupCwd
-      ) {
-        return false
-      }
-      if (startupWslContext && path === startupWorkspaceCwd) {
-        return wslWorkspaceCwdExists === true
-      }
-      const probePath = process.platform === 'win32' ? normalizeWindowsTerminalCwd(path) : path
-      const exists = probedDirectories.get(probePath)
+      const exists = probedDirectories.get(path)
       if (exists === undefined) {
-        unprobedDirectory ??= probePath
+        unprobedDirectory ??= path
       }
       return exists ?? false
     },
     onFallbackToWorkspaceRoot
   })
-  if (allowMissingCwdFallback) {
-    // Why replay: the shared resolver asks synchronously, so probe each folder it asks about off
-    // the main thread, in its order, until a dry run asks about none it lacks.
-    for (;;) {
-      unprobedDirectory = undefined
-      resolveStartupCwd(worktreeId, args.cwd, missingDirFallback())
-      if (unprobedDirectory === undefined) {
-        break
-      }
-      probedDirectories.set(unprobedDirectory, await fallback.directoryExists(unprobedDirectory))
+  // Why replay: the shared resolver asks synchronously, so probe each folder it asks about off
+  // the main thread, in its order, until a dry run asks about none it lacks.
+  for (;;) {
+    unprobedDirectory = undefined
+    resolveStartupCwd(worktreeId, args.cwd, missingDirFallback())
+    if (unprobedDirectory === undefined) {
+      break
     }
+    probedDirectories.set(unprobedDirectory, await fallback.directoryExists(unprobedDirectory))
   }
   const cwd = resolveStartupCwd(
     worktreeId,
     args.cwd,
-    allowMissingCwdFallback
-      ? missingDirFallback(() => {
-          didFallbackToWorkspaceRootCwd = true
-        })
-      : undefined
+    missingDirFallback(() => {
+      didFallbackToWorkspaceRootCwd = true
+    })
   )
-  if (didFallbackToWorkspaceRootCwd && wslWorkspaceCwdExists === true && cwd) {
-    prevalidatedCwd = cwd
-  }
   return {
     cwd,
-    prevalidatedCwd,
     startupCwdFallback: didFallbackToWorkspaceRootCwd && cwd ? { kind: 'worktree', cwd } : undefined
   }
 }

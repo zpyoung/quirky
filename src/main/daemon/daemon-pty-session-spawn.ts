@@ -15,13 +15,10 @@ import { shellPathSupportsPtyStartupBarrier, resolvePtyShellPath } from './shell
 import { shellReadyMarkerComesFromLineEditor } from '../../shared/shell-ready-marker-timing'
 import { getRecoveredHistorySeedSegments } from './terminal-history-seed-segments'
 import { AGENT_SESSION_CLAIM_DAEMON_PROTOCOL_VERSION, type CreateOrAttachResult } from './types'
-import { normalizeWslColdRestoreCwd } from './wsl-cold-restore-cwd'
-import { resolveWslSessionContext } from './wsl-session-context'
 import { resolveSafePtyDefaultCwd } from '../providers/pty-default-cwd'
 import { resolveUnixShellPath } from '../providers/local-pty-utils'
 import type { PtySpawnOptions, PtySpawnResult } from '../providers/pty-provider-contract'
-import { injectHistoryEnv, injectWslFishHistoryEnv, logHistoryInjection } from '../terminal-history'
-import { addWslEnvKeys } from '../wsl-env'
+import { injectHistoryEnv, logHistoryInjection } from '../terminal-history'
 
 export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
   // Checked again in doSpawn: retirement can close admission while spawn awaits.
@@ -70,39 +67,24 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
   }
 
   protected withHistoryIsolation(opts: PtySpawnOptions): PtySpawnOptions {
-    const wslContext = resolveWslSessionContext({
-      cwd: opts.cwd,
-      sessionId: opts.sessionId,
-      shellOverride: opts.shellOverride,
-      terminalWindowsWslDistro: opts.terminalWindowsWslDistro
-    })
     if (
       opts.attachOnly === true ||
       (opts.sessionId !== undefined && opts.isNewSession !== true) ||
       !opts.worktreeId ||
       opts.historyIsolationEnabled !== true ||
-      (process.platform === 'win32' && !wslContext)
+      process.platform === 'win32'
     ) {
       return opts
     }
     const env = { ...opts.env }
-    const preferredShell = wslContext
-      ? 'bash'
-      : opts.shellOverride || env.SHELL || process.env.SHELL || '/bin/zsh'
+    const preferredShell = opts.shellOverride || env.SHELL || process.env.SHELL || '/bin/zsh'
     const shellPath = resolveUnixShellPath(preferredShell)
-    const historyArgs = [
+    const result = injectHistoryEnv(
       env,
       opts.worktreeId,
       shellPath,
       opts.cwd ?? resolveSafePtyDefaultCwd()
-    ] as const
-    const result = wslContext
-      ? injectHistoryEnv(...historyArgs, { wslDistro: wslContext.distro })
-      : injectHistoryEnv(...historyArgs)
-    if (wslContext) {
-      injectWslFishHistoryEnv(env, opts.worktreeId, wslContext.distro)
-      addWslEnvKeys(env, ['HISTFILE', 'fish_history'])
-    }
+    )
     logHistoryInjection(opts.worktreeId, result)
     return { ...opts, env }
   }
@@ -125,12 +107,6 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
     const emulateLegacyAttachOnly =
       attachOnly && this.protocolVersion < STABLE_PANE_ATTACH_ONLY_DAEMON_PROTOCOL_VERSION
     let sessionId = requestedSessionId
-    let wslDistro = resolveWslSessionContext({
-      cwd: opts.cwd,
-      sessionId,
-      shellOverride: opts.shellOverride,
-      terminalWindowsWslDistro: opts.terminalWindowsWslDistro
-    })?.distro
     let activeSpawnContext: DaemonPtySpawnContext | null = null
     const freezeHistory = async (): Promise<void> => {
       if (!this.historyManager) {
@@ -154,11 +130,7 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
       }
       await freezeHistory()
       const recoverySessionId = activeSpawnContext?.sessionId ?? sessionId
-      const recoveryWslDistro = activeSpawnContext?.wslDistro ?? wslDistro
-      const detection = await this.historyReader.detectColdRestoreState(recoverySessionId, {
-        ...options,
-        wslDistro: recoveryWslDistro
-      })
+      const detection = await this.historyReader.detectColdRestoreState(recoverySessionId, options)
       if (detection.status === 'unreadable') {
         historyRecovery.unreadableSessionId = detection.sessionId
         return null
@@ -170,15 +142,7 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
       if (!restoreInfo) {
         return null
       }
-      return {
-        ...restoreInfo,
-        cwd:
-          normalizeWslColdRestoreCwd({
-            recoveredCwd: restoreInfo.cwd,
-            requestedCwd: opts.cwd ?? resolveSafePtyDefaultCwd(),
-            wslDistro: recoveryWslDistro
-          }) ?? ''
-      }
+      return restoreInfo
     }
 
     if (this.killedSessionTombstones.has(sessionId)) {
@@ -247,7 +211,7 @@ export abstract class DaemonPtySessionSpawn extends DaemonPtySpawnResult {
       attachOnly,
       emulateLegacyAttachOnly,
       sessionId,
-      wslDistro,
+      wslDistro: undefined,
       restoreInfo,
       restoreSkippedForLiveSession,
       effectiveCwd,

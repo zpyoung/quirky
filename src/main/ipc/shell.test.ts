@@ -50,11 +50,6 @@ vi.mock('../codex-cli/command', () => ({
   resolveCliCommand: resolveCliCommandMock
 }))
 
-vi.mock('../win32-utils', () => ({
-  getCmdExePath: () => 'C:\\Windows\\System32\\cmd.exe',
-  getSpawnArgsForWindows: getSpawnArgsForWindowsMock
-}))
-
 import { EXTERNAL_EDITOR_CLI_COMMAND, registerShellHandlers } from './shell'
 import { resolveExternalEditorLaunchSpec } from '../external-editor-launch'
 import type { SshTarget } from '../../shared/ssh-types'
@@ -406,78 +401,6 @@ describe('registerShellHandlers', () => {
         )
       }
     )
-
-    it('shows the Windows console for NeoVim executable launchers on Windows', async () => {
-      const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      const workspacePath = resolve('workspace')
-      const handler = getHandler('shell:openInExternalEditor')
-      const nvimPath = 'C:\\Program Files\\Neovim\\bin\\nvim.exe'
-
-      try {
-        await expect(
-          handler({}, { path: workspacePath, command: nvimPath, ownerHostId: 'local' })
-        ).resolves.toEqual({
-          ok: true
-        })
-        expect(resolveCliCommandMock).not.toHaveBeenCalled()
-        expect(getSpawnArgsForWindowsMock).toHaveBeenCalledWith(
-          nvimPath,
-          [normalize(workspacePath)],
-          {
-            detachedGui: false
-          }
-        )
-        expect(spawnMock).toHaveBeenCalledWith(nvimPath, [normalize(workspacePath)], {
-          detached: true,
-          stdio: 'ignore',
-          windowsHide: false
-        })
-      } finally {
-        if (platformDescriptor) {
-          Object.defineProperty(process, 'platform', platformDescriptor)
-        }
-      }
-    })
-
-    it('detaches JetBrains batch shims on Windows but leaves other launchers waiting', async () => {
-      const platformDescriptor = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      const workspacePath = normalize(resolve('workspace'))
-      const ideaShim = 'C:\\Users\\me\\AppData\\Local\\JetBrains\\Toolbox\\scripts\\idea.cmd'
-      const codeShim = 'C:\\Tools\\code.cmd'
-      const handler = getHandler('shell:openInExternalEditor')
-
-      try {
-        resolveCliCommandMock.mockReturnValueOnce(ideaShim)
-        await expect(
-          handler({}, { path: workspacePath, command: 'idea', ownerHostId: 'local' })
-        ).resolves.toEqual({
-          ok: true
-        })
-        expect(getSpawnArgsForWindowsMock).toHaveBeenLastCalledWith(ideaShim, [workspacePath], {
-          detachedGui: true
-        })
-
-        resolveCliCommandMock.mockReturnValueOnce(codeShim)
-        await expect(
-          handler({}, { path: workspacePath, command: 'code', ownerHostId: 'local' })
-        ).resolves.toEqual({
-          ok: true
-        })
-        // Why: a waiting batch launcher skips the start /B wrap; process-host builds its cmd line.
-        expect(getSpawnArgsForWindowsMock).toHaveBeenCalledTimes(1)
-        expect(spawnMock).toHaveBeenLastCalledWith(
-          expect.any(String),
-          [expect.stringContaining(`"${codeShim}" "${workspacePath}"`)],
-          expect.objectContaining({ windowsHide: true, windowsVerbatimArguments: true })
-        )
-      } finally {
-        if (platformDescriptor) {
-          Object.defineProperty(process, 'platform', platformDescriptor)
-        }
-      }
-    })
 
     it('forces Cursor launcher folders into a new window', async () => {
       resolveCliCommandMock.mockReturnValueOnce('/usr/local/bin/cursor')

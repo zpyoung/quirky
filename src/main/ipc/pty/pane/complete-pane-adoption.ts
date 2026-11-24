@@ -16,7 +16,6 @@ import {
 } from './agent-session-owners'
 import { seedHeadlessTerminalFromSpawnResult } from './terminal-spawn-restore'
 import { admitProviderReattachLaunchIdentity } from './launch-authority'
-import { ensureWslHookRelayForReattach } from '../../../agent-hooks/wsl-hook-relay-reattach'
 import { ptySizes } from '../delivery/visibility-state'
 import {
   resolveCommittedPtySize,
@@ -75,7 +74,6 @@ export async function completePaneAdoption(
           beforeAttach
         )
       : undefined
-    ensureWslHookRelayForReattach(result, args.connectionId)
     runtime?.preparePtyExecutionContext?.(result.id, result.wslDistro ?? null, {
       preserveExisting: result.wslDistro === undefined
     })

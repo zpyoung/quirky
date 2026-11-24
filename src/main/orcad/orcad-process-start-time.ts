@@ -15,7 +15,6 @@ import {
   START_TIME_TOLERANCE_MS,
   startTimesWithinTolerance
 } from '../daemon/daemon-process-start-time'
-import { readWindowsProcessCreationTime } from '../windows/windows-process-table'
 
 export type OrcadProcessIncarnation = { linuxStartTicks: string; bootId: string }
 
@@ -42,9 +41,7 @@ export type OrcadProcessIdentityReaders = {
 }
 
 export function readOrcadProcessStartedAtMs(pid: number): number | null {
-  return process.platform === 'win32'
-    ? readWindowsProcessCreationTime(pid)
-    : getProcessStartedAtMs(pid)
+  return getProcessStartedAtMs(pid)
 }
 
 /** Linux only: `/proc/<pid>/stat` field 22 and the kernel boot id, neither tied to a clock. */

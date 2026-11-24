@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SkillDiscoveryResult } from '../../shared/skills'
 import type { Repo } from '../../shared/repo-types'
 
-const { nativeScans, wslScans } = vi.hoisted(() => ({
-  nativeScans: [] as unknown[],
-  wslScans: [] as unknown[]
-}))
+const { nativeScans } = vi.hoisted(() => ({ nativeScans: [] as unknown[] }))
 
 const emptyResult = (): SkillDiscoveryResult => ({ skills: [], sources: [], scannedAt: 1 })
 
@@ -14,13 +11,6 @@ vi.mock('./discovery', () => ({
   discoverSkills: vi.fn(async (args: unknown) => {
     nativeScans.push(args)
     return emptyResult()
-  })
-}))
-
-vi.mock('./skill-discovery-wsl', () => ({
-  discoverSkillObservationInWsl: vi.fn(async (args: unknown) => {
-    wslScans.push(args)
-    return { rows: [], sources: [], scannedAt: 1 }
   })
 }))
 
@@ -43,7 +33,6 @@ function makeRepo(path: string): Repo {
 beforeEach(() => {
   clearSkillDiscoveryCaches()
   nativeScans.length = 0
-  wslScans.length = 0
   vi.mocked(clearSkillRootScanCache).mockClear()
 })
 
@@ -102,69 +91,6 @@ describe('discoverSkillsOnTarget', () => {
     await discoverSkillsOnTarget({ kind: 'native-host', cwd: '/workspace' }, [], { refresh: true })
 
     expect(nativeScans).toEqual([{ repos: [], cwd: '/workspace', refresh: true }])
-  })
-
-  it('reuses a WSL result rather than booting wsl.exe again', async () => {
-    const target = {
-      kind: 'wsl',
-      distro: 'Ubuntu',
-      homeDir: '/home/dev',
-      cwd: '/home/dev/repo'
-    } as const
-
-    await discoverSkillsOnTarget(target, [])
-    await discoverSkillsOnTarget(target, [])
-
-    expect(wslScans).toHaveLength(1)
-  })
-
-  it('never shares a WSL result across distros or workspaces', async () => {
-    await discoverSkillsOnTarget(
-      { kind: 'wsl', distro: 'Ubuntu', homeDir: '/home/dev', cwd: '/home/dev/a' },
-      []
-    )
-    await discoverSkillsOnTarget(
-      { kind: 'wsl', distro: 'Fedora', homeDir: '/home/dev', cwd: '/home/dev/a' },
-      []
-    )
-    await discoverSkillsOnTarget(
-      { kind: 'wsl', distro: 'Ubuntu', homeDir: '/home/dev', cwd: '/home/dev/b' },
-      []
-    )
-
-    expect(wslScans).toHaveLength(3)
-  })
-
-  it('distinguishes an absent WSL cwd from the literal undefined path', async () => {
-    await discoverSkillsOnTarget(
-      { kind: 'wsl', distro: 'Ubuntu', homeDir: '/home/dev', cwd: undefined },
-      []
-    )
-    await discoverSkillsOnTarget(
-      { kind: 'wsl', distro: 'Ubuntu', homeDir: '/home/dev', cwd: 'undefined' },
-      []
-    )
-
-    expect(wslScans).toEqual([
-      { distro: 'Ubuntu', homeDir: '/home/dev' },
-      { distro: 'Ubuntu', homeDir: '/home/dev', cwd: 'undefined' }
-    ])
-  })
-
-  it('re-reads a WSL target when the caller refreshes', async () => {
-    const target = {
-      kind: 'wsl',
-      distro: 'Ubuntu',
-      homeDir: '/home/dev',
-      cwd: '/home/dev/repo'
-    } as const
-
-    await discoverSkillsOnTarget(target, [])
-    await discoverSkillsOnTarget(target, [], { refresh: true })
-    await discoverSkillsOnTarget(target, [])
-
-    // The refreshed result replaces the cached one, so the third call is free.
-    expect(wslScans).toHaveLength(2)
   })
 
   it('drops the root cache too when the host clears its scans', () => {

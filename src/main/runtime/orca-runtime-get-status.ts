@@ -33,7 +33,6 @@ import {
 import { MOBILE_WEB_BUNDLE_CAPABILITY } from '../../shared/mobile-web-bundle/mobile-web-bundle-capability'
 import { loadBundledMobileWebBundle } from './bundled-mobile-web-bundle'
 import { runtimeTerminalDegradation } from './native-terminal-availability'
-import { isWindowsProcessStartTimeAvailable } from '../windows/windows-process-table'
 import type { RuntimeWorktreeLifecycleEvent } from './orca-runtime-core'
 import { WORKTREE_CREATE_RESULT_TTL_MS } from './orca-runtime-core'
 import type { RuntimePtyController } from './runtime-pty-controller-contract'
@@ -97,8 +96,6 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
     // TEMPORARY: nothing on this host reads it any more. Clients older than this build keep
     // re-probing their WSL capabilities until it is true, so it is published for one
     // compatibility window and then removed.
-    const windowsProcessStartTimeAvailable =
-      process.platform === 'win32' && isWindowsProcessStartTimeAvailable()
     const capabilities: RuntimeCapability[] = RUNTIME_CAPABILITIES.filter(
       (capability) =>
         (capability !== 'browser.screencast.v1' || canBrowse) &&
@@ -189,7 +186,6 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
       capabilities,
       ...(degradations.length > 0 ? { degradations } : {}),
       worktreeCreateIdempotency: { dedupeTtlMs: WORKTREE_CREATE_RESULT_TTL_MS },
-      ...(windowsProcessStartTimeAvailable ? { windowsProcessStartTimeAvailable } : {}),
       hostPlatform: process.platform,
       machineName: this.readMachineName(),
       terminalWindowsShell: this.store?.getSettings?.().terminalWindowsShell ?? null,

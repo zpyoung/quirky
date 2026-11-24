@@ -1,7 +1,5 @@
 import { stat } from 'node:fs/promises'
-import { isWslPath } from '../wsl'
-import { WATCHER_IGNORE_DIRS } from './filesystem-watcher-ignore'
-import { createWslWatcher, type WatchedRoot } from './filesystem-watcher-wsl'
+import type { WatchedRoot } from './filesystem-watcher-lifecycle-state'
 import { WatcherChildCapacityError } from './parcel-watcher-child-registry'
 import { isWatcherProcessFailure } from './parcel-watcher-process-failure'
 import type {
@@ -9,7 +7,7 @@ import type {
   LocalWatcherInstallToken
 } from './filesystem-watcher-lifecycle-state'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
-import { createLocalWatcher, scheduleLocalBatchFlush } from './filesystem-watcher-local-events'
+import { createLocalWatcher } from './filesystem-watcher-local-events'
 import {
   registerWatcherSenderCleanup,
   rememberUnwatchableRoot,
@@ -21,7 +19,6 @@ import { cancelLocalBatchFlush } from './filesystem-watcher-batch-control'
 export async function installLocalWatcher(
   rootKey: string,
   rootPath: string,
-  worktreePath: string,
   cancelToken: LocalWatcherInstallToken,
   scheduleCapacityRetry: (listeners: Map<number, Electron.WebContents>) => void
 ): Promise<LocalWatcherInstallResult> {
@@ -41,19 +38,7 @@ export async function installLocalWatcher(
     }
 
     try {
-      // Why: WSL paths use one snapshot subprocess inside the distro so `wsl --shutdown` can kill it; native Windows uses @parcel/watcher.
-      root = isWslPath(worktreePath)
-        ? await createWslWatcher(
-            rootKey,
-            worktreePath,
-            {
-              ignoreDirs: WATCHER_IGNORE_DIRS,
-              scheduleBatchFlush: scheduleLocalBatchFlush,
-              watchedRoots: watcherLifecycleState.watchedRoots
-            },
-            cancelToken.abortController.signal
-          )
-        : await createLocalWatcher(rootKey, rootPath, cancelToken.abortController.signal)
+      root = await createLocalWatcher(rootKey, rootPath, cancelToken.abortController.signal)
     } catch (error) {
       // Why: setup can fail after its child misses the exit deadline; retain that owner even when the renderer-facing error is swallowed.
       retainLocalWatcherPhysicalFailure(rootKey, error)

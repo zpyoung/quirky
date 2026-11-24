@@ -26,26 +26,6 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock
 }))
 
-vi.mock('../pwsh', () => ({
-  isPwshAvailable: isPwshAvailableMock
-}))
-
-// Resolve PowerShell family names to deterministic absolute paths so these
-// tests run on non-Windows CI. The real resolver (which skips the Store App
-// Execution Alias stub) is exercised in windows-powershell-executable.test.ts.
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('../providers/windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('../providers/local-pty-utils', async (importOriginal) => {
   const actual = await importOriginal<typeof LocalPtyUtils>()
   return {
@@ -64,15 +44,6 @@ vi.mock('../providers/agent-foreground-process', () => ({
       ? value
       : { available: true, processName: value }
   }
-}))
-
-// Console-membership reads run a real node-pty fork that never settles under
-// fake timers; default to "shell-only" so the degraded-scan guard falls through
-// to its existing retirement logic (the degraded-scan behavior itself is
-// covered in pty-subprocess-foreground-degraded-scan.test.ts).
-vi.mock('../providers/windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: () => new Set([12345]),
-  isWindowsPtyJobReadable: () => true
 }))
 
 import { createPtySubprocess } from './pty-subprocess'
@@ -310,43 +281,6 @@ describe('createPtySubprocess', () => {
     }
   })
 
-  it('awaits a fresh delayed Windows scan instead of serving the shell fallback', async () => {
-    const proc = mockPtyProcess()
-    proc.process = 'powershell.exe'
-    spawnMock.mockReturnValue(proc)
-    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'win32' })
-    let resolveFresh!: (processName: string) => void
-    resolveAgentForegroundProcessMock.mockReturnValue(
-      new Promise<string>((resolve) => {
-        resolveFresh = resolve
-      })
-    )
-
-    try {
-      const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-      const confirmation = handle.confirmForegroundProcess!()
-      let settled = false
-      void confirmation.then(() => {
-        settled = true
-      })
-      await Promise.resolve()
-      expect(settled).toBe(false)
-
-      resolveFresh('droid')
-      await expect(confirmation).resolves.toBe('droid')
-      expect(resolveAgentForegroundProcessMock).toHaveBeenCalledExactlyOnceWith(
-        proc.pid,
-        'powershell.exe',
-        expect.objectContaining({ fresh: true, forceProcessScan: true })
-      )
-    } finally {
-      if (platform) {
-        Object.defineProperty(process, 'platform', platform)
-      }
-    }
-  })
-
   it('returns null when a fresh Windows confirmation scan is unavailable', async () => {
     const proc = mockPtyProcess()
     proc.process = 'powershell.exe'
@@ -356,27 +290,6 @@ describe('createPtySubprocess', () => {
     resolveAgentForegroundProcessMock.mockResolvedValue({
       available: false,
       processName: 'powershell.exe'
-    })
-
-    try {
-      const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-      await expect(handle.confirmForegroundProcess!()).resolves.toBeNull()
-    } finally {
-      if (platform) {
-        Object.defineProperty(process, 'platform', platform)
-      }
-    }
-  })
-
-  it('returns null when a recognized Windows fallback disappears during confirmation', async () => {
-    const proc = mockPtyProcess()
-    proc.process = 'droid'
-    spawnMock.mockReturnValue(proc)
-    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'win32' })
-    resolveAgentForegroundProcessMock.mockResolvedValue({
-      available: true,
-      processName: null
     })
 
     try {
@@ -574,29 +487,6 @@ describe('createPtySubprocess', () => {
       )
 
       await vi.waitFor(() => expect(handle.getForegroundProcess()).toBe('codex'))
-    } finally {
-      if (platform) {
-        Object.defineProperty(process, 'platform', platform)
-      }
-    }
-  })
-
-  it('does not schedule foreground enrichment for arbitrary Windows TUIs', async () => {
-    const proc = mockPtyProcess()
-    proc.process = 'vim.exe'
-    spawnMock.mockReturnValue(proc)
-    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
-    Object.defineProperty(process, 'platform', { value: 'win32' })
-
-    try {
-      const handle = await createPtySubprocess({
-        sessionId: 'test',
-        cols: 80,
-        rows: 24
-      })
-
-      expect(handle.getForegroundProcess()).toBe('vim.exe')
-      expect(resolveAgentForegroundProcessMock).not.toHaveBeenCalled()
     } finally {
       if (platform) {
         Object.defineProperty(process, 'platform', platform)

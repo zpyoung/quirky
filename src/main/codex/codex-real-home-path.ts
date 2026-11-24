@@ -1,7 +1,6 @@
 import { resolve } from 'node:path'
 import { getSystemCodexHomePath } from './codex-home-paths'
-import { readBashStartupEnvVar, readShellStartupEnvVar } from '../pty/shell-startup-env'
-import { readPowerShellProfileEnvValues } from '../pty/powershell-profile-env'
+import { readShellStartupEnvVar } from '../pty/shell-startup-env'
 
 /** True when the user points Codex outside its standard native home. */
 export function hasCustomCodexHomeOverride(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -30,27 +29,18 @@ export function hasCustomCodexHomeOverrideForLaunch(launchEnv?: NodeJS.ProcessEn
   ) {
     return true
   }
-  // Why USERPROFILE: Windows has no HOME, and PowerShell profiles hang off it.
-  const home = getLaunchEnvValue(launchEnv, process.platform === 'win32' ? 'USERPROFILE' : 'HOME')
+  const home = getLaunchEnvValue(launchEnv, 'HOME')
   if (!home) {
     return false
   }
-  // Why: a Windows pane may run either PowerShell edition or Git Bash, so any of their
-  // startup files counts.
-  const shellCodexHomes =
-    process.platform === 'win32'
-      ? [
-          ...readPowerShellProfileEnvValues('CODEX_HOME', home),
-          readBashStartupEnvVar('CODEX_HOME', home)
-        ]
-      : [
-          readShellStartupEnvVar(
-            'CODEX_HOME',
-            home,
-            getLaunchEnvValue(launchEnv, 'SHELL'),
-            getLaunchEnvValue(launchEnv, 'XDG_CONFIG_HOME')
-          )
-        ]
+  const shellCodexHomes = [
+    readShellStartupEnvVar(
+      'CODEX_HOME',
+      home,
+      getLaunchEnvValue(launchEnv, 'SHELL'),
+      getLaunchEnvValue(launchEnv, 'XDG_CONFIG_HOME')
+    )
+  ]
   return shellCodexHomes.some(
     (codexHome) => codexHome !== undefined && hasCustomCodexHomeOverride({ CODEX_HOME: codexHome })
   )

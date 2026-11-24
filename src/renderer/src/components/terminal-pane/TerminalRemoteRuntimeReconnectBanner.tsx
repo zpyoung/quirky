@@ -3,8 +3,6 @@ import { Loader2, ServerOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
 import type { PtyTransportRecoveryState } from './pty-transport-types'
-import type { WslHostUnavailableReason } from './use-wsl-host-unavailable-reason'
-import { WslHostUnavailableBanner } from './WslHostUnavailableBanner'
 
 type VisibleRecoveryPhase = Extract<
   PtyTransportRecoveryState['phase'],
@@ -37,19 +35,13 @@ export function useRemoteRuntimeRecoveryBannerRevealed(needsAction: boolean): bo
 export function TerminalRemoteRuntimeReconnectBanner({
   phase,
   onReconnect,
-  wslHostUnavailable = null,
   pairingRefused = false
 }: {
   phase: VisibleRecoveryPhase
   onReconnect: () => void
-  /** The pane's WSL host cannot run: nothing is retrying, so say why instead. */
-  wslHostUnavailable?: WslHostUnavailableReason | null
   /** The pane's managed server refuses this desktop and pairing again over SSH failed. */
   pairingRefused?: boolean
 }): React.JSX.Element {
-  if (wslHostUnavailable) {
-    return <WslHostUnavailableBanner reason={wslHostUnavailable} />
-  }
   const retrying = phase !== 'disconnected' && !pairingRefused
 
   return (
@@ -124,9 +116,7 @@ export function DelayedRemoteRuntimeReconnectBanner({
   epoch: number
 }): React.JSX.Element | null {
   const revealed = useRemoteRuntimeRecoveryBannerRevealed(
-    props.phase === 'disconnected' ||
-      Boolean(props.wslHostUnavailable) ||
-      Boolean(props.pairingRefused)
+    props.phase === 'disconnected' || Boolean(props.pairingRefused)
   )
   return revealed ? <TerminalRemoteRuntimeReconnectBanner key={epoch} {...props} /> : null
 }

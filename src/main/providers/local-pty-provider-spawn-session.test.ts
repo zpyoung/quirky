@@ -73,31 +73,9 @@ vi.mock('../pty-descendant-termination', () => ({
   killWithDescendantSweep: killWithDescendantSweepMock
 }))
 
-// Resolve PowerShell family names to deterministic absolute paths (the fs mock
-// above otherwise makes every probe miss). The real resolver — which skips the
-// Store App Execution Alias stub — is covered in
-// windows-powershell-executable.test.ts.
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('./windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('./agent-foreground-process', () => ({
   resolveAgentForegroundProcessWithAvailability: (...args: unknown[]) =>
     resolveAgentForegroundProcessMock(...args)
-}))
-
-vi.mock('./windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: (...args: unknown[]) => readWindowsPtyJobProcessIdsMock(...args),
-  isWindowsPtyJobReadable: () => true
 }))
 
 vi.mock('../wsl', () => ({
@@ -284,53 +262,6 @@ describe('LocalPtyProvider', () => {
       expect(spawnMock).not.toHaveBeenCalled()
     })
 
-    it('keeps a native UNC session native on a conflicting WSL reattach', async () => {
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      const first = await provider.spawn({
-        cols: 80,
-        rows: 24,
-        sessionId: 'native-session',
-        cwd: '\\\\server\\share\\repo',
-        shellOverride: 'powershell.exe'
-      })
-      spawnMock.mockClear()
-
-      const second = await provider.spawn({
-        cols: 120,
-        rows: 40,
-        sessionId: first.id,
-        shellOverride: 'wsl.exe',
-        terminalWindowsWslDistro: 'Ubuntu'
-      })
-
-      expect(first.wslDistro).toBeNull()
-      expect(second.wslDistro).toBeNull()
-      expect(spawnMock).not.toHaveBeenCalled()
-    })
-
-    it('keeps the first WSL distro on a conflicting distro reattach', async () => {
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      const first = await provider.spawn({
-        cols: 80,
-        rows: 24,
-        sessionId: 'wsl-session',
-        cwd: '\\\\wsl.localhost\\Ubuntu\\home\\jin\\repo'
-      })
-      spawnMock.mockClear()
-
-      const second = await provider.spawn({
-        cols: 120,
-        rows: 40,
-        sessionId: first.id,
-        shellOverride: 'wsl.exe',
-        terminalWindowsWslDistro: 'Debian'
-      })
-
-      expect(first.wslDistro).toBe('Ubuntu')
-      expect(second.wslDistro).toBe('Ubuntu')
-      expect(spawnMock).not.toHaveBeenCalled()
-    })
-
     it('does not reattach numeric caller session ids that can collide after restart', async () => {
       const first = await provider.spawn({ cols: 80, rows: 24 })
       spawnMock.mockClear()
@@ -498,31 +429,6 @@ describe('LocalPtyProvider', () => {
         expect(pendingLocalPtySpawns.has(id)).toBe(false)
       }
     )
-
-    it('cancels deferred shell availability before finalizing a launch plan', async () => {
-      spawnMock.mockClear()
-      Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
-      let finishAvailability!: (available: boolean) => void
-      const buildSpawnEnv = vi.fn((_id: string, env: Record<string, string>) => env)
-      provider.configure({
-        getWindowsShell: () => 'powershell.exe',
-        getWindowsPowerShellImplementation: () => 'auto',
-        pwshAvailable: () =>
-          new Promise<boolean>((resolve) => {
-            finishAvailability = resolve
-          }),
-        buildSpawnEnv
-      })
-      const id = 'deferred-availability-session'
-      const spawn = provider.spawn({ cols: 80, rows: 24, sessionId: id })
-      const rejected = expect(spawn).rejects.toThrow(`PTY spawn canceled: ${id}`)
-      await provider.shutdown(id, { immediate: true })
-      finishAvailability(true)
-      await rejected
-      expect(buildSpawnEnv).not.toHaveBeenCalled()
-      expect(spawnMock.mock.calls.length).toBe(0)
-      expect(pendingLocalPtySpawns.has(id)).toBe(false)
-    })
 
     it.each(['synchronous environment', 'async environment', 'preflight'])(
       'releases cancellation state after failed %s and allows a fresh retry',

@@ -12,16 +12,7 @@ const message = 'Could not reach the update server: net::ERR_CONNECTION_REFUSED'
 const error: UpdateStatus = { state: 'error', message }
 const actionableErrors: UpdateStatus[] = [
   { ...error, userInitiated: true },
-  { ...error, version: '1.4.200' },
-  {
-    ...error,
-    recovery: {
-      kind: 'linux-package-install',
-      packageType: 'deb',
-      reason: 'manual-install-required',
-      version: '1.4.200'
-    }
-  }
+  { ...error, version: '1.4.200' }
 ]
 
 function setStatus(status: UpdateStatus): void {

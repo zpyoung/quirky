@@ -26,26 +26,6 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock
 }))
 
-vi.mock('../pwsh', () => ({
-  isPwshAvailable: isPwshAvailableMock
-}))
-
-// Resolve PowerShell family names to deterministic absolute paths so these
-// tests run on non-Windows CI. The real resolver (which skips the Store App
-// Execution Alias stub) is exercised in windows-powershell-executable.test.ts.
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('../providers/windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('../providers/local-pty-utils', async (importOriginal) => {
   const actual = await importOriginal<typeof LocalPtyUtils>()
   return {
@@ -63,15 +43,6 @@ vi.mock('../providers/agent-foreground-process', () => ({
       ? value
       : { available: true, processName: value }
   }
-}))
-
-// Console-membership reads run a real node-pty fork that never settles under
-// fake timers; default to "shell-only" so the degraded-scan guard falls through
-// to its existing retirement logic (the degraded-scan behavior itself is
-// covered in pty-subprocess-foreground-degraded-scan.test.ts).
-vi.mock('../providers/windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: () => new Set([12345]),
-  isWindowsPtyJobReadable: () => true
 }))
 
 import { createPtySubprocess } from './pty-subprocess'

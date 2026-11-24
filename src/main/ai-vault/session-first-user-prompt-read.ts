@@ -14,8 +14,6 @@ import {
 } from './session-scanner-opencode-sqlite-worker-spawn'
 import { splitOpenCodeSqliteCandidate } from './session-scanner-opencode-sqlite-paths'
 import type { FileWithMtime } from './session-scanner-types'
-import type { OpenCodeWslRuntime } from './session-scanner-opencode-wsl-runtime'
-import { configureOpenCodeWslReaders } from './session-scanner-opencode-wsl-client'
 
 export type ReadAiVaultFirstUserPromptArgs = {
   agent: AiVaultAgent
@@ -23,7 +21,6 @@ export type ReadAiVaultFirstUserPromptArgs = {
   sessionId?: string
   executionHostId?: ExecutionHostId
   codexHome?: string | null
-  wslOpenCodeReaders?: readonly OpenCodeWslRuntime[]
 }
 
 export type ReadAiVaultFirstUserPromptResult = AiVaultFirstUserPromptResult
@@ -45,9 +42,6 @@ export async function readAiVaultFirstUserPrompt(
   const executionHostId = args.executionHostId ?? LOCAL_EXECUTION_HOST_ID
   if (executionHostId !== LOCAL_EXECUTION_HOST_ID) {
     return { prompt: null }
-  }
-  if (args.wslOpenCodeReaders) {
-    configureOpenCodeWslReaders(args.wslOpenCodeReaders)
   }
 
   // Why: partial/corrupt transcripts make parsers throw. Resolve null like every

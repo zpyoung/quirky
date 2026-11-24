@@ -1,13 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const execLocal = vi.fn()
-const execWsl = vi.fn()
 
 vi.mock('../ipc/preflight-command-exec', () => ({
   execLocalPreflightCommandOrThrow: (command: string, args: string[]) =>
     execLocal(command, args) as Promise<{ stdout: string; stderr: string }>,
-  execCommandInWslOrThrow: (target: { distro?: string }, command: string) =>
-    execWsl(target, command) as Promise<{ stdout: string; stderr: string }>,
   shellQuote: (value: string) => `'${value.replace(/'/g, "'\\''")}'`
 }))
 
@@ -15,7 +12,6 @@ const { buildLocalClaudeAskGateHost } = await import('./claude-ask-suppression-l
 
 beforeEach(() => {
   execLocal.mockReset().mockResolvedValue({ stdout: '1.2.0', stderr: '' })
-  execWsl.mockReset().mockResolvedValue({ stdout: '1.2.0', stderr: '' })
 })
 
 describe('buildLocalClaudeAskGateHost', () => {
@@ -43,18 +39,6 @@ describe('buildLocalClaudeAskGateHost', () => {
     ).not.toHaveProperty('commandOverride')
   })
 
-  it('probes inside the distro when the Windows terminal shell is wsl', async () => {
-    const host = buildLocalClaudeAskGateHost(
-      { terminalWindowsShell: 'wsl.exe', terminalWindowsWslDistro: 'Ubuntu' },
-      'win32'
-    )
-
-    expect(host).toMatchObject({ kind: 'local', wslDistro: 'Ubuntu', shell: 'posix' })
-    await expect(host.probe(['claude', '--version'])).resolves.toBe('1.2.0')
-    expect(execWsl).toHaveBeenCalledWith({ distro: 'Ubuntu' }, "'claude' '--version'")
-    expect(execLocal).not.toHaveBeenCalled()
-  })
-
   it('keys the default distro apart from the native Windows host', () => {
     const wslDefault = buildLocalClaudeAskGateHost({ terminalWindowsShell: 'wsl.exe' }, 'win32')
     const native = buildLocalClaudeAskGateHost({ terminalWindowsShell: 'powershell.exe' }, 'win32')
@@ -72,6 +56,5 @@ describe('buildLocalClaudeAskGateHost', () => {
 
     await host.probe(['claude', '--version'])
     expect(execLocal).toHaveBeenCalledWith('claude', ['--version'])
-    expect(execWsl).not.toHaveBeenCalled()
   })
 })

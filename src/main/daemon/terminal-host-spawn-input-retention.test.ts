@@ -20,7 +20,6 @@ function subprocess() {
     forceKill() {
       exitListener?.(137)
     },
-    terminateOwnedTree: () => 'unavailable' as const,
     onData(listener: (data: string) => void) {
       dataListener = listener
     },

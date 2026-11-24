@@ -11,7 +11,6 @@ async function disposeLiveSession(session: Session): Promise<void> {
   try {
     await killWithDescendantSweep(session.pid, () => {}, {
       ownsRoot: () => session.isAlive,
-      terminateOwnedTree: () => session.terminateOwnedTree(),
       terminateDescendants: terminateShutdownDescendants,
       awaitEscalation: true
     })

@@ -1,19 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  DESKTOP_RC_TAG,
-  DESKTOP_STABLE_TAG,
-  agentStateRulesTag,
-  isAgentStateRulesTag
-} from './release-tag-patterns.mjs'
+import { DESKTOP_RC_TAG, DESKTOP_STABLE_TAG, MOBILE_TAG } from './release-tag-patterns.mjs'
 
-const RULES_TAGS = [agentStateRulesTag(1, 'next'), agentStateRulesTag(1, 'stable')]
-const rulesRelease = (tag, extra = {}) => ({
+const MOBILE_TAGS = ['mobile-v1.4.1', 'mobile-android-v1.4.1']
+const mobileRelease = (tag, extra = {}) => ({
   tag_name: tag,
   name: tag,
   draft: false,
   prerelease: true,
   author: { login: 'github-actions[bot]' },
-  assets: [{ name: 'agent-state-rules.json', download_count: 5 }],
+  assets: [{ name: 'mobile.apk', download_count: 5 }],
   ...extra
 })
 
@@ -22,21 +17,21 @@ const DESKTOP_ONLY_PROOFS = {
   'config/scripts/create-draft-release.mjs': async () => {
     const { latestPreviousPublishedDesktopReleaseTag } = await import('./create-draft-release.mjs')
     const releases = [
-      ...RULES_TAGS.map((tag) => rulesRelease(tag)),
+      ...MOBILE_TAGS.map((tag) => mobileRelease(tag)),
       { tag_name: 'v1.4.1', draft: false }
     ]
     expect(latestPreviousPublishedDesktopReleaseTag(releases, 'v1.4.2')).toBe('v1.4.1')
   },
   'config/scripts/publish-complete-draft-releases.mjs': async () => {
     const { isReleaseCutDraft } = await import('./publish-complete-draft-releases.mjs')
-    for (const tag of RULES_TAGS) {
-      expect(isReleaseCutDraft(rulesRelease(tag, { draft: true }))).toBe(false)
+    for (const tag of MOBILE_TAGS) {
+      expect(isReleaseCutDraft(mobileRelease(tag, { draft: true }))).toBe(false)
     }
   },
   'config/scripts/latest-stable-release.mjs': async () => {
     const { latestStableDesktopReleaseTag } = await import('./latest-stable-release.mjs')
     const releases = [
-      ...RULES_TAGS.map((tag) => rulesRelease(tag, { prerelease: false })),
+      ...MOBILE_TAGS.map((tag) => mobileRelease(tag, { prerelease: false })),
       { tag_name: 'v1.4.1' }
     ]
     expect(latestStableDesktopReleaseTag(releases)).toBe('v1.4.1')
@@ -45,7 +40,7 @@ const DESKTOP_ONLY_PROOFS = {
     const { matchingDesktopReleases } = await import('./assert-github-release-is-draft.mjs')
     expect(
       matchingDesktopReleases(
-        RULES_TAGS.map((tag) => rulesRelease(tag)),
+        MOBILE_TAGS.map((tag) => mobileRelease(tag)),
         'v1.4.1'
       )
     ).toEqual([])
@@ -54,7 +49,7 @@ const DESKTOP_ONLY_PROOFS = {
     const { verifyRequiredReleaseAssets } = await import('./verify-release-required-assets.mjs')
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify(RULES_TAGS.map((tag) => rulesRelease(tag)))))
+      vi.fn(async () => new Response(JSON.stringify(MOBILE_TAGS.map((tag) => mobileRelease(tag)))))
     )
     await expect(
       verifyRequiredReleaseAssets({ repo: 'stablyai/orca', tag: 'v1.4.1', token: '' })
@@ -79,11 +74,10 @@ describe('release tag pattern census', () => {
     }
   )
 
-  it('never classifies an agent state rules tag as a desktop release', () => {
-    for (const tag of RULES_TAGS) {
-      expect(isAgentStateRulesTag(tag)).toBe(true)
+  it('never classifies a mobile tag as a desktop release', () => {
+    for (const tag of MOBILE_TAGS) {
+      expect(MOBILE_TAG.test(tag)).toBe(true)
       expect(DESKTOP_STABLE_TAG.test(tag) || DESKTOP_RC_TAG.test(tag)).toBe(false)
     }
-    expect(() => agentStateRulesTag(1, 'beta')).toThrow()
   })
 })

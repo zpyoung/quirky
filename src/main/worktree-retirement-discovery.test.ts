@@ -133,20 +133,6 @@ describe('discoverRetiredWorktreeNames', () => {
     })
   })
 
-  it('matches a WSL UNC root', async () => {
-    await withFakeHome([`--wsl--Ubuntu-home-ada-orca-workspaces-${FIRST}`], async (home) => {
-      const retired = await discoverRetiredWorktreeNames({
-        workspaceRoots: ['\\\\wsl$\\Ubuntu\\home\\ada\\orca\\workspaces'],
-        home,
-        env: {},
-        // Stubbed even though this case asserts the host-side bucket: the real resolver shells out
-        // to `wsl.exe`, so on a Windows runner this unit test would boot the developer's distro.
-        resolveWslHome: async () => null
-      })
-      expect(retired.names).toEqual(new Set([FIRST]))
-    })
-  })
-
   it('ignores buckets belonging to a sibling root with the same prefix', async () => {
     await withFakeHome(
       [`-Users-ada-orca-workspaces-orcadyne-${FIRST}`, `-Users-ada-orca-workspaces-orca-${SECOND}`],
@@ -177,45 +163,6 @@ describe('discoverRetiredWorktreeNames', () => {
         await rm(configDir, { force: true, recursive: true })
       }
     })
-  })
-
-  it("matches a WSL workspace's bucket inside the distro, keyed by its Linux cwd", async () => {
-    // The agent for a WSL workspace is spawned through `wsl.exe`, so it runs inside the distro:
-    // its cwd is `/home/ada/...`, and its bucket lands in the distro's own home — not the
-    // Windows-side one. After the workspace directory is gone, that bucket is the only evidence.
-    const distroHome = await mkdtemp(join(tmpdir(), 'orca-retirement-distro-'))
-    await withFakeHome([], async (home) => {
-      try {
-        await mkdir(join(distroHome, '.claude', 'projects', `-home-ada-orca-workspaces-${FIRST}`), {
-          recursive: true
-        })
-        const retired = await discoverRetiredWorktreeNames({
-          workspaceRoots: ['\\\\wsl.localhost\\Ubuntu\\home\\ada\\orca\\workspaces'],
-          home,
-          env: {},
-          resolveWslHome: async (distro) => (distro === 'Ubuntu' ? distroHome : null)
-        })
-        expect(retired.names).toEqual(new Set([FIRST]))
-      } finally {
-        await rm(distroHome, { force: true, recursive: true })
-      }
-    })
-  })
-
-  it('still reads the Windows-side home for a WSL root when the distro home cannot be resolved', async () => {
-    // A stopped distro must not cost the retirements the host can still see.
-    await withFakeHome(
-      [`--wsl-localhost-Ubuntu-home-ada-orca-workspaces-${FIRST}`],
-      async (home) => {
-        const retired = await discoverRetiredWorktreeNames({
-          workspaceRoots: ['\\\\wsl.localhost\\Ubuntu\\home\\ada\\orca\\workspaces'],
-          home,
-          env: {},
-          resolveWslHome: async () => null
-        })
-        expect(retired.names).toEqual(new Set([FIRST]))
-      }
-    )
   })
 
   it('retires live workspace directories alongside surviving buckets', async () => {

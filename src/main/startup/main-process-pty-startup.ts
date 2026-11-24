@@ -3,7 +3,6 @@ import { isLocalExecutionHost } from '../../shared/execution-host'
 import { getPtyIdForPaneKey } from '../ipc/pty/pane/key-state'
 import { getDaemonProvider, listLiveDaemonPtyIds } from '../daemon/daemon-provider-state'
 import { initDaemonPtyProvider } from '../daemon/daemon-provider-init'
-import { restartLocalTerminalsAfterElevation } from '../windows/windows-administrator-restart'
 import { resolveTerminalSpawnAdmissionMode } from '../daemon/terminal-spawn-gate'
 import {
   getCodexPaneAccount,
@@ -28,9 +27,14 @@ import {
 } from '../agent-hooks/restored-status-dead-terminal-sweep'
 import { startFirstWindowStartupServices } from './first-window-startup-services'
 import { logStartupMilestone } from './startup-diagnostics'
-import type { WindowsDesktopStartupServices } from './windows-desktop-shell-path-startup'
 import type { RuntimeWorktreeLifecycleEvent } from '../runtime/orca-runtime'
 import { mainProcessState as state } from './main-process-state'
+
+export type TerminalRuntimeStartupServices = {
+  firstWindowReady: Promise<void>
+  localPtyReady: Promise<void>
+  localPtyProviderReady: Promise<void>
+}
 
 export function emitPluginWorktreeLifecycle(event: RuntimeWorktreeLifecycleEvent): void {
   state.pluginService?.emitEvent(
@@ -110,7 +114,7 @@ async function sweepRestoredStatusesAgainstLocalPtys(): Promise<void> {
   await state.runtime?.sidebarFacts?.reconcileSortStampTiers(provider)
 }
 
-export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServices {
+export function startTerminalRuntimeStartupServices(): TerminalRuntimeStartupServices {
   agentHookServer.setTmuxManagedPtyResolver(
     createLocalTmuxManagedPtyResolver({
       getPtyId: getPtyIdForPaneKey,
@@ -129,7 +133,6 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
         // Why both: desktop and `orca serve` share one restore budget per machine (D1 Q1).
         spawnAdmission: resolveTerminalSpawnAdmissionMode()
       })
-      await restartLocalTerminalsAfterElevation(signal)
       // Why: a retained shell keeps its launch-time Codex home even when the current routing lane changes.
       const hasRetainedManagedHostPane = hasRecordedManagedHostCodexPane()
       if (
@@ -196,7 +199,7 @@ export function startTerminalRuntimeStartupServices(): WindowsDesktopStartupServ
 }
 
 export function bindTerminalRuntimeStartupServices(
-  services: Promise<WindowsDesktopStartupServices>
+  services: Promise<TerminalRuntimeStartupServices>
 ): void {
   state.firstWindowStartupServicesReady = services.then((value) => value.firstWindowReady)
   state.localPtyStartupReady = services.then((value) => value.localPtyReady)

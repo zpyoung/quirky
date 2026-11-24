@@ -3,7 +3,6 @@ import type { CodexAccountSelectionTarget } from '../codex-accounts/runtime-sele
 import type { CodexRuntimeHomeService } from '../codex-accounts/runtime-home-service'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { codexHookService } from './hook-service'
-import { getDefaultWslDistro } from '../wsl'
 import { isAgentStatusHooksEnabledForAgent } from '../agent-hooks/managed-agent-hook-controls'
 import { reconcileCodexHooksForLaunch } from './codex-hook-reconcile'
 
@@ -28,7 +27,7 @@ export function createCodexRuntimeHomeLaunchPreparation(deps: {
       unavailableManagedHomePath: launchContext?.unavailableManagedHomePath
     })
     const launchesCodex = launchContext?.launchesCodex === true
-    if (runtimeHomePath === null && target?.runtime !== 'wsl') {
+    if (runtimeHomePath === null) {
       // Why only a Codex launch waits: the pane spawn already schedules the reconcile, which
       // writes only on a change; plain terminals and structured launches never wait on it.
       if (launchesCodex) {
@@ -36,10 +35,6 @@ export function createCodexRuntimeHomeLaunchPreparation(deps: {
       }
       return null
     }
-    const hookTarget =
-      target?.runtime === 'wsl'
-        ? { runtime: 'wsl' as const, wslDistro: target.wslDistro?.trim() || getDefaultWslDistro() }
-        : target
     const isHooksEnabled = (): boolean =>
       isAgentStatusHooksEnabledForAgent(deps.getSettings(), 'codex')
     const hooksEnabled = isHooksEnabled()
@@ -47,7 +42,6 @@ export function createCodexRuntimeHomeLaunchPreparation(deps: {
       // Why: honor the persisted off switch so post-startup launches can't reinstall removed hooks.
       const status = await codexHookService.prepareRuntimeHomeForLaunch(
         runtimeHomePath,
-        hookTarget,
         isHooksEnabled,
         launchesCodex
       )

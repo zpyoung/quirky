@@ -49,9 +49,7 @@ export function statusesEqual(left: UpdateStatus, right: UpdateStatus): boolean 
         left.version === right.version &&
         left.retryable === right.retryable &&
         left.retryAction === right.retryAction &&
-        left.userInitiated === right.userInitiated &&
-        // Recovery identity fences async actions, so same-valued recaptures must reach the renderer.
-        left.recovery === right.recovery
+        left.userInitiated === right.userInitiated
       )
   }
 }

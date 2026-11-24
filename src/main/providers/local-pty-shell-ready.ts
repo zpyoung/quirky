@@ -5,11 +5,6 @@
  * that point each shell at its Orca wrapper (which emits the OSC 777 marker the scanner detects).
  */
 import { basename, win32 as pathWin32 } from 'node:path'
-import {
-  encodePowerShellCommand,
-  getPowerShellOsc133Bootstrap,
-  isPowerShellExecutableName
-} from '../powershell-osc133-bootstrap'
 import { getFishCodexShellLaunchPreflight } from '../../shared/codex-shell-function'
 import { getFishClaudeShellFunction } from '../../shared/claude-shell-function'
 import { getFishXdgDataDirsLaunchEnv } from '../fish-xdg-data-dirs-handoff'
@@ -120,20 +115,6 @@ export function getShellLaunchConfig(
           : {})
       },
       supportsReadyMarker: features.includes('ready')
-    }
-  }
-
-  if (isPowerShellExecutableName(shellName)) {
-    return {
-      args: [
-        '-NoLogo',
-        '-NoExit',
-        // Why base64 and not -Command: see powershell-osc133-bootstrap.ts (MDE review).
-        '-EncodedCommand',
-        encodePowerShellCommand(getPowerShellOsc133Bootstrap())
-      ],
-      env: {},
-      supportsReadyMarker: false
     }
   }
 

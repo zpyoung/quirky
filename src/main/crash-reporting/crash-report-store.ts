@@ -3,7 +3,6 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { app } from 'electron'
-import { grantDirAclAsync, isPermissionError } from '../win32-utils'
 import {
   formatCrashReportText,
   sanitizeCrashReportBreadcrumbs,
@@ -49,10 +48,8 @@ async function wait(delayMs: number): Promise<void> {
 }
 
 async function runCrashReportFileOperationWithWindowsRecovery<T>(
-  directory: string,
   operation: () => Promise<T>
 ): Promise<T> {
-  let repairedAcl = false
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await operation()
@@ -63,16 +60,6 @@ async function runCrashReportFileOperationWithWindowsRecovery<T>(
         attempt >= WINDOWS_FILE_OPERATION_RETRY_DELAYS_MS.length
       ) {
         throw error
-      }
-      if (!repairedAcl && isPermissionError(error)) {
-        repairedAcl = true
-        try {
-          // Why: Chromium can reset userData ACLs before startup capture or
-          // recovery, so both the crash write and next prompt must repair it.
-          await grantDirAclAsync(directory)
-        } catch {
-          // The bounded retry below still handles transient file locks.
-        }
       }
       await wait(WINDOWS_FILE_OPERATION_RETRY_DELAYS_MS[attempt])
     }
@@ -227,9 +214,8 @@ export class CrashReportStore {
 
   private async readReportsFromDisk(): Promise<CrashReportRecord[]> {
     try {
-      const raw = await runCrashReportFileOperationWithWindowsRecovery(
-        path.dirname(this.filePath),
-        () => fs.readFile(this.filePath, 'utf8')
+      const raw = await runCrashReportFileOperationWithWindowsRecovery(() =>
+        fs.readFile(this.filePath, 'utf8')
       )
       const parsed = JSON.parse(raw) as Partial<CrashReportFile>
       return Array.isArray(parsed.reports) ? parsed.reports.slice(0, MAX_REPORTS) : []
@@ -245,7 +231,7 @@ export class CrashReportStore {
     const directory = path.dirname(this.filePath)
     const tmpPath = `${this.filePath}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`
     try {
-      await runCrashReportFileOperationWithWindowsRecovery(directory, async () => {
+      await runCrashReportFileOperationWithWindowsRecovery(async () => {
         await fs.mkdir(directory, { recursive: true })
         await fs.writeFile(tmpPath, `${JSON.stringify({ reports }, null, 2)}${os.EOL}`, 'utf8')
         await fs.rename(tmpPath, this.filePath)

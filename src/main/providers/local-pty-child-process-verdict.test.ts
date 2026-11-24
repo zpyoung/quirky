@@ -3,10 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { resolveForegroundMock } = vi.hoisted(() => ({ resolveForegroundMock: vi.fn() }))
 const jobMembers = vi.hoisted(() => vi.fn())
-vi.mock('./windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: jobMembers,
-  isWindowsPtyJobReadable: () => true
-}))
 
 const { confirmShellForegroundMock } = vi.hoisted(() => ({
   confirmShellForegroundMock: vi.fn()
@@ -18,7 +14,6 @@ vi.mock('./agent-foreground-process', () => ({
 }))
 import { isRetiredPtyMaster } from '../pty/node-pty-master-fd-retirement'
 import {
-  confirmLocalPtyShellForeground,
   hasLocalPtyChildProcesses,
   inspectLocalPtyChildProcesses
 } from './local-pty-foreground-inspection'
@@ -96,17 +91,6 @@ afterEach(() => {
   ptyShellPath.clear()
 })
 
-describe('confirmLocalPtyShellForeground', () => {
-  it('proves against the spawned shell path, which tells the Git Bash launcher apart', async () => {
-    const launcher = 'C:\\Program Files\\Git\\bin\\bash.exe'
-    registerPane('pty-git-bash', 'bash.exe', launcher)
-    confirmShellForegroundMock.mockResolvedValueOnce(true)
-
-    await expect(confirmLocalPtyShellForeground('pty-git-bash')).resolves.toBe(true)
-    expect(confirmShellForegroundMock).toHaveBeenCalledWith(4242, launcher, expect.any(Object))
-  })
-})
-
 // Windows has no master fd to retire, and `WindowsTerminal.process` answers from the spawn name.
 const describeOnPosix = process.platform === 'win32' ? describe.skip : describe
 
@@ -165,38 +149,6 @@ describeOnPosix('inspectLocalPtyChildProcesses on a retired master', () => {
 
 describe('inspectPtyProviderProcess child-process evidence', () => {
   const provider = new LocalPtyProvider()
-
-  it('uses the owned Windows job without a static-name marker, preserving uncertain and replaced panes', async () => {
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    registerPane('pty-win', 'powershell.exe', 'powershell.exe')
-    const inspect = () =>
-      inspectPtyProviderProcess(provider, 'pty-win', {
-        expectedIncarnationId: 'incarnation:pty-win'
-      })
-    jobMembers.mockReturnValue(new Set([4242]))
-    await expect(inspect()).resolves.toMatchObject({
-      childProcessEvidence: 'no-children',
-      hasChildProcesses: false
-    })
-    jobMembers.mockReturnValue(new Set([4242, 4243]))
-    await expect(inspect()).resolves.toMatchObject({
-      childProcessEvidence: 'children',
-      hasChildProcesses: true
-    })
-    jobMembers.mockReturnValue(null)
-    await expect(inspect()).resolves.toMatchObject({
-      childProcessEvidence: 'unverifiable',
-      hasChildProcesses: true
-    })
-    jobMembers.mockImplementationOnce(() => {
-      registerPane('pty-win', 'powershell.exe', 'powershell.exe')
-      return new Set([4242])
-    })
-    await expect(inspect()).resolves.toMatchObject({
-      childProcessEvidence: 'unverifiable',
-      hasChildProcesses: true
-    })
-  })
 
   it('carries unverifiable evidence when the child read fails after foreground inspection', async () => {
     let reads = 0

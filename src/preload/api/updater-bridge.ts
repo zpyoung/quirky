@@ -10,9 +10,6 @@ export const updaterApi = {
   check: (options) => ipcRenderer.invoke('updater:check', options),
   download: () => ipcRenderer.invoke('updater:download'),
   dismissAvailableUpdate: () => ipcRenderer.invoke('updater:dismissAvailableUpdate'),
-  getLinuxPackageInstallInstructions: () =>
-    ipcRenderer.invoke('updater:getLinuxPackageInstallInstructions'),
-  showLinuxPackage: () => ipcRenderer.invoke('updater:showLinuxPackage'),
   listBuilds: (channel, options) => ipcRenderer.invoke('updater:listBuilds', channel, options),
   quitAndInstall: (): Promise<void> =>
     prepareAndInvokeUpdaterInstall(

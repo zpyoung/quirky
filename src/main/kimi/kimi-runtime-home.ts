@@ -1,13 +1,10 @@
 import { homedir } from 'node:os'
-import { join, win32 as pathWin32 } from 'node:path'
-import { parseWslUncPath } from '../../shared/wsl-paths'
+import { join } from 'node:path'
 import {
   resolveLocalAccountRuntimeTarget,
   type LocalAccountRuntimeTarget
 } from '../../shared/local-account-runtime'
 import type { GlobalSettings } from '../../shared/global-settings-types'
-import { getWslHomeAsync, listWslDistrosAsync } from '../wsl'
-import { isWslDistroRunning } from '../wsl-background-distro-gate'
 
 export type KimiHomeResolution = LocalAccountRuntimeTarget & {
   /** null when the distro is missing or stopped, or its home could not be probed. */
@@ -41,30 +38,8 @@ export function getKimiRuntimeTarget(
  * Electron's main process for up to 5s each cycle while a distro is stopped.
  */
 export async function resolveKimiHome(
-  target: LocalAccountRuntimeTarget,
-  platform: NodeJS.Platform = process.platform
+  _target: LocalAccountRuntimeTarget,
+  _platform: NodeJS.Platform = process.platform
 ): Promise<KimiHomeResolution> {
-  if (target.runtime !== 'wsl' || platform !== 'win32') {
-    return { runtime: 'host', wslDistro: null, path: getHostKimiHome() }
-  }
-  const distro = target.wslDistro?.trim() || (await defaultWslDistro())
-  if (!distro) {
-    return { runtime: 'wsl', wslDistro: null, path: null }
-  }
-  // Why: a quota poll is background work and must not boot a stopped distro.
-  if (!(await isWslDistroRunning(distro))) {
-    return { runtime: 'wsl', wslDistro: distro, path: null }
-  }
-  const home = await getWslHomeAsync(distro)
-  // KIMI_CODE_HOME describes the Windows host process, never the distro's home.
-  return { runtime: 'wsl', wslDistro: distro, path: home ? joinKimiHome(home) : null }
-}
-
-/** Async twin of `getDefaultWslDistro`, which shells out to wsl.exe synchronously. */
-async function defaultWslDistro(): Promise<string | null> {
-  return (await listWslDistrosAsync())[0] ?? null
-}
-
-function joinKimiHome(home: string): string {
-  return parseWslUncPath(home) ? pathWin32.join(home, '.kimi-code') : join(home, '.kimi-code')
+  return { runtime: 'host', wslDistro: null, path: getHostKimiHome() }
 }

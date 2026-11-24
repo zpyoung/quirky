@@ -27,15 +27,9 @@ async function runAt(run, relayEra) {
 
 const refusalTargets = [
   // The refusal must precede everything that tags, signs or publishes.
-  [
-    'adhoc-mac-build.yml',
-    'orcad-template-support',
-    'Detect whether the ref ships the orcad template'
-  ],
   ['release-cut.yml', 'cut', 'Resolve ref SHA'],
   // Dispatchable on its own with any tag, so release-cut's refusal does not cover it.
-  ['release-mac-build.yml', 'build-mac', 'Build app'],
-  ['dev-channel-win-build.yml', 'build-win', 'Build app']
+  ['release-mac-build.yml', 'build-mac', 'Build app']
 ].map(([workflow, job, laterStep]) => {
   const jobSteps = steps(workflow, job)
   const index = jobSteps.findIndex((step) => step.name === STEP)
