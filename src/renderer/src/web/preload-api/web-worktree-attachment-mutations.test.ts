@@ -52,10 +52,7 @@ describe('paired web attachment mutation compatibility', () => {
         ...(supported
           ? {}
           : {
-              linkedPR: null,
-              linkedBitbucketPR: null,
-              linkedAzureDevOpsPR: null,
-              linkedGiteaPR: null
+              linkedPR: null
             })
       })
       expect(mocks.assertEnvironment).toHaveBeenCalledWith('env')

@@ -28,7 +28,7 @@ export type GitHubEnterpriseRepoSlug = GitHubOwnerRepo & { host: string }
 // Why: `gh` only ever manages github.com / GitHub Enterprise credentials, so a
 // host `gh auth status` reports as logged-in is definitively a GitHub host. This
 // mirrors the `glab auth status` signal GitLab self-hosted detection uses, so a
-// GHES remote is not left to fall through to Gitea (#8312).
+// GHES remote is still claimed by GitHub (#8312).
 const HOST_AUTH_TTL_MS = 15 * 60_000
 const HOST_AUTH_MISS_TTL_MS = 60_000
 const HOST_AUTH_CACHE_MAX_ENTRIES = 512
@@ -221,7 +221,7 @@ export function isGitHubHostAuthenticatedForGlobalCli(host: string): Promise<boo
  * Resolve owner/repo for a GitHub Enterprise Server remote — a custom host the
  * user is gh-authenticated to. Returns null for github.com (already handled by
  * {@link getOwnerRepo}) and for hosts gh is not logged in to
- * (Gitea/Forgejo/self-hosted GitLab/etc.), so GHES routes to the GitHub provider
+ * (self-hosted GitLab and other forges), so GHES routes to the GitHub provider
  * without a GitHub provider stealing another forge's remote.
  */
 export async function getEnterpriseGitHubRepoSlugForRemote(

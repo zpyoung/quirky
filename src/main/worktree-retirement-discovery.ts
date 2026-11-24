@@ -7,7 +7,14 @@ import {
   isClaudeProjectDirInScope
 } from './ai-vault/claude-project-dir-encoding'
 import type { RetirementScanResult } from './worktree-retirement-backfill-scan'
-import { normalizeRetirableGeneratedName } from './worktree-name-retirement'
+import { creatureNameTier } from '../shared/worktree/retired-name-registry'
+
+/** Only canonical generator output is persisted. Collision retries advance canonical tiers, so a
+ *  repeat-suffixed path can never be generated again and needs no permanent registry entry. */
+export function normalizeRetirableGeneratedName(name: string): string | null {
+  const normalized = name.trim().toLowerCase()
+  return normalized.length <= 256 && creatureNameTier(normalized) !== null ? normalized : null
+}
 
 /** Why: over-retiring costs one name from a 552-entry pool; under-retiring reissues a path whose
  *  agent history is still on disk. So this matches generously and never tries to be exact. */

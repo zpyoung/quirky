@@ -595,11 +595,8 @@ describe('createGitHubSlice.fetchPRForBranch', () => {
     expect(mockApi.hostedReview.forBranch).toHaveBeenCalledWith({
       branch,
       currentHeadOid: null,
-      linkedAzureDevOpsPR: null,
-      linkedBitbucketPR: null,
       linkedGitHubPR: null,
       linkedGitLabMR: null,
-      linkedGiteaPR: null,
       repoId,
       repoPath
     })

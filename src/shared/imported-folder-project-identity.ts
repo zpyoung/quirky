@@ -37,7 +37,7 @@ export function assertImportedFolderRemoteMatchesProject(
 /**
  * The repo fields that link a folder into `projectId` when it does not project there on its own.
  * A GitHub project stamps its identity as `upstream`. A project keyed by its Git remote (GitLab,
- * Bitbucket, a self-hosted host) records the folder's remote once it names the same repository,
+ * a self-hosted host) records the folder's remote once it names the same repository,
  * since a freshly cloned folder's remote may not have been probed yet.
  */
 export function resolveImportedFolderProjectLink(

@@ -53,19 +53,8 @@ export function hasPositiveHostedReviewNumberLink(args: {
   linkedGitHubPR?: number | null
   fallbackGitHubPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
 }): boolean {
-  // Why: a linked review from any provider blocks unsafe pushes. Build on the
-  // resolvable subset so the two helpers cannot drift — a resolvable link is by
-  // definition also a blocking link; only the resolver-less providers are added.
-  return (
-    hasResolvableHostedReviewPushTargetLink(args) ||
-    isPositiveHostedReviewNumber(args.linkedBitbucketPR) ||
-    isPositiveHostedReviewNumber(args.linkedAzureDevOpsPR) ||
-    isPositiveHostedReviewNumber(args.linkedGiteaPR)
-  )
+  return hasResolvableHostedReviewPushTargetLink(args)
 }
 
 export function resolveHostedReviewActionUpstreamStatus(args: {

@@ -22,7 +22,7 @@ When you've rewritten history (rebase, amend, squash) and the remote only has ol
 
 ## Open a hosted review
 
-After the branch is pushed, use the Source Control panel's hosted review action to create the pull request or merge request. Confirm the base branch, title, description, and draft state before submitting. Bitbucket Cloud can create pull requests from the same composer; it has no draft PRs, so Draft is hidden. For GitHub, when the selected base already has an open PR you can **Stack this PR above #N** — see [Stacked pull requests](/docs/review/github#stacked-pull-requests).
+After the branch is pushed, use the Source Control panel's hosted review action to create the pull request or merge request. Confirm the base branch, title, description, and draft state before submitting. For GitHub, when the selected base already has an open PR you can **Stack this PR above #N** — see [Stacked pull requests](/docs/review/github#stacked-pull-requests).
 
 If Orca needs to run a follow-up commit as part of the Create PR flow and that commit fails — hooks reject it, or the working tree has an uncommittable state — the dialog surfaces a detailed failure summary with the hook output and next-step buttons instead of dropping you back into the panel with no context. Use **Fix with AI** from the summary to hand the failure to an agent, or resolve it yourself and rerun.
 

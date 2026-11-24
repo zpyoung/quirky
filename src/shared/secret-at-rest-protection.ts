@@ -16,7 +16,7 @@ export type SecretAtRestProtection =
 /**
  * Classify a credential file that stores raw ciphertext with no envelope.
  *
- * Why a heuristic: these stores (speech, Linear, Jira, Bitbucket) write either
+ * Why a heuristic: these stores (speech, Linear, Jira) write either
  * `safeStorage` ciphertext or the bare token, with nothing on disk to tell them apart.
  * This is the same test `readStoredCredentialToken` already uses to decide whether a
  * file is a legacy plaintext token, kept in one place so the reader and the reporter

@@ -1,12 +1,12 @@
 import { stat } from 'node:fs/promises'
-import type { WatchedRoot } from './filesystem-watcher-lifecycle-state'
 import { WatcherChildCapacityError } from './parcel-watcher-child-registry'
 import { isWatcherProcessFailure } from './parcel-watcher-process-failure'
-import type {
-  LocalWatcherInstallResult,
-  LocalWatcherInstallToken
+import {
+  type LocalWatcherInstallResult,
+  type LocalWatcherInstallToken,
+  type WatchedRoot,
+  watcherLifecycleState
 } from './filesystem-watcher-lifecycle-state'
-import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'
 import { createLocalWatcher } from './filesystem-watcher-local-events'
 import {
   registerWatcherSenderCleanup,

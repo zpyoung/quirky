@@ -86,13 +86,6 @@ function sharedCreateFields(
     ...(request.linkedGitLabIssue !== undefined
       ? { linkedGitLabIssue: request.linkedGitLabIssue }
       : {}),
-    ...(request.linkedBitbucketPR !== undefined
-      ? { linkedBitbucketPR: request.linkedBitbucketPR }
-      : {}),
-    ...(request.linkedAzureDevOpsPR !== undefined
-      ? { linkedAzureDevOpsPR: request.linkedAzureDevOpsPR }
-      : {}),
-    ...(request.linkedGiteaPR !== undefined ? { linkedGiteaPR: request.linkedGiteaPR } : {}),
     ...(options?.linkedWorkItem !== undefined ? { linkedWorkItem: options.linkedWorkItem } : {}),
     ...(options?.linkedTaskSourceContext !== undefined
       ? { linkedTaskSourceContext: options.linkedTaskSourceContext }

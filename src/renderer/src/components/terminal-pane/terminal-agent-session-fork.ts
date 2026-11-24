@@ -237,9 +237,6 @@ export async function startAgentSessionFork(fork: PreparedAgentSessionFork): Pro
       undefined,
       undefined,
       undefined,
-      undefined,
-      undefined,
-      undefined,
       // Why: a project two hosts publish refuses a host-less create; the fork belongs on its source's host.
       { executionHostId: forkCreationHostId(store, fork.worktreeId) }
     )

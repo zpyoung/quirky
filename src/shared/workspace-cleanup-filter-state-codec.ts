@@ -21,14 +21,7 @@ import {
 } from './workspace-cleanup-filter-model'
 
 // Provider-general: every hosted-review provider is selectable, never a GitHub special case.
-const REVIEW_PROVIDER_VALUES: HostedReviewProvider[] = [
-  'github',
-  'gitlab',
-  'bitbucket',
-  'azure-devops',
-  'gitea',
-  'unsupported'
-]
+const REVIEW_PROVIDER_VALUES: HostedReviewProvider[] = ['github', 'gitlab', 'unsupported']
 
 /**
  * Tolerant by design: this reads user data written by older (and newer) Orca

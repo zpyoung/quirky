@@ -228,10 +228,7 @@ export function createObserveTerminalGitHubPullRequestLink(
         active: true,
         currentHeadOid: head,
         linkedGitHubPR: wasLinked ? link.number : null,
-        linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null
+        linkedGitLabMR: null
       })
       return (
         observationIsCurrent() &&

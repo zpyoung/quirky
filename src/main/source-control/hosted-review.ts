@@ -21,12 +21,6 @@ function reviewLinkForProvider(
       }
     case 'gitlab':
       return { linkedReviewNumber: input.linkedGitLabMR ?? null }
-    case 'bitbucket':
-      return { linkedReviewNumber: input.linkedBitbucketPR ?? null }
-    case 'azure-devops':
-      return { linkedReviewNumber: input.linkedAzureDevOpsPR ?? null }
-    case 'gitea':
-      return { linkedReviewNumber: input.linkedGiteaPR ?? null }
   }
 }
 
@@ -38,9 +32,6 @@ export async function getHostedReviewForBranch(
     linkedGitHubPR?: number | null
     fallbackGitHubPR?: number | null
     linkedGitLabMR?: number | null
-    linkedBitbucketPR?: number | null
-    linkedAzureDevOpsPR?: number | null
-    linkedGiteaPR?: number | null
     currentHeadOid?: string | null
     /**
      * Set by surfaces that only ever render the selected worktree, which is the
@@ -57,10 +48,7 @@ export async function getHostedReviewForBranch(
     !branchName &&
     input.linkedGitHubPR == null &&
     input.fallbackGitHubPR == null &&
-    input.linkedGitLabMR == null &&
-    input.linkedBitbucketPR == null &&
-    input.linkedAzureDevOpsPR == null &&
-    input.linkedGiteaPR == null
+    input.linkedGitLabMR == null
   ) {
     return null
   }

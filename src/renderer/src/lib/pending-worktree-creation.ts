@@ -97,9 +97,6 @@ export type WorktreeCreationRequest = {
   workspaceStatus?: WorkspaceStatus
   linkedGitLabMR?: number
   linkedGitLabIssue?: number
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
   /** Backend-spawn startup payload (`createWorktree` arg). Present only when the
    *  agent launch is self-contained; otherwise the renderer drives startup via
    *  `startupPlan`. */

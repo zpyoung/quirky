@@ -13,7 +13,7 @@ export function normalizeGitLabHost(value: string): string {
 }
 
 // Why: host recognition is port-aware so two services on the same hostname
-// but different ports (e.g. a GitLab on :8080 and a Gitea on :3030) are not
+// but different ports (e.g. a GitLab on :8080 and another service on :3030) are not
 // conflated. The hostname (port-less) part is kept for legacy known-host
 // entries that were recorded without a port.
 function hostnameOf(host: string): string {
@@ -58,7 +58,7 @@ function makeProjectRefForTrustedHost(host: string, path: string): ProjectRef | 
  *   legacy `gitlab.com` / bare-hostname known entries.
  * - A known entry WITH a port only matches a URL host with the exact same
  *   port, so `gitlab.example.com:8443` does not accept a
- *   `gitea.example.com:3000` (or same-host different-port) remote.
+ *   `other.example.com:3000` (or same-host different-port) remote.
  */
 function knownHostMatches(urlHost: string, knownHost: string): boolean {
   if (urlHost === knownHost) {

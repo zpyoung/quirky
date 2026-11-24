@@ -384,7 +384,7 @@ describe('agent, git, review, ticket, context, and location filters', () => {
       s.safety.dismissed = 'any'
       s.review.presence = 'some'
       s.review.states = ['draft']
-      s.review.providers = ['gitlab', 'bitbucket']
+      s.review.providers = ['gitlab', 'github']
     })
     expect(matchesWorkspaceCleanupFilters(draftMr, state, FACET_NOW)).toBe(true)
     state.review.providers = ['github']

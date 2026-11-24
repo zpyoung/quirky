@@ -37,16 +37,7 @@ export const ATTACHMENT_INPUT_KINDS = [
   {
     value: 'jira-issue',
     label: () => translate('workspace.links.kind.jira_task_url', 'Jira task (URL)')
-  },
-  {
-    value: 'bitbucket-pr',
-    label: () => translate('workspace.links.kind.bitbucket_pr', 'Bitbucket PR')
-  },
-  {
-    value: 'azure-devops-pr',
-    label: () => translate('workspace.links.kind.azure_devops_pr', 'Azure DevOps PR')
-  },
-  { value: 'gitea-pr', label: () => translate('workspace.links.kind.gitea_pr', 'Gitea PR') }
+  }
 ] as const
 export type AttachmentInputKind = (typeof ATTACHMENT_INPUT_KINDS)[number]['value']
 
@@ -59,10 +50,7 @@ export function workspaceAttachmentProviderLabel(item: WorkspaceAttachment): str
     github: 'GitHub',
     gitlab: 'GitLab',
     linear: 'Linear',
-    jira: 'Jira',
-    bitbucket: 'Bitbucket',
-    'azure-devops': 'Azure DevOps',
-    gitea: 'Gitea'
+    jira: 'Jira'
   }
   return labels[item.provider]
 }
@@ -88,10 +76,6 @@ export function parseWorkspaceAttachmentInput(
   const jira = parseJiraIssueUrl(value)
   const linear = parseLinearIssueInput(value)
   if (/^https?:\/\//i.test(value)) {
-    const otherReview = parseOtherReviewUrl(value)
-    if (otherReview) {
-      return otherReview
-    }
     if (github) {
       return { provider: 'github', type: github.type, number: github.number, url: value }
     }
@@ -142,11 +126,6 @@ export function parseWorkspaceAttachmentInput(
   if (kind === 'gitlab-mr' || kind === 'gitlab-issue') {
     return { provider: 'gitlab', type: kind === 'gitlab-mr' ? 'mr' : 'issue', number }
   }
-  if (kind === 'bitbucket-pr' || kind === 'azure-devops-pr' || kind === 'gitea-pr') {
-    const provider =
-      kind === 'bitbucket-pr' ? 'bitbucket' : kind === 'gitea-pr' ? 'gitea' : 'azure-devops'
-    return { provider, type: 'pr', number }
-  }
   return { provider: 'github', type: kind === 'github-pr' ? 'pr' : 'issue', number }
 }
 
@@ -171,42 +150,9 @@ export function getActiveWorkspaceReviewKey(worktree: Worktree | undefined): str
       ? worktree.linkedPR === item.number
       : item.provider === 'gitlab' && item.type === 'mr'
         ? worktree.linkedGitLabMR === item.number
-        : item.provider === 'bitbucket'
-          ? worktree.linkedBitbucketPR === item.number
-          : item.provider === 'azure-devops'
-            ? worktree.linkedAzureDevOpsPR === item.number
-            : item.provider === 'gitea'
-              ? worktree.linkedGiteaPR === item.number
-              : false
+        : false
   )
   return active ? getWorkspaceAttachmentKey(active) : null
-}
-
-function parseOtherReviewUrl(value: string): WorkspaceAttachment | null {
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    return null
-  }
-  if (url.username || url.password) {
-    return null
-  }
-  const match = /\/(pull-requests|pullrequest|pulls)\/(\d+)\/?$/.exec(url.pathname)
-  if (!match) {
-    return null
-  }
-  const number = Number(match[2])
-  if (!Number.isSafeInteger(number) || number <= 0) {
-    return null
-  }
-  const provider =
-    match[1] === 'pull-requests'
-      ? 'bitbucket'
-      : match[1] === 'pullrequest'
-        ? 'azure-devops'
-        : 'gitea'
-  return { provider, type: 'pr', number, url: value }
 }
 
 export function canUseWorkspaceReviewForChecks(
@@ -220,19 +166,7 @@ export function canUseWorkspaceReviewForChecks(
   const host = repo?.gitRemoteIdentity?.canonicalKey.split('/')[0].toLowerCase()
   const provider =
     knownProvider ??
-    (host === 'github.com'
-      ? 'github'
-      : host === 'gitlab.com'
-        ? 'gitlab'
-        : host === 'bitbucket.org'
-          ? 'bitbucket'
-          : host === 'dev.azure.com' ||
-              host === 'ssh.dev.azure.com' ||
-              host?.endsWith('.visualstudio.com')
-            ? 'azure-devops'
-            : host === 'codeberg.org'
-              ? 'gitea'
-              : undefined)
+    (host === 'github.com' ? 'github' : host === 'gitlab.com' ? 'gitlab' : undefined)
   if (provider && item.provider !== provider) {
     return false
   }

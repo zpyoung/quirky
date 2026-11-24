@@ -13,15 +13,6 @@ export function getProviderName(review: WorktreeCardPrDisplay): string {
   if (review.provider === 'gitlab') {
     return 'GitLab'
   }
-  if (review.provider === 'bitbucket') {
-    return 'Bitbucket'
-  }
-  if (review.provider === 'azure-devops') {
-    return 'Azure DevOps'
-  }
-  if (review.provider === 'gitea') {
-    return 'Gitea'
-  }
   return 'GitHub'
 }
 

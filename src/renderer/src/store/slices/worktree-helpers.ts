@@ -211,9 +211,6 @@ export type WorktreeSlice = {
     creationId?: string,
     linkedLinearIssueWorkspaceId?: string | null,
     linkedLinearIssueOrganizationUrlKey?: string | null,
-    linkedBitbucketPR?: number | null,
-    linkedAzureDevOpsPR?: number | null,
-    linkedGiteaPR?: number | null,
     compareBaseRef?: string,
     options?: CreateWorktreeCallOptions
   ) => Promise<CreateWorktreeResult>

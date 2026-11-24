@@ -5,7 +5,6 @@ import {
   parseExecutionHostId
 } from '../shared/execution-host'
 import {
-  creatureNameTier,
   EMPTY_RETIRED_NAME_REGISTRY,
   isEmptyRetiredNameRegistry,
   mergeRetiredNameRegistries,
@@ -27,7 +26,12 @@ import {
   retirementNamespaceKeysToRead,
   type SshTargetLookup
 } from './worktree-retirement-namespace'
-import { discoverRetiredWorktreeNames } from './worktree-retirement-discovery'
+import {
+  discoverRetiredWorktreeNames,
+  normalizeRetirableGeneratedName
+} from './worktree-retirement-discovery'
+
+export { normalizeRetirableGeneratedName }
 import { runRetirementBackfillScan } from './worktree-retirement-backfill-scan'
 import { getWorktreeMirrorDistro } from './project-runtime-git-options'
 import type { ProjectRuntimeResolutionStore } from './local-project-runtime-resolution'
@@ -62,13 +66,6 @@ function withMirrorDistro(
 ): RetirementPathSettings {
   const distro = getWorktreeMirrorDistro(store, repo)
   return distro ? { ...settings, wslMirrorDistro: distro } : settings
-}
-
-/** Only canonical generator output is persisted. Collision retries advance canonical tiers, so a
- *  repeat-suffixed path can never be generated again and needs no permanent registry entry. */
-export function normalizeRetirableGeneratedName(name: string): string | null {
-  const normalized = name.trim().toLowerCase()
-  return normalized.length <= 256 && creatureNameTier(normalized) !== null ? normalized : null
 }
 
 /** A sparse create error carries this marker only when its rollback also failed, leaving the path

@@ -65,11 +65,4 @@ describe('HostedReviewActions draft state', () => {
     expect(markup).not.toContain('Merge')
     expect(markup).not.toContain('auto-merge')
   })
-
-  it.each(['azure-devops', 'gitea'] as const)(
-    'does not misroute unsupported %s drafts through GitHub',
-    (provider) => {
-      expect(renderDraft(provider)).toBe('')
-    }
-  )
 })

@@ -320,11 +320,8 @@ describe('hosted review cache race protection', () => {
     expect(mockApi.hostedReview.forBranch).toHaveBeenNthCalledWith(2, {
       branch: 'feature/inflight',
       currentHeadOid: null,
-      linkedAzureDevOpsPR: null,
-      linkedBitbucketPR: null,
       linkedGitHubPR: null,
       linkedGitLabMR: null,
-      linkedGiteaPR: null,
       repoPath: '/repo'
     })
     resolveGitHubLookup(githubReview)

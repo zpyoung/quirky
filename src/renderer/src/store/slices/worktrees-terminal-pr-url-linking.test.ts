@@ -93,10 +93,7 @@ describe('worktree remote runtime mutations', () => {
       repoOwnerExecutionHostId: 'local',
       currentHeadOid: wt.head,
       linkedGitHubPR: null,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
     for (let i = 0; i < 20; i++) {
       await Promise.resolve()
@@ -269,10 +266,7 @@ describe('worktree remote runtime mutations', () => {
       repoOwnerExecutionHostId: 'local',
       currentHeadOid: wt.head,
       linkedGitHubPR: null,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
     for (let i = 0; i < 20; i++) {
       await Promise.resolve()
@@ -476,10 +470,7 @@ describe('worktree remote runtime mutations', () => {
       repoOwnerExecutionHostId: 'local',
       currentHeadOid: wt.head,
       linkedGitHubPR: null,
-      linkedGitLabMR: null,
-      linkedBitbucketPR: null,
-      linkedAzureDevOpsPR: null,
-      linkedGiteaPR: null
+      linkedGitLabMR: null
     })
 
     for (let i = 0; i < 20; i++) {

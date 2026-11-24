@@ -21,7 +21,7 @@ export type WorkspaceAttachmentOrigin = {
 }
 
 export type WorkspaceAttachment = {
-  provider: 'github' | 'gitlab' | 'linear' | 'jira' | 'bitbucket' | 'azure-devops' | 'gitea'
+  provider: 'github' | 'gitlab' | 'linear' | 'jira'
   type: 'issue' | 'pr' | 'mr'
   number: number
   identifier?: string
@@ -136,9 +136,6 @@ export type Worktree = {
   // to typecheck and load without migration.
   linkedGitLabMR?: number | null
   linkedGitLabIssue?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
   linkedWorkItem?: WorkspaceLinkedItem | null
   /** All attachments; singular fields select the active review/task for older readers. */
   linkedItems?: WorkspaceAttachment[]

@@ -3,13 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createGitHubPullRequestMock,
-  createBitbucketPullRequestMock,
   createGitLabMergeRequestMock,
-  createAzureDevOpsPullRequestMock,
-  createGiteaPullRequestMock,
-  getAzureDevOpsRepoSlugMock,
-  getBitbucketRepoSlugMock,
-  getGiteaRepoSlugMock,
   getMergeRequestForBranchMock,
   getProjectSlugMock,
   getPRForBranchOutcomeMock,
@@ -18,13 +12,7 @@ const {
   getEnterpriseGitHubRepoSlugMock
 } = vi.hoisted(() => ({
   createGitHubPullRequestMock: vi.fn(),
-  createBitbucketPullRequestMock: vi.fn(),
   createGitLabMergeRequestMock: vi.fn(),
-  createAzureDevOpsPullRequestMock: vi.fn(),
-  createGiteaPullRequestMock: vi.fn(),
-  getAzureDevOpsRepoSlugMock: vi.fn(),
-  getBitbucketRepoSlugMock: vi.fn(),
-  getGiteaRepoSlugMock: vi.fn(),
   getMergeRequestForBranchMock: vi.fn(),
   getProjectSlugMock: vi.fn(),
   getPRForBranchOutcomeMock: vi.fn(),
@@ -57,36 +45,6 @@ vi.mock('../github/github-enterprise-repository', () => ({
   getEnterpriseGitHubRepoSlug: getEnterpriseGitHubRepoSlugMock
 }))
 
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketRepoSlug: getBitbucketRepoSlugMock,
-  getBitbucketPullRequestForBranch: vi.fn(),
-  getBitbucketPullRequest: vi.fn()
-}))
-
-vi.mock('../bitbucket/pull-request-creation', () => ({
-  createBitbucketPullRequest: createBitbucketPullRequestMock
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsRepoSlug: getAzureDevOpsRepoSlugMock,
-  getAzureDevOpsPullRequestForBranch: vi.fn(),
-  getAzureDevOpsPullRequest: vi.fn()
-}))
-
-vi.mock('../azure-devops/pull-request-creation', () => ({
-  createAzureDevOpsPullRequest: createAzureDevOpsPullRequestMock
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaRepoSlug: getGiteaRepoSlugMock,
-  getGiteaPullRequestForBranch: vi.fn(),
-  getGiteaPullRequest: vi.fn()
-}))
-
-vi.mock('../gitea/pull-request-creation', () => ({
-  createGiteaPullRequest: createGiteaPullRequestMock
-}))
-
 import {
   FORGE_PROVIDERS,
   detectHostedReviewProvider,
@@ -106,12 +64,6 @@ describe('forge provider interface', () => {
   beforeEach(() => {
     createGitHubPullRequestMock.mockReset()
     createGitLabMergeRequestMock.mockReset()
-    createBitbucketPullRequestMock.mockReset()
-    createAzureDevOpsPullRequestMock.mockReset()
-    createGiteaPullRequestMock.mockReset()
-    getAzureDevOpsRepoSlugMock.mockReset()
-    getBitbucketRepoSlugMock.mockReset()
-    getGiteaRepoSlugMock.mockReset()
     getMergeRequestForBranchMock.mockReset()
     getProjectSlugMock.mockReset()
     getPRForBranchOutcomeMock.mockReset()
@@ -136,10 +88,10 @@ describe('forge provider interface', () => {
     expect(getRepoSlugMock).not.toHaveBeenCalled()
   })
 
-  it('detects a GitHub Enterprise Server remote as the GitHub provider, not Gitea', async () => {
+  it('detects a GitHub Enterprise Server remote as the GitHub provider', async () => {
     // Regression for #8312: a GHES host is not github.com, so github.com-only
     // slug parsing returns null. Detection must claim it via the enterprise
-    // resolver instead of falling through to Gitea's demand for ORCA_GITEA_TOKEN.
+    // resolver.
     getProjectSlugMock.mockResolvedValue(null)
     // Why: getRepoSlug resolves hosted identities itself now — a GHES remote
     // comes back host-qualified instead of null + separate enterprise fallback.
@@ -157,29 +109,6 @@ describe('forge provider interface', () => {
     ).resolves.toMatchObject({
       id: 'github'
     })
-    // Gitea must never be consulted once GitHub claims the enterprise host.
-    expect(getGiteaRepoSlugMock).not.toHaveBeenCalled()
-  })
-
-  it('leaves a genuinely non-GitHub remote for later providers when gh is not authenticated', async () => {
-    getProjectSlugMock.mockResolvedValue(null)
-    getRepoSlugMock.mockResolvedValue(null)
-    // gh is not logged in to this host, so the enterprise resolver declines and
-    // the Gitea provider is free to claim its own self-hosted remote.
-    getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
-    getBitbucketRepoSlugMock.mockResolvedValue(null)
-    getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-    getGiteaRepoSlugMock.mockResolvedValue({
-      host: 'gitea.example.com',
-      owner: 'team',
-      repo: 'orca',
-      apiBaseUrl: 'https://gitea.example.com/api/v1',
-      webBaseUrl: 'https://gitea.example.com'
-    })
-
-    await expect(
-      detectHostedReviewProvider({ executionHostId: 'local', repoPath: '/repo' })
-    ).resolves.toBe('gitea')
   })
 
   it('keeps review creation capability scoped to providers with creation support', async () => {
@@ -187,14 +116,9 @@ describe('forge provider interface', () => {
       FORGE_PROVIDERS.map((provider) => [provider.id, provider.supportsReviewCreation])
     ).toEqual([
       ['gitlab', true],
-      ['github', true],
-      ['bitbucket', true],
-      ['azure-devops', true],
-      ['gitea', true]
+      ['github', true]
     ])
     // Why: the shared list is what the Create blocker and the renderer read.
-    // When it drifted from this one, Bitbucket had a working createReview but
-    // still reported "provider does not support creating a pull request".
     for (const provider of FORGE_PROVIDERS) {
       expect(supportsHostedReviewCreation(provider.id)).toBe(provider.supportsReviewCreation)
     }
@@ -233,28 +157,6 @@ describe('forge provider interface', () => {
     )
   })
 
-  it('routes Bitbucket review creation through the shared provider contract', async () => {
-    createBitbucketPullRequestMock.mockResolvedValue({
-      ok: true,
-      number: 23,
-      url: 'https://bitbucket.org/team/orca/pull-requests/23'
-    })
-
-    const provider = getForgeProviderById('bitbucket')
-    const input = {
-      provider: 'bitbucket' as const,
-      base: 'main',
-      head: 'feature/provider-interface',
-      title: 'Add provider interface'
-    }
-    await expect(provider.createReview?.('/repo', input, 'local')).resolves.toEqual({
-      ok: true,
-      number: 23,
-      url: 'https://bitbucket.org/team/orca/pull-requests/23'
-    })
-    expect(createBitbucketPullRequestMock).toHaveBeenCalledWith('/repo', input, 'local')
-  })
-
   it('routes GitLab review creation through the shared provider contract', async () => {
     createGitLabMergeRequestMock.mockResolvedValue({
       ok: true,
@@ -283,78 +185,6 @@ describe('forge provider interface', () => {
       '/repo',
       {
         provider: 'gitlab',
-        base: 'main',
-        head: 'feature/provider-interface',
-        title: 'Add provider interface'
-      },
-      'ssh:ssh-1'
-    )
-  })
-
-  it('routes Azure DevOps review creation through the shared provider contract', async () => {
-    createAzureDevOpsPullRequestMock.mockResolvedValue({
-      ok: true,
-      number: 88,
-      url: 'https://dev.azure.com/acme/Project/_git/orca/pullrequest/88'
-    })
-
-    const provider = getForgeProviderById('azure-devops')
-    await expect(
-      provider.createReview?.(
-        '/repo',
-        {
-          provider: 'azure-devops',
-          base: 'main',
-          head: 'feature/provider-interface',
-          title: 'Add provider interface'
-        },
-        'ssh:ssh-1'
-      )
-    ).resolves.toEqual({
-      ok: true,
-      number: 88,
-      url: 'https://dev.azure.com/acme/Project/_git/orca/pullrequest/88'
-    })
-    expect(createAzureDevOpsPullRequestMock).toHaveBeenCalledWith(
-      '/repo',
-      {
-        provider: 'azure-devops',
-        base: 'main',
-        head: 'feature/provider-interface',
-        title: 'Add provider interface'
-      },
-      'ssh:ssh-1'
-    )
-  })
-
-  it('routes Gitea review creation through the shared provider contract', async () => {
-    createGiteaPullRequestMock.mockResolvedValue({
-      ok: true,
-      number: 19,
-      url: 'https://git.example.com/team/orca/pulls/19'
-    })
-
-    const provider = getForgeProviderById('gitea')
-    await expect(
-      provider.createReview?.(
-        '/repo',
-        {
-          provider: 'gitea',
-          base: 'main',
-          head: 'feature/provider-interface',
-          title: 'Add provider interface'
-        },
-        'ssh:ssh-1'
-      )
-    ).resolves.toEqual({
-      ok: true,
-      number: 19,
-      url: 'https://git.example.com/team/orca/pulls/19'
-    })
-    expect(createGiteaPullRequestMock).toHaveBeenCalledWith(
-      '/repo',
-      {
-        provider: 'gitea',
         base: 'main',
         head: 'feature/provider-interface',
         title: 'Add provider interface'

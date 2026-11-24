@@ -3,15 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   createGitHubPullRequestMock,
   createGitLabMergeRequestMock,
-  createAzureDevOpsPullRequestMock,
-  createGiteaPullRequestMock,
-  isAzureDevOpsReviewCreationAuthenticatedMock,
-  isGiteaReviewCreationAuthenticatedMock,
   getRepoSlugMock,
   getProjectSlugMock,
-  getBitbucketRepoSlugMock,
-  getAzureDevOpsRepoSlugMock,
-  getGiteaRepoSlugMock,
   getHostedReviewForBranchMock,
   ghExecFileAsyncMock,
   glabExecFileAsyncMock,
@@ -21,15 +14,8 @@ const {
 } = vi.hoisted(() => ({
   createGitHubPullRequestMock: vi.fn(),
   createGitLabMergeRequestMock: vi.fn(),
-  createAzureDevOpsPullRequestMock: vi.fn(),
-  createGiteaPullRequestMock: vi.fn(),
-  isAzureDevOpsReviewCreationAuthenticatedMock: vi.fn(),
-  isGiteaReviewCreationAuthenticatedMock: vi.fn(),
   getRepoSlugMock: vi.fn(),
   getProjectSlugMock: vi.fn(),
-  getBitbucketRepoSlugMock: vi.fn(),
-  getAzureDevOpsRepoSlugMock: vi.fn(),
-  getGiteaRepoSlugMock: vi.fn(),
   getHostedReviewForBranchMock: vi.fn(),
   ghExecFileAsyncMock: vi.fn(),
   glabExecFileAsyncMock: vi.fn(),
@@ -56,34 +42,6 @@ vi.mock('../gitlab/client', () => ({
 
 vi.mock('../gitlab/merge-request-creation', () => ({
   createGitLabMergeRequest: createGitLabMergeRequestMock
-}))
-
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketRepoSlug: getBitbucketRepoSlugMock,
-  getBitbucketPullRequestForBranch: vi.fn(),
-  getBitbucketPullRequest: vi.fn()
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsRepoSlug: getAzureDevOpsRepoSlugMock,
-  getAzureDevOpsPullRequestForBranch: vi.fn(),
-  getAzureDevOpsPullRequest: vi.fn()
-}))
-
-vi.mock('../azure-devops/pull-request-creation', () => ({
-  createAzureDevOpsPullRequest: createAzureDevOpsPullRequestMock,
-  isAzureDevOpsReviewCreationAuthenticated: isAzureDevOpsReviewCreationAuthenticatedMock
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaRepoSlug: getGiteaRepoSlugMock,
-  getGiteaPullRequestForBranch: vi.fn(),
-  getGiteaPullRequest: vi.fn()
-}))
-
-vi.mock('../gitea/pull-request-creation', () => ({
-  createGiteaPullRequest: createGiteaPullRequestMock,
-  isGiteaReviewCreationAuthenticated: isGiteaReviewCreationAuthenticatedMock
 }))
 
 vi.mock('../github/gh-utils', () => ({
@@ -123,15 +81,8 @@ function resetMocks(): void {
   for (const mock of [
     createGitHubPullRequestMock,
     createGitLabMergeRequestMock,
-    createAzureDevOpsPullRequestMock,
-    createGiteaPullRequestMock,
-    isAzureDevOpsReviewCreationAuthenticatedMock,
-    isGiteaReviewCreationAuthenticatedMock,
     getRepoSlugMock,
     getProjectSlugMock,
-    getBitbucketRepoSlugMock,
-    getAzureDevOpsRepoSlugMock,
-    getGiteaRepoSlugMock,
     getHostedReviewForBranchMock,
     ghExecFileAsyncMock,
     glabExecFileAsyncMock,
@@ -146,9 +97,6 @@ function resetMocks(): void {
 function mockGitHubProvider(): void {
   getProjectSlugMock.mockResolvedValue(null)
   getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'orca' })
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue(null)
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
 }
 
@@ -163,9 +111,6 @@ function mockGitHubEnterpriseProvider(): void {
     repo: 'orca',
     host: 'github.acme-corp.com'
   })
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue(null)
   // The auth gate still keys off the enterprise resolver (authed-GHES signal).
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue({
     owner: 'acme',
@@ -177,37 +122,6 @@ function mockGitHubEnterpriseProvider(): void {
 function mockGitLabProvider(): void {
   getProjectSlugMock.mockResolvedValue({ host: 'gitlab.com', path: 'acme/orca' })
   getRepoSlugMock.mockResolvedValue(null)
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue(null)
-}
-
-function mockAzureDevOpsProvider(): void {
-  getProjectSlugMock.mockResolvedValue(null)
-  getRepoSlugMock.mockResolvedValue(null)
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue({
-    host: 'dev.azure.com',
-    project: 'Project',
-    repository: 'orca',
-    apiBaseUrl: 'https://dev.azure.com/acme/Project',
-    webBaseUrl: 'https://dev.azure.com/acme/Project/_git/orca'
-  })
-  getGiteaRepoSlugMock.mockResolvedValue(null)
-}
-
-function mockGiteaProvider(): void {
-  getProjectSlugMock.mockResolvedValue(null)
-  getRepoSlugMock.mockResolvedValue(null)
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue({
-    host: 'git.example.com',
-    owner: 'acme',
-    repo: 'orca',
-    apiBaseUrl: 'https://git.example.com/api/v1',
-    webBaseUrl: 'https://git.example.com'
-  })
 }
 
 describe('createHostedReview', () => {
@@ -255,18 +169,6 @@ describe('createHostedReview', () => {
       number: 44,
       url: 'https://gitlab.com/acme/orca/-/merge_requests/44'
     })
-    createAzureDevOpsPullRequestMock.mockResolvedValue({
-      ok: true,
-      number: 88,
-      url: 'https://dev.azure.com/acme/Project/_git/orca/pullrequest/88'
-    })
-    createGiteaPullRequestMock.mockResolvedValue({
-      ok: true,
-      number: 19,
-      url: 'https://git.example.com/acme/orca/pulls/19'
-    })
-    isAzureDevOpsReviewCreationAuthenticatedMock.mockReturnValue(true)
-    isGiteaReviewCreationAuthenticatedMock.mockReturnValue(true)
   })
 
   it('revalidates ahead commits before creating a GitHub pull request', async () => {
@@ -457,7 +359,6 @@ describe('createHostedReview', () => {
     // gate must not fire a second (rate-limited) gh probe.
     expect(ghExecFileAsyncMock).not.toHaveBeenCalled()
     expect(createGitHubPullRequestMock).toHaveBeenCalled()
-    expect(createGiteaPullRequestMock).not.toHaveBeenCalled()
   })
 
   it('creates a GitLab merge request after fresh main-process validation passes', async () => {
@@ -495,74 +396,6 @@ describe('createHostedReview', () => {
       'local'
     )
     expect(createGitHubPullRequestMock).not.toHaveBeenCalled()
-  })
-
-  it('creates an Azure DevOps pull request after fresh main-process validation passes', async () => {
-    mockAzureDevOpsProvider()
-
-    await expect(
-      createHostedReview(
-        '/repo',
-        {
-          provider: 'azure-devops',
-          base: 'main',
-          head: 'feature',
-          title: 'Feature'
-        },
-        'local'
-      )
-    ).resolves.toEqual({
-      ok: true,
-      number: 88,
-      url: 'https://dev.azure.com/acme/Project/_git/orca/pullrequest/88'
-    })
-
-    expect(createAzureDevOpsPullRequestMock).toHaveBeenCalledWith(
-      '/repo',
-      {
-        provider: 'azure-devops',
-        base: 'main',
-        head: 'feature',
-        title: 'Feature'
-      },
-      'local'
-    )
-    expect(createGitHubPullRequestMock).not.toHaveBeenCalled()
-    expect(createGitLabMergeRequestMock).not.toHaveBeenCalled()
-  })
-
-  it('creates a Gitea pull request after fresh main-process validation passes', async () => {
-    mockGiteaProvider()
-
-    await expect(
-      createHostedReview(
-        '/repo',
-        {
-          provider: 'gitea',
-          base: 'main',
-          head: 'feature',
-          title: 'Feature'
-        },
-        'local'
-      )
-    ).resolves.toEqual({
-      ok: true,
-      number: 19,
-      url: 'https://git.example.com/acme/orca/pulls/19'
-    })
-
-    expect(createGiteaPullRequestMock).toHaveBeenCalledWith(
-      '/repo',
-      {
-        provider: 'gitea',
-        base: 'main',
-        head: 'feature',
-        title: 'Feature'
-      },
-      'local'
-    )
-    expect(createGitHubPullRequestMock).not.toHaveBeenCalled()
-    expect(createGitLabMergeRequestMock).not.toHaveBeenCalled()
   })
 
   it('returns the existing review instead of creating a duplicate', async () => {

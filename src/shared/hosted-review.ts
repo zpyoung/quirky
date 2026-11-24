@@ -6,21 +6,9 @@ import type {
   PRReviewDecision
 } from './github/pull-request-types'
 
-export type HostedReviewProvider =
-  | 'github'
-  | 'gitlab'
-  | 'bitbucket'
-  | 'azure-devops'
-  | 'gitea'
-  | 'unsupported'
+export type HostedReviewProvider = 'github' | 'gitlab' | 'unsupported'
 
 export type HostedReviewState = 'open' | 'closed' | 'merged' | 'draft'
-
-// Why: Bitbucket Cloud's API has no draft pull requests, so offering the toggle
-// there would either publish a live PR or fail at submit.
-export function hostedReviewProviderSupportsDraft(provider: HostedReviewProvider): boolean {
-  return provider !== 'bitbucket'
-}
 
 /** A linked review is identified by a positive integer PR/MR number. */
 export function isPositiveHostedReviewNumber(value: unknown): value is number {
@@ -63,9 +51,6 @@ export type HostedReviewForBranchArgs = {
   linkedGitHubPR?: number | null
   fallbackGitHubPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
   // The worktree's checked-out HEAD oid (GitHub merged-at-head visibility).
   currentHeadOid?: string | null
   /**
@@ -203,9 +188,6 @@ export type HostedReviewCreationEligibilityArgs = {
   linkedGitHubPR?: number | null
   fallbackGitHubPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
 }
 
 export type HostedReviewDecision = 'approved' | 'changes_requested' | 'review_required' | null

@@ -8,9 +8,6 @@ import { resolveSourceControlSuppressedGitHubPRState } from './suppressed-github
 const worktree = {
   linkedPR: null,
   linkedGitLabMR: null,
-  linkedBitbucketPR: null,
-  linkedAzureDevOpsPR: null,
-  linkedGiteaPR: null,
   suppressedGitHubPR: 42
 }
 
@@ -108,10 +105,7 @@ describe('resolveSourceControlSuppressedGitHubPRState', () => {
 
   it.each([
     ['GitHub', { linkedPR: 42 }],
-    ['GitLab', { linkedGitLabMR: 9 }],
-    ['Bitbucket', { linkedBitbucketPR: 9 }],
-    ['Azure DevOps', { linkedAzureDevOpsPR: 9 }],
-    ['Gitea', { linkedGiteaPR: 9 }]
+    ['GitLab', { linkedGitLabMR: 9 }]
   ])('keeps an explicit %s review ahead of stale GitHub suppression', (_provider, link) => {
     expect(resolve({ worktree: { ...worktree, ...link } })).toBeNull()
   })

@@ -49,13 +49,7 @@ type ChecksPanelGitStatusEffectsInput = Pick<
   > &
   Pick<
     ChecksPanelContextState,
-    | 'isFolder'
-    | 'linkedAzureDevOpsPR'
-    | 'linkedBitbucketPR'
-    | 'linkedGiteaPR'
-    | 'linkedGitLabMR'
-    | 'linkedPR'
-    | 'fallbackGitHubPRNumber'
+    'isFolder' | 'linkedGitLabMR' | 'linkedPR' | 'fallbackGitHubPRNumber'
   >
 
 const GIT_STATUS_FAILURE_RETRY_MS = 3000
@@ -84,9 +78,6 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
     hostedReviewCreationRequestKey,
     isFolder,
     isPanelVisible,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     fallbackGitHubPRNumber,
@@ -310,10 +301,7 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
       behind: remoteStatus?.behind,
       linkedGitHubPR: linkedPR,
       fallbackGitHubPR: fallbackGitHubPRNumber,
-      linkedGitLabMR,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR
+      linkedGitLabMR
     })
       .then((result) => {
         if (!stale) {
@@ -354,9 +342,6 @@ export function useChecksPanelGitStatusEffects(model: ChecksPanelGitStatusEffect
     linkedPR,
     fallbackGitHubPRNumber,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     remoteStatus?.ahead,
     remoteStatus?.behind,
     remoteStatus?.hasUpstream,

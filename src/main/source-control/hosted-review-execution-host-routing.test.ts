@@ -20,17 +20,9 @@ const {
   getRepoSlugMock,
   getPRForBranchOutcomeMock,
   getRepoUpstreamMock,
-  getBitbucketRepoSlugMock,
-  getBitbucketPullRequestForBranchOrThrowMock,
-  getAzureDevOpsRepoSlugMock,
-  getGiteaRepoSlugMock,
   createGitLabMergeRequestMock,
   createGitHubPullRequestMock,
-  createBitbucketPullRequestMock,
-  createAzureDevOpsPullRequestMock,
-  createGiteaPullRequestMock,
   getEnterpriseGitHubRepoSlugMock,
-  isBitbucketReviewCreationAuthenticatedMock,
   resolveDefaultBaseRefViaExecMock,
   probeAnyExactRefMock,
   assertRemoteUrlReadableMock
@@ -44,17 +36,9 @@ const {
   getRepoSlugMock: vi.fn(),
   getPRForBranchOutcomeMock: vi.fn(),
   getRepoUpstreamMock: vi.fn(),
-  getBitbucketRepoSlugMock: vi.fn(),
-  getBitbucketPullRequestForBranchOrThrowMock: vi.fn(),
-  getAzureDevOpsRepoSlugMock: vi.fn(),
-  getGiteaRepoSlugMock: vi.fn(),
   createGitLabMergeRequestMock: vi.fn(),
   createGitHubPullRequestMock: vi.fn(),
-  createBitbucketPullRequestMock: vi.fn(),
-  createAzureDevOpsPullRequestMock: vi.fn(),
-  createGiteaPullRequestMock: vi.fn(),
   getEnterpriseGitHubRepoSlugMock: vi.fn(),
-  isBitbucketReviewCreationAuthenticatedMock: vi.fn(),
   resolveDefaultBaseRefViaExecMock: vi.fn(),
   probeAnyExactRefMock: vi.fn(),
   assertRemoteUrlReadableMock: vi.fn()
@@ -117,39 +101,6 @@ vi.mock('../github/client', () => ({
 
 vi.mock('../github/github-enterprise-repository', () => ({
   getEnterpriseGitHubRepoSlug: getEnterpriseGitHubRepoSlugMock
-}))
-
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketRepoSlug: getBitbucketRepoSlugMock,
-  getBitbucketPullRequest: vi.fn(async () => null),
-  getBitbucketPullRequestForBranchOrThrow: getBitbucketPullRequestForBranchOrThrowMock
-}))
-
-vi.mock('../bitbucket/pull-request-creation', () => ({
-  createBitbucketPullRequest: createBitbucketPullRequestMock,
-  isBitbucketReviewCreationAuthenticated: isBitbucketReviewCreationAuthenticatedMock
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsRepoSlug: getAzureDevOpsRepoSlugMock,
-  getAzureDevOpsPullRequest: vi.fn(async () => null),
-  getAzureDevOpsPullRequestForBranchOrThrow: vi.fn(async () => null)
-}))
-
-vi.mock('../azure-devops/pull-request-creation', () => ({
-  createAzureDevOpsPullRequest: createAzureDevOpsPullRequestMock,
-  isAzureDevOpsReviewCreationAuthenticated: vi.fn(async () => true)
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaRepoSlug: getGiteaRepoSlugMock,
-  getGiteaPullRequest: vi.fn(async () => null),
-  getGiteaPullRequestForBranchOrThrow: vi.fn(async () => null)
-}))
-
-vi.mock('../gitea/pull-request-creation', () => ({
-  createGiteaPullRequest: createGiteaPullRequestMock,
-  isGiteaReviewCreationAuthenticated: vi.fn(async () => true)
 }))
 
 import { __resetHostedReviewBranchCacheForTests } from './hosted-review-branch-cache'
@@ -244,19 +195,11 @@ beforeEach(() => {
   getProjectSlugMock.mockResolvedValue(null)
   getRepoSlugMock.mockResolvedValue(null)
   getRepoUpstreamMock.mockResolvedValue(null)
-  getBitbucketRepoSlugMock.mockResolvedValue(null)
-  getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-  getGiteaRepoSlugMock.mockResolvedValue(null)
   getPRForBranchOutcomeMock.mockResolvedValue({ kind: 'not_found' })
   getMergeRequestForBranchOrThrowMock.mockResolvedValue(null)
-  getBitbucketPullRequestForBranchOrThrowMock.mockResolvedValue(null)
   getEnterpriseGitHubRepoSlugMock.mockResolvedValue({ host: 'github.com', owner: 'a', repo: 'b' })
-  isBitbucketReviewCreationAuthenticatedMock.mockResolvedValue(true)
   createGitHubPullRequestMock.mockResolvedValue({ ok: true, number: 7, url: 'https://pr/7' })
   createGitLabMergeRequestMock.mockResolvedValue({ ok: true, number: 7, url: 'https://mr/7' })
-  createBitbucketPullRequestMock.mockResolvedValue({ ok: true, number: 7, url: 'https://pr/7' })
-  createAzureDevOpsPullRequestMock.mockResolvedValue({ ok: true, number: 7, url: 'https://pr/7' })
-  createGiteaPullRequestMock.mockResolvedValue({ ok: true, number: 7, url: 'https://pr/7' })
 })
 
 describe('hosted-review lookups route on the resolved execution host', () => {
@@ -294,23 +237,23 @@ describe('hosted-review lookups route on the resolved execution host', () => {
   })
 
   it('does not dial this client for a runtime row whose nested target shares a local name', async () => {
-    getBitbucketRepoSlugMock.mockResolvedValue({ workspace: 'acme', repo: 'widgets' })
+    getRepoSlugMock.mockResolvedValue({ host: 'github.com', owner: 'a', repo: 'b' })
     const commands = makeCommands(
       makeRepo({ connectionId: 'ssh-b', executionHostId: 'runtime:env-1' })
     )
 
     await commands.getHostedReviewForBranch({ repoSelector: 'repo-1', branch: 'feature' })
 
-    expect(getBitbucketRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, null)
+    expect(getRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, null)
   })
 
   it('keeps a runtime row with no nested target on this process (self-addressed stamp)', async () => {
-    getGiteaRepoSlugMock.mockResolvedValue({ host: 'gitea.example', owner: 'a', repo: 'b' })
+    getRepoSlugMock.mockResolvedValue({ host: 'github.com', owner: 'a', repo: 'b' })
     const commands = makeCommands(makeRepo({ executionHostId: 'runtime:env-1' }))
 
     await commands.getHostedReviewForBranch({ repoSelector: 'repo-1', branch: 'feature' })
 
-    expect(getGiteaRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, null)
+    expect(getRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, null)
   })
 
   it('keeps a legacy connectionId-only SSH row on its target', async () => {
@@ -359,29 +302,8 @@ describe('hosted-review creation routes on the resolved execution host', () => {
     expect(createGitLabMergeRequestMock).not.toHaveBeenCalled()
   })
 
-  it('creates a Bitbucket review locally for a runtime row rather than dialing its nested target', async () => {
-    getBitbucketRepoSlugMock.mockResolvedValue({ workspace: 'acme', repo: 'widgets' })
-    const commands = makeCommands(
-      makeRepo({ connectionId: 'ssh-b', executionHostId: 'runtime:env-1' })
-    )
-
-    const result = await commands.createHostedReview({
-      repoSelector: 'repo-1',
-      provider: 'bitbucket',
-      ...CREATE_INPUT
-    })
-
-    expect(result.ok).toBe(true)
-    expect(sshTargetThatRanGit()).toBeNull()
-    expect(createBitbucketPullRequestMock).toHaveBeenCalledWith(
-      REPO_PATH,
-      expect.objectContaining({ provider: 'bitbucket' }),
-      'local'
-    )
-  })
-
   it('reports creation eligibility from the executionHostId-only SSH host', async () => {
-    getAzureDevOpsRepoSlugMock.mockResolvedValue({ organization: 'acme', project: 'p', repo: 'r' })
+    getRepoSlugMock.mockResolvedValue({ host: 'github.com', owner: 'a', repo: 'b' })
     const commands = makeCommands(makeRepo({ executionHostId: 'ssh:ssh-a' }))
 
     await commands.getHostedReviewCreationEligibility({
@@ -393,7 +315,7 @@ describe('hosted-review creation routes on the resolved execution host', () => {
       behind: 0
     })
 
-    expect(getAzureDevOpsRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, 'ssh-a')
+    expect(getRepoSlugMock).toHaveBeenCalledWith(REPO_PATH, 'ssh-a')
     expect(sshTargetThatRanGit()).toBeNull()
   })
 

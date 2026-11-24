@@ -6,24 +6,6 @@ import type {
   HostedReviewProvider
 } from '../../shared/hosted-review'
 import {
-  getAzureDevOpsPullRequest,
-  getAzureDevOpsPullRequestForBranchOrThrow,
-  getAzureDevOpsRepoSlug
-} from '../azure-devops/client'
-import { createAzureDevOpsPullRequest } from '../azure-devops/pull-request-creation'
-import {
-  getBitbucketPullRequest,
-  getBitbucketPullRequestForBranchOrThrow,
-  getBitbucketRepoSlug
-} from '../bitbucket/client'
-import { createBitbucketPullRequest } from '../bitbucket/pull-request-creation'
-import {
-  getGiteaPullRequest,
-  getGiteaPullRequestForBranchOrThrow,
-  getGiteaRepoSlug
-} from '../gitea/client'
-import { createGiteaPullRequest } from '../gitea/pull-request-creation'
-import {
   createGitHubPullRequest,
   getGitHubPRLookupRateLimitBlock,
   getPRForBranchOutcome,
@@ -31,13 +13,7 @@ import {
 } from '../github/client'
 import { getMergeRequest, getMergeRequestForBranchOrThrow, getProjectSlug } from '../gitlab/client'
 import { createGitLabMergeRequest } from '../gitlab/merge-request-creation'
-import {
-  mapAzureDevOpsReview,
-  mapBitbucketReview,
-  mapGiteaReview,
-  mapGitHubReview,
-  mapGitLabReview
-} from './forge-review-mappers'
+import { mapGitHubReview, mapGitLabReview } from './forge-review-mappers'
 import { hostedReviewSshConnectionId } from './hosted-review-execution-host'
 import {
   hasHostedReviewLocalGitOptions,
@@ -168,7 +144,7 @@ const gitHubForgeProvider = {
   supportsReviewCreation: true,
   // Why: getRepoSlug resolves hosted identities — GHES remotes are claimed when
   // gh is authenticated to their host (the same signal GitLab uses for
-  // self-hosted instances), so detection never falls through to Gitea (#8312).
+  // self-hosted instances),.
   resolveRepository: async (context) =>
     getRepoSlug(
       context.repoPath,
@@ -213,113 +189,11 @@ const gitHubForgeProvider = {
   createReview: createGitHubPullRequest
 } satisfies ForgeProvider
 
-const bitbucketForgeProvider = {
-  id: 'bitbucket',
-  supportsReviewCreation: true,
-  resolveRepository: (context) =>
-    getBitbucketRepoSlug(
-      context.repoPath,
-      forgeConnectionId(context),
-      ...hostedReviewExecutionArgs(context)
-    ),
-  async getReviewForBranch(input) {
-    // Why: surface a real lookup failure so eligibility records `unavailable`
-    // instead of a false "No pull request found".
-    const pr = await getBitbucketPullRequestForBranchOrThrow(
-      input.repoPath,
-      input.branch,
-      input.linkedReviewNumber ?? null,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapBitbucketReview(pr) : null
-  },
-  async getReviewByNumber(input) {
-    const pr = await getBitbucketPullRequest(
-      input.repoPath,
-      input.number,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapBitbucketReview(pr) : null
-  },
-  createReview: createBitbucketPullRequest
-} satisfies ForgeProvider
-
-const azureDevOpsForgeProvider = {
-  id: 'azure-devops',
-  supportsReviewCreation: true,
-  resolveRepository: (context) =>
-    getAzureDevOpsRepoSlug(
-      context.repoPath,
-      forgeConnectionId(context),
-      ...hostedReviewExecutionArgs(context)
-    ),
-  async getReviewForBranch(input) {
-    // Why: surface a real lookup failure so eligibility records `unavailable`
-    // instead of a false "No pull request found".
-    const pr = await getAzureDevOpsPullRequestForBranchOrThrow(
-      input.repoPath,
-      input.branch,
-      input.linkedReviewNumber ?? null,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapAzureDevOpsReview(pr) : null
-  },
-  async getReviewByNumber(input) {
-    const pr = await getAzureDevOpsPullRequest(
-      input.repoPath,
-      input.number,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapAzureDevOpsReview(pr) : null
-  },
-  createReview: createAzureDevOpsPullRequest
-} satisfies ForgeProvider
-
-const giteaForgeProvider = {
-  id: 'gitea',
-  supportsReviewCreation: true,
-  resolveRepository: (context) =>
-    getGiteaRepoSlug(
-      context.repoPath,
-      forgeConnectionId(context),
-      ...hostedReviewExecutionArgs(context)
-    ),
-  async getReviewForBranch(input) {
-    // Why: surface a real lookup failure so eligibility records `unavailable`
-    // instead of a false "No pull request found".
-    const pr = await getGiteaPullRequestForBranchOrThrow(
-      input.repoPath,
-      input.branch,
-      input.linkedReviewNumber ?? null,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapGiteaReview(pr) : null
-  },
-  async getReviewByNumber(input) {
-    const pr = await getGiteaPullRequest(
-      input.repoPath,
-      input.number,
-      forgeConnectionId(input),
-      ...hostedReviewExecutionArgs(input)
-    )
-    return pr ? mapGiteaReview(pr) : null
-  },
-  createReview: createGiteaPullRequest
-} satisfies ForgeProvider
-
 // Why: provider order preserves existing branch-status behavior when remotes
 // could be interpreted by more than one hosting integration.
 export const FORGE_PROVIDERS = [
   gitLabForgeProvider,
-  gitHubForgeProvider,
-  bitbucketForgeProvider,
-  azureDevOpsForgeProvider,
-  giteaForgeProvider
+  gitHubForgeProvider
 ] as const satisfies readonly ForgeProvider[]
 
 export function getForgeProviderById(id: ForgeProviderId): ForgeProvider {

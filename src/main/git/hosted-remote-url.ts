@@ -1,7 +1,7 @@
 // Scoped local fork of the hosted-git-info@9.0.3 behavior Orca used.
-// Why: source links only need GitHub/GitLab/Bitbucket remote parsing and file
+// Why: source links only need GitHub/GitLab remote parsing and file
 // URL construction, so we keep that small surface local and tested.
-type HostedRemoteProvider = 'github' | 'gitlab' | 'bitbucket'
+type HostedRemoteProvider = 'github' | 'gitlab'
 
 type HostedRemote = {
   host: string
@@ -15,7 +15,6 @@ type HostedRemoteHost = {
 }
 
 const shorthandHosts: Record<string, { host: string; provider: HostedRemoteProvider }> = {
-  bitbucket: { host: 'bitbucket.org', provider: 'bitbucket' },
   github: { host: 'github.com', provider: 'github' },
   gitlab: { host: 'gitlab.com', provider: 'gitlab' }
 }
@@ -29,9 +28,6 @@ function providerForHost(host: string): HostedRemoteHost | null {
   }
   if (normalized === 'gitlab.com') {
     return { host: 'gitlab.com', provider: 'gitlab' }
-  }
-  if (normalized === 'bitbucket.org') {
-    return { host: 'bitbucket.org', provider: 'bitbucket' }
   }
   return null
 }
@@ -96,11 +92,6 @@ function encodeRelativePath(path: string): string {
   return path.replaceAll('\\', '/').split('/').filter(Boolean).map(encodeURIComponent).join('/')
 }
 
-function encodeBitbucketFileLineFragment(path: string, line: number): string {
-  const fileName = path.replaceAll('\\', '/').split('/').findLast(Boolean)
-  return fileName ? `#${encodeURIComponent(`${fileName}-${line}`)}` : ''
-}
-
 export function buildHostedRemoteFileUrl(
   remoteUrl: string,
   relativePath: string,
@@ -121,10 +112,7 @@ export function buildHostedRemoteFileUrl(
   if (remote.provider === 'github') {
     return `${baseUrl}/blob/${encodedBranch}${filePathSuffix}#L${line}`
   }
-  if (remote.provider === 'gitlab') {
-    return `${baseUrl}/-/blob/${encodedBranch}${filePathSuffix}#L${line}`
-  }
-  return `${baseUrl}/src/${encodedBranch}${filePathSuffix}${encodeBitbucketFileLineFragment(relativePath, line)}`
+  return `${baseUrl}/-/blob/${encodedBranch}${filePathSuffix}#L${line}`
 }
 
 export function buildHostedRemoteCommitUrl(remoteUrl: string, sha: string): string | null {
@@ -142,9 +130,6 @@ export function buildHostedRemoteCommitUrl(remoteUrl: string, sha: string): stri
 
   if (remote.provider === 'gitlab') {
     return `${baseUrl}/-/commit/${encodedSha}`
-  }
-  if (remote.provider === 'bitbucket') {
-    return `${baseUrl}/commits/${encodedSha}`
   }
   return `${baseUrl}/commit/${encodedSha}`
 }

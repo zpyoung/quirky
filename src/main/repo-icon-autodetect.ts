@@ -21,9 +21,7 @@ const WEBSITE_HOSTS_TO_SKIP = new Set([
   'github.com',
   'www.github.com',
   'gitlab.com',
-  'www.gitlab.com',
-  'bitbucket.org',
-  'www.bitbucket.org'
+  'www.gitlab.com'
 ])
 
 function shouldUseWebsiteFavicon(rawUrl: string): boolean {

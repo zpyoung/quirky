@@ -271,7 +271,7 @@ export function IntegrationsStep(): React.JSX.Element {
             <span className="text-[13px] leading-relaxed text-muted-foreground">
               {translate(
                 'auto.components.onboarding.IntegrationsStep.277f30eb34',
-                'Linear, GitLab, Bitbucket, Azure DevOps, Gitea, and Jira live in Settings > Integrations.'
+                'Linear, GitLab, and Jira live in Settings > Integrations.'
               )}
             </span>
           </div>

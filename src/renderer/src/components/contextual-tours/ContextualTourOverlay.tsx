@@ -3,9 +3,9 @@ import { useAppStore } from '@/store'
 import {
   getContextualTour,
   type ContextualTourId,
+  type ContextualTourOutcome,
   type ContextualTourStepAction
 } from '../../../../shared/contextual-tours'
-import type { ContextualTourOutcome } from '../../../../shared/contextual-tours'
 import { isContextualTourAllowedForModal } from './contextual-tour-gate'
 import {
   areContextualTourRenderStatesEqual,

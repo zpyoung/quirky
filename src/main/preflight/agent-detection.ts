@@ -10,9 +10,6 @@ import type {
   ShellHydrationFailureReason
 } from '../../shared/shell-path-hydration-types'
 import { hydrateShellPath, mergePathSegments } from '../startup/hydrate-shell-path'
-import { getAzureDevOpsAuthStatus } from '../azure-devops/client'
-import { getBitbucketAuthStatus } from '../bitbucket/client'
-import { getGiteaAuthStatus } from '../gitea/client'
 import { _resetKnownHostsCache } from '../gitlab/gl-utils'
 import type { PreflightRuntimeContext } from '../ipc/preflight-runtime-target'
 
@@ -42,21 +39,6 @@ export type PreflightStatus = {
   // affordances (the GitLab tab in the source picker, MR list, etc.)
   // gate on `glab?.authenticated`.
   glab?: { installed: boolean; authenticated: boolean }
-  bitbucket?: { configured: boolean; authenticated: boolean; account: string | null }
-  azureDevOps?: {
-    configured: boolean
-    authenticated: boolean
-    account: string | null
-    baseUrl: string | null
-    tokenConfigured: boolean
-  }
-  gitea?: {
-    configured: boolean
-    authenticated: boolean
-    account: string | null
-    baseUrl: string | null
-    tokenConfigured: boolean
-  }
 }
 
 export { detectRemoteWindowsTerminalCapabilities }
@@ -249,20 +231,14 @@ async function executePreflightCheck(
     detectCommandRuntime('glab')
   ])
 
-  const [ghAuthenticated, glabAuthenticated, bitbucket, azureDevOps, gitea] = await Promise.all([
+  const [ghAuthenticated, glabAuthenticated] = await Promise.all([
     ghProbe.installed ? isGhAuthenticated(ghProbe) : Promise.resolve(false),
-    glabProbe.installed ? isGlabAuthenticated(glabProbe) : Promise.resolve(false),
-    getBitbucketAuthStatus(),
-    getAzureDevOpsAuthStatus(),
-    getGiteaAuthStatus()
+    glabProbe.installed ? isGlabAuthenticated(glabProbe) : Promise.resolve(false)
   ])
 
   return {
     git: { installed: gitProbe.installed },
     gh: { installed: ghProbe.installed, authenticated: ghAuthenticated },
-    glab: { installed: glabProbe.installed, authenticated: glabAuthenticated },
-    bitbucket,
-    azureDevOps,
-    gitea
+    glab: { installed: glabProbe.installed, authenticated: glabAuthenticated }
   }
 }

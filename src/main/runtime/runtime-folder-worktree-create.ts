@@ -109,13 +109,6 @@ export async function createRuntimeFolderWorktree(args: {
       ? { linkedGitLabIssue: request.linkedGitLabIssue }
       : {}),
     ...(request.linkedGitLabMR !== undefined ? { linkedGitLabMR: request.linkedGitLabMR } : {}),
-    ...(request.linkedBitbucketPR !== undefined
-      ? { linkedBitbucketPR: request.linkedBitbucketPR }
-      : {}),
-    ...(request.linkedAzureDevOpsPR !== undefined
-      ? { linkedAzureDevOpsPR: request.linkedAzureDevOpsPR }
-      : {}),
-    ...(request.linkedGiteaPR !== undefined ? { linkedGiteaPR: request.linkedGiteaPR } : {}),
     ...(request.linkedWorkItem !== undefined ? { linkedWorkItem: request.linkedWorkItem } : {}),
     ...(request.linkedItems !== undefined ? { linkedItems: request.linkedItems } : {}),
     ...(request.linkedTaskSourceContext !== undefined

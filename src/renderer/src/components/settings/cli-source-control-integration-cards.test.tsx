@@ -22,13 +22,7 @@ const mocks = vi.hoisted(() => ({
   preflight: {
     statuses: {
       ghStatus: 'connected',
-      glabStatus: 'connected',
-      bitbucketStatus: 'not-configured',
-      azureDevOpsStatus: 'not-configured',
-      giteaStatus: 'not-configured',
-      bitbucketAccount: null,
-      azureDevOpsAccount: null,
-      giteaAccount: null
+      glabStatus: 'connected'
     },
     unavailable: false,
     refresh: vi.fn()

@@ -72,8 +72,8 @@ describe('gitlab project ref parsing', () => {
   })
 
   it('distinguishes two services on the same host by port — only the GitLab one matches', () => {
-    // Why: a GitLab on :8443 and a Gitea on :3030 share a hostname but are
-    // different services. With only the GitLab port in known hosts, the Gitea
+    // Why: a GitLab on :8443 and another service on :3030 share a hostname but are
+    // different services. With only the GitLab port in known hosts, the other
     // remote must NOT be classified as GitLab.
     const knownHosts = ['gitlab.com', 'gitea.example.com:8443']
     expect(parseGitLabProjectRef('http://gitea.example.com:8443/team/api.git', knownHosts)).toEqual(

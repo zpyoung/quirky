@@ -16,9 +16,6 @@ type RefreshHostedReviewCardArgs = {
   linkedGitHubPR?: number | null
   fallbackGitHubPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
   repoOwnerExecutionHostId?: string
 }
 
@@ -34,9 +31,6 @@ export function refreshHostedReviewCard(
     repoOwnerExecutionHostId: args.repoOwnerExecutionHostId,
     linkedGitHubPR: args.linkedGitHubPR ?? null,
     ...(fallbackGitHubPR !== null ? { fallbackGitHubPR } : {}),
-    linkedGitLabMR: args.linkedGitLabMR ?? null,
-    linkedBitbucketPR: args.linkedBitbucketPR ?? null,
-    linkedAzureDevOpsPR: args.linkedAzureDevOpsPR ?? null,
-    linkedGiteaPR: args.linkedGiteaPR ?? null
+    linkedGitLabMR: args.linkedGitLabMR ?? null
   })
 }

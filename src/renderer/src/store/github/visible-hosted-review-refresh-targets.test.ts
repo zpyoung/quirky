@@ -247,7 +247,7 @@ describe('visible hosted review refresh targets', () => {
 
   it('sets provider-neutral cadence for open, no review, closed and merged states', () => {
     const store = setup()
-    for (const provider of ['gitlab', 'bitbucket', 'azure-devops', 'gitea'] as const) {
+    for (const provider of ['gitlab'] as const) {
       for (const [state, status, intervalMs] of [
         ['open', 'success', 120_000],
         ['draft', 'pending', 120_000],

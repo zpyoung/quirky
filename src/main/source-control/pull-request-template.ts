@@ -5,10 +5,6 @@ import type { HostedReviewProvider } from '../../shared/hosted-review'
 const PULL_REQUEST_TEMPLATE_CANDIDATES = [
   '.github/pull_request_template.md',
   '.github/PULL_REQUEST_TEMPLATE.md',
-  '.azuredevops/pull_request_template.md',
-  '.azuredevops/PULL_REQUEST_TEMPLATE.md',
-  '.gitea/pull_request_template.md',
-  '.gitea/PULL_REQUEST_TEMPLATE.md',
   'pull_request_template.md',
   'PULL_REQUEST_TEMPLATE.md',
   'docs/pull_request_template.md',

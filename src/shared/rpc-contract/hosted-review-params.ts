@@ -12,10 +12,7 @@ export const HostedReviewForBranch = z.object({
   active: z.boolean().optional(),
   linkedGitHubPR: z.number().int().positive().nullable().optional(),
   fallbackGitHubPR: z.number().int().positive().nullable().optional(),
-  linkedGitLabMR: z.number().int().positive().nullable().optional(),
-  linkedBitbucketPR: z.number().int().positive().nullable().optional(),
-  linkedAzureDevOpsPR: z.number().int().positive().nullable().optional(),
-  linkedGiteaPR: z.number().int().positive().nullable().optional()
+  linkedGitLabMR: z.number().int().positive().nullable().optional()
 })
 
 export const HostedReviewCreationEligibility = z.object({
@@ -29,10 +26,7 @@ export const HostedReviewCreationEligibility = z.object({
   behind: z.number().int().nonnegative().optional(),
   linkedGitHubPR: z.number().int().positive().nullable().optional(),
   fallbackGitHubPR: z.number().int().positive().nullable().optional(),
-  linkedGitLabMR: z.number().int().positive().nullable().optional(),
-  linkedBitbucketPR: z.number().int().positive().nullable().optional(),
-  linkedAzureDevOpsPR: z.number().int().positive().nullable().optional(),
-  linkedGiteaPR: z.number().int().positive().nullable().optional()
+  linkedGitLabMR: z.number().int().positive().nullable().optional()
 })
 
 export const HostedReviewCreate = z.object({

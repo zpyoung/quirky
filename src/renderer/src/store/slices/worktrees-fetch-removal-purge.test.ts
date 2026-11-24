@@ -137,8 +137,8 @@ describe('fetchWorktrees', () => {
 
     mockApi.worktrees.list.mockResolvedValue([surviving])
     store.setState({ worktreesByRepo: { repo1: [removed, surviving] } } as Partial<AppState>)
-    await store.getState().updateWorktreeMeta(removed.id, { linkedBitbucketPR: 101 })
-    await store.getState().updateWorktreeMeta(surviving.id, { linkedAzureDevOpsPR: 202 })
+    await store.getState().updateWorktreeMeta(removed.id, { linkedGitLabMR: 101 })
+    await store.getState().updateWorktreeMeta(surviving.id, { linkedGitLabMR: 202 })
 
     expect(getHostedReviewLinkMutationGenerationForTests(removed.id)).toBeGreaterThan(0)
     expect(getHostedReviewLinkMutationGenerationForTests(surviving.id)).toBeGreaterThan(0)

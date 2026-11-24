@@ -101,11 +101,8 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
   const {
     fallbackGitHubPRNumber,
     hasResolvableReviewPushTargetLink,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
     linkedGitHubPR,
-    linkedGitLabMR,
-    linkedGiteaPR
+    linkedGitLabMR
   } = linkedReviews
   const providerHint = useSourceControlHostedReviewProviderHint({
     activeRepo,
@@ -119,11 +116,8 @@ export function useSourceControlReviewContext(panelState: SourceControlPanelStat
     hostedReviewCreationRequestState: hostedReviewState.hostedReviewCreationRequestState,
     isBranchVisible,
     isFolder,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
     linkedGitHubPR,
-    linkedGitLabMR,
-    linkedGiteaPR
+    linkedGitLabMR
   })
   useSourceControlReviewPushTarget({
     activeWorktree,

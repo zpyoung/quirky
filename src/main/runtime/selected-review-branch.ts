@@ -6,9 +6,6 @@ export type SelectedReviewBranchInput = {
   branchNameOverride?: string
   linkedPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
   pushTarget?: GitPushTarget
 }
 
@@ -25,15 +22,6 @@ export function getSelectedReviewBranch(
   }
   if (typeof args.linkedGitLabMR === 'number') {
     return { provider: 'gitlab', number: args.linkedGitLabMR }
-  }
-  if (typeof args.linkedBitbucketPR === 'number') {
-    return { provider: 'bitbucket', number: args.linkedBitbucketPR }
-  }
-  if (typeof args.linkedAzureDevOpsPR === 'number') {
-    return { provider: 'azure-devops', number: args.linkedAzureDevOpsPR }
-  }
-  if (typeof args.linkedGiteaPR === 'number') {
-    return { provider: 'gitea', number: args.linkedGiteaPR }
   }
   return null
 }
@@ -79,15 +67,9 @@ export function isAllowedPushTargetRemoteConflict(
 export function getSelectedReviewLookupHints(args: SelectedReviewBranchInput): {
   linkedGitHubPR?: number | null
   linkedGitLabMR?: number | null
-  linkedBitbucketPR?: number | null
-  linkedAzureDevOpsPR?: number | null
-  linkedGiteaPR?: number | null
 } {
   return {
     linkedGitHubPR: args.linkedPR ?? null,
-    linkedGitLabMR: args.linkedGitLabMR ?? null,
-    linkedBitbucketPR: args.linkedBitbucketPR ?? null,
-    linkedAzureDevOpsPR: args.linkedAzureDevOpsPR ?? null,
-    linkedGiteaPR: args.linkedGiteaPR ?? null
+    linkedGitLabMR: args.linkedGitLabMR ?? null
   }
 }

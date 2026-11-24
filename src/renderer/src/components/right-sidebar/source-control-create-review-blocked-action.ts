@@ -27,15 +27,6 @@ export function resolveHostedReviewAuthInstruction(provider: HostedReviewProvide
   if (provider === 'gitlab') {
     return 'Run glab auth login'
   }
-  if (provider === 'azure-devops') {
-    return 'Set ORCA_AZURE_DEVOPS_TOKEN'
-  }
-  if (provider === 'gitea') {
-    return 'Set ORCA_GITEA_TOKEN'
-  }
-  if (provider === 'bitbucket') {
-    return 'Connect Bitbucket in Settings > Integrations'
-  }
   return 'Run gh auth login'
 }
 

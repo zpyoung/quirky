@@ -14,10 +14,7 @@ import { getVisibleHostedReviewRefreshTargets } from './visible-hosted-review-re
 const owner: Repo = { id: 'repo-1', path: '/repo', displayName: 'repo', badgeColor: '', addedAt: 0 }
 const providers = [
   ['github', 'linkedPR', 'github.com/team/repo', 'pull'],
-  ['gitlab', 'linkedGitLabMR', 'gitlab.example.com/team/repo', '-/merge_requests'],
-  ['bitbucket', 'linkedBitbucketPR', 'bitbucket.org/team/repo', 'pull-requests'],
-  ['azure-devops', 'linkedAzureDevOpsPR', 'dev.azure.com/team/project/_git/repo', 'pullrequest'],
-  ['gitea', 'linkedGiteaPR', 'codeberg.org/team/repo', 'pulls']
+  ['gitlab', 'linkedGitLabMR', 'gitlab.example.com/team/repo', '-/merge_requests']
 ] as const
 
 beforeEach(() => {

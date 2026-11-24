@@ -324,32 +324,6 @@ describe('resolvePrimaryAction Create PR intent', () => {
       disabled: true
     })
   })
-
-  it.each(['azure-devops', 'gitea'] as const)(
-    'returns Create PR intent for a %s branch that needs a safe push before review',
-    (provider) => {
-      const result = resolvePrimaryAction(
-        inputs({
-          upstreamStatus: { hasUpstream: true, ahead: 2, behind: 0 },
-          hostedReviewCreation: {
-            provider,
-            review: null,
-            canCreate: false,
-            blockedReason: 'needs_push',
-            nextAction: 'push',
-            reviewLookupOutcome: 'not_found'
-          }
-        })
-      )
-      expect(result).toEqual({
-        kind: 'create_pr_intent',
-        label: 'Create PR',
-        title: 'Prepare this branch and create a pull request',
-        disabled: false
-      })
-    }
-  )
-
   it('routes unpublished commits through Create PR intent while keeping Publish Branch in the commit area', () => {
     const input = inputs({
       upstreamStatus: { hasUpstream: false, ahead: 0, behind: 0 },

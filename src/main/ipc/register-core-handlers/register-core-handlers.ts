@@ -16,7 +16,6 @@ import { registerHostedReviewHandlers } from '../hosted-review'
 import { registerLinearHandlers } from '../linear'
 import { registerJiraHandlers } from '../jira'
 import { registerJiraIssueSummaryGenerationHandlers } from '../jira-issue-summary-generation'
-import { registerBitbucketHandlers } from '../bitbucket'
 import { registerCrashReportingHandlers } from '../crash-reporting'
 import { registerExportHandlers } from '../export'
 import { registerStatsHandlers } from '../stats'
@@ -193,7 +192,6 @@ export function registerCoreHandlers(
   registerLinearHandlers()
   registerJiraHandlers()
   registerJiraIssueSummaryGenerationHandlers(store, commitMessageAgentEnv)
-  registerBitbucketHandlers()
   if (crashReports) {
     registerCrashReportingHandlers(crashReports)
   }

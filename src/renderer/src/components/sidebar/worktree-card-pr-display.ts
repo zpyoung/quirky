@@ -24,9 +24,6 @@ export function isCachedMergedBranchPRCurrentForWorktree(
 type LinkedReviewNumbers = {
   linkedPR: number | null
   linkedGitLabMR: number | null
-  linkedBitbucketPR: number | null
-  linkedAzureDevOpsPR: number | null
-  linkedGiteaPR: number | null
 }
 
 export type WorktreeCardPrDisplay =
@@ -56,12 +53,6 @@ function getLinkedReviewNumber(
       return links.linkedPR
     case 'gitlab':
       return links.linkedGitLabMR
-    case 'bitbucket':
-      return links.linkedBitbucketPR
-    case 'azure-devops':
-      return links.linkedAzureDevOpsPR
-    case 'gitea':
-      return links.linkedGiteaPR
   }
 }
 
@@ -84,24 +75,13 @@ export function getWorktreeCardPrDisplay(
   review: HostedReviewInfo | null | undefined,
   linkedPR: number | null,
   linkedGitLabMR: number | null = null,
-  linkedBitbucketPR: number | null = null,
-  linkedAzureDevOpsPR: number | null = null,
-  linkedGiteaPR: number | null = null,
   options: WorktreeCardPrDisplayOptions = {}
 ): WorktreeCardPrDisplay | null {
   const links = {
     linkedPR,
-    linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR
+    linkedGitLabMR
   }
-  const hasLinkedReview =
-    linkedPR !== null ||
-    linkedGitLabMR !== null ||
-    linkedBitbucketPR !== null ||
-    linkedAzureDevOpsPR !== null ||
-    linkedGiteaPR !== null
+  const hasLinkedReview = linkedPR !== null || linkedGitLabMR !== null
   if (
     review?.provider === 'github' &&
     isGitHubPRSuppressed(
@@ -145,18 +125,6 @@ export function getWorktreeCardPrDisplay(
 
   if (linkedGitLabMR !== null) {
     return makeLinkedReviewFallback('gitlab', linkedGitLabMR, review)
-  }
-
-  if (linkedBitbucketPR !== null) {
-    return makeLinkedReviewFallback('bitbucket', linkedBitbucketPR, review)
-  }
-
-  if (linkedAzureDevOpsPR !== null) {
-    return makeLinkedReviewFallback('azure-devops', linkedAzureDevOpsPR, review)
-  }
-
-  if (linkedGiteaPR !== null) {
-    return makeLinkedReviewFallback('gitea', linkedGiteaPR, review)
   }
 
   return null

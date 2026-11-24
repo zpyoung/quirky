@@ -150,10 +150,7 @@ describe('persistWorktreeMeta GitHub PR suppression compatibility', () => {
       {
         worktree: 'id:repo::/feature',
         linkedPR: 42,
-        linkedGitLabMR: null,
-        linkedBitbucketPR: null,
-        linkedAzureDevOpsPR: null,
-        linkedGiteaPR: null
+        linkedGitLabMR: null
       },
       { timeoutMs: 15_000 }
     )

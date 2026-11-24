@@ -46,10 +46,7 @@ export function getWorkspaceReferenceLookup(request: WorkspaceReferenceRequest, 
           repoOwnerExecutionHostId: getRepoExecutionHostId(repo),
           admissionTier: request.admissionTier ?? 'interactive',
           linkedGitHubPR: item.provider === 'github' ? item.number : null,
-          linkedGitLabMR: item.provider === 'gitlab' ? item.number : null,
-          linkedBitbucketPR: item.provider === 'bitbucket' ? item.number : null,
-          linkedAzureDevOpsPR: item.provider === 'azure-devops' ? item.number : null,
-          linkedGiteaPR: item.provider === 'gitea' ? item.number : null
+          linkedGitLabMR: item.provider === 'gitlab' ? item.number : null
         }),
       (review) =>
         matchWorkspaceReferenceReview(item, review)

@@ -21,9 +21,6 @@ export type WorkspaceReviewResolution = {
   cachedBranchFallbackGitHubPRNumber: number | null
   linkedGitHubPR: number | null
   linkedGitLabMR: number | null
-  linkedBitbucketPR: number | null
-  linkedAzureDevOpsPR: number | null
-  linkedGiteaPR: number | null
   effectiveReviewStaleMerged: boolean
 }
 
@@ -35,20 +32,8 @@ export function resolveWorkspaceReview(
   const hostedReview = hostedReviewEntry?.data
   const linkedGitHubPR = worktree.linkedPR ?? null
   const linkedGitLabMR = worktree.linkedGitLabMR ?? null
-  const linkedBitbucketPR = worktree.linkedBitbucketPR ?? null
-  const linkedAzureDevOpsPR = worktree.linkedAzureDevOpsPR ?? null
-  const linkedGiteaPR = worktree.linkedGiteaPR ?? null
-  const hasNonGitHubLinkedReview =
-    linkedGitLabMR !== null ||
-    linkedBitbucketPR !== null ||
-    linkedAzureDevOpsPR !== null ||
-    linkedGiteaPR !== null
-  const hasLinkedReview =
-    linkedGitHubPR !== null ||
-    linkedGitLabMR !== null ||
-    linkedBitbucketPR !== null ||
-    linkedAzureDevOpsPR !== null ||
-    linkedGiteaPR !== null
+  const hasNonGitHubLinkedReview = linkedGitLabMR !== null
+  const hasLinkedReview = linkedGitHubPR !== null || linkedGitLabMR !== null
   const cachedBranchPR = prCacheEntry?.data
   const cachedMergedBranchPRMatchesCurrentHead = isCachedMergedBranchPRCurrentForWorktree(
     cachedBranchPR,
@@ -87,22 +72,14 @@ export function resolveWorkspaceReview(
     !isCachedMergedBranchPRCurrentForWorktree(hostedReview, worktree)
       ? null
       : hostedReviewEntry?.branchLookupGitHubPRNumber
-  const prDisplay = getWorktreeCardPrDisplay(
-    cachedBranchReview,
-    linkedGitHubPR,
-    linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
-    {
-      reviewHintKey:
-        (useCachedBranchReview || cachedMergedBranchPRMatchesCurrentHead) && !hasLinkedReview
-          ? ''
-          : hostedReviewEntry?.linkedReviewHintKey,
-      branchLookupGitHubPRNumber,
-      suppressedGitHubPR: worktree.suppressedGitHubPR ?? null
-    }
-  )
+  const prDisplay = getWorktreeCardPrDisplay(cachedBranchReview, linkedGitHubPR, linkedGitLabMR, {
+    reviewHintKey:
+      (useCachedBranchReview || cachedMergedBranchPRMatchesCurrentHead) && !hasLinkedReview
+        ? ''
+        : hostedReviewEntry?.linkedReviewHintKey,
+    branchLookupGitHubPRNumber,
+    suppressedGitHubPR: worktree.suppressedGitHubPR ?? null
+  })
   const effectiveReviewStaleMerged =
     cachedBranchReview?.state === 'merged' &&
     !isCachedMergedBranchPRCurrentForWorktree(cachedBranchReview, worktree)
@@ -111,9 +88,6 @@ export function resolveWorkspaceReview(
     cachedBranchFallbackGitHubPRNumber,
     linkedGitHubPR,
     linkedGitLabMR,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     effectiveReviewStaleMerged
   }
 }

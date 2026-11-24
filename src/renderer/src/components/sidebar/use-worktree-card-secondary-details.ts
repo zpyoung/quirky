@@ -36,9 +36,6 @@ export function useWorktreeCardSecondaryDetails({
   jiraIssueDisplay,
   prDisplay,
   linkedGitLabMR,
-  linkedBitbucketPR,
-  linkedAzureDevOpsPR,
-  linkedGiteaPR,
   newCardStyle,
   compactCards,
   cardDetails,
@@ -60,10 +57,7 @@ export function useWorktreeCardSecondaryDetails({
     | 'settings'
   > &
   Pick<LinkedDetails, 'issueDisplay' | 'linearIssue' | 'linearIssueDisplay' | 'jiraIssueDisplay'> &
-  Pick<
-    ReviewDetails,
-    'prDisplay' | 'linkedGitLabMR' | 'linkedBitbucketPR' | 'linkedAzureDevOpsPR' | 'linkedGiteaPR'
-  > & {
+  Pick<ReviewDetails, 'prDisplay' | 'linkedGitLabMR'> & {
     showStatus: boolean
     showIssue: boolean
     showLinearIssue: boolean
@@ -176,16 +170,10 @@ export function useWorktreeCardSecondaryDetails({
   const hoverReviewProvider = hoverReview?.provider
   const canUnlinkReview =
     hoverReviewProvider === 'github' ||
-    (hoverReviewProvider === 'gitlab' && linkedGitLabMR !== null) ||
-    (hoverReviewProvider === 'bitbucket' && linkedBitbucketPR !== null) ||
-    (hoverReviewProvider === 'azure-devops' && linkedAzureDevOpsPR !== null) ||
-    (hoverReviewProvider === 'gitea' && linkedGiteaPR !== null)
+    (hoverReviewProvider === 'gitlab' && linkedGitLabMR !== null)
   const hasExplicitLinkedReview =
     (hoverReviewProvider === 'github' && worktree.linkedPR !== null) ||
-    (hoverReviewProvider === 'gitlab' && linkedGitLabMR !== null) ||
-    (hoverReviewProvider === 'bitbucket' && linkedBitbucketPR !== null) ||
-    (hoverReviewProvider === 'azure-devops' && linkedAzureDevOpsPR !== null) ||
-    (hoverReviewProvider === 'gitea' && linkedGiteaPR !== null)
+    (hoverReviewProvider === 'gitlab' && linkedGitLabMR !== null)
   const handleUnlinkReview = useCallback(async () => {
     const options = { executionHostId: worktree.hostId ?? 'local' }
     switch (hoverReviewProvider) {
@@ -203,15 +191,6 @@ export function useWorktreeCardSecondaryDetails({
         return
       case 'gitlab':
         void updateWorktreeMeta(worktree.id, { linkedGitLabMR: null }, options)
-        return
-      case 'bitbucket':
-        void updateWorktreeMeta(worktree.id, { linkedBitbucketPR: null }, options)
-        return
-      case 'azure-devops':
-        void updateWorktreeMeta(worktree.id, { linkedAzureDevOpsPR: null }, options)
-        return
-      case 'gitea':
-        void updateWorktreeMeta(worktree.id, { linkedGiteaPR: null }, options)
         break
       case 'unsupported':
       case undefined:

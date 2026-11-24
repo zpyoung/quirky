@@ -30,11 +30,8 @@ export function useSourceControlHostedReviewProviderHint({
   hostedReviewCreationRequestState,
   isBranchVisible,
   isFolder,
-  linkedAzureDevOpsPR,
-  linkedBitbucketPR,
   linkedGitHubPR,
-  linkedGitLabMR,
-  linkedGiteaPR
+  linkedGitLabMR
 }: {
   activeRepo: SourceControlWorktreeContext['activeRepo']
   activeRepoId: string | null
@@ -47,11 +44,8 @@ export function useSourceControlHostedReviewProviderHint({
   hostedReviewCreationRequestState: SourceControlHostedReviewState['hostedReviewCreationRequestState']
   isBranchVisible: boolean
   isFolder: boolean
-  linkedAzureDevOpsPR: SourceControlLinkedReviews['linkedAzureDevOpsPR']
-  linkedBitbucketPR: SourceControlLinkedReviews['linkedBitbucketPR']
   linkedGitHubPR: SourceControlLinkedReviews['linkedGitHubPR']
   linkedGitLabMR: SourceControlLinkedReviews['linkedGitLabMR']
-  linkedGiteaPR: SourceControlLinkedReviews['linkedGiteaPR']
 }) {
   const shouldResolveHostedReviewCreation =
     isBranchVisible &&
@@ -89,9 +83,6 @@ export function useSourceControlHostedReviewProviderHint({
         linkedGitHubPR,
         fallbackGitHubPR: fallbackGitHubPRNumber,
         linkedGitLabMR,
-        linkedBitbucketPR,
-        linkedAzureDevOpsPR,
-        linkedGiteaPR,
         remoteInferredProvider: remoteInferredHostedReviewProvider
       }),
     [
@@ -99,11 +90,8 @@ export function useSourceControlHostedReviewProviderHint({
       fallbackGitHubPRNumber,
       hostedReview,
       hostedReviewCreation,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
       linkedGitHubPR,
       linkedGitLabMR,
-      linkedGiteaPR,
       remoteInferredHostedReviewProvider
     ]
   )
@@ -113,9 +101,7 @@ export function useSourceControlHostedReviewProviderHint({
       hostedReviewCreation !== null ||
       linkedGitHubPR !== null ||
       fallbackGitHubPRNumber !== null ||
-      linkedGitLabMR !== null ||
-      linkedAzureDevOpsPR !== null ||
-      linkedGiteaPR !== null
+      linkedGitLabMR !== null
 
     if (!hasConcreteProviderHint) {
       return
@@ -135,8 +121,6 @@ export function useSourceControlHostedReviewProviderHint({
     hostedReview,
     hostedReviewCreation,
     hostedReviewCreationProviderHintRef,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     linkedGitHubPR,
     linkedGitLabMR,
     provisionalHostedReviewProvider

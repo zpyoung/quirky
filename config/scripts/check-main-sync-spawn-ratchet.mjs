@@ -45,11 +45,9 @@ const GATED_FAMILIES = [
     }
   },
   {
-    modules: ['src/main/wsl-availability', 'src/main/wsl'],
+    modules: ['src/main/wsl'],
     advice: { isWslAvailable: 'use isWslAvailableAsync' }
-  },
-  { modules: ['src/main/pwsh'], advice: { isPwshAvailable: 'use isPwshAvailableAsync' } },
-  { modules: ['src/main/win32-utils'], advice: { grantDirAcl: 'use grantDirAclAsync' } }
+  }
 ]
 const ADVICE = new Map(GATED_FAMILIES.flatMap((family) => Object.entries(family.advice)))
 const GATED_MARKERS = [

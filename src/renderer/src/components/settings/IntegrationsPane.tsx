@@ -1,10 +1,4 @@
-import {
-  AzureDevOpsIntegrationCard,
-  BitbucketIntegrationCard,
-  GiteaIntegrationCard,
-  GitHubIntegrationCard,
-  GitLabIntegrationCard
-} from './source-control-integration-cards'
+import { GitHubIntegrationCard, GitLabIntegrationCard } from './source-control-integration-cards'
 import { JiraIntegrationCard, LinearIntegrationCard } from './task-tracker-integration-cards'
 import { useIntegrationProviderStatusRefresh } from './use-integration-provider-status-refresh'
 import { translate } from '@/i18n/i18n'
@@ -30,9 +24,6 @@ export function IntegrationsPane(): React.JSX.Element {
         <div className="space-y-3">
           <GitHubIntegrationCard />
           <GitLabIntegrationCard />
-          <BitbucketIntegrationCard />
-          <AzureDevOpsIntegrationCard />
-          <GiteaIntegrationCard />
         </div>
       </section>
 

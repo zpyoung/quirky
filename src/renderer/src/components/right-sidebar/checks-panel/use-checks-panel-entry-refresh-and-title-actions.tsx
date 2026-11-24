@@ -20,9 +20,6 @@ type ChecksPanelEntryRefreshAndTitleActionsInput = Pick<
   | 'hostedReviewCacheKey'
   | 'isFolder'
   | 'isGitLabReviewContext'
-  | 'linkedAzureDevOpsPR'
-  | 'linkedBitbucketPR'
-  | 'linkedGiteaPR'
   | 'linkedGitLabMR'
   | 'linkedPR'
   | 'pr'
@@ -76,9 +73,6 @@ export function useChecksPanelEntryRefreshAndTitleActions(
     isFolder,
     isGitLabReviewContext,
     isPanelVisible,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     mountedRef,
@@ -109,10 +103,7 @@ export function useChecksPanelEntryRefreshAndTitleActions(
           linkedGitHubPR: linkedPR,
           fallbackGitHubPR: fallbackGitHubPRNumber,
           currentHeadOid: activeWorktree?.head ?? null,
-          linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR
+          linkedGitLabMR
         })
         if (activeGitLabReview) {
           void fetchGitLabDetails()
@@ -139,9 +130,6 @@ export function useChecksPanelEntryRefreshAndTitleActions(
       fetchGitLabDetails,
       fetchHostedReviewForBranch,
       isGitLabReviewContext,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
-      linkedGiteaPR,
       linkedGitLabMR,
       linkedPR,
       repo
@@ -209,10 +197,7 @@ export function useChecksPanelEntryRefreshAndTitleActions(
         branch,
         linkedGitHubPR: linkedPR,
         fallbackGitHubPR: fallbackGitHubPRNumber,
-        linkedGitLabMR,
-        linkedBitbucketPR,
-        linkedAzureDevOpsPR,
-        linkedGiteaPR
+        linkedGitLabMR
       })
       const refreshedGitLabReview =
         refreshedReview?.provider === 'gitlab' ? refreshedReview : activeGitLabReview
@@ -238,10 +223,7 @@ export function useChecksPanelEntryRefreshAndTitleActions(
       branch,
       linkedGitHubPR: linkedPR,
       fallbackGitHubPR: refreshedPR?.number ?? fallbackGitHubPRNumber,
-      linkedGitLabMR,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR
+      linkedGitLabMR
     })
   }, [
     activeGitLabReview,
@@ -252,9 +234,6 @@ export function useChecksPanelEntryRefreshAndTitleActions(
     fetchGitLabDetails,
     fetchHostedReviewForBranch,
     fetchPRForBranch,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     linkedPR,
     repo

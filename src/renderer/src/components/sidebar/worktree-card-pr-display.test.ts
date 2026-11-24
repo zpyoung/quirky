@@ -28,17 +28,6 @@ const gitLabReview: HostedReviewInfo = {
   mergeable: 'MERGEABLE'
 }
 
-const bitbucketReview: HostedReviewInfo = {
-  provider: 'bitbucket',
-  number: 789,
-  title: 'Ready Bitbucket PR',
-  state: 'open',
-  url: 'https://bitbucket.org/stablyai/orca/pull-requests/789',
-  status: 'success',
-  updatedAt: '2026-05-13T00:00:00.000Z',
-  mergeable: 'MERGEABLE'
-}
-
 describe('getWorktreeCardPrDisplay', () => {
   it('uses cached PR details when available', () => {
     expect(getWorktreeCardPrDisplay(pr, 123)).toBe(pr)
@@ -66,7 +55,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('ignores linked-lookup PR details when the worktree is unlinked', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: 'github:123'
       })
     ).toBeNull()
@@ -74,7 +63,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('keeps an unlinked GitHub PR visible when branch provenance names the same PR', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: 'github:123',
         branchLookupGitHubPRNumber: 123
       })
@@ -83,7 +72,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('still suppresses unlinked linked-lookup details when branch provenance names a different PR', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: 'github:123',
         branchLookupGitHubPRNumber: 999
       })
@@ -92,7 +81,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('does not let a GitHub branch PR number corroborate an unlinked GitLab MR', () => {
     expect(
-      getWorktreeCardPrDisplay(gitLabReview, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(gitLabReview, null, null, {
         reviewHintKey: 'gitlab:321',
         branchLookupGitHubPRNumber: 321
       })
@@ -101,7 +90,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('does not let branch provenance override linked non-GitHub review metadata', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, 321, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, 321, {
         reviewHintKey: 'gitlab:321',
         branchLookupGitHubPRNumber: 123
       })
@@ -110,7 +99,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('shows branch-discovered GitHub PR details when the worktree is unlinked', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: ''
       })
     ).toBe(pr)
@@ -118,7 +107,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('hides a matching suppressed branch-discovered GitHub PR', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: '',
         suppressedGitHubPR: 123
       })
@@ -127,7 +116,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('lets an explicit GitHub link override stale suppression metadata', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, 123, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, 123, null, {
         suppressedGitHubPR: 123
       })
     ).toBe(pr)
@@ -135,7 +124,7 @@ describe('getWorktreeCardPrDisplay', () => {
 
   it('keeps a different branch-discovered GitHub PR visible', () => {
     expect(
-      getWorktreeCardPrDisplay(pr, null, null, null, null, null, {
+      getWorktreeCardPrDisplay(pr, null, null, {
         reviewHintKey: '',
         suppressedGitHubPR: 999
       })
@@ -164,14 +153,6 @@ describe('getWorktreeCardPrDisplay', () => {
       number: 654,
       title: 'Loading MR...'
     })
-  })
-
-  it('preserves branch-discovered hosted reviews for providers without worktree metadata', () => {
-    expect(
-      getWorktreeCardPrDisplay(bitbucketReview, null, null, null, null, null, {
-        suppressedGitHubPR: bitbucketReview.number
-      })
-    ).toBe(bitbucketReview)
   })
 })
 

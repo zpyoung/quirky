@@ -7,9 +7,6 @@ const {
   createGitHubPullRequestMock,
   getRepoSlugMock,
   getProjectSlugMock,
-  getBitbucketRepoSlugMock,
-  getAzureDevOpsRepoSlugMock,
-  getGiteaRepoSlugMock,
   getEnterpriseGitHubRepoSlugMock,
   getHostedReviewForBranchMock,
   ghExecFileAsyncMock,
@@ -20,9 +17,6 @@ const {
   createGitHubPullRequestMock: vi.fn(),
   getRepoSlugMock: vi.fn(),
   getProjectSlugMock: vi.fn(),
-  getBitbucketRepoSlugMock: vi.fn(),
-  getAzureDevOpsRepoSlugMock: vi.fn(),
-  getGiteaRepoSlugMock: vi.fn(),
   getEnterpriseGitHubRepoSlugMock: vi.fn(),
   getHostedReviewForBranchMock: vi.fn(),
   ghExecFileAsyncMock: vi.fn(),
@@ -45,29 +39,6 @@ vi.mock('../gitlab/client', () => ({
   getMergeRequest: vi.fn()
 }))
 vi.mock('../gitlab/merge-request-creation', () => ({ createGitLabMergeRequest: vi.fn() }))
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketRepoSlug: getBitbucketRepoSlugMock,
-  getBitbucketPullRequestForBranch: vi.fn(),
-  getBitbucketPullRequest: vi.fn()
-}))
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsRepoSlug: getAzureDevOpsRepoSlugMock,
-  getAzureDevOpsPullRequestForBranch: vi.fn(),
-  getAzureDevOpsPullRequest: vi.fn()
-}))
-vi.mock('../azure-devops/pull-request-creation', () => ({
-  createAzureDevOpsPullRequest: vi.fn(),
-  isAzureDevOpsReviewCreationAuthenticated: vi.fn()
-}))
-vi.mock('../gitea/client', () => ({
-  getGiteaRepoSlug: getGiteaRepoSlugMock,
-  getGiteaPullRequestForBranch: vi.fn(),
-  getGiteaPullRequest: vi.fn()
-}))
-vi.mock('../gitea/pull-request-creation', () => ({
-  createGiteaPullRequest: vi.fn(),
-  isGiteaReviewCreationAuthenticated: vi.fn()
-}))
 vi.mock('../github/gh-utils', () => ({
   acquire: vi.fn(),
   release: vi.fn(),
@@ -116,9 +87,6 @@ describe('createHostedReview with shared symlinks', () => {
       createGitHubPullRequestMock,
       getRepoSlugMock,
       getProjectSlugMock,
-      getBitbucketRepoSlugMock,
-      getAzureDevOpsRepoSlugMock,
-      getGiteaRepoSlugMock,
       getEnterpriseGitHubRepoSlugMock,
       getHostedReviewForBranchMock,
       ghExecFileAsyncMock,
@@ -131,9 +99,6 @@ describe('createHostedReview with shared symlinks', () => {
 
     getProjectSlugMock.mockResolvedValue(null)
     getRepoSlugMock.mockResolvedValue({ owner: 'acme', repo: 'orca' })
-    getBitbucketRepoSlugMock.mockResolvedValue(null)
-    getAzureDevOpsRepoSlugMock.mockResolvedValue(null)
-    getGiteaRepoSlugMock.mockResolvedValue(null)
     getEnterpriseGitHubRepoSlugMock.mockResolvedValue(null)
     getHostedReviewForBranchMock.mockResolvedValue(null)
     ghExecFileAsyncMock.mockResolvedValue({ stdout: '', stderr: '' })

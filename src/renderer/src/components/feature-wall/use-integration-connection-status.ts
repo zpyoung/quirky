@@ -58,25 +58,10 @@ type CliStatus = {
   authenticated?: boolean
 }
 
-type BitbucketStatus = {
-  configured?: boolean
-  authenticated?: boolean
-}
-
-type TokenReviewStatus = {
-  configured?: boolean
-  authenticated?: boolean
-  baseUrl?: string | null
-  tokenConfigured?: boolean
-}
-
 type ProviderStatusFacts = {
   preflightStatus: {
     gh?: CliStatus
     glab?: CliStatus
-    bitbucket?: BitbucketStatus
-    azureDevOps?: TokenReviewStatus
-    gitea?: TokenReviewStatus
   } | null
   preflightStatusChecked: boolean
   preflightStatusContextKey: string | null
@@ -96,8 +81,8 @@ export type IntegrationConnectionStatus = {
   // True once any review provider is connected/configured for this context.
   reviewConnected: boolean
   // Display name of the connected review provider, or null while none is.
-  reviewProviderName: 'GitHub' | 'GitLab' | 'Bitbucket' | 'Azure DevOps' | 'Gitea' | null
-  // GitHub/GitLab issues can double as tasks; token/env review providers do not.
+  reviewProviderName: 'GitHub' | 'GitLab' | null
+  // GitHub/GitLab issues can double as tasks.
   codeHostTaskProviderName: 'GitHub' | 'GitLab' | null
   // True once any task source is usable: a code host (its issues double as a
   // task source) or a dedicated tracker (Linear/Jira).
@@ -118,30 +103,6 @@ export type IntegrationConnectionStatus = {
   checking: boolean
 }
 
-function isBitbucketReviewConnected(status: BitbucketStatus | undefined): boolean {
-  return status?.configured === true && status.authenticated === true
-}
-
-function isAzureDevOpsReviewConfigured(status: TokenReviewStatus | undefined): boolean {
-  if (status?.configured !== true) {
-    return false
-  }
-  if (status.tokenConfigured === true && status.baseUrl && status.authenticated !== true) {
-    return false
-  }
-  return true
-}
-
-function isGiteaReviewConfigured(status: TokenReviewStatus | undefined): boolean {
-  if (status?.configured !== true) {
-    return false
-  }
-  if (status.tokenConfigured === true && status.authenticated !== true) {
-    return false
-  }
-  return true
-}
-
 export function deriveIntegrationConnectionStatus(
   facts: ProviderStatusFacts
 ): IntegrationConnectionStatus {
@@ -157,12 +118,6 @@ export function deriveIntegrationConnectionStatus(
     reviewReadyForConnection &&
     facts.preflightStatus?.glab?.installed === true &&
     facts.preflightStatus.glab.authenticated === true
-  const bitbucketConnected =
-    reviewReadyForConnection && isBitbucketReviewConnected(facts.preflightStatus?.bitbucket)
-  const azureDevOpsConnected =
-    reviewReadyForConnection && isAzureDevOpsReviewConfigured(facts.preflightStatus?.azureDevOps)
-  const giteaConnected =
-    reviewReadyForConnection && isGiteaReviewConfigured(facts.preflightStatus?.gitea)
 
   const linearStatusCurrent = facts.linearStatusContextKey === facts.providerRuntimeContextKey
   const jiraStatusCurrent = facts.jiraStatusContextKey === facts.providerRuntimeContextKey
@@ -172,17 +127,7 @@ export function deriveIntegrationConnectionStatus(
     !linearChecking && linearStatusCurrent && facts.linearStatus.connected === true
   const jiraConnected = !jiraChecking && jiraStatusCurrent && facts.jiraStatus.connected === true
 
-  const reviewProviderName = githubConnected
-    ? 'GitHub'
-    : gitlabConnected
-      ? 'GitLab'
-      : bitbucketConnected
-        ? 'Bitbucket'
-        : azureDevOpsConnected
-          ? 'Azure DevOps'
-          : giteaConnected
-            ? 'Gitea'
-            : null
+  const reviewProviderName = githubConnected ? 'GitHub' : gitlabConnected ? 'GitLab' : null
   const codeHostTaskProviderName = githubConnected ? 'GitHub' : gitlabConnected ? 'GitLab' : null
   const trackerProviderName = linearConnected ? 'Linear' : jiraConnected ? 'Jira' : null
   const taskSourceNames: IntegrationConnectionStatus['taskSourceNames'] = [
@@ -198,12 +143,7 @@ export function deriveIntegrationConnectionStatus(
   const trackerChecking = trackerProviderName === null && (linearChecking || jiraChecking)
 
   return {
-    reviewConnected:
-      githubConnected ||
-      gitlabConnected ||
-      bitbucketConnected ||
-      azureDevOpsConnected ||
-      giteaConnected,
+    reviewConnected: githubConnected || gitlabConnected,
     reviewProviderName,
     codeHostTaskProviderName,
     trackerConnected: hasUsableTaskSource,

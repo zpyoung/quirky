@@ -39,9 +39,6 @@ export function useChecksPanelCheckAndReviewActions(model: ChecksPanelCheckAndRe
     gitLabProjectRefRef,
     isCurrentAsyncResult,
     isFixingChecksWithAI,
-    linkedAzureDevOpsPR,
-    linkedBitbucketPR,
-    linkedGiteaPR,
     linkedGitLabMR,
     panelContextKey,
     panelContextKeyRef,
@@ -195,10 +192,7 @@ export function useChecksPanelCheckAndReviewActions(model: ChecksPanelCheckAndRe
           repoId: repo.id,
           branch,
           linkedGitHubPR: linkedPRNumber,
-          linkedGitLabMR,
-          linkedBitbucketPR,
-          linkedAzureDevOpsPR,
-          linkedGiteaPR
+          linkedGitLabMR
         })
         if (!isCurrentRequestContext()) {
           return
@@ -302,9 +296,6 @@ export function useChecksPanelCheckAndReviewActions(model: ChecksPanelCheckAndRe
       fetchPRComments,
       fetchPRForBranch,
       isCurrentAsyncResult,
-      linkedAzureDevOpsPR,
-      linkedBitbucketPR,
-      linkedGiteaPR,
       linkedGitLabMR,
       panelContextKey,
       prCacheKey,

@@ -408,7 +408,7 @@ describe('mapped Jira owner A to SSH execution owner B', () => {
     }
     const createWorktree = useAppStore.getState().createWorktree
     const args: Parameters<typeof createWorktree> = [executionRepo.id, 'export']
-    args[24] = {
+    args[21] = {
       executionHostId: 'runtime:unresolved-owner',
       linkedTaskSourceContext: jiraSource
     }

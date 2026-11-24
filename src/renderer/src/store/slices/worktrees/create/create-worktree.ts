@@ -143,9 +143,6 @@ export function createCreateWorktree(
     creationId,
     linkedLinearIssueWorkspaceId,
     linkedLinearIssueOrganizationUrlKey,
-    linkedBitbucketPR,
-    linkedAzureDevOpsPR,
-    linkedGiteaPR,
     compareBaseRef,
     options
   ) => {
@@ -170,9 +167,6 @@ export function createCreateWorktree(
       creationId,
       linkedLinearIssueWorkspaceId,
       linkedLinearIssueOrganizationUrlKey,
-      linkedBitbucketPR,
-      linkedAzureDevOpsPR,
-      linkedGiteaPR,
       compareBaseRef,
       options
     }

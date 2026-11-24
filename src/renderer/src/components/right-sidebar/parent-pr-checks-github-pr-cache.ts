@@ -90,10 +90,5 @@ export function getParentPrChecksGitHubPRCacheEntry({
 }
 
 function hasNonGitHubLinkedReview(worktree: Worktree): boolean {
-  return (
-    worktree.linkedGitLabMR != null ||
-    worktree.linkedBitbucketPR != null ||
-    worktree.linkedAzureDevOpsPR != null ||
-    worktree.linkedGiteaPR != null
-  )
+  return worktree.linkedGitLabMR != null
 }

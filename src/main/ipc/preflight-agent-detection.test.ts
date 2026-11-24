@@ -7,9 +7,6 @@ const {
   execFileAsyncMock,
   hydrateShellPathMock,
   mergePathSegmentsMock,
-  getBitbucketAuthStatusMock,
-  getAzureDevOpsAuthStatusMock,
-  getGiteaAuthStatusMock,
   resolveCliCommandsMock,
   isCommandOnLocalPathMock,
   listLocalCommandPathsMock,
@@ -21,9 +18,6 @@ const {
   execFileAsyncMock: vi.fn(),
   hydrateShellPathMock: vi.fn(),
   mergePathSegmentsMock: vi.fn(),
-  getBitbucketAuthStatusMock: vi.fn(),
-  getAzureDevOpsAuthStatusMock: vi.fn(),
-  getGiteaAuthStatusMock: vi.fn(),
   resolveCliCommandsMock: vi.fn(),
   isCommandOnLocalPathMock: vi.fn(),
   listLocalCommandPathsMock: vi.fn(),
@@ -75,18 +69,6 @@ vi.mock('../pty/windows-environment-path', () => ({
   mergePersistedWindowsPath: mergePersistedWindowsPathMock
 }))
 
-vi.mock('../bitbucket/client', () => ({
-  getBitbucketAuthStatus: getBitbucketAuthStatusMock
-}))
-
-vi.mock('../azure-devops/client', () => ({
-  getAzureDevOpsAuthStatus: getAzureDevOpsAuthStatusMock
-}))
-
-vi.mock('../gitea/client', () => ({
-  getGiteaAuthStatus: getGiteaAuthStatusMock
-}))
-
 import {
   detectInstalledAgents,
   detectInstalledAgentsWithShellPathHydration
@@ -106,9 +88,6 @@ describe('preflight', () => {
         execFileAsyncMock,
         hydrateShellPathMock,
         mergePathSegmentsMock,
-        getBitbucketAuthStatusMock,
-        getAzureDevOpsAuthStatusMock,
-        getGiteaAuthStatusMock,
         resolveCliCommandsMock,
         isCommandOnLocalPathMock,
         listLocalCommandPathsMock,
@@ -392,54 +371,6 @@ describe('preflight', () => {
     expect(mergePathSegmentsMock).toHaveBeenCalledWith(['/home/test/.local/bin'])
   })
 
-  it('does not run host shell hydration for WSL agent detection', async () => {
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    runWslProcessMock.mockImplementation(async ({ script }: { script: string }) => {
-      if (script.includes("'claude'")) {
-        return {
-          environmentResolved: true,
-          code: 0,
-          stdout: '__ORCA_AGENT_PATH__claude\t/home/test/.local/bin/claude\n',
-          stderr: '',
-          timedOut: false
-        }
-      }
-      throw new Error('not found')
-    })
-
-    await expect(
-      detectInstalledAgentsWithShellPathHydration({ wslDistro: 'Ubuntu' })
-    ).resolves.toEqual(['claude'])
-    expect(hydrateShellPathMock).not.toHaveBeenCalled()
-  })
-
-  it('does not report Claude Agent Teams from WSL agent detection', async () => {
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    runWslProcessMock.mockImplementation(async ({ script }: { script: string }) => {
-      expect(script).not.toContain("'orca'")
-      expect(script).not.toContain("'orca-dev'")
-      expect(script).not.toContain("'orca-ide'")
-      if (script.includes("'claude'")) {
-        return {
-          environmentResolved: true,
-          code: 0,
-          stdout: '__ORCA_AGENT_PATH__claude\t/home/test/.local/bin/claude\n',
-          stderr: '',
-          timedOut: false
-        }
-      }
-      throw new Error('not found')
-    })
-
-    await expect(detectInstalledAgents({ wslDistro: 'Ubuntu' })).resolves.toEqual(['claude'])
-  })
-
   it('detects Mistral Vibe from the installed vibe executable', async () => {
     execFileAsyncMock.mockImplementation(async (command, args) => {
       if (command !== 'which') {
@@ -472,63 +403,5 @@ describe('preflight', () => {
     })
 
     await expect(detectInstalledAgents()).resolves.toEqual(['mistral-vibe'])
-  })
-
-  it('detects agents from the selected WSL distro for a WSL workspace', async () => {
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    runWslProcessMock.mockImplementation(async ({ script }: { script: string }) => {
-      if (script.includes("'claude'")) {
-        return {
-          environmentResolved: true,
-          code: 0,
-          stdout: '__ORCA_AGENT_PATH__claude\t/home/test/.local/bin/claude\n',
-          stderr: '',
-          timedOut: false
-        }
-      }
-      throw new Error('not found')
-    })
-
-    await expect(detectInstalledAgents({ wslDistro: 'Ubuntu' })).resolves.toEqual(['claude'])
-    expect(runWslProcessMock).toHaveBeenCalledTimes(1)
-    // Why: the local fallback must not report host binaries as WSL binaries.
-    expect(resolveCliCommandsMock).not.toHaveBeenCalled()
-    // Why assert the lane, not the argv: argv is the runner's contract and is
-    // pinned by its own tests. What this suite owns is that detection asks the
-    // right distro on the lane that carries the user's PATH.
-    expect(runWslProcessMock).toHaveBeenCalledWith(
-      expect.objectContaining({ distro: 'Ubuntu', loginPath: 'preferred' })
-    )
-  })
-
-  it('detects agents from the default WSL distro when requested', async () => {
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    runWslProcessMock.mockImplementation(async ({ script }: { script: string }) => {
-      if (script.includes("'codex'")) {
-        return {
-          environmentResolved: true,
-          code: 0,
-          stdout: '__ORCA_AGENT_PATH__codex\t/home/test/.local/bin/codex\n',
-          stderr: '',
-          timedOut: false
-        }
-      }
-      throw new Error('not found')
-    })
-
-    await expect(detectInstalledAgents({ wslDefault: true })).resolves.toEqual(['codex'])
-    expect(runWslProcessMock).toHaveBeenCalledTimes(1)
-    // Why: the local fallback must not leak into WSL detection.
-    expect(resolveCliCommandsMock).not.toHaveBeenCalled()
-    // No distro named: the runner resolves the default.
-    expect(runWslProcessMock).toHaveBeenCalledWith(
-      expect.objectContaining({ distro: undefined, loginPath: 'preferred' })
-    )
   })
 })
