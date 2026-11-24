@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "skipPaths": [
+    "LICENSE",
+    "CHANGELOG.md",
+    "docs/quirk/specs/2026-11-24-orca-based-quirky/**",
+    "src/main/import-from-orca/**",
+    "src/shared/repo-config-paths.ts",
+    "mobile/src/app-update/fixtures/**",
+    "config/rename-allowlist.json",
+    "config/scripts/rename-to-quirky/**",
+    "config/scripts/check-no-orca-strings.mjs",
+    "config/scripts/check-no-orca-strings.test.mjs",
+    "pnpm-lock.yaml",
+    "mobile/pnpm-lock.yaml"
+  ],
+  "keepTokens": ["stablyai/orca", "Lovecast Inc.", "Claude Code-credentials"],
+  "creditLines": [
+    { "path": "README.md", "match": "Based on Orca" },
+    { "path": "src/main/startup/gpu-lifecycle.ts", "match": "Based on Orca" }
+  ]
+}
