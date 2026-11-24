@@ -109,6 +109,8 @@ docs/**
 !docs/audits/plugin-uninstall-log-retirement/**
 !docs/readme/
 !docs/readme/**
+!docs/upstream-review/
+!docs/upstream-review/**
 !docs/bug-reproductions/
 !docs/bug-reproductions/**
 !docs/quirk/
@@ -148,6 +150,7 @@ playwright-report/
 /.claude/skills/*
 # Fork-owned, versioned with the repo (not an installation).
 !/.claude/skills/release/
+!/.claude/skills/upstream-review/
 /.agents/skills/
 /skills-lock.json
 # Machine-local agent settings; carries this checkout's remote test-host address.

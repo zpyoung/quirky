@@ -12,10 +12,8 @@ const EXPECTED_MATRIX = {
   '.github/workflows/e2e.yml#changed-e2e': { contents: 'read' },
   '.github/workflows/e2e.yml#e2e': { contents: 'read' },
   '.github/workflows/e2e.yml#quirkyd-serve-mode-switch': { contents: 'read' },
-  '.github/workflows/e2e.yml#quirkyd-serve-mode-switch-windows': { contents: 'read' },
   '.github/workflows/e2e.yml#quirkyd-ssh-docker': { contents: 'read' },
   '.github/workflows/e2e.yml#ssh-browser-network-route': { contents: 'read' },
-  '.github/workflows/homebrew-bump.yml#bump-cask': { contents: 'read' },
   '.github/workflows/release-mac-build.yml#build-mac': { actions: 'read', contents: 'write' },
   '.github/workflows/release-mac-build.yml#qualification-template': {
     actions: 'read',
@@ -46,21 +44,11 @@ const EXPECTED_MATRIX = {
       ])
     )
   ),
-  [`${RELEASE_WORKFLOW}#build`]: { actions: 'read', contents: 'write' },
   [`${RELEASE_WORKFLOW}#build-mac`]: { actions: 'write', contents: 'read' },
   [`${RELEASE_WORKFLOW}#verify-mac-build`]: { actions: 'read', contents: 'read' },
   [`${RELEASE_WORKFLOW}#create-release`]: { contents: 'write' },
   [`${RELEASE_WORKFLOW}#cut`]: { contents: 'write' },
   [`${RELEASE_WORKFLOW}#docs-production-dispatch`]: { actions: 'write' },
-  [`${RELEASE_WORKFLOW}#homebrew-bump`]: { contents: 'read' },
-  [`${RELEASE_WORKFLOW}#homebrew-bump -> .github/workflows/homebrew-bump.yml#bump-cask`]: {
-    contents: 'read'
-  },
-  [`${RELEASE_WORKFLOW}#homebrew-bump-published-rc-draft`]: { contents: 'read' },
-  [`${RELEASE_WORKFLOW}#homebrew-bump-published-rc-draft -> .github/workflows/homebrew-bump.yml#bump-cask`]:
-    {
-      contents: 'read'
-    },
   [`${RELEASE_WORKFLOW}#quirkyd-template`]: { actions: 'read', contents: 'read' },
   [`${RELEASE_WORKFLOW}#quirkyd-template -> .github/workflows/qualified-quirkyd-template.yml#qualify -> .github/workflows/node-server-tests.yml#changes`]:
     {
@@ -104,12 +92,10 @@ const PUBLISH_TAG_JOBS = new Set(['build', 'create-release'])
 // Why this list is shorter than upstream's: the fork's release-cut is macOS-only and
 // carries no skill-sharing release gate, so those jobs have no fork counterpart.
 const RELEASE_TAG_EXECUTION_JOBS = [
-  'build',
   'create-release',
   'terminal-rendering-golden',
   'terminal-rendering-release-evidence'
 ]
-const REUSABLE_CALL_JOBS = ['homebrew-bump', 'homebrew-bump-published-rc-draft']
 
 function readWorkflow(relativePath) {
   const ref = process.env.RELEASE_CUT_WORKFLOW_REF
@@ -265,10 +251,6 @@ describe('release-cut token permissions', () => {
         expect(workflow.jobs[jobName].needs).toBe('cut')
         expect(workflow.jobs[jobName].if).toBe("needs.cut.outputs.should_release == 'true'")
       }
-    }
-    for (const jobName of REUSABLE_CALL_JOBS) {
-      expect(workflow.jobs[jobName].uses).toBe('./.github/workflows/homebrew-bump.yml')
-      expect(matrix[`${RELEASE_WORKFLOW}#${jobName}`]).toEqual({ contents: 'read' })
     }
 
     const macWorkflow = readWorkflow('.github/workflows/release-mac-build.yml')
