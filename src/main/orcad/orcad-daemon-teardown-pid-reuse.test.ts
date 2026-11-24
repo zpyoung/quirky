@@ -4,11 +4,11 @@ import { join } from 'node:path'
 import { spawnProcess } from '@orca/process-host'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanupDaemonForProtocol } from '../daemon/daemon-protocol-cleanup'
-import type { WindowsProcessIdentityRow } from '../windows/windows-process-table'
 import {
   __setDaemonProcessTableReaderForTests,
   killProfileDaemons,
-  recordProfileDaemons
+  recordProfileDaemons,
+  type ProcessTableRow
 } from './orcad-daemon-teardown-fixture'
 
 vi.mock('../daemon/daemon-protocol-cleanup', () => ({ cleanupDaemonForProtocol: vi.fn() }))
@@ -43,8 +43,8 @@ describe('daemon descendant walk under Windows pid reuse', () => {
   /** Records the tree from `before`, then tears down against `after`; resolves to the error, if any. */
   async function teardown(
     root: string,
-    before: WindowsProcessIdentityRow[],
-    after: WindowsProcessIdentityRow[]
+    before: ProcessTableRow[],
+    after: ProcessTableRow[]
   ): Promise<unknown> {
     let table = before
     __setDaemonProcessTableReaderForTests(async () => table)

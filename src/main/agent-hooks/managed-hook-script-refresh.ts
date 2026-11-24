@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { grantDirAclAsync, isPermissionError } from '../win32-utils'
 import { renameOverLockedTargetAsync } from './locked-executable-rename'
 
 type ExistingScript = { exists: false } | { exists: true; content: Buffer | null }
@@ -36,26 +35,6 @@ export async function scriptStillExists(scriptPath: string): Promise<boolean> {
   } catch (error) {
     if (isMissingPathError(error)) {
       return false
-    }
-    throw error
-  }
-}
-
-async function writeScriptWithAclRetry(
-  scriptPath: string,
-  content: string | Buffer
-): Promise<void> {
-  try {
-    await writeFile(scriptPath, content, 'utf-8')
-  } catch (error) {
-    if (isPermissionError(error) && process.platform === 'win32') {
-      try {
-        await grantDirAclAsync(dirname(scriptPath))
-        await writeFile(scriptPath, content, 'utf-8')
-        return
-      } catch {
-        // Re-throw the original permission error.
-      }
     }
     throw error
   }
@@ -100,7 +79,7 @@ async function writeManagedScriptAtomically(
 
   const tmpPath = join(dirname(scriptPath), `.${Date.now()}-${randomUUID()}.tmp`)
   try {
-    await writeScriptWithAclRetry(tmpPath, content)
+    await writeFile(tmpPath, content, 'utf-8')
     if (process.platform !== 'win32') {
       await chmod(tmpPath, 0o755)
     }

@@ -1,24 +1,10 @@
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import path, { isAbsolute, join, posix, resolve } from 'node:path'
+import path, { isAbsolute, join, resolve, type posix } from 'node:path'
 import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
-import { buildWslCapturedLoginShellCommand } from '../../shared/wsl-login-shell-command'
-import { toWindowsWslPath } from '../../shared/wsl-paths'
-import { runWslProcess } from '../wsl/wsl-runner'
 import type { SkillProviderRootOverrides } from './skill-provider-destinations'
 
 const PROVIDER_ROOT_MAX_LENGTH = 32_768
-const WSL_ENV_PROBE_TIMEOUT_MS = 8_000
-const WSL_ENV_PROBE_VALUE_MAX_LENGTH = 4_096
-// Room for rc output ahead of the fence; a clipped fence reads as a failed probe.
-const WSL_ENV_PROBE_MAX_BYTES = 65_536
-const PROVIDER_HOME_ENVS = SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
-  provider.homeEnv ? [{ id: provider.id, name: provider.homeEnv }] : []
-)
-// Why $HOME first: unusable homes are judged against the guest's own home.
-const WSL_PROVIDER_HOMES_PROBE = buildWslCapturedLoginShellCommand(
-  `printf '%s\\0' "$HOME" ${PROVIDER_HOME_ENVS.map(({ name }) => `"\${${name}:-}"`).join(' ')}`
-)
 
 type HomePathApi = Pick<typeof posix, 'dirname' | 'isAbsolute' | 'relative' | 'sep'>
 
@@ -114,72 +100,4 @@ export function withClaudeSkillProviderRoot(
 ): SkillProviderRootOverrides {
   const configDirectory = normalizedRoot(claudeConfigDirectory ?? undefined)
   return configDirectory ? { ...roots, claude: join(configDirectory, 'skills') } : roots
-}
-
-/** The fenced payload, or null when the probe failed or the fence was lost. */
-type WslEnvironmentProbe = (distro: string) => Promise<string | null>
-
-async function probeWslProviderHomes(distro: string): Promise<string | null> {
-  const result = await runWslProcess({
-    distro,
-    // 'none': the fenced command runs its own login shell, so a runner probe
-    // would buy a second one out of the same 8s budget.
-    loginPath: 'none',
-    script: WSL_PROVIDER_HOMES_PROBE.command,
-    shell: 'sh',
-    timeoutMs: WSL_ENV_PROBE_TIMEOUT_MS,
-    maxOutputBytes: WSL_ENV_PROBE_MAX_BYTES
-  })
-  if (result.code !== 0 || result.timedOut) {
-    return null
-  }
-  return WSL_PROVIDER_HOMES_PROBE.readStdout(result.stdout)
-}
-
-/** A clean absolute guest path, or null. */
-function cleanWslPath(value: string): string | null {
-  const candidate = value.trim()
-  if (
-    !candidate ||
-    candidate.length > WSL_ENV_PROBE_VALUE_MAX_LENGTH ||
-    !candidate.startsWith('/') ||
-    candidate.includes('\\') ||
-    Array.from(candidate).some((character) => {
-      const code = character.charCodeAt(0)
-      return code <= 0x1f || code === 0x7f
-    })
-  ) {
-    return null
-  }
-  return posix.resolve(candidate)
-}
-
-/** Every table `homeEnv` as the WSL login shell sees it, read in one probe. */
-export async function resolveWslSkillProviderRoots(
-  distro: string,
-  probe: WslEnvironmentProbe = probeWslProviderHomes
-): Promise<SkillProviderRootOverrides> {
-  try {
-    // `$HOME` then each value, all NUL-terminated; any other shape is a broken probe.
-    const fields = (await probe(distro))?.split('\0') ?? []
-    if (fields.length !== PROVIDER_HOME_ENVS.length + 2) {
-      return {}
-    }
-    const [rawUserHome, ...values] = fields
-    // Without the guest home the root/home/ancestor guard cannot run.
-    const userHome = cleanWslPath(rawUserHome)
-    if (!userHome) {
-      return {}
-    }
-    const roots: SkillProviderRootOverrides = {}
-    PROVIDER_HOME_ENVS.forEach(({ id }, index) => {
-      const home = cleanWslPath(values[index])
-      if (home && isUsableProviderHome(home, userHome, posix)) {
-        roots[id] = toWindowsWslPath(`${home}/skills`, distro)
-      }
-    })
-    return roots
-  } catch {
-    return {}
-  }
 }

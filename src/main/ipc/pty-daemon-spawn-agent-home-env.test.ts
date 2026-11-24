@@ -1,14 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { piBuildPtyEnvMock } from './pty-ipc-mock-registry'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import {
   type DaemonSpawnCall,
   createDaemonActiveProviderFixtures
 } from './pty-ipc-daemon-provider-fixtures'
 import { delimiter, join } from 'node:path'
-import type { TuiAgent } from '../../shared/tui-agent'
 import { LEGACY_TERMINAL_SHIM_REMOTE_ENV_KEYS } from '../pty/legacy-terminal-shim-dir'
-import { wslHookRelayManager } from '../agent-hooks/wsl-hook-relay-manager'
 import { registerPtyHandlers } from './pty/register-handlers'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
@@ -54,12 +51,8 @@ describe('registerPtyHandlers', () => {
 
   describe('spawn environment', () => {
     describe('daemon-active provider (parity with LocalPtyProvider)', () => {
-      const {
-        setupDaemonAdapter,
-        withWin32Platform,
-        daemonSpawnAndGetOptions,
-        daemonSpawnAndGetEnv
-      } = createDaemonActiveProviderFixtures({ handlers, mainWindow })
+      const { setupDaemonAdapter, daemonSpawnAndGetOptions, daemonSpawnAndGetEnv } =
+        createDaemonActiveProviderFixtures({ handlers, mainWindow })
 
       // Why: under the daemon, LocalPtyProvider.buildSpawnEnv never runs, so host-local env injection must happen in the pty:spawn handler instead.
       it('overrides an unmarked custom home for an authoritative daemon resume', async () => {
@@ -196,169 +189,6 @@ describe('registerPtyHandlers', () => {
         expect(env.HTTPS_PROXY).toBe('http://proxy.example:8080')
         expect(env.NO_PROXY).toBe('localhost,*.internal')
       })
-      it('skips host Codex home when a daemon-backed Windows spawn targets a WSL cwd', async () => {
-        const originalPlatform = process.platform
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: 'win32'
-        })
-        try {
-          const spawnOptions = await daemonSpawnAndGetOptions(
-            {},
-            () => 'C:\\Users\\test\\AppData\\Roaming\\Orca\\codex-runtime-home\\home',
-            undefined,
-            {
-              CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Orca\\codex-runtime-home\\home',
-              ORCA_CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Orca\\codex-runtime-home\\home'
-            },
-            {
-              cwd: '\\\\wsl.localhost\\Ubuntu\\home\\test\\repo',
-              worktreeId: 'repo-1::\\\\wsl.localhost\\Ubuntu\\home\\test\\repo'
-            }
-          )
-          const { env } = spawnOptions
-          expect(env.CODEX_HOME).toBeUndefined()
-          expect(env.ORCA_CODEX_HOME).toBeUndefined()
-          expect(spawnOptions.envToDelete).toEqual(
-            expect.arrayContaining(['CODEX_HOME', 'ORCA_CODEX_HOME'])
-          )
-        } finally {
-          Object.defineProperty(process, 'platform', {
-            configurable: true,
-            value: originalPlatform
-          })
-        }
-      })
-      it('skips host Codex home when a daemon-backed Windows spawn uses a WSL shell override', async () => {
-        const originalPlatform = process.platform
-        Object.defineProperty(process, 'platform', {
-          configurable: true,
-          value: 'win32'
-        })
-        try {
-          const spawnOptions = await daemonSpawnAndGetOptions(
-            {},
-            () => 'C:\\Users\\test\\AppData\\Roaming\\Orca\\codex-runtime-home\\home',
-            undefined,
-            {
-              CODEX_HOME: 'C:\\Users\\test\\.codex',
-              ORCA_CODEX_HOME: 'C:\\Users\\test\\AppData\\Roaming\\Orca\\codex-runtime-home\\home'
-            },
-            { shellOverride: 'wsl.exe' }
-          )
-          expect(spawnOptions.env.CODEX_HOME).toBeUndefined()
-          expect(spawnOptions.env.ORCA_CODEX_HOME).toBeUndefined()
-          expect(spawnOptions.envToDelete).toEqual(
-            expect.arrayContaining(['CODEX_HOME', 'ORCA_CODEX_HOME'])
-          )
-        } finally {
-          Object.defineProperty(process, 'platform', {
-            configurable: true,
-            value: originalPlatform
-          })
-        }
-      })
-      it('drops OPENCODE_CONFIG_DIR for a WSL daemon spawn until the guest overlay is known', async () => {
-        await withWin32Platform(async () => {
-          const env = await daemonSpawnAndGetEnv({}, undefined, undefined, undefined, {
-            shellOverride: 'wsl.exe'
-          })
-          // Why: relay not connected yet → never cross the Windows overlay path into WSL.
-          expect(env.OPENCODE_CONFIG_DIR).toBeUndefined()
-          expect(env.ORCA_OPENCODE_CONFIG_DIR).toBeUndefined()
-          expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-        })
-      })
-      it('does not install or inject a Prime extension for an explicit WSL launch', async () => {
-        await withWin32Platform(async () => {
-          const env = await daemonSpawnAndGetEnv(
-            {
-              PRIME_AGENT_CODING_AGENT_DIR: 'C:\\Users\\test\\.prime\\agent',
-              ORCA_PRIME_AGENT_STATUS_EXTENSION: 'C:\\stale\\orca-agent-status.ts'
-            },
-            undefined,
-            undefined,
-            undefined,
-            { shellOverride: 'wsl.exe', command: 'prime-agent', launchAgent: 'prime-agent' }
-          )
-
-          expect(piBuildPtyEnvMock).not.toHaveBeenCalled()
-          expect(env.ORCA_PRIME_AGENT_SOURCE_AGENT_DIR).toBeUndefined()
-          expect(env.ORCA_PRIME_AGENT_STATUS_EXTENSION).toBeUndefined()
-          expect(env.ORCA_WSL_HOOK_INSTANCE).toBeUndefined()
-          expect(env.PRIME_AGENT_CODING_AGENT_DIR).toBe('C:\\Users\\test\\.prime\\agent')
-        })
-      })
-      it('does not prepare a Prime extension for a typed launch in a bare WSL shell', async () => {
-        await withWin32Platform(async () => {
-          const env = await daemonSpawnAndGetEnv({}, undefined, undefined, undefined, {
-            shellOverride: 'wsl.exe'
-          })
-
-          expect(piBuildPtyEnvMock.mock.calls.some(([, , kind]) => kind === 'prime-agent')).toBe(
-            false
-          )
-          expect(env.ORCA_PRIME_AGENT_STATUS_EXTENSION).toBeUndefined()
-          expect(env.PRIME_AGENT_CODING_AGENT_DIR).toBeUndefined()
-        })
-      })
-      it('points OPENCODE_CONFIG_DIR at the guest overlay when the WSL relay reports it', async () => {
-        const guestDir = '/home/jin/.orca-relay/opencode-overlays/abc'
-        const spy = vi.spyOn(wslHookRelayManager, 'getOpenCodeOverlayDir').mockReturnValue(guestDir)
-        try {
-          await withWin32Platform(async () => {
-            const env = await daemonSpawnAndGetEnv(
-              { ORCA_OPENCODE_SOURCE_CONFIG_DIR: '/home/jin/.config/opencode' },
-              undefined,
-              undefined,
-              undefined,
-              { shellOverride: 'wsl.exe' }
-            )
-            expect(env.OPENCODE_CONFIG_DIR).toBe(guestDir)
-            expect(env.ORCA_OPENCODE_CONFIG_DIR).toBe(guestDir)
-            // The Windows-side source pointer must not cross into the guest.
-            expect(env.ORCA_OPENCODE_SOURCE_CONFIG_DIR).toBeUndefined()
-          })
-        } finally {
-          spy.mockRestore()
-        }
-      })
-      // Why: the guest materializes one overlay per OpenCode major, each holding only its
-      // own plugin file. Asking for the wrong one hands the guest the other variant's
-      // plugin, whose agent gate then registers no hooks at all.
-      const guestOverlayCases: {
-        launchAgent?: TuiAgent
-        expectedAgent: 'opencode' | 'opencode2'
-      }[] = [
-        { expectedAgent: 'opencode' },
-        { launchAgent: 'opencode2', expectedAgent: 'opencode2' }
-      ]
-      it.each(guestOverlayCases)(
-        'selects the $expectedAgent guest overlay for a WSL spawn',
-        async ({ launchAgent, expectedAgent }) => {
-          const guestDirs = {
-            opencode: '/home/jin/.orca-relay/opencode-overlays/abc',
-            opencode2: '/home/jin/.orca-relay/opencode2-overlays/def'
-          }
-          const spy = vi
-            .spyOn(wslHookRelayManager, 'getOpenCodeOverlayDir')
-            .mockImplementation((_distro, agent = 'opencode') => guestDirs[agent])
-          try {
-            await withWin32Platform(async () => {
-              const env = await daemonSpawnAndGetEnv({}, undefined, undefined, undefined, {
-                shellOverride: 'wsl.exe',
-                ...(launchAgent ? { launchAgent } : {})
-              })
-              expect(spy.mock.calls.map(([, agent]) => agent)).toEqual([expectedAgent])
-              expect(env.ORCA_OPENCODE_AGENT).toBe(expectedAgent)
-              expect(env.OPENCODE_CONFIG_DIR).toBe(guestDirs[expectedAgent])
-              expect(env.ORCA_OPENCODE_CONFIG_DIR).toBe(guestDirs[expectedAgent])
-            })
-          } finally {
-            spy.mockRestore()
-          }
-        }
-      )
       it('strips the daemon-inherited Orca-owned CODEX_HOME for real-home routing', async () => {
         const spawnOptions = await daemonSpawnAndGetOptions(
           {},

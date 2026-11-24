@@ -168,10 +168,6 @@ async function probeGlabKnownHosts(
     // connection results, and bound an otherwise global probe.
     const { stdout, stderr } = await glabExecFileAsync(['auth', 'status'], {
       timeout: GLAB_KNOWN_HOSTS_TIMEOUT_MS,
-      // Why: a local probe would cache the default distro's auth under 'native'
-      // and wake an idle VM. A connection-keyed probe keeps the retry — glab never
-      // runs over SSH/relay, so the calls it gates take that same fallback.
-      ...(connectionId ? {} : { allowDefaultWslFallback: false }),
       ...(!connectionId && localGitOptions.wslDistro
         ? { wslDistro: localGitOptions.wslDistro }
         : {}),

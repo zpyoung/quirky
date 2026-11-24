@@ -3,13 +3,10 @@ import { join } from 'node:path'
 import { parseOrcaYaml } from '../shared/orca-yaml'
 import { resolveHookCommandSourcePolicy } from '../shared/hook-command-source-policy'
 import { getEffectiveHooksFromConfig } from './effective-hook-config'
-import { getHookRuntimeTarget, getHookWslContext } from './hook-runtime-target'
 import { getSetupEnvVars } from './setup-hook-env-vars'
 import { iterateLfScriptLines } from './setup-runner-script-text'
 import { promptGuardShellEnv } from './git/runner'
 import { dropIncoherentCondaActivationEnv } from './pty/conda-activation-env'
-import { toLinuxPath } from './wsl'
-import { runWslProcess } from './wsl/wsl-runner'
 import type { HookRuntimeTarget } from './hook-runtime-target'
 import type { OrcaHooks } from '../shared/orca-yaml-hook-types'
 import type { Repo } from '../shared/repo-types'
@@ -91,16 +88,6 @@ function hookProcessError(
     output: `${stdout}\n${stderr}\n${error.message}`.trim(),
     ...(typeof code === 'number' ? { exitCode: code } : {})
   }
-}
-
-/** A hook that never started reported no exit, so the code stays withheld. */
-function hookSpawnFailure(
-  error: unknown,
-  context: { hookName: string; cwd: string }
-): HookProcessOutcome {
-  const message = error instanceof Error ? error.message : String(error)
-  console.error(`[hooks] ${context.hookName} hook failed in ${context.cwd}:`, message)
-  return { success: false, output: message }
 }
 
 function getHookShell(): string | undefined {
@@ -205,7 +192,7 @@ export function runHook(
   cwd: string,
   repo: Repo,
   hooksPath?: string,
-  projectRuntime?: ProjectExecutionRuntimeResolution | HookRuntimeTarget,
+  _projectRuntime?: ProjectExecutionRuntimeResolution | HookRuntimeTarget,
   /** Deadline override. Production uses HOOK_TIMEOUT; tests use it to exercise the timeout path. */
   timeoutMs: number = HOOK_TIMEOUT
   // Why (#19334): an absent exitCode means no exit was ever observed. The archive-hook removal
@@ -216,48 +203,6 @@ export function runHook(
 
   if (!script) {
     return Promise.resolve({ success: true, output: '' })
-  }
-
-  const runtimeTarget = getHookRuntimeTarget(projectRuntime)
-  const wslInfo = getHookWslContext(cwd, runtimeTarget)
-
-  if (wslInfo) {
-    // Why: hook scripts run inside WSL, so translate the ORCA_* Windows UNC paths to Linux paths.
-    const envVars = getSetupEnvVars(repo, cwd)
-    const wslEnv: Record<string, string> = {}
-    for (const [key, value] of Object.entries(envVars)) {
-      wslEnv[key] = toLinuxPath(value)
-    }
-    // Why: same unattended-git guard as the non-WSL branch below (issue
-    // #7652) — only the guard flags and any indexed git-config protocol are
-    // meant to reach the guest; askpass stays host-side, same as before.
-    const guardedEnv = promptGuardShellEnv(wslEnv)
-    const guestEnv: Record<string, string> = { ...wslEnv }
-    for (const [key, value] of Object.entries(guardedEnv)) {
-      if (
-        value !== undefined &&
-        (key === 'GIT_TERMINAL_PROMPT' ||
-          key === 'GCM_INTERACTIVE' ||
-          key.startsWith('GIT_CONFIG_'))
-      ) {
-        guestEnv[key] = value
-      }
-    }
-
-    return runWslProcess({
-      distro: wslInfo.distro ?? undefined,
-      loginPath: 'preferred',
-      script,
-      // Why pinned: these are user-authored orca.yaml scripts and the native
-      // path runs /bin/bash. Defaulting to sh would fail bash-only hooks on WSL
-      // only -- a downgrade the user never asked for.
-      shell: 'bash',
-      cwd: wslInfo.linuxPath,
-      env: guestEnv,
-      timeoutMs
-    })
-      .then((result) => classifyHookProcessResult(result, { hookName, cwd, timeoutMs }))
-      .catch((error: unknown) => hookSpawnFailure(error, { hookName, cwd }))
   }
 
   const shellHookEnv: NodeJS.ProcessEnv = { ...process.env, ...getSetupEnvVars(repo, cwd) }

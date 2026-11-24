@@ -20,9 +20,7 @@ export abstract class CodexRuntimeHomeLegacyMigration extends CodexRuntimeHomePa
     try {
       migrateLegacySharedAuthToPerAccountHome({
         activeHostAccountId: normalizeCodexRuntimeSelection(settings).host,
-        hostAccounts: settings.codexManagedAccounts.filter(
-          (account) => !this.getWslManagedHomePath(account)
-        ),
+        hostAccounts: settings.codexManagedAccounts,
         managedAccountsRoot: this.getManagedAccountsRoot(),
         metadataDir: this.getRuntimeMetadataDir(),
         sharedRuntimeHome: this.getRuntimeHomePath(),

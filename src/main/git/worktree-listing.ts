@@ -22,7 +22,7 @@ import {
   isNotGitRepositoryError,
   normalizeLocalBranchRef
 } from './worktree-operation-options'
-import { areWorktreePathsEqual, translateWorktreePath } from './worktree-path-comparison'
+import { areWorktreePathsEqual } from './worktree-path-comparison'
 import { detectSparseCheckoutCached } from './worktree-sparse-checkout-cache'
 
 const SPARSE_CHECKOUT_DETECTION_CONCURRENCY = 8
@@ -87,10 +87,7 @@ export async function listWorktreesStrict(
   repoPath: string,
   options: GitWorktreeExecOptions = {}
 ): Promise<GitWorktreeInfo[]> {
-  const worktrees = (await readWorktreeList(repoPath, options)).map((worktree) => {
-    const translatedPath = translateWorktreePath(worktree.path, repoPath, options)
-    return translatedPath === worktree.path ? worktree : { ...worktree, path: translatedPath }
-  })
+  const worktrees = await readWorktreeList(repoPath, options)
   const visibleWorktrees = options.includeCreatePreparations
     ? worktrees
     : worktrees.filter((worktree) => !isWorktreeCreatePreparation(worktree))
@@ -318,7 +315,7 @@ export async function describeCreatedWorktree(
     repoPath,
     [
       {
-        path: translateWorktreePath(created.topLevel, repoPath, options),
+        path: created.topLevel,
         head,
         branch: expectedRef,
         isBare: false,

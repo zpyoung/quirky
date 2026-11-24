@@ -25,7 +25,6 @@ import {
   getSelectedAgentRuntime,
   getSkillDiscoveryTargetForRuntime
 } from './CliSkillRuntimeSetup'
-import { WslCliRegistration } from './WslCliRegistration'
 import { useCliRegistrationActions } from './use-cli-registration-actions'
 import { useLocalCliSkillFreshnessName } from './use-local-cli-skill-freshness-name'
 import { translate } from '@/i18n/i18n'
@@ -340,8 +339,6 @@ export function CliSection({
           </div>
         ) : null}
       </div>
-
-      <WslCliRegistration currentPlatform={currentPlatform} />
 
       <CliRegistrationDialog
         busyAction={busyAction}

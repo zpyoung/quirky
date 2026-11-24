@@ -1,7 +1,4 @@
-import {
-  getClaudeProfileRouter,
-  getClaudeWslProfileRouter
-} from '../../../claude-accounts/claude-profile-installed-router'
+import { getClaudeProfileRouter } from '../../../claude-accounts/claude-profile-installed-router'
 import { getPtyIpc } from '../../pty-host-bindings'
 import {
   CLAUDE_ACCOUNT_FUNCTION_DAEMON_PROTOCOL_VERSION,
@@ -36,9 +33,7 @@ export function installPtyClaudeOldTerminalIpcHandler(deps: Deps): void {
       // Why the pane's own runtime: claude there runs that runtime's System default.
       const runsAnother =
         target.runtime === 'wsl'
-          ? await getClaudeWslProfileRouter()
-              ?.systemDefaultRunsAnotherAccount(target.wslDistro)
-              .catch(() => null)
+          ? null
           : getClaudeProfileRouter()?.systemDefaultRunsAnotherAccount()
       return runsAnother === true
     }

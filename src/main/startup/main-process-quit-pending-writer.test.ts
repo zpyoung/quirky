@@ -20,7 +20,6 @@ const dependencies: Record<string, Record<string, unknown>> = {
   '../daemon/daemon-provider-state': { disconnectDaemon: settled(), shutdownDaemon: settled() },
   '../ipc/ssh/ssh-shutdown-drain': { beginSshShutdown },
   '../agent-hooks/server': { agentHookServer: { stop: stopAgentHookServer } },
-  '../agent-hooks/wsl-hook-relay-manager': { wslHookRelayManager: { disposeAll: idle() } },
   '../agent-hooks/managed-agent-hook-controls': {
     removeManagedAgentHooksAsync: vi.fn(async () => [])
   },

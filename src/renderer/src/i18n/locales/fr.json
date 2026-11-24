@@ -17424,17 +17424,6 @@
         "description": "La ref de suivi distante « {{value0}} » était indisponible ; Orca a donc utilisé la locale « {{value1}} ». Cet espace de travail pourrait ne pas inclure les derniers changements distants.",
         "dismiss": "Compris"
       },
-      "LinuxPackageInstallRecoveryCard": {
-        "e3de29c86a": "Afficher le paquet",
-        "55c86654b7": "Copier la commande d'installation",
-        "53e1559f99": "Échec de l'installation automatique",
-        "a7ac6ec78b": "Orca a téléchargé la mise à jour mais n'a pas pu installer le paquet système automatiquement.",
-        "82c6dbea00": "Copiez la commande et exécutez-la dans un terminal système sur l'ordinateur où Orca est installé. Une fois terminée, quittez puis rouvrez Orca pour utiliser la nouvelle version.",
-        "53c4b8e148": "Aucun agent d'authentification exploitable n'a répondu à la demande d'installation privilégiée.",
-        "c732bcbf8f": "Vérification du paquet...",
-        "aa57fa4f80": "Commande copiée. Exécutez-la dans un terminal système pour installer {{value0}}, puis quittez et rouvrez Orca.",
-        "b7e7c5bc95": "Orca vérifie le fichier téléchargé par rapport aux métadonnées de version au moment où il construit cette commande. Le paquet système lui-même n'est pas vérifié par signature, et Orca ne peut pas garantir le fichier au-delà de ce point."
-      },
       "pr-check-counts": {
         "passingChip": "{{value0}} réussis",
         "failingChip": "{{value0}} en échec",

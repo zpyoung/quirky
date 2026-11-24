@@ -5,8 +5,6 @@ import {
   resetAiVaultScannerBackgroundForTests,
   scanAiVaultSessionsInBackground
 } from './session-scanner-background'
-import { getCachedWslDistros, hasCachedWslDistros, listRunningWslHomeDirsAsync } from '../wsl'
-import { filterPathsToRunningWslDistrosAsync } from '../wsl-running-path-filter'
 import {
   isAiVaultScanCancelledError,
   type AiVaultListArgs,
@@ -14,7 +12,6 @@ import {
 } from '../../shared/ai-vault-types'
 import { aiVaultLocalScanKey, aiVaultLocalScanScopeKey } from '../../shared/ai-vault-local-scan-key'
 import type { AiVaultScanOptions } from './session-scanner-types'
-import { prepareOpenCodeWslReaders } from './opencode-wsl-runtime-preparation'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 import { AiVaultScanCoordinator } from './ai-vault-scan-coordinator'
 import {
@@ -81,18 +78,15 @@ export function configureAiVaultSessionSources(next: AiVaultSessionSources): voi
  */
 export async function localAiVaultScanRoots(): Promise<
   Required<Pick<AiVaultScanOptions, 'additionalCodexSessionsDirs' | 'wslHomeDirs'>> &
-    Pick<AiVaultScanOptions, 'executionHostId' | 'wslOpenCodeReaders' | 'claudeProfileProjectsDirs'>
+    Pick<AiVaultScanOptions, 'executionHostId' | 'claudeProfileProjectsDirs'>
 > {
-  const [additionalCodexHomes, wslHomeDirs] = await Promise.all([
-    filterPathsToRunningWslDistrosAsync(configuredAdditionalCodexHomePaths()),
-    getAiVaultWslHomeDirs()
-  ])
   return {
-    additionalCodexSessionsDirs: additionalCodexHomes.map((homePath) => join(homePath, 'sessions')),
-    wslHomeDirs,
+    additionalCodexSessionsDirs: configuredAdditionalCodexHomePaths().map((homePath) =>
+      join(homePath, 'sessions')
+    ),
+    wslHomeDirs: [],
     // Why: the scan runs in a worker or child process, which has no account router.
     claudeProfileProjectsDirs: claudeProfileHistoryDirs('projects'),
-    wslOpenCodeReaders: await prepareOpenCodeWslReaders(wslHomeDirs),
     // Why: this scan is always host-local; callers addressing this host by a
     // runtime id get the result restamped at the RPC edge, never rescanned.
     executionHostId: LOCAL_EXECUTION_HOST_ID
@@ -187,17 +181,7 @@ export async function listAiVaultSessions(
 // Exported for the subagent-transcript IPC path, which validates
 // renderer-supplied paths against the same WSL-aware Claude roots the scan uses.
 export async function getAiVaultWslHomeDirs(): Promise<string[]> {
-  if (process.platform !== 'win32') {
-    return []
-  }
-  // No installed distro can be running: spares WSL-less hosts the running-distro probe.
-  // Cache read only: a rejected wsl.exe probe yields [] without caching, so it must not
-  // narrow the WSL roots delete/subagent validation trusts; and probing here would let this
-  // listing be the first to cache [] and flip a configured distro to "missing".
-  if (hasCachedWslDistros() && getCachedWslDistros()?.length === 0) {
-    return []
-  }
-  return listRunningWslHomeDirsAsync()
+  return []
 }
 
 // Drops the scan-result cache after a session is deleted so a non-force

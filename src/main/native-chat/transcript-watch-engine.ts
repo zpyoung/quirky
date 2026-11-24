@@ -25,11 +25,10 @@ import type {
 import { createTranscriptWatchScheduler } from './transcript-watch-scheduler'
 import { WslTranscriptFsError } from './wsl-transcript-fs-gate'
 import {
-  createRunningGuardedTranscriptNativeWatcher,
-  isWslTranscriptWatcherPath,
-  transcriptWatcherPathIsRunning
-} from './wsl-transcript-watcher-running-guard'
-import { observeWslTranscriptRunningState } from './wsl-transcript-running-observer'
+  createTranscriptNativeWatcher,
+  type TranscriptNativeWatcher
+} from './transcript-native-watcher'
+import { parseSshTranscriptPath } from './ssh-transcript-path'
 import { trackActiveNativeChatWatcher } from './transcript-watcher-count'
 
 /** Install a live tail, or return null when the resolved file is not readable yet. */
@@ -39,7 +38,6 @@ export async function installTranscriptWatcher(
   args: SubscribeNativeChatTranscriptArgs,
   signal?: AbortSignal
 ): Promise<NativeChatTranscriptSubscription | null> {
-  const isWslPath = isWslTranscriptWatcherPath(filePath)
   if (!(await transcriptWatcherPathIsInstallable(filePath, signal))) {
     return null
   }
@@ -125,9 +123,7 @@ export async function installTranscriptWatcher(
       rotationRetryCount = 0
       return
     }
-    if (!isWslPath) {
-      scheduleRotationRetry()
-    }
+    scheduleRotationRetry()
   }
 
   async function drainOnce(): Promise<void> {
@@ -224,14 +220,8 @@ export async function installTranscriptWatcher(
     await finishSuccessfulDrain(current)
   }
 
-  async function drain(runningChecked = false): Promise<void> {
+  async function drain(): Promise<void> {
     if (closed) {
-      return
-    }
-    if (isWslPath && !runningChecked && !(await transcriptWatcherPathIsRunning(filePath))) {
-      nativeWatcher.invalidate()
-      initialErrorEmitted ||=
-        !closed && initialDrain && emitTranscriptUnavailableSnapshot(onInitialSnapshot)
       return
     }
     if (reading) {
@@ -257,9 +247,7 @@ export async function installTranscriptWatcher(
               onInitialSnapshot,
               error instanceof WslTranscriptFsError ? error.message : 'Transcript unavailable'
             )
-          if (!isWslPath) {
-            scheduleRotationRetry()
-          }
+          scheduleRotationRetry()
           break
         }
       } while (pendingReadRequested && !closed)
@@ -280,11 +268,10 @@ export async function installTranscriptWatcher(
       const versionChanged =
         watchedVersion === null || transcriptFileVersionChanged(current, watchedVersion)
       if (versionChanged || current.size !== state.offset || nativeWatcher.needsRebind()) {
-        await drain(true)
+        await drain()
       }
     } catch {
-      // WSL retries wait for the next shared running-state observation.
-      await (isWslPath ? undefined : drain())
+      await drain()
     }
   }
 
@@ -294,24 +281,22 @@ export async function installTranscriptWatcher(
     drain: () => void drain(),
     reconcile: reconcileKnownRunning
   })
-  const nativeWatcher = createRunningGuardedTranscriptNativeWatcher(
-    filePath,
-    () => scheduler.scheduleEventDrain(),
-    scheduleRotationRetry
-  )
+  // fs.watch cannot see an SSH host's file; the reconciliation poll stats it there instead.
+  const nativeWatcher: TranscriptNativeWatcher = parseSshTranscriptPath(filePath)
+    ? { bind: () => false, dispose: () => {}, invalidate: () => {}, needsRebind: () => false }
+    : createTranscriptNativeWatcher(
+        filePath,
+        () => {
+          if (!nativeWatcher.needsRebind()) {
+            scheduler.scheduleEventDrain()
+          }
+        },
+        scheduleRotationRetry
+      )
 
   nativeWatcher.bind()
-  const stopWslObservation = isWslPath
-    ? observeWslTranscriptRunningState(
-        filePath,
-        () => reconcileKnownRunning(),
-        () => nativeWatcher.invalidate()
-      )
-    : () => {}
   trackActiveNativeChatWatcher(1)
-  if (!isWslPath) {
-    scheduler.startReconciliation()
-  }
+  scheduler.startReconciliation()
   scheduler.scheduleEventDrain()
 
   return {
@@ -323,7 +308,6 @@ export async function installTranscriptWatcher(
       closed = true
       gateAbort.abort(new Error('Native Chat transcript watcher unsubscribed'))
       scheduler.dispose()
-      stopWslObservation()
       nativeWatcher.dispose()
       trackActiveNativeChatWatcher(-1)
     }

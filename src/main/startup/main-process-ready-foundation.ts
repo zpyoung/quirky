@@ -13,7 +13,6 @@ import { ensureActiveOrcaProfile } from '../orca-profiles/profile-index-store'
 import { getCanonicalUserDataPath } from '../persistence'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { loadWslMoveFence } from '../persistence/moving-wsl-projects/wsl-move-scope-guard'
-import { runGatedWslMoveDesktopRewritePass } from '../persistence/moving-wsl-projects/wsl-move-desktop-rewrite'
 import { createProfileStateStoreForStartup } from '../persistence/profile-state/profile-state-startup-authority'
 import { initializeBrowserClientHostId } from '../browser/browser-client-host-id'
 import { scheduleSecretProtectionGapReport } from '../host/deferred-secret-protection-report'
@@ -21,12 +20,6 @@ import { withholdUnreachableKeychainForServe } from '../host/serve-keychain-guar
 import { initSshHostKeyStoreFile } from '../ssh/ssh-host-key-store'
 import { initOrcadHeldFenceTokenFile } from '../ssh/orcad-held-fence-tokens'
 import { neutralizeLegacyTerminalShimDir } from '../pty/legacy-terminal-shim-dir'
-import { createWindowsShellPathHydration } from './windows-shell-path-hydration'
-import {
-  configureWindowsHostGitEnvironmentReadiness,
-  setDefaultWslDistroOverride
-} from '../git/runner'
-import { wslHookRelayManager } from '../agent-hooks/wsl-hook-relay-manager'
 import { applyAppIcon } from '../app-icon'
 import {
   shouldSuppressDevEducation,
@@ -47,11 +40,6 @@ import { writeHttp1CompatibilityMarker } from './http1-compatibility-marker'
 import { mainProcessState as state } from './main-process-state'
 import { syncMacMenuBarIcon } from './main-window-actions'
 import { updateGpuAccelerationAboutPanel } from './gpu-lifecycle'
-import {
-  logWslCliReconciliationResults,
-  reconcileManagedWslCliRegistrations
-} from '../cli/wsl-cli-registration-reconciliation'
-import { createWslCliReconciliationStartupBarrier } from './wsl-cli-reconciliation-startup-barrier'
 import { agentHookServer } from '../agent-hooks/server'
 import { isAgentStatusHooksEnabled } from '../agent-hooks/managed-agent-hook-controls'
 import { reportProfileStateWriteFailure } from './profile-state-write-failure'
@@ -107,27 +95,6 @@ export async function initializeReadyFoundation(): Promise<void> {
       usesMockKeychain: app.commandLine.hasSwitch('use-mock-keychain')
     })
   }
-  // Why: managed WSL launchers live outside the Windows app bundle, so keep their launcher/bridge contract synced across app updates.
-  state.managedWslCliReconciliationStatus = 'pending'
-  state.managedWslCliReconciliationReady = reconcileManagedWslCliRegistrations({
-    isPackaged: app.isPackaged,
-    userDataPath: canonicalUserDataPath,
-    appVersion: app.getVersion()
-  })
-    .then((results) => {
-      logWslCliReconciliationResults(results)
-      state.managedWslCliReconciliationStatus = 'settled'
-    })
-    .catch((error) => {
-      state.managedWslCliReconciliationStatus = 'failed'
-      console.warn(
-        '[wsl-cli] Managed registration reconciliation discovery failed:',
-        error instanceof Error ? error.message : String(error)
-      )
-    })
-  state.managedWslCliStartupBarrierReady = createWslCliReconciliationStartupBarrier(
-    state.managedWslCliReconciliationReady
-  )
   const profile = ensureActiveOrcaProfile()
   state.activeOrcaProfile = profile
   // Why this early: the first window stamps the hosting id into its renderer's argv, so the durable
@@ -153,8 +120,6 @@ export async function initializeReadyFoundation(): Promise<void> {
   setNodeDistMirrorSettingReader(() => store.getSettings().nodeDistMirrorUrl)
   // Why before any handler or runtime: a project a WSL move is taking must never get a new terminal.
   loadWslMoveFence(getAppEnvironment().getPath('userData'))
-  // Finishes a move that committed before a crash; gated off it does nothing, and it never throws.
-  void runGatedWslMoveDesktopRewritePass({ userDataPath: getAppEnvironment().getPath('userData') })
   // Why: create pending readiness before the guard can observe the default session.
   // Why parked on state instead of awaited here: Dock/Launchpad launches don't inherit shell
   // proxy env vars, so the persisted proxy must land before any app-owned network fetcher runs —
@@ -190,26 +155,6 @@ export async function initializeReadyFoundation(): Promise<void> {
   initOrcadHeldFenceTokenFile(profile.dataFile)
   // Why: must precede PTY handler registration and run in headless serve too, which returns before openMainWindow.
   neutralizeLegacyTerminalShimDir(app.getPath('userData'))
-  const windowsShellPathHydration = createWindowsShellPathHydration()
-  state.windowsShellPathHydration = windowsShellPathHydration
-  configureWindowsHostGitEnvironmentReadiness(
-    process.platform === 'win32' ? windowsShellPathHydration.whenReady : null
-  )
-  if (process.platform === 'win32') {
-    const settings = store.getSettings()
-    if (app.isPackaged) {
-      void windowsShellPathHydration.hydrate(
-        settings.terminalWindowsShell,
-        settings.terminalWindowsPowerShellImplementation
-      )
-    } else {
-      windowsShellPathHydration.configure(
-        settings.terminalWindowsShell,
-        settings.terminalWindowsPowerShellImplementation
-      )
-    }
-  }
-  wslHookRelayManager.setManagedHookSettingsResolver(() => state.store?.getSettings() ?? null)
   logStartupMilestone('store-loaded')
   // Why: pre-`ready` startup reads this flag from a marker so it never has to parse orca-data.json.
   writeHttp1CompatibilityMarker(
@@ -217,8 +162,6 @@ export async function initializeReadyFoundation(): Promise<void> {
     store.getSettings().electronHttp1CompatibilityMode === true,
     profile.profile.id
   )
-  // Why: apply initial fallback WSL distro from store settings for global git/CLI calls.
-  setDefaultWslDistroOverride(store.getSettings().terminalWindowsWslDistro ?? null)
   store.onSettingsChanged((updates, settings) => {
     if ('electronHttp1CompatibilityMode' in updates) {
       writeHttp1CompatibilityMarker(
@@ -227,40 +170,12 @@ export async function initializeReadyFoundation(): Promise<void> {
         profile.profile.id
       )
     }
-    if ('terminalWindowsWslDistro' in updates) {
-      // Why: synchronize fallback WSL distro updates to runner.
-      setDefaultWslDistroOverride(settings.terminalWindowsWslDistro ?? null)
-    }
-    if (
-      ('terminalWindowsShell' in updates || 'terminalWindowsPowerShellImplementation' in updates) &&
-      process.platform === 'win32'
-    ) {
-      if (app.isPackaged) {
-        void windowsShellPathHydration.hydrate(
-          settings.terminalWindowsShell,
-          settings.terminalWindowsPowerShellImplementation
-        )
-      } else {
-        windowsShellPathHydration.configure(
-          settings.terminalWindowsShell,
-          settings.terminalWindowsPowerShellImplementation
-        )
-      }
-    }
     if ('showMenuBarIcon' in updates) {
       // Why: Store is the mutation authority for all settings writes, so every macOS toggle updates the native item live.
       syncMacMenuBarIcon(settings.showMenuBarIcon !== false)
     }
     if ('agentStatusHooksEnabled' in updates) {
       agentHookServer.setStatusHooksEnabled(isAgentStatusHooksEnabled(settings))
-      // Why both directions: the ensure gate only blocks NEW relays, so off must stop the running
-      // guest process and timers, and on must restart them — otherwise open WSL panes report no
-      // status until their next spawn.
-      if (isAgentStatusHooksEnabled(settings)) {
-        wslHookRelayManager.resumeStoppedRelays()
-      } else {
-        wslHookRelayManager.disposeAll({ permanent: false })
-      }
     }
   })
   applyAppIcon(store.getSettings().appIcon)

@@ -20,15 +20,7 @@ import { CodexRuntimeHomeRouting } from './runtime-home-service-home-routing'
 
 export abstract class CodexRuntimeHomeLaunch extends CodexRuntimeHomeRouting {
   protected initializeLastSyncedState(): void {
-    const settings = this.store.getSettings()
-    const activeAccount = this.getActiveAccount(
-      settings.codexManagedAccounts,
-      normalizeCodexRuntimeSelection(settings).host
-    )
-    // Why: WSL-managed homes never touch host ~/.codex; treating one as "last synced" makes cold start mangle host auth Orca never touched.
-    this.lastSyncedAccountId = this.getWslManagedHomePath(activeAccount)
-      ? null
-      : normalizeCodexRuntimeSelection(settings).host
+    this.lastSyncedAccountId = normalizeCodexRuntimeSelection(this.store.getSettings()).host
   }
 
   /**
@@ -42,13 +34,6 @@ export abstract class CodexRuntimeHomeLaunch extends CodexRuntimeHomeRouting {
     launchEnv?: NodeJS.ProcessEnv,
     options?: { unavailableManagedHomePath?: string }
   ): string | null {
-    if (target?.runtime === 'wsl') {
-      const wslTarget = this.resolveWslDefaultTarget(target)
-      const homePath = this.getWslCodexHomePathForSelection(wslTarget)
-      this.startLegacyWslAuthDrain(wslTarget)
-      this.finishWslLaunchPreparation(wslTarget, homePath)
-      return homePath
-    }
     const selfContainedAccount = this.getSelfContainedManagedHostAccount()
     if (selfContainedAccount) {
       const perAccountHome = this.prepareSelfContainedManagedHomeForLaunch(
@@ -119,16 +104,7 @@ export abstract class CodexRuntimeHomeLaunch extends CodexRuntimeHomeRouting {
     launchEnv?: NodeJS.ProcessEnv,
     options?: { unavailableManagedHomePath?: string }
   ): Promise<string | null> {
-    if (target?.runtime !== 'wsl') {
-      return this.prepareForCodexLaunch(target, launchEnv, options)
-    }
-    const wslTarget = this.resolveWslDefaultTarget(target)
-    const homePath = this.getWslCodexHomePathForSelection(wslTarget)
-    // Why: the retired home may hold the freshest credential, so the first
-    // direct-home Codex spawn must wait for its bounded guest transaction.
-    await this.startLegacyWslAuthDrain(wslTarget, { throwOnFailure: true })
-    this.finishWslLaunchPreparation(wslTarget, homePath)
-    return homePath
+    return this.prepareForCodexLaunch(target, launchEnv, options)
   }
 
   beginHostSystemDefaultSessionMigrationLaunch(

@@ -33,7 +33,6 @@ import {
 } from './agent-launch-scope-runtime'
 import { resolveQoderTerminalCommand } from './qoder-terminal-command-resolution'
 import { resolveStartupShell } from '../../shared/tui-agent-startup-shell'
-import { resolveWslSessionContext } from '../daemon/wsl-session-context'
 import { isTuiAgentEnabled } from '../../shared/tui-agent-selection'
 import { hostAgentLaunchMetadata } from '../agent-launch/agent-launch-metadata'
 
@@ -271,14 +270,8 @@ function resolveQoderLaunchCommand(
       launch.shellOverride
     )
   }
-  // Where the process runs: a `\\wsl$` cwd first, then a WSL shell, as the spawn decides it.
-  const wsl = resolveWslSessionContext({
-    cwd: resolveTerminalStartupCwd(workspace.path, launch.cwd) ?? workspace.path,
-    shellOverride: fact.pty.shellOverride,
-    terminalWindowsWslDistro: fact.pty.terminalWindowsWslDistro
-  })
   return resolveQoderTerminalCommand(launch, {
-    context: wsl ? { wslDistro: wsl.distro } : {},
+    context: {},
     shell: agentLaunchQuotingShell(fact)
   })
 }

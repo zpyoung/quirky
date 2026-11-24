@@ -13,7 +13,7 @@ import {
   mintPtySessionId,
   ptySessionIdForAgentCreateOperation
 } from '../../../daemon/pty-session-id'
-import { resolvePathEnvKey } from '../../../pty/windows-environment-path'
+import { resolvePathEnvKey } from '../../../pty/windows-path-segment-merge'
 import type { RuntimePtySpawnState } from './spawn-state'
 import { resolvePtySpawnStartupTarget } from '../spawn-startup-target'
 import { resolvePtySpawnHostEnv } from '../spawn-host-env'

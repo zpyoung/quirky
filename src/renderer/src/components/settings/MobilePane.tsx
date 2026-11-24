@@ -16,7 +16,6 @@ import { MobileAutoRestoreFitSection } from './MobileAutoRestoreFitSection'
 import { MobilePairingConnectionOptions } from './MobilePairingConnectionOptions'
 import { MobilePairingSetupSection } from './MobilePairingSetupSection'
 import { MobileRelayMintFailureNotice } from '../mobile/mobile-relay-mint-failure-notice'
-import { WindowsFirewallNotice } from '../mobile/WindowsFirewallNotice'
 import { translate } from '@/i18n/i18n'
 import {
   canMintMobilePairingOffer,
@@ -400,12 +399,6 @@ export function MobilePane(): React.JSX.Element {
         onQrEnlargedChange={setQrEnlarged}
         onCodeCopiedChange={setCodeCopied}
         onClearCodeCopiedTimer={clearCodeCopiedResetTimer}
-      />
-
-      <WindowsFirewallNotice
-        pairingReady={pairingUrl != null}
-        address={selectedAddress}
-        usingRelay={connectionMode === 'automatic'}
       />
 
       <MobilePairedDevicesSection

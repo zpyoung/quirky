@@ -28,7 +28,7 @@ import {
   ORCAD_EXITED_OWN_LOCK_QUIET_SECONDS,
   ORCAD_STATE_MUTATION_LOCK_DIRNAME
 } from '../managed-server/host-state/orcad-state-snapshot-members'
-import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../providers/windows-shell-args'
+import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../../shared/windows-command-line-budget'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import type { InstallLockExitedOwnerProof } from '../managed-server/install/remote-install-lock'
 import { isWindowsRemoteHost, joinRemotePath } from './ssh-remote-platform'

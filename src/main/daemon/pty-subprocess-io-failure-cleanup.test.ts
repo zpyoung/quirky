@@ -4,7 +4,6 @@ import { createDaemonPtySubprocessHandle } from './pty-subprocess/subprocess-han
 import { mockPtyProcess } from './pty-subprocess-test-harness'
 import { TerminalHost } from './terminal-host'
 import { HeadlessEmulator } from './headless-emulator'
-import * as ptyJob from '../windows/windows-pty-job'
 
 vi.mock('./pty-subprocess/foreground-process-tracker', () => ({
   createPtyForegroundProcessTracker: () => ({
@@ -103,24 +102,6 @@ describe.each(['darwin', 'linux', 'win32'] as const)('%s native-handle contract'
       expect(signal).not.toHaveBeenCalled()
       fixture.handle.dispose()
     })
-
-    it.skipIf(platform !== 'win32')(
-      'preserves ConPTY single-close ownership after I/O failure',
-      () => {
-        const fixture = createFixture()
-        const terminateJob = vi.spyOn(ptyJob, 'terminatePtyJob').mockReturnValue('terminated')
-        const signal = vi.spyOn(process, 'kill').mockReturnValue(true)
-        failIo(fixture, operation)
-        fixture.handle.kill()
-        fixture.handle.forceKill()
-        fixture.proc._simulateExit(137)
-        fixture.handle.dispose()
-        expect(fixture.proc.kill).toHaveBeenCalledOnce()
-        expect(terminateJob).toHaveBeenCalledOnce()
-        expect(signal).not.toHaveBeenCalled()
-        expect(fixture.proc.destroy).not.toHaveBeenCalled()
-      }
-    )
 
     it('preserves early output and exit status while fencing listener cleanup', () => {
       const fixture = createFixture()

@@ -21,7 +21,6 @@ type AgentHookCommandResult = {
 }
 
 // Covers managed-home verification, WSL identity, trust grant, and bounded app-server reap.
-const WSL_CODEX_PREPARE_TIMEOUT_MS = 50_000
 
 async function getDataPath(): Promise<string> {
   return (
@@ -178,25 +177,9 @@ async function setAgentHooksEnabled(
 }
 
 export const AGENT_HOOK_HANDLERS: Record<string, CommandHandler> = {
-  'agent hooks prepare-codex': async ({ client, flags }) => {
+  'agent hooks prepare-codex': async ({ flags }) => {
     rejectRemoteHookSelection(flags)
-    if (!process.env.WSL_DISTRO_NAME?.trim()) {
-      // Why a no-op: native pane wrappers from builds up to v1.4.216 still call it; delete once no supported build's wrapper does.
-      return
-    }
-    try {
-      await client.call(
-        'agentHooks.prepareCodexForWslPane',
-        {
-          codexHome: process.env.CODEX_HOME ?? '',
-          orcaCodexHome: process.env.ORCA_CODEX_HOME ?? '',
-          wslDistro: process.env.WSL_DISTRO_NAME
-        },
-        { timeoutMs: WSL_CODEX_PREPARE_TIMEOUT_MS }
-      )
-    } catch {
-      // Best effort: old or unavailable runtimes must not block Codex launch.
-    }
+    // Why a no-op: native pane wrappers from builds up to v1.4.216 still call it; delete once no supported build's wrapper does.
   },
   'agent hooks status': async ({ json, flags }) => {
     rejectRemoteHookSelection(flags)

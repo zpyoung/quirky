@@ -56,7 +56,6 @@ import {
   SelectCodexAccountForTargetParams,
   SelectDataAccountParams
 } from './accounts-params'
-import { PrepareCodexForWslPaneParams } from './agent-hooks-params'
 import { AgentLaunch, AgentLaunchReplay } from './agent-launch-params'
 import { AgentLaunchSettingsMutation } from './agent-launch-settings-params'
 import {
@@ -685,7 +684,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'accounts.zcodePlanSaveApiKey': UsageCredentialApiKeyParams,
   'agent.launch': AgentLaunch,
   'agent.launchReplay': AgentLaunchReplay,
-  'agentHooks.prepareCodexForWslPane': PrepareCodexForWslPaneParams,
   'agentSession.acknowledgeAttention': AcknowledgeAttentionParams,
   'agentSession.agents': AgentsParams,
   'agentSession.cancel': CancelParams,
@@ -1035,9 +1033,6 @@ export const RPC_PARAMS_BY_METHOD = {
   'heimdall:unsubscribe': HeimdallUnsubscribeRequestSchema,
   'host.gitBash.isAvailable': null,
   'host.platform': null,
-  'host.pwsh.isAvailable': null,
-  'host.wsl.isAvailable': null,
-  'host.wsl.listDistros': null,
   'hostedReview.create': HostedReviewCreate,
   'hostedReview.createStacked': HostedReviewCreate,
   'hostedReview.forBranch': HostedReviewForBranch,

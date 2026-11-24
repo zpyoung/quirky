@@ -53,7 +53,6 @@ function createFakeSubprocess(foregroundProcess: string) {
     write: (data: string) => void written.push(data),
     resize: () => {},
     kill: () => {},
-    terminateOwnedTree: () => 'unavailable' as const,
     forceKill(this: { forceKilled: boolean }) {
       this.forceKilled = true
     },

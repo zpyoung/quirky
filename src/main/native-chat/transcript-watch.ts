@@ -16,7 +16,6 @@ import type {
 } from './transcript-watch-contract'
 import { nativeChatLineDecoderForAgent } from './transcript-tail-reader'
 import { WslTranscriptFsError, wslTranscriptFsRefusal } from './wsl-transcript-fs-gate'
-import { observeRunningWslDistros } from './wsl-transcript-running-observer'
 
 export { readNativeChatTranscriptTail } from './transcript-tail-reader'
 export { getActiveNativeChatWatcherCount } from './transcript-watcher-count'
@@ -219,13 +218,7 @@ function subscribeViaResolvePoll(
     scheduleAttempt()
   }
 
-  if (exactPathNeedsWslResolution) {
-    stopWslObservation = observeRunningWslDistros((runningDistros) =>
-      runAttempt({ runningDistros: [...runningDistros] })
-    )
-  } else {
-    scheduleAttempt()
-  }
+  scheduleAttempt()
 
   return {
     watching: true,

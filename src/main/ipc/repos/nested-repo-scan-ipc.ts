@@ -3,7 +3,6 @@ import { isAbsolute } from 'node:path'
 import type { z } from 'zod'
 import type { NestedRepoScanResult } from '../../../shared/project-group-types'
 import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import { awaitWindowsHostGitEnvironmentReady } from '../../git/runner'
 import { scanNestedRepos } from '../../project-groups/nested-repo-discovery'
 import type { ProjectGroupScanNestedArgs } from './repo-ipc-arg-schemas'
 
@@ -78,10 +77,6 @@ export async function scanNestedReposForIpc(args: {
 }): Promise<NestedRepoScanResult> {
   validateNestedRepoScanRoot(args.path, args.connectionId)
   if (!args.connectionId) {
-    await awaitWindowsHostGitEnvironmentReady({
-      cwd: args.path,
-      ...(args.signal ? { signal: args.signal } : {})
-    })
     return scanNestedRepos({
       path: args.path,
       options: args.options,

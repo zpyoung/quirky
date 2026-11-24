@@ -1,4 +1,3 @@
-import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
 import { resolveOuterWrapperForegroundProcess } from '../../shared/foreground-wrapper-agent'
 import type { ProcessTableRow } from '../../shared/process-table-snapshot'
 import {
@@ -7,23 +6,17 @@ import {
   getProcessTableSnapshot
 } from '../../shared/process-table-snapshot-reader'
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
-import {
-  resolveWindowsAgentForegroundProcessWithAvailability,
-  shouldInspectWindowsAgentForeground,
-  type AgentForegroundResolutionOptions
-} from './windows-agent-foreground-process'
 import { isShellProcess } from '../../shared/shell-process-detection'
 import {
   selectForegroundProcessCandidate,
   type SelectedForegroundProcess
 } from '../../shared/foreground-process-selection'
-import { isWindowsShellAloneInJob } from './windows-shell-alone-in-job'
-import {
-  readWindowsProcessIdentityTableFresh,
-  type WindowsProcessIdentityRow
-} from '../windows/windows-process-table'
 
-export type { AgentForegroundResolutionOptions } from './windows-agent-foreground-process'
+export type AgentForegroundResolutionOptions = {
+  contextPaths?: readonly string[]
+  /** Require a process-table scan started after this request. */
+  fresh?: boolean
+}
 export {
   resolveAgentForegroundProcessesBatch,
   resolveAgentForegroundProcessesFromIndex,
@@ -37,22 +30,7 @@ export {
 export type AgentForegroundProcessResolution = {
   available: boolean
   processName: string | null
-  /**
-   * Windows: pid of the process a recognized name belongs to — a liveness
-   * anchor callers may check against the pane's job. Absent when the name is a
-   * fallback, ambiguous, or resolved on POSIX (where `+` already marks it).
-   */
   processId?: number
-  /** Windows: the scan proved the caller's `anchorProcessId` is now a non-agent. */
-  anchorPidForeign?: boolean
-}
-
-type ShellForegroundConfirmationOptions = {
-  readWindowsPtyJobProcessIds?: () =>
-    | ReadonlySet<number>
-    | null
-    | Promise<ReadonlySet<number> | null>
-  readWindowsProcessIdentityTable?: () => Promise<WindowsProcessIdentityRow[]>
 }
 
 function commandExecutable(command: string): string {
@@ -70,24 +48,10 @@ function executableBasename(command: string): string {
 
 export async function confirmShellForegroundProcess(
   shellPid: number | null | undefined,
-  spawnedShellProcess: string | null | undefined,
-  options: ShellForegroundConfirmationOptions = {}
+  spawnedShellProcess: string | null | undefined
 ): Promise<boolean> {
   if (!shellPid || !spawnedShellProcess || !isShellProcess(spawnedShellProcess)) {
     return false
-  }
-  if (process.platform === 'win32') {
-    try {
-      return await isWindowsShellAloneInJob(
-        shellPid,
-        spawnedShellProcess,
-        await options.readWindowsPtyJobProcessIds?.(),
-        options.readWindowsProcessIdentityTable ?? readWindowsProcessIdentityTableFresh
-      )
-    } catch {
-      // Unavailable job or process-table inspection is missing proof, never a thrown confirmation.
-      return false
-    }
   }
   try {
     const index = getProcessTableIndex(await getFreshShellForegroundSnapshot())
@@ -131,35 +95,6 @@ export async function resolveAgentForegroundProcessWithAvailability(
 ): Promise<AgentForegroundProcessResolution> {
   if (!shellPid) {
     return { available: false, processName: fallbackProcess }
-  }
-
-  if (process.platform === 'win32') {
-    if (
-      !fallbackProcess ||
-      (!shouldInspectWindowsAgentForeground(fallbackProcess) && !options.forceProcessScan)
-    ) {
-      return { available: true, processName: fallbackProcess }
-    }
-    const resolution = await resolveWindowsAgentForegroundProcessWithAvailability(
-      shellPid,
-      fallbackProcess,
-      options
-    )
-    return {
-      available: resolution.available,
-      // Why: a forced confirmation scan that no longer sees the recognized
-      // fallback is authoritative evidence that the agent exited meanwhile.
-      processName:
-        resolution.processName ??
-        (options.forceProcessScan && recognizeAgentProcessFromCommandLine(fallbackProcess)
-          ? null
-          : fallbackProcess),
-      // The anchor only travels with the name it proved, never with a fallback.
-      ...(resolution.processName !== null && resolution.processId !== undefined
-        ? { processId: resolution.processId }
-        : {}),
-      ...(resolution.anchorPidForeign ? { anchorPidForeign: true } : {})
-    }
   }
 
   try {

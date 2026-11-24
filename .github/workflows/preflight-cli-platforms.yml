@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-15, windows-2022]
+        os: [ubuntu-22.04, macos-15]
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
     steps:
@@ -49,8 +49,6 @@ jobs:
           src/main/ipc/preflight-runnable-local-cli.test.ts
           src/main/ipc/preflight-agent-detection.test.ts
           src/main/ipc/preflight-agent-refresh.test.ts
-          src/main/ipc/preflight-wsl-agent-detection.test.ts
-          src/main/ipc/preflight-windows-path-refresh.repro.test.ts
           src/main/startup/hydrate-shell-path.test.ts
           src/main/startup/hydrate-shell-path.windows.test.ts
           src/main/startup/login-shell-environment.test.ts

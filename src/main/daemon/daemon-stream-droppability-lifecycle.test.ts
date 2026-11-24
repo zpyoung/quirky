@@ -37,7 +37,6 @@ function createMockSubprocess(): MockSubprocess {
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(() => onExit?.(0)),
-    terminateOwnedTree: () => 'unavailable' as const,
     forceKill: vi.fn(() => onExit?.(137)),
     signal: vi.fn(),
     onData(callback) {

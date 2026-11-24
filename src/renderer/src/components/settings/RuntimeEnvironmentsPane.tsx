@@ -19,7 +19,6 @@ import { RuntimeDefaultHostRow } from './runtime-default-host-row'
 import { RuntimeInstallServerDialog } from './runtime-install-server-dialog'
 import { RuntimeServerList } from './runtime-server-list'
 import { useRuntimeServersPage } from './runtime-servers-page-context'
-import { WslHostsSection } from './WslHostsSection'
 import { useManagedServerCatalog } from './use-managed-server-catalog'
 import { useRuntimeEnvironmentCatalog } from './use-runtime-environment-catalog'
 import { useRuntimeEnvironmentConnectionActions } from './use-runtime-environment-connection-actions'
@@ -251,9 +250,6 @@ export function RuntimeEnvironmentsPane({
           )}
         </p>
       ) : null}
-
-      {/* Why gated on the managed API: WSL hosts, like managed servers, need the desktop. */}
-      {managedCatalog.api ? <WslHostsSection onChanged={reloadAll} /> : null}
 
       <EphemeralVmRuntimesSection />
 

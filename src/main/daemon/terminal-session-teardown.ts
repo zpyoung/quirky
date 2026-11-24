@@ -121,7 +121,6 @@ export class TerminalSessionTeardown {
     session.beginTermination()
     await killWithDescendantSweep(session.pid, () => {}, {
       ownsRoot: () => this.sessions.get(sessionId) === session && session.isAlive,
-      terminateOwnedTree: () => session.terminateOwnedTree(),
       terminateDescendants: terminateShutdownDescendants,
       awaitEscalation: true
     })
@@ -174,7 +173,6 @@ export class TerminalSessionTeardown {
             // Why: the descendant rows are only authoritative while this exact
             // Session still owns the root PID captured by ps.
             ownsRoot: () => this.sessions.get(sessionId) === session && session.isAlive,
-            terminateOwnedTree: () => session.terminateOwnedTree(),
             terminateDescendants: (snapshot) => {
               entry.descendantVerification = terminateShutdownDescendants(snapshot)
               return entry.descendantVerification

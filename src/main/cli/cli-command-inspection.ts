@@ -2,19 +2,12 @@ import { existsSync } from 'node:fs'
 import { lstat, readFile, readlink } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import type { CliInstallMethod, CliInstallStatus } from '../../shared/cli-install-types'
-import { isAppImageExtractedLauncherPath } from './appimage-extracted-root'
 import { DEV_COMMAND_NAME, DEV_LAUNCHER_DIR } from './cli-install-constants'
-import { buildWindowsForwarder, extractManagedUnixLauncherTarget } from './cli-dev-launcher'
-import { isPermissionError } from '../win32-utils'
+import { extractManagedUnixLauncherTarget } from './cli-dev-launcher'
+import { isPermissionError } from '../../shared/permission-error'
 import { isMissingError } from './cli-install-errors'
 import { CliInstallLocation } from './cli-install-location'
-import { isPathInsideOrEqual, samePathEntry } from './cli-install-path-format'
-import { extractLegacyAppImageCliWrapperTarget } from './legacy-appimage-cli-wrapper'
-
-// Why: electron-builder's /opt directory name varies with productName sanitization, which is why
-// resources/linux/packaging/after-install.sh enumerates all three of these. A symlink into one is a
-// previous packaged Orca and is ours to reclaim; anything else stays a conflict.
-const PACKAGED_LINUX_LAUNCHER_DIRECTORIES = ['/opt/Orca', '/opt/orca-ide', '/opt/orca']
+import { isPathInsideOrEqual } from './cli-install-path-format'
 
 export class CliCommandInspection extends CliInstallLocation {
   protected async inspectSymlink(
@@ -26,9 +19,7 @@ export class CliCommandInspection extends CliInstallLocation {
       if (!stats.isSymbolicLink()) {
         if (stats.isFile()) {
           const currentContent = await readFile(commandPath, 'utf8')
-          const managedTarget =
-            extractManagedUnixLauncherTarget(currentContent) ??
-            extractLegacyAppImageCliWrapperTarget(currentContent)
+          const managedTarget = extractManagedUnixLauncherTarget(currentContent)
           if (managedTarget) {
             return this.buildStatus({
               commandPath,
@@ -130,24 +121,7 @@ export class CliCommandInspection extends CliInstallLocation {
       )
     }
 
-    if (this.platform === 'linux') {
-      if (this.isPackagedLinuxLauncherTarget(resolvedTarget, expectedName)) {
-        return true
-      }
-      const extractionOptions = this.appImageExtractionOptions()
-      return extractionOptions
-        ? isAppImageExtractedLauncherPath(extractionOptions, resolvedTarget)
-        : false
-    }
-
     return false
-  }
-
-  /** A launcher inside a packaged Linux install tree, left behind by a deb/rpm Orca. */
-  protected isPackagedLinuxLauncherTarget(resolvedTarget: string, expectedName: string): boolean {
-    return PACKAGED_LINUX_LAUNCHER_DIRECTORIES.some(
-      (directory) => resolvedTarget === `${directory}/resources/bin/${expectedName}`
-    )
   }
 
   protected isSiblingDevLauncherTarget(
@@ -167,83 +141,6 @@ export class CliCommandInspection extends CliInstallLocation {
       basename(siblingDevUserDataPath) === `${basename(packagedUserDataPath)}-dev` &&
       isPathInsideOrEqual(siblingDevLauncherDir, resolvedTarget)
     )
-  }
-
-  protected isLinuxAppImage(): boolean {
-    return this.platform === 'linux' && Boolean(this.appImagePath)
-  }
-
-  protected isWindowsPackagedBundledCommand(
-    commandPath: string | null,
-    launcherPath: string | null
-  ): boolean {
-    return (
-      this.platform === 'win32' &&
-      this.isPackaged &&
-      commandPath !== null &&
-      launcherPath !== null &&
-      samePathEntry('win32', commandPath, launcherPath)
-    )
-  }
-
-  protected async inspectWindowsWrapper(
-    commandPath: string,
-    launcherPath: string
-  ): Promise<CliInstallStatus> {
-    try {
-      const stats = await lstat(commandPath)
-      if (!stats.isFile()) {
-        return this.buildStatus({
-          commandPath,
-          launcherPath,
-          installMethod: 'wrapper',
-          supported: true,
-          state: 'conflict',
-          currentTarget: null,
-          detail: `${commandPath} exists but is not an Orca launcher script.`
-        })
-      }
-
-      if (this.isWindowsPackagedBundledCommand(commandPath, launcherPath)) {
-        return this.buildStatus({
-          commandPath,
-          launcherPath,
-          installMethod: 'wrapper',
-          supported: true,
-          state: 'installed',
-          currentTarget: launcherPath,
-          detail: `Registered at ${commandPath}.`
-        })
-      }
-
-      const currentContent = await readFile(commandPath, 'utf8')
-      const expectedContent = buildWindowsForwarder(launcherPath)
-      return this.buildStatus({
-        commandPath,
-        launcherPath,
-        installMethod: 'wrapper',
-        supported: true,
-        state: currentContent === expectedContent ? 'installed' : 'stale',
-        currentTarget: launcherPath,
-        detail:
-          currentContent === expectedContent
-            ? `Registered at ${commandPath}.`
-            : `${commandPath} points to a different launcher.`
-      })
-    } catch (error) {
-      if (isMissingError(error)) {
-        return this.buildStatus({
-          commandPath,
-          launcherPath,
-          installMethod: 'wrapper',
-          supported: true,
-          state: 'not_installed',
-          currentTarget: null,
-          detail: `Register ${commandPath} to use Orca from Command Prompt or PowerShell.`
-        })
-      }
-      throw error
-    }
   }
 
   protected buildStatus(args: {

@@ -71,9 +71,7 @@ describe('gitlab client — MR operations', () => {
         hosts: ['gitlab.com'],
         activeHost: 'gitlab.com'
       })
-      expect(glabExecFileAsyncMock).toHaveBeenCalledWith(['auth', 'status'], {
-        allowDefaultWslFallback: false
-      })
+      expect(glabExecFileAsyncMock).toHaveBeenCalledWith(['auth', 'status'])
     })
 
     it('merges many authenticated hosts with one cache scan', async () => {

@@ -4,7 +4,6 @@ import {
   terminateDescendantSnapshotWithVerdict,
   type DescendantTreeVerdict
 } from '../pty-descendant-exit-verification'
-import { terminateWindowsProcessTree } from '../windows-process-tree-kill'
 import { recordSelfInitiatedTreeKill } from '../crash-reporting/self-initiated-tree-kill-log'
 
 /** What the teardown observed of the descendants; null when it signalled but observed nothing. */
@@ -16,12 +15,9 @@ type TeardownChild = Pick<ChildProcessHandle, 'pid' | 'kill'>
 
 export type ProviderProcessTeardownDeps = {
   site: string
-  platform?: NodeJS.Platform
   dedicatedProcessGroup?: boolean
   captureDescendants?: (rootPid: number) => Promise<DescendantSnapshot | null>
   terminateDescendants?: (snapshot: DescendantSnapshot) => Promise<DescendantTreeVerdict>
-  /** Resolves true only when taskkill reports the whole tree terminated. */
-  terminateWindowsTree?: (rootPid: number, deps?: { site?: string }) => Promise<boolean>
   signalProcessGroup?: (pgid: number, signal: NodeJS.Signals) => void
   signalProcess?: (pid: number, signal: NodeJS.Signals) => void
 }
@@ -120,14 +116,6 @@ async function terminateOnce(
   if (!rootPid) {
     child.kill('SIGKILL')
     return 'unverifiable'
-  }
-  if ((deps.platform ?? process.platform) === 'win32') {
-    const terminate = deps.terminateWindowsTree ?? terminateWindowsProcessTree
-    const treeTerminated = await terminate(rootPid, { site: deps.site })
-    // taskkill owns the tree; this preserves the prior direct-child fallback when it fails.
-    child.kill('SIGKILL')
-    // Taskkill's own report, not an observation: only its clean exit says the tree is gone.
-    return treeTerminated ? 'exited' : 'unverifiable'
   }
   if (deps.dedicatedProcessGroup) {
     return terminateDedicatedPosixGroup(rootPid, deps)

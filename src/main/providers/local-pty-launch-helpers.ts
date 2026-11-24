@@ -1,7 +1,5 @@
 import { basename, delimiter, win32 as pathWin32 } from 'node:path'
-import { splitWorktreeIdForFilesystem } from '../../shared/worktree/id'
-import { parseWslPath } from '../wsl'
-import { resolvePathEnvKey } from '../pty/windows-environment-path'
+import { resolvePathEnvKey } from '../pty/windows-path-segment-merge'
 import { expandWindowsEnvironmentVariables } from '../../shared/windows-environment-expansion'
 import { resolveSafePtyDefaultCwd } from './pty-default-cwd'
 import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../shared/orcad-managed-launch-env'
@@ -50,24 +48,6 @@ export function promoteAgentTeamsShimPath(
   const pathKey = resolvePathEnvKey(env, process.platform)
   const currentParts = env[pathKey]?.split(pathDelimiter).filter(Boolean) ?? []
   env[pathKey] = [shimDir, ...currentParts.filter((part) => part !== shimDir)].join(pathDelimiter)
-}
-
-export function getWslContextFromWorktreeId(
-  worktreeId: string | undefined
-): { distro: string; treatPosixCwdAsWsl: true } | undefined {
-  // Why: strip any synthetic `::workspace:<uuid>` suffix so WSL detection parses the real path, not a nonexistent identifier.
-  const worktreePath = worktreeId
-    ? splitWorktreeIdForFilesystem(worktreeId)?.worktreePath
-    : undefined
-  const wslInfo = worktreePath ? parseWslPath(worktreePath) : null
-  return wslInfo ? { distro: wslInfo.distro, treatPosixCwdAsWsl: true } : undefined
-}
-
-export function getWslContextFromPreferredDistro(
-  distro: string | null | undefined
-): { distro: string; treatPosixCwdAsWsl: true } | undefined {
-  const trimmed = distro?.trim()
-  return trimmed ? { distro: trimmed, treatPosixCwdAsWsl: true } : undefined
 }
 
 export function normalizeLocalCallerSessionId(

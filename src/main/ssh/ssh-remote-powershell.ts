@@ -1,6 +1,6 @@
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { encodePowerShellCommand } from '../../shared/powershell-command-encoding'
-import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../providers/windows-shell-args'
+import { CMD_EXE_COMMAND_LINE_MAX_CHARS } from '../../shared/windows-command-line-budget'
 
 // Why cmd.exe and not the 32767 CreateProcess cap: Windows OpenSSH runs every exec request
 // through sshd's DefaultShell, cmd.exe on a stock install. Budget under cmd.exe's own ceiling

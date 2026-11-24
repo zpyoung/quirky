@@ -11,7 +11,6 @@ import type { Dirent } from 'node:fs'
 import { open, readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { app, crashReporter } from 'electron'
-import { installAppImageCrashpadHandlerExit } from './appimage-crashpad-handler-exit'
 import { createMinidumpFileSource, observeMinidumpExtent } from './minidump-file-source'
 import {
   parseMinidumpCrashSignature,
@@ -80,7 +79,6 @@ export function startCrashpadCapture(options: CrashpadCaptureOptions = {}): bool
     console.error('[crash-reporting] Crashpad start failed:', error)
     return false
   }
-  installAppImageCrashpadHandlerExit()
   crashpadDumpDirectory = options.dumpDirectory ?? resolveDumpDirectory()
   // Why: a dying main process never delivers process-gone, so a crash loop
   // never reaches the post-crash prune, and Crashpad's own pass runs in the

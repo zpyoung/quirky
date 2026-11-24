@@ -11,9 +11,9 @@ import {
   parkServeSupervisorsForInstall,
   serveInstallRefusalMessage
 } from './serve-supervisor-install-park'
-import { UpdaterPackageRecovery } from './updater-package-recovery'
+import { UpdaterInstallSupport } from './updater-install-support'
 
-export abstract class UpdaterMacInstallPreflight extends UpdaterPackageRecovery {
+export abstract class UpdaterMacInstallPreflight extends UpdaterInstallSupport {
   protected async preflightMacInstall(pendingVersion: string): Promise<boolean> {
     if (process.platform !== 'darwin') {
       return true

@@ -1,11 +1,5 @@
-import { link, readlink, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { link, readlink, rmdir, symlink, unlink } from 'node:fs/promises'
 import type { CliInstallStatus } from '../../shared/cli-install-types'
-import {
-  ensureAppImageExtractedRoot,
-  isAppImageExtractedLauncherPath,
-  type AppImageExtractedRoot
-} from './appimage-extracted-root'
 import { CliCommandInspection } from './cli-command-inspection'
 import {
   buildMacPrivilegedSymlinkReadableCommand,
@@ -20,10 +14,7 @@ import {
   type CommandQuarantine,
   type StableCommandInspection
 } from './cli-command-filesystem-transaction'
-import { DEV_LAUNCHER_DIR, LEGACY_LINUX_COMMAND_NAME } from './cli-install-constants'
-import { buildWindowsForwarder } from './cli-dev-launcher'
-import { isPermissionError } from '../win32-utils'
-import { isPathInsideOrEqual } from './cli-install-path-format'
+import { isPermissionError } from '../../shared/permission-error'
 
 export class CliCommandInstallation extends CliCommandInspection {
   protected async installSymlink(status: CliInstallStatus): Promise<void> {
@@ -94,85 +85,12 @@ export class CliCommandInstallation extends CliCommandInspection {
     await this.discardQuarantinedCommand(quarantine)
   }
 
-  protected async removeLegacyLinuxCommandIfManaged(launcherPath: string | null): Promise<void> {
-    if (this.platform !== 'linux' || this.commandPathOverride || !launcherPath) {
-      return
-    }
-
-    const commandPath = join(this.homePath, '.local', 'bin', LEGACY_LINUX_COMMAND_NAME)
-    try {
-      const inspected = await this.inspectStableLegacyCommand(commandPath, launcherPath)
-      if (!inspected?.managed) {
-        return
-      }
-      const quarantine = await this.quarantineCommandPath(commandPath)
-      if (!(await capturedExpectedEntry(quarantine, inspected))) {
-        await this.restoreQuarantinedCommand(quarantine, commandPath)
-        return
-      }
-      await this.discardQuarantinedCommand(quarantine)
-    } catch (error) {
-      // Why: the new command is already registered; leave legacy cleanup for a later attempt.
-      console.warn(
-        `[cli] Could not remove the legacy command at ${commandPath}:`,
-        error instanceof Error ? error.message : String(error)
-      )
-    }
-  }
-
   protected async quarantineCommandPath(commandPath: string): Promise<CommandQuarantine> {
     return quarantineCommandPath(commandPath)
   }
 
   protected async linkQuarantinedCommand(heldPath: string, commandPath: string): Promise<void> {
     await link(heldPath, commandPath)
-  }
-
-  protected isManagedLegacyLinuxTarget(resolvedTarget: string, launcherPath: string): boolean {
-    const legacyLauncherPath = resolve(dirname(launcherPath), LEGACY_LINUX_COMMAND_NAME)
-    if (resolvedTarget === legacyLauncherPath) {
-      return true
-    }
-
-    if (basename(resolvedTarget) !== LEGACY_LINUX_COMMAND_NAME) {
-      return false
-    }
-
-    if (this.isPackagedLinuxLauncherTarget(resolvedTarget, LEGACY_LINUX_COMMAND_NAME)) {
-      return true
-    }
-
-    const devLauncherDir = resolve(this.userDataPath, ...DEV_LAUNCHER_DIR)
-    if (isPathInsideOrEqual(devLauncherDir, resolvedTarget)) {
-      return true
-    }
-
-    const extractionOptions = this.appImageExtractionOptions()
-    return extractionOptions
-      ? isAppImageExtractedLauncherPath(
-          extractionOptions,
-          resolvedTarget,
-          LEGACY_LINUX_COMMAND_NAME
-        )
-      : false
-  }
-
-  protected async installWindowsWrapper(commandPath: string, launcherPath: string): Promise<void> {
-    await writeFile(commandPath, buildWindowsForwarder(launcherPath), 'utf8')
-  }
-
-  protected async ensureLinuxAppImagePayload(): Promise<AppImageExtractedRoot | null> {
-    const extractionOptions = this.appImageExtractionOptions()
-    if (!this.isLinuxAppImage() || !extractionOptions) {
-      return null
-    }
-    const extractedRoot = await ensureAppImageExtractedRoot(extractionOptions)
-    if (!extractedRoot) {
-      throw new Error(
-        `Could not extract the Orca AppImage at ${this.appImagePath}. Check that it is executable and that ${this.appImageCacheRootPath} has free space.`
-      )
-    }
-    return extractedRoot
   }
 
   /** Why: a 0700 root-owned link is unreadable to the user, so root opens it up before the normal ownership check. */
@@ -197,37 +115,6 @@ export class CliCommandInstallation extends CliCommandInspection {
       throw new Error(`Could not read the command at ${commandPath}.`)
     }
     return readable
-  }
-
-  private async inspectStableLegacyCommand(
-    commandPath: string,
-    launcherPath: string
-  ): Promise<
-    | (Pick<StableCommandInspection, 'fileSha256' | 'rawSymlinkTarget'> & {
-        snapshot: NonNullable<StableCommandInspection['snapshot']>
-        managed: boolean
-      })
-    | null
-  > {
-    const inspected = await inspectStableCommand(commandPath, () =>
-      this.inspectSymlink(commandPath, launcherPath)
-    )
-    if (!inspected.snapshot) {
-      return null
-    }
-    const resolvedTarget = inspected.rawSymlinkTarget
-      ? resolve(dirname(commandPath), inspected.rawSymlinkTarget)
-      : inspected.status.currentTarget
-    return {
-      fileSha256: inspected.fileSha256,
-      rawSymlinkTarget: inspected.rawSymlinkTarget,
-      snapshot: inspected.snapshot,
-      managed: Boolean(
-        resolvedTarget &&
-        (this.isManagedLegacyLinuxTarget(resolvedTarget, launcherPath) ||
-          (this.appImagePath && resolve(resolvedTarget) === resolve(this.appImagePath)))
-      )
-    }
   }
 
   private async restoreQuarantinedCommand(

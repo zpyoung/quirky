@@ -1,20 +1,17 @@
 import { app, ipcMain } from 'electron'
-import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import type { BrowserWindow } from 'electron'
 import type { ReleaseBuildListResult, UpdateCheckOptions } from '../../shared/update-status-types'
 import { RELEASE_CHANNELS, type ReleaseChannel } from '../../shared/release-channel'
-import { isTrustedUIRenderer } from '../ipc/ui'
 import type { Store } from '../persistence'
 import { logStartupMilestone } from '../startup/startup-diagnostics'
 import {
   checkForUpdatesFromMenu,
   dismissAvailableUpdate,
   downloadUpdate,
-  getLinuxPackageInstallInstructions,
   getUpdateStatus,
   listAvailableReleaseBuilds,
   quitAndInstall,
   setupAutoUpdater,
-  showLinuxPackage,
   type PreQuitCleanupFailureMode,
   type UpdateInstallMode,
   type UpdaterSetupOptions
@@ -120,8 +117,6 @@ export function registerUpdaterHandlers(_store: Store): void {
   ipcMain.removeHandler('updater:download')
   ipcMain.removeHandler('updater:quitAndInstall')
   ipcMain.removeHandler('updater:dismissAvailableUpdate')
-  ipcMain.removeHandler('updater:getLinuxPackageInstallInstructions')
-  ipcMain.removeHandler('updater:showLinuxPackage')
   ipcMain.removeHandler('updater:listBuilds')
 
   ipcMain.handle('updater:getStatus', () => getUpdateStatus())
@@ -133,16 +128,6 @@ export function registerUpdaterHandlers(_store: Store): void {
   ipcMain.handle('updater:download', () => downloadUpdate())
   ipcMain.handle('updater:quitAndInstall', () => quitAndInstall())
   ipcMain.handle('updater:dismissAvailableUpdate', () => dismissAvailableUpdate())
-  // Why: the response carries a local package path and the reveal touches the native desktop, so
-  // neither may be reached from a guest, dashboard popout, stale window, or utility renderer.
-  ipcMain.handle('updater:getLinuxPackageInstallInstructions', (event) => {
-    assertTrustedUpdaterRecoverySender(event)
-    return getLinuxPackageInstallInstructions()
-  })
-  ipcMain.handle('updater:showLinuxPackage', (event) => {
-    assertTrustedUpdaterRecoverySender(event)
-    return showLinuxPackage()
-  })
   ipcMain.handle(
     'updater:listBuilds',
     async (
@@ -166,10 +151,4 @@ export function registerUpdaterHandlers(_store: Store): void {
       }
     }
   )
-}
-
-function assertTrustedUpdaterRecoverySender(event: IpcMainInvokeEvent): void {
-  if (!isTrustedUIRenderer(event.sender)) {
-    throw new Error('Unauthorized updater package recovery sender')
-  }
 }

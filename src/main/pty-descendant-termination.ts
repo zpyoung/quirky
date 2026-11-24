@@ -1,10 +1,4 @@
 import { execFile } from 'node:child_process'
-import type { JobTerminationOutcome } from './windows/windows-pty-job'
-import { terminateWindowsProcessTree, type WindowsTreeKiller } from './windows-process-tree-kill'
-import {
-  verifyWindowsTreeKillTarget,
-  type WindowsTreeKillTarget
-} from './windows-pty-root-identity'
 import { parseProcessTable, type ProcessTableRow } from './pty-process-table-parser'
 
 export { parseProcessTable, type ProcessTableRow } from './pty-process-table-parser'
@@ -230,65 +224,19 @@ type KillSweepDeps = SnapshotDeps &
     /** Shutdown can retain the owner until descendant escalation finishes. */
     terminateDescendants?: (snapshot: DescendantSnapshot) => void | Promise<unknown>
     awaitEscalation?: boolean | (() => boolean)
-    /**
-     * Terminate the PTY's job object. Returns `unavailable` when this tree has
-     * no job, which is not permission to assume it is gone.
-     */
-    terminateOwnedTree?: () => JobTerminationOutcome
-    /** Injectable Windows tree killer (defaults to taskkill /T /F). */
-    killWindowsTree?: WindowsTreeKiller
-    /** Injectable Windows root-identity probe (defaults to a live process query). */
-    verifyTreeKillTarget?: (rootPid: number) => Promise<WindowsTreeKillTarget>
   }
 
 /**
- * Standard agent-session kill sequencing.
- * - POSIX: snapshot the descendant tree, signal members, then killRoot.
- * - Windows: terminate the PTY's job object, which is exact and needs no
- *   identity probe. Only when this build has no job does it fall back to the
- *   old scheme — a process-table scrape gating `taskkill /T /F` on a
- *   parent-pid walk, which refuses whenever it cannot prove ownership and so
- *   leaves the tree running (#9045, #10475).
- * Callers must not signal the root before this runs on POSIX — a dead root's
- * descendants reparent to pid 1 and become unfindable. Snapshot failure
- * degrades to killRoot alone on POSIX.
+ * Standard agent-session kill sequencing: snapshot the descendant tree, signal
+ * members, then killRoot. Callers must not signal the root before this runs — a
+ * dead root's descendants reparent to pid 1 and become unfindable. Snapshot
+ * failure degrades to killRoot alone.
  */
 export async function killWithDescendantSweep(
   rootPid: number,
   killRoot: () => void,
   deps: KillSweepDeps = {}
 ): Promise<void> {
-  const platform = deps.platform ?? process.platform
-  if (platform === 'win32') {
-    try {
-      if ((deps.ownsRoot?.() ?? true) && Number.isInteger(rootPid) && rootPid > 0) {
-        // Why first: the job names the tree Orca created, so it is immune to the
-        // pid recycling the probe below exists to guard against, and it reaches
-        // descendants that reparented away from the shell.
-        if (deps.terminateOwnedTree?.() === 'terminated') {
-          return
-        }
-        // Why: ownsRoot() is JS state only, and node-pty's ConPTY exit watcher closes
-        // the last shell handle before it queues the JS exit callback — Windows may
-        // already have recycled this PID while the map still looks live. taskkill /T /F
-        // on a recycled PID force-kills an unrelated tree, so demand OS identity first.
-        const verify = deps.verifyTreeKillTarget ?? verifyWindowsTreeKillTarget
-        const target = await verify(rootPid).catch((): WindowsTreeKillTarget => 'unknown')
-        // Re-check ownership: the identity query awaits, so exit can land meanwhile.
-        if (target === 'own' && (deps.ownsRoot?.() ?? true)) {
-          const killTree =
-            deps.killWindowsTree ??
-            ((pid: number) => terminateWindowsProcessTree(pid, { site: 'pty-descendant-sweep' }))
-          // Why: taskkill may race an already-exited tree; never block killRoot on that.
-          await killTree(rootPid).catch(() => {})
-        }
-      }
-    } finally {
-      killRoot()
-    }
-    return
-  }
-
   const snapshot = await captureDescendantSnapshot(rootPid, deps)
   let descendants: void | Promise<unknown> = undefined
   const awaitEscalation =

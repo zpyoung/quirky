@@ -14,22 +14,14 @@ import { getAzureDevOpsAuthStatus } from '../azure-devops/client'
 import { getBitbucketAuthStatus } from '../bitbucket/client'
 import { getGiteaAuthStatus } from '../gitea/client'
 import { _resetKnownHostsCache } from '../gitlab/gl-utils'
-import { mergePersistedWindowsPathAsync } from '../pty/windows-environment-path'
-import type { WslPreflightTarget } from '../ipc/preflight-wsl-agent-detection'
-import {
-  getPreflightWslTarget,
-  type PreflightRuntimeContext
-} from '../ipc/preflight-runtime-target'
+import type { PreflightRuntimeContext } from '../ipc/preflight-runtime-target'
 
 export type { PreflightRuntimeContext }
 import { hydrateShellPathForAgentDetection } from '../ipc/agent-detection-shell-path'
 import {
-  execCommandInWslOrThrow,
   execLocalPreflightCommandOrThrow,
-  findRunnableLocalCommand,
-  isCommandAvailable
+  findRunnableLocalCommand
 } from '../ipc/preflight-command-exec'
-import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import {
   detectRemoteWindowsTerminalCapabilities,
   type RemoteWindowsTerminalCapabilities
@@ -39,8 +31,6 @@ import {
   KNOWN_TUI_AGENT_DETECTION_COMMANDS,
   resolveDetectedTuiAgentIds
 } from '../../shared/tui-agent-detection-commands'
-import { invalidateWslGuestEnvironment } from '../wsl/wsl-guest-environment'
-import { prunePreflightWslCache } from '../preflight-wsl-cache'
 import { detectAgentCommandsOnHost } from './agent-command-detection'
 export { detectAgentCommandsOnHost } from './agent-command-detection'
 
@@ -75,63 +65,34 @@ export type { RemoteWindowsTerminalCapabilities }
 // Why: cache the result so repeated Landing mounts don't re-spawn processes.
 // The check only runs once per app session — relaunch to re-check.
 let cached: PreflightStatus | null = null
-// Why keyed by distro rather than one slot: each distro carries its own
-// toolchain, so distro A's result must never answer for distro B. Previously a
-// WSL target skipped the cache entirely and re-spawned five wsl.exe probes —
-// two of them login shells — on every caller, waking an idle VM each time.
-//
-// Why a TTL here when the local cache lasts the session: `isCommandAvailable`
-// collapses every failure into `installed: false`, so an unreachable distro is
-// indistinguishable from one with no tooling. Pinning that for the session
-// would report "git not installed" until relaunch; expiring lets it self-heal
-// while still collapsing the burst of calls that made this expensive.
-const WSL_PREFLIGHT_CACHE_TTL_MS = 30_000
-const MAX_WSL_PREFLIGHT_DISTRO_ENTRIES = 128
-const cachedByWslDistro = new Map<string, { result: PreflightStatus; expiresAt: number }>()
 // Collapses concurrent callers (several panes mounting at once) onto one probe
 // set instead of one full set each before the first result lands.
-const preflightInFlight = new Map<string, Promise<PreflightStatus>>()
+let preflightInFlight: Promise<PreflightStatus> | null = null
 
-// Why a generation per key: two runs for the same target can overlap (a forced
-// refresh started while a slower probe is still out). Without this the slower
-// one settles last and writes its older result over the newer one, so the next
-// caller reads staler status than the refresh it asked for. The epoch does the
-// same for `_resetPreflightCache`, which integrations call on credential
-// changes: a probe already in flight must not repopulate the cache it cleared.
-const latestPreflightRun = new Map<string, number>()
+// Why a generation: two runs can overlap (a forced refresh started while a
+// slower probe is still out). Without this the slower one settles last and
+// writes its older result over the newer one, so the next caller reads staler
+// status than the refresh it asked for. The epoch does the same for
+// `_resetPreflightCache`, which integrations call on credential changes: a
+// probe already in flight must not repopulate the cache it cleared.
+let latestPreflightRun = 0
 let preflightRunCounter = 0
 let preflightCacheEpoch = 0
-
-const LOCAL_PREFLIGHT_CACHE_KEY = 'local'
-
-function preflightCacheKey(wslTarget: WslPreflightTarget | null): string {
-  return wslTarget ? `wsl:${wslTarget.distro ?? ''}` : LOCAL_PREFLIGHT_CACHE_KEY
-}
 
 /** @internal - tests need a clean preflight cache between cases. */
 export function _resetPreflightCache(): void {
   cached = null
-  cachedByWslDistro.clear()
-  preflightInFlight.clear()
-  latestPreflightRun.clear()
+  preflightInFlight = null
+  latestPreflightRun = 0
   // Why bump rather than just clear: a probe already in flight would otherwise
   // settle after this and repopulate the cache an integration just invalidated.
   preflightCacheEpoch += 1
 }
 
 /** A CLI verdict and, on the local path, the exact copy that produced it. */
-type CommandRuntime = { installed: boolean; wslTarget?: WslPreflightTarget; binary?: string }
+type CommandRuntime = { installed: boolean; binary?: string }
 
-async function detectCommandRuntime(
-  command: string,
-  context?: PreflightRuntimeContext
-): Promise<CommandRuntime> {
-  const wslTarget = getPreflightWslTarget(context)
-  if (wslTarget) {
-    return (await isCommandAvailable(command, wslTarget))
-      ? { installed: true, wslTarget }
-      : { installed: false }
-  }
+async function detectCommandRuntime(command: string): Promise<CommandRuntime> {
   // Pin auth to the copy that passed --version, so PATH cannot select the dead shim again.
   const probe = await findRunnableLocalCommand(command)
   return probe.status === 'available'
@@ -142,12 +103,12 @@ async function detectCommandRuntime(
 export async function detectInstalledAgents(context?: PreflightRuntimeContext): Promise<string[]> {
   const commands = getTuiAgentDetectionProbeCommands(
     KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-    getPreflightWslTarget(context) ? 'wsl' : process.platform
+    process.platform
   )
   return resolveDetectedTuiAgentIds(
     KNOWN_TUI_AGENT_DETECTION_COMMANDS,
     await detectAgentCommandsOnHost(commands, { context }),
-    getPreflightWslTarget(context) ? 'wsl' : process.platform
+    process.platform
   )
 }
 
@@ -184,23 +145,6 @@ export type RefreshAgentsResult = {
 export async function refreshShellPathAndDetectAgents(
   context?: PreflightRuntimeContext
 ): Promise<RefreshAgentsResult> {
-  const wslTarget = getPreflightWslTarget(context)
-  if (wslTarget) {
-    // Why invalidate first: the guest PATH is cached per distro for the process
-    // lifetime, so Refresh would otherwise re-read the pre-install PATH and
-    // keep reporting a just-installed CLI as absent -- the exact case this
-    // function exists to handle.
-    invalidateWslGuestEnvironment(wslTarget.distro)
-    const agents = await detectInstalledAgents(context)
-    return {
-      agents,
-      addedPathSegments: [],
-      shellHydrationOk: true,
-      pathSource: 'sync_seed_only',
-      pathFailureReason: 'none'
-    }
-  }
-
   const hydration = await hydrateShellPath({ force: true })
   const added = hydration.ok ? mergePathSegments(hydration.segments) : []
   const agents = await detectInstalledAgents(context)
@@ -215,13 +159,10 @@ export async function refreshShellPathAndDetectAgents(
 
 // Why the probe object rather than the bare command name: on the local path
 // `binary` is the copy that just passed `--version`, which on a shim-shadowed
-// host is not what PATH would resolve (#22975). WSL has no `binary` — the guest
-// resolves the name inside the distro, where Orca's PATH ordering cannot apply.
+// host is not what PATH would resolve (#22975).
 async function isGhAuthenticated(probe: CommandRuntime): Promise<boolean> {
   try {
-    await (probe.wslTarget
-      ? execCommandInWslOrThrow(probe.wslTarget, `${quotePosixShell('gh')} auth status`)
-      : execLocalPreflightCommandOrThrow(probe.binary ?? 'gh', ['auth', 'status']))
+    await execLocalPreflightCommandOrThrow(probe.binary ?? 'gh', ['auth', 'status'])
     // Why: for plain-text `gh auth status`, exit 0 means gh did not detect any
     // authentication issues for the checked hosts/accounts.
     return true
@@ -240,9 +181,7 @@ async function isGhAuthenticated(probe: CommandRuntime): Promise<boolean> {
 // status to stderr in some versions and stdout in others; check both.
 async function isGlabAuthenticated(probe: CommandRuntime): Promise<boolean> {
   try {
-    await (probe.wslTarget
-      ? execCommandInWslOrThrow(probe.wslTarget, `${quotePosixShell('glab')} auth status`)
-      : execLocalPreflightCommandOrThrow(probe.binary ?? 'glab', ['auth', 'status']))
+    await execLocalPreflightCommandOrThrow(probe.binary ?? 'glab', ['auth', 'status'])
     return true
   } catch (error) {
     const stdout = (error as { stdout?: string }).stdout ?? ''
@@ -256,78 +195,43 @@ export async function runPreflightCheck(
   force = false,
   context?: PreflightRuntimeContext
 ): Promise<PreflightStatus> {
-  const wslTarget = getPreflightWslTarget(context)
-  const cacheKey = preflightCacheKey(wslTarget)
-  prunePreflightWslCache(
-    cachedByWslDistro,
-    latestPreflightRun,
-    Date.now(),
-    MAX_WSL_PREFLIGHT_DISTRO_ENTRIES
-  )
-
   if (!force) {
-    if (wslTarget) {
-      const entry = cachedByWslDistro.get(cacheKey)
-      if (entry && entry.expiresAt > Date.now()) {
-        return entry.result
-      }
-    } else if (cached) {
+    if (cached) {
       return cached
     }
-    const inFlight = preflightInFlight.get(cacheKey)
-    if (inFlight) {
-      return inFlight
+    if (preflightInFlight) {
+      return preflightInFlight
     }
   }
 
   const runId = ++preflightRunCounter
   const epochAtStart = preflightCacheEpoch
-  latestPreflightRun.set(cacheKey, runId)
+  latestPreflightRun = runId
 
-  const run = executePreflightCheck(force, context, wslTarget)
-  preflightInFlight.set(cacheKey, run)
+  const run = executePreflightCheck(force, context)
+  preflightInFlight = run
   try {
     const result = await run
     // Superseded by a newer run, or the cache was reset while this was out:
     // return what we probed, but do not let it become the cached answer.
-    const isCurrent =
-      latestPreflightRun.get(cacheKey) === runId && epochAtStart === preflightCacheEpoch
-    if (isCurrent) {
-      if (wslTarget) {
-        cachedByWslDistro.set(cacheKey, {
-          result,
-          expiresAt: Date.now() + WSL_PREFLIGHT_CACHE_TTL_MS
-        })
-        prunePreflightWslCache(
-          cachedByWslDistro,
-          latestPreflightRun,
-          Date.now(),
-          MAX_WSL_PREFLIGHT_DISTRO_ENTRIES
-        )
-      } else {
-        cached = result
-      }
+    if (latestPreflightRun === runId && epochAtStart === preflightCacheEpoch) {
+      cached = result
     }
     return result
   } finally {
     // Why the identity check: a concurrent force run replaces this entry, and
     // that newer run must stay joinable after this one settles.
-    if (preflightInFlight.get(cacheKey) === run) {
-      preflightInFlight.delete(cacheKey)
+    if (preflightInFlight === run) {
+      preflightInFlight = null
     }
   }
 }
 
 async function executePreflightCheck(
   force: boolean,
-  context: PreflightRuntimeContext | undefined,
-  wslTarget: WslPreflightTarget | null
+  context: PreflightRuntimeContext | undefined
 ): Promise<PreflightStatus> {
-  if (process.platform === 'win32' && !wslTarget) {
-    await mergePersistedWindowsPathAsync(process.env, { forceRefresh: force })
-  } else if (process.platform !== 'win32') {
-    await hydrateShellPathForAgentDetection(context, force)
-  }
+  await hydrateShellPathForAgentDetection(context, force)
 
   if (force) {
     // Why: the GitLab known-hosts cache (gl-utils) is populated lazily on the
@@ -340,9 +244,9 @@ async function executePreflightCheck(
   }
 
   const [gitProbe, ghProbe, glabProbe] = await Promise.all([
-    detectCommandRuntime('git', context),
-    detectCommandRuntime('gh', context),
-    detectCommandRuntime('glab', context)
+    detectCommandRuntime('git'),
+    detectCommandRuntime('gh'),
+    detectCommandRuntime('glab')
   ])
 
   const [ghAuthenticated, glabAuthenticated, bitbucket, azureDevOps, gitea] = await Promise.all([

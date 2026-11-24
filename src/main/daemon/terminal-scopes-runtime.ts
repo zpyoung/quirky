@@ -2,7 +2,6 @@
 import { existsSync } from 'node:fs'
 import { spawnProcess } from '@orca/process-host'
 import { userManagerEnv } from './daemon-cgroup-scope'
-import { setPtyActiveProcessLimit } from '../windows/windows-pty-job'
 import { resolveTerminalScopes, type TerminalScopeRuntime } from './terminal-scopes'
 import type { PtyProcessCeilingState } from '../../shared/pty-process-ceiling-state'
 
@@ -19,8 +18,7 @@ export function initializeTerminalScopes(
   const resolved = resolveTerminalScopes({
     env: process.env,
     platform: process.platform,
-    daemonScope,
-    setWindowsLimit: setPtyActiveProcessLimit
+    daemonScope
   })
   active = 'on' in resolved.scopes ? { scopes: resolved.scopes.on, log } : null
   if (active && daemonScope) {

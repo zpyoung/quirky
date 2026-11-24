@@ -1,8 +1,4 @@
 import { runProcess } from '@orca/process-host'
-import {
-  readWindowsProcessTable,
-  type WindowsProcessRow as NativeWindowsProcessRow
-} from '../windows/windows-process-table'
 
 /**
  * Host-wide sweep locating live OpenCode client processes for the
@@ -11,10 +7,7 @@ import {
  * Why a dedicated sweep instead of reusing the memory collector's: that
  * index carries pid/ppid/cpu/rss but no argv or start times, and importing
  * the memory subsystem here would drag its Electron app-metrics dependency
- * into the hook path. On Windows the table is read only through the native
- * reader (`windows-process-table.ts`); on macOS/Linux through one `ps` call.
- * The invocation pattern (5 s timeout, 10 MB cap, fail-open []) mirrors
- * `windows-process-resource-collector.ts`.
+ * into the hook path. The table comes from one `ps` call (5 s timeout, 10 MB cap, fail-open []).
  */
 
 /** One process identity row from a host sweep. */
@@ -124,32 +117,6 @@ export function parsePsCommLine(line: string): { pid: number; executable: string
   return { pid, executable }
 }
 
-/**
- * One native Windows process-table row. Rows without a kernel creation time
- * cannot bracket a session creation, so they are skipped rather than guessed.
- */
-export function nativeWindowsRowToIdentity(
-  row: NativeWindowsProcessRow
-): ProcessIdentityRow | null {
-  if (!Number.isFinite(row.pid) || !Number.isFinite(row.ppid)) {
-    return null
-  }
-  if (typeof row.creationTimeMs !== 'number' || !Number.isFinite(row.creationTimeMs)) {
-    return null
-  }
-  const argv = splitCommandLineArgv(row.command)
-  if (argv.length === 0) {
-    return null
-  }
-  return {
-    pid: row.pid,
-    ppid: row.ppid,
-    startedAtMs: row.creationTimeMs,
-    executable: row.name,
-    argv
-  }
-}
-
 function executableBaseName(value: string): string {
   const bare = value.split(/[\\/]/).at(-1) ?? ''
   return bare.toLowerCase().replace(/\.exe$/, '')
@@ -189,27 +156,13 @@ export function isOpenCodeClientProcess(row: {
 /** Every process identity row on this host; fail-open [] like the memory sweeps. */
 export async function sweepProcessIdentities(
   deps: {
-    platform?: NodeJS.Platform
     run?: typeof runProcess
     nowMs?: number
-    readWindowsTable?: () => Promise<NativeWindowsProcessRow[]>
   } = {}
 ): Promise<ProcessIdentityRow[]> {
-  const platform = deps.platform ?? process.platform
   const run = deps.run ?? runProcess
   const nowMs = deps.nowMs ?? Date.now()
   try {
-    if (platform === 'win32') {
-      // Why the native table and nothing else: it is the only sanctioned
-      // Windows process-table reader (see windows-process-enumeration.md);
-      // forking powershell.exe for a whole-table CIM scan is exactly the
-      // pattern it retired.
-      const readTable = deps.readWindowsTable ?? readWindowsProcessTable
-      const rows = await readTable()
-      return rows
-        .map((row) => nativeWindowsRowToIdentity(row))
-        .filter((row): row is ProcessIdentityRow => row !== null)
-    }
     const stdout = await execFileText(run, 'ps', ['-eo', 'pid=,ppid=,etime=,args='])
     const rows = stdout
       .split('\n')

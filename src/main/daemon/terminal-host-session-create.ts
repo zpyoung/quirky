@@ -22,7 +22,6 @@ import { resolveDaemonSessionScrollbackRows } from './daemon-session-scrollback-
 import { TerminalAttachCanceledError } from './daemon-errors'
 import { waitForTerminalAttachOperation } from './terminal-attach-cancellation'
 import { SessionNotFoundError } from './types'
-import { resolveWslSessionContext } from './wsl-session-context'
 
 type TerminalHostSessionCreateDependencies = {
   sessions: Map<string, Session>
@@ -109,7 +108,6 @@ export async function createOrAttachTerminalSession(
 
   deps.killedTombstones.clearForCreate(opts.sessionId)
   const size = normalizePtySize(opts.cols, opts.rows)
-  const wslDistro = resolveWslSessionContext(opts)?.distro
   const sessionId = opts.sessionId
   let lease = deps.spawnGate?.admit(
     {
@@ -133,7 +131,7 @@ export async function createOrAttachTerminalSession(
       // Why: a paced wait can outlast the host's shutdown fence or the caller's cancellation.
       deps.assertCreateAllowed()
     }
-    return await spawnAndPublishSession(opts, deps, { size, wslDistro }, (publishedId, isAlive) =>
+    return await spawnAndPublishSession(opts, deps, { size }, (publishedId, isAlive) =>
       lease?.commit(publishedId, isAlive)
     )
   } finally {
@@ -144,13 +142,12 @@ export async function createOrAttachTerminalSession(
 async function spawnAndPublishSession(
   opts: InternalCreateOrAttachOptions,
   deps: TerminalHostSessionCreateDependencies,
-  ctx: { size: { cols: number; rows: number }; wslDistro: string | undefined },
+  ctx: { size: { cols: number; rows: number } },
   onPublished: (sessionId: string, isAlive: boolean) => void
 ): Promise<CreateOrAttachResult> {
-  const { size, wslDistro } = ctx
+  const { size } = ctx
   // Why before the fork: the shell's own cwd may already have fallen back, so probe the requested path.
-  const cwdReadableByDaemon =
-    opts.cwd && !wslDistro ? await isCwdReadableByThisProcess(opts.cwd) : null
+  const cwdReadableByDaemon = opts.cwd ? await isCwdReadableByThisProcess(opts.cwd) : null
   const subprocess = await deps.spawnSubprocess({
     sessionId: opts.sessionId,
     cols: size.cols,
@@ -184,14 +181,12 @@ async function spawnAndPublishSession(
     subprocess,
     ownerBackend: resolvePtyOwnerBackend({
       platform: process.platform,
-      shellPath: subprocess.shellPath,
-      wslDistro
+      shellPath: subprocess.shellPath
     }),
     shellReadySupported,
     scrollback: resolveDaemonSessionScrollbackRows(),
     historySeedChunks: opts.historySeedChunks,
     ...(opts.startupIngress ? { startupIngress: opts.startupIngress } : {}),
-    wslDistro,
     onExit: createSessionExitHandler(
       deps.onSessionExit,
       opts.sessionId,

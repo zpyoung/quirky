@@ -2,22 +2,15 @@ import { homedir } from 'node:os'
 import { wslGatedAccess } from './wsl-transcript-fs-access'
 import { join } from 'node:path'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
-import { getAiVaultWslHomeDirs } from '../ai-vault/cached-session-list'
-import { prepareOpenCodeWslReaders } from '../ai-vault/opencode-wsl-runtime-preparation'
-import {
-  configureOpenCodeWslReaders,
-  openCodeWslPath
-} from '../ai-vault/session-scanner-opencode-wsl-client'
 import { readOpenCodeTranscriptSignalViaWorker } from '../ai-vault/session-scanner-opencode-sqlite-worker-spawn'
 import {
   compareOpenCodeClaimPriority,
-  listOpenCodeDatabases,
-  listOpenCodeDatabasesInDirectory
+  listOpenCodeDatabases
 } from '../opencode-usage/opencode-database-discovery'
 
 // ZCode sessions belong only to its own store.
-function zcodeTranscriptDatabasePaths(wslHomeDirs: readonly string[]): string[] {
-  return [homedir(), ...wslHomeDirs].map((home) => join(home, '.zcode', 'cli', 'db', 'db.sqlite'))
+function zcodeTranscriptDatabasePaths(): string[] {
+  return [join(homedir(), '.zcode', 'cli', 'db', 'db.sqlite')]
 }
 
 export async function discoverOpenCodeTranscriptDatabase(
@@ -89,69 +82,17 @@ export async function discoverOpenCodeTranscriptDatabase(
     return null
   }
   try {
-    if (agent === 'zcode') {
-      const native = await findSession(zcodeTranscriptDatabasePaths([]))
-      if (native) {
-        return native
-      }
-      const homes = (await waitForPromiseWithSignal(getAiVaultWslHomeDirs(), boundedSignal)).slice(
-        0,
-        32
-      )
-      if (homes.length > 0) {
-        const readers = await waitForPromiseWithSignal(
-          prepareOpenCodeWslReaders(homes),
-          boundedSignal
-        )
-        boundedSignal.throwIfAborted()
-        configureOpenCodeWslReaders(readers)
-      }
-      const wsl = await findSession(zcodeTranscriptDatabasePaths(homes))
-      if (wsl) {
-        return wsl
-      }
-      if (refusals[0]) {
-        throw refusals[0]
-      }
-      return null
-    }
-    const primary = await waitForPromiseWithSignal(
-      listOpenCodeDatabases(onRefusal, undefined, boundedSignal),
-      boundedSignal
-    )
-    // Unrelated WSL setup must not hold up a matching native database.
-    const native = await findSession(primary.filter((path) => !openCodeWslPath(path)))
-    if (native) {
-      return native
-    }
-    const homes = await waitForPromiseWithSignal(getAiVaultWslHomeDirs(), boundedSignal)
-    const sources = await waitForPromiseWithSignal(
-      Promise.all(
-        homes
-          .slice(0, 32)
-          .map((home) =>
-            listOpenCodeDatabasesInDirectory(
-              join(home, '.local', 'share', 'opencode'),
-              onRefusal,
+    const found =
+      agent === 'zcode'
+        ? await findSession(zcodeTranscriptDatabasePaths())
+        : await findSession(
+            await waitForPromiseWithSignal(
+              listOpenCodeDatabases(onRefusal, undefined, boundedSignal),
               boundedSignal
             )
           )
-      ),
-      boundedSignal
-    )
-    const primaryWsl = primary.filter((path) => openCodeWslPath(path))
-    const readerRoots = [...new Set([...homes, ...primaryWsl])]
-    if (readerRoots.length > 0) {
-      const readers = await waitForPromiseWithSignal(
-        prepareOpenCodeWslReaders(readerRoots),
-        boundedSignal
-      )
-      boundedSignal.throwIfAborted()
-      configureOpenCodeWslReaders(readers)
-    }
-    const wsl = await findSession([...primaryWsl, ...sources.flat()])
-    if (wsl) {
-      return wsl
+    if (found) {
+      return found
     }
     if (refusals[0]) {
       throw refusals[0]

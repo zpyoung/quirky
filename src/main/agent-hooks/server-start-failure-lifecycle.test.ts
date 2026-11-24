@@ -15,7 +15,6 @@ vi.mock('node:http', async (importOriginal) => {
 })
 
 import { AgentHookServer, _internals } from './server'
-import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import { makePaneKey } from '../../shared/stable-pane-id'
 
 const PANE = makePaneKey('tab-lifecycle', '11111111-1111-4111-8111-111111111111')
@@ -30,14 +29,11 @@ afterEach(() => {
 })
 
 describe('AgentHookServer startup failure lifecycle', () => {
-  it.each(['main', 'relay'] as const)(
+  it.each(['main'] as const)(
     'shares one %s listener across concurrent startup requests',
-    async (host) => {
+    async () => {
       const directory = mkdtempSync(join(tmpdir(), 'orca-concurrent-hook-start-'))
-      const server =
-        host === 'main'
-          ? new AgentHookServer()
-          : new RelayAgentHookServer({ endpointDir: directory, forward: () => undefined })
+      const server = new AgentHookServer()
       try {
         await Promise.all([server.start(), server.start()])
         expect(createServerMock).toHaveBeenCalledTimes(1)
@@ -53,14 +49,11 @@ describe('AgentHookServer startup failure lifecycle', () => {
     }
   )
 
-  it.each(['main', 'relay'] as const)(
+  it.each(['main'] as const)(
     'does not revive a stopped %s startup and permits its replacement',
-    async (host) => {
+    async () => {
       const directory = mkdtempSync(join(tmpdir(), 'orca-stopped-hook-start-'))
-      const server =
-        host === 'main'
-          ? new AgentHookServer()
-          : new RelayAgentHookServer({ endpointDir: directory, forward: () => undefined })
+      const server = new AgentHookServer()
       try {
         const interrupted = server.start()
         server.stop()

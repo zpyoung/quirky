@@ -5,7 +5,7 @@ import { watchBatchFlushDelayMs } from '../../shared/filesystem-watch-batch-wind
 import { MAX_BATCHED_WATCHER_EVENTS, queueWatcherEvents } from './filesystem-watcher-event-batch'
 // Why: suppress high-churn dirs at the watcher level (separate from the File Explorer display filter, which only hides rows).
 import { WATCHER_IGNORE_DIRS, buildParcelWatcherIgnoreOptions } from './filesystem-watcher-ignore'
-import type { WatchedRoot } from './filesystem-watcher-wsl'
+import type { WatchedRoot } from './filesystem-watcher-lifecycle-state'
 import { subscribeViaWatcherProcess } from './parcel-watcher-process'
 import { normalizeWatcherEventPath } from './filesystem-watcher-paths'
 import { watcherLifecycleState } from './filesystem-watcher-lifecycle-state'

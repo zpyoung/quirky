@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ServingModule from '../../managed-server/lifecycle/orcad-managed-serving'
 import type { ManagedOrcadStartListener } from '../../managed-server/lifecycle/orcad-managed-serving'
 import type { SshTarget } from '../../../shared/ssh-types'
@@ -10,8 +10,6 @@ const mocks = vi.hoisted(() => {
   return {
     environments,
     reads,
-    ensureForRuntimeCall: vi.fn(async () => {}),
-    hasWslService: true,
     ensureTunnel: vi.fn(async () => {}),
     rebuildTunnel: vi.fn(async () => {}),
     verify: vi.fn(),
@@ -32,10 +30,6 @@ vi.mock('../../../shared/runtime-environment-store', () => ({
     // A fresh object per read, so a test can tell the re-read after bring-up from the first.
     return { ...environment, read: mocks.reads[id] }
   }
-}))
-vi.mock('../../wsl/wsl-host-service-instance', () => ({
-  getWslHostService: () =>
-    mocks.hasWslService ? { ensureForRuntimeCall: mocks.ensureForRuntimeCall } : null
 }))
 vi.mock('../../ssh/managed-server-update-deps', () => ({ managedServerUpdateDeps: () => ({}) }))
 vi.mock('../../managed-server/lifecycle/orcad-managed-tunnel', () => ({
@@ -71,8 +65,6 @@ import {
   installManagedOrcadStartStatus,
   resolveManagedRuntimeEnvironment
 } from './runtime-environment-managed-tunnel'
-import { WSL_HOSTS_GATED_OFF_MESSAGE } from '../../wsl/wsl-host-gate'
-import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../../shared/wsl-host-internal-gate'
 
 describe('resolving a managed runtime for a call', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -120,50 +112,14 @@ describe('resolving a managed runtime for a call', () => {
   })
 })
 
-describe('resolving a runtime for a call, by host kind', () => {
-  const wsl = {
-    id: 'wsl:ubuntu',
-    orcadDeployment: { kind: 'wsl', distro: 'Ubuntu', localPort: 42000, remotePort: 6768 }
-  }
+describe('resolving a runtime for a call', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.hasWslService = true
     for (const id of Object.keys(mocks.reads)) {
       delete mocks.reads[id]
     }
-    mocks.environments = { 'wsl:ubuntu': wsl, 'paired-1': { id: 'paired-1' } }
+    mocks.environments = { 'paired-1': { id: 'paired-1' } }
     mocks.verify.mockResolvedValue({ state: 'serving' })
-    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '1')
-  })
-  afterEach(() => vi.unstubAllEnvs())
-
-  it('brings a WSL host up through its service, never through an SSH tunnel', async () => {
-    // The record re-read after bring-up, which may have moved the bridge port.
-    await expect(resolveManagedRuntimeEnvironment('/u', 'wsl:ubuntu')).resolves.toEqual({
-      ...wsl,
-      read: 2
-    })
-    expect(mocks.ensureForRuntimeCall).toHaveBeenCalledWith('wsl:ubuntu')
-    expect(mocks.ensureTunnel).not.toHaveBeenCalled()
-    expect(mocks.verify).not.toHaveBeenCalled()
-    expect(mocks.restoreUpdate).not.toHaveBeenCalled()
-  })
-
-  it('resolves a WSL host with no service without bringing anything up', async () => {
-    mocks.hasWslService = false
-    await expect(resolveManagedRuntimeEnvironment('/u', 'wsl:ubuntu')).resolves.toEqual({
-      ...wsl,
-      read: 2
-    })
-    expect(mocks.ensureTunnel).not.toHaveBeenCalled()
-  })
-
-  it('refuses a WSL host with the gate closed', async () => {
-    vi.stubEnv(WSL_HOSTS_INTERNAL_GATE_ENV, '')
-    await expect(resolveManagedRuntimeEnvironment('/u', 'wsl:ubuntu')).rejects.toThrow(
-      WSL_HOSTS_GATED_OFF_MESSAGE
-    )
-    expect(mocks.ensureForRuntimeCall).not.toHaveBeenCalled()
   })
 
   it('runs the managed tunnel path for a paired server too', async () => {
@@ -174,7 +130,6 @@ describe('resolving a runtime for a call, by host kind', () => {
     expect(mocks.ensureTunnel).toHaveBeenCalledWith('/u', 'paired-1')
     expect(mocks.verify).toHaveBeenCalledWith('/u', 'paired-1')
     expect(mocks.restoreUpdate).toHaveBeenCalledWith('paired-1', expect.any(Function))
-    expect(mocks.ensureForRuntimeCall).not.toHaveBeenCalled()
   })
 })
 

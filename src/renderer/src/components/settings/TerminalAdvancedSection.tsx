@@ -7,15 +7,9 @@ import {
 } from '../../../../shared/terminal-scrollback-policy'
 import { Input } from '../ui/input'
 import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group'
-import {
-  SettingsRow,
-  SettingsSegmentedControl,
-  SettingsSubsectionHeader
-} from './SettingsFormControls'
+import { SettingsRow, SettingsSubsectionHeader } from './SettingsFormControls'
 import { SCROLLBACK_PRESETS_ROWS } from './SettingsConstants'
 import { SearchableSetting } from './SearchableSetting'
-import { matchesSettingsSearch } from './settings-search'
-import { getTerminalWindowsPowershellImplementationSearchEntry } from './terminal-windows-search'
 import { TerminalMacKeyboardSection } from './TerminalMacKeyboardSection'
 import { translate } from '@/i18n/i18n'
 
@@ -24,9 +18,6 @@ type TerminalAdvancedSectionProps = {
   updateSettings: (updates: Partial<GlobalSettings>) => void
   scrollbackMode: 'preset' | 'custom'
   setScrollbackMode: (mode: 'preset' | 'custom') => void
-  searchQuery: string
-  showWindowsPowerShellImplementation: boolean
-  pwshAvailable?: boolean
   isMac: boolean
 }
 
@@ -39,9 +30,6 @@ export function TerminalAdvancedSection({
   updateSettings,
   scrollbackMode,
   setScrollbackMode,
-  searchQuery,
-  showWindowsPowerShellImplementation,
-  pwshAvailable,
   isMac
 }: TerminalAdvancedSectionProps): React.JSX.Element {
   const scrollbackRows = normalizeDesktopTerminalScrollbackRows(settings.terminalScrollbackRows)
@@ -58,7 +46,6 @@ export function TerminalAdvancedSection({
   )
   const scrollbackToggleValue =
     scrollbackMode === 'custom' ? 'custom' : isPreset ? `${scrollbackRows}` : 'custom'
-  const powerShellImplementation = settings.terminalWindowsPowerShellImplementation ?? 'auto'
   const commitScrollbackRowsDraft = (): void => {
     const trimmed = scrollbackRowsDraft.trim()
     const value = Number(trimmed)
@@ -200,101 +187,6 @@ export function TerminalAdvancedSection({
             }
           />
         </SearchableSetting>
-
-        {showWindowsPowerShellImplementation &&
-        matchesSettingsSearch(
-          searchQuery,
-          getTerminalWindowsPowershellImplementationSearchEntry()
-        ) ? (
-          <SearchableSetting
-            title={translate(
-              'auto.components.settings.TerminalPane.fe20f79dd1',
-              'PowerShell Version'
-            )}
-            description={translate(
-              'auto.components.settings.TerminalPane.3d88af864d',
-              'Choose whether the PowerShell shell option launches Windows PowerShell or PowerShell 7+ for new terminal panes.'
-            )}
-            keywords={[
-              'terminal',
-              'windows',
-              'powershell',
-              'pwsh',
-              'powershell 7',
-              'windows powershell',
-              'version',
-              'advanced'
-            ]}
-          >
-            <SettingsRow
-              alignTop
-              label={translate(
-                'auto.components.settings.TerminalPane.fe20f79dd1',
-                'PowerShell Version'
-              )}
-              description={
-                pwshAvailable ? (
-                  translate(
-                    'auto.components.settings.TerminalPane.5ed5c95344',
-                    'Choose between Windows PowerShell and PowerShell 7+ for new terminal panes.'
-                  )
-                ) : (
-                  <>
-                    {translate(
-                      'auto.components.settings.TerminalPane.a016ffbeed',
-                      'Auto uses Windows PowerShell now and switches to PowerShell 7+ when installed.'
-                    )}{' '}
-                    <a
-                      href="https://github.com/PowerShell/PowerShell/releases/latest"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="underline hover:text-foreground"
-                    >
-                      {translate(
-                        'auto.components.settings.TerminalPane.822f62ddcd',
-                        'Download PowerShell 7+'
-                      )}
-                    </a>
-                    .
-                  </>
-                )
-              }
-              control={
-                <SettingsSegmentedControl
-                  ariaLabel={translate(
-                    'auto.components.settings.TerminalPane.fe20f79dd1',
-                    'PowerShell Version'
-                  )}
-                  value={powerShellImplementation}
-                  onChange={(value) =>
-                    updateSettings({ terminalWindowsPowerShellImplementation: value })
-                  }
-                  options={[
-                    {
-                      value: 'auto',
-                      label: translate('auto.components.settings.TerminalPane.43c2ff7b0e', 'Auto')
-                    },
-                    {
-                      value: 'powershell.exe',
-                      label: translate(
-                        'auto.components.settings.TerminalPane.d26174e1dd',
-                        'Windows PowerShell'
-                      )
-                    },
-                    {
-                      value: 'pwsh.exe',
-                      label: translate(
-                        'auto.components.settings.TerminalPane.96be03b8eb',
-                        'PowerShell 7+'
-                      ),
-                      disabled: !pwshAvailable
-                    }
-                  ]}
-                />
-              }
-            />
-          </SearchableSetting>
-        ) : null}
 
         {isMac ? (
           <TerminalMacKeyboardSection settings={settings} updateSettings={updateSettings} />

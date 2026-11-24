@@ -74,7 +74,7 @@ describe('runtime environment store with records this build cannot read', () => 
   // A record kind this build predates; otherwise it would parse as a plain pairing.
   const futureKind = {
     id: 'future',
-    kind: 'wsl-distro',
+    kind: 'future-host',
     name: 'Ubuntu',
     createdAt: 1,
     updatedAt: 1,
@@ -93,6 +93,19 @@ describe('runtime environment store with records this build cannot read', () => 
     preferredEndpointId: 'ws',
     distro: { name: 'Ubuntu', futureField: true }
   }
+
+  it('drops persisted WSL host records instead of keeping them', () => {
+    const alpha = add('Alpha')
+    appendRawRecords({ ...futureKind, id: 'wsl-host', kind: 'wsl-distro' })
+    add('Beta')
+
+    expect(listEnvironments(userDataPath).map((environment) => environment.id)).toContain(alpha.id)
+    expect(
+      readJson(getEnvironmentStorePath(userDataPath)).environments?.some(
+        (record) => (record as { id?: string }).id === 'wsl-host'
+      )
+    ).toBe(false)
+  })
 
   it('lists readable records and rewrites unreadable ones verbatim and in order', () => {
     const alpha = add('Alpha')

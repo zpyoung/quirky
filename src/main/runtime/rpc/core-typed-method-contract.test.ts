@@ -68,10 +68,10 @@ describe('defineMethod preserves the declared contract', () => {
 
   it('keeps a registered method addressable by its literal name', () => {
     type StatusGet = ByName<(typeof STATUS_METHODS)[number], 'status.get'>
-    type ListDistros = ByName<(typeof HOST_CAPABILITY_METHODS)[number], 'host.wsl.listDistros'>
+    type GitBashProbe = ByName<(typeof HOST_CAPABILITY_METHODS)[number], 'host.gitBash.isAvailable'>
     expectTypeOf<StatusGet>().not.toBeNever()
     expectTypeOf<StatusGet['handler']>().returns.resolves.toExtend<{ runtimeId: string }>()
-    expectTypeOf<ListDistros['handler']>().returns.toEqualTypeOf<Promise<string[]>>()
+    expectTypeOf<GitBashProbe['handler']>().returns.resolves.toEqualTypeOf<boolean>()
     // The manifest is the erasure boundary's input, so the literal names have to survive it too.
     expectTypeOf<ByName<(typeof ALL_RPC_METHODS)[number], 'status.get'>>().not.toBeNever()
   })

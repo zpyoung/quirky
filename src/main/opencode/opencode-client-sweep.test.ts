@@ -3,7 +3,6 @@ import type { ProcessResult, ProcessSpec } from '@orca/process-host/process-spec
 import {
   isOpenCodeClientArgv,
   isOpenCodeClientProcess,
-  nativeWindowsRowToIdentity,
   parsePsArgsLine,
   parsePsCommLine,
   parsePsElapsedToMs,
@@ -90,32 +89,6 @@ describe('splitCommandLineArgv', () => {
   })
 })
 
-describe('nativeWindowsRowToIdentity', () => {
-  it('maps pid, creation time and quoted command line', () => {
-    const row = nativeWindowsRowToIdentity({
-      pid: 23487,
-      ppid: 22618,
-      name: 'opencode.exe',
-      creationTimeMs: NOW - 60_000,
-      command: '"C:\\Program Files\\OpenCode\\opencode.exe" --session ses_1'
-    })
-    expect(row).toMatchObject({
-      pid: 23487,
-      ppid: 22618,
-      startedAtMs: NOW - 60_000,
-      executable: 'opencode.exe',
-      argv: ['C:\\Program Files\\OpenCode\\opencode.exe', '--session', 'ses_1']
-    })
-  })
-
-  it('skips rows without a creation time or command line', () => {
-    expect(nativeWindowsRowToIdentity({ pid: 4, ppid: 0, name: 'System', command: '' })).toBeNull()
-    expect(
-      nativeWindowsRowToIdentity({ pid: 4, ppid: 0, name: 'System', command: 'opencode' })
-    ).toBeNull()
-  })
-})
-
 describe('isOpenCodeClientArgv', () => {
   it('matches clients and rejects the serve daemon', () => {
     expect(isOpenCodeClientArgv(['opencode'])).toBe(true)
@@ -171,7 +144,6 @@ describe('sweepProcessIdentities', () => {
 
   it('joins the comm executable onto args rows on POSIX', async () => {
     const rows = await sweepProcessIdentities({
-      platform: 'darwin',
       nowMs: NOW,
       run: psRunner({
         args: '23487 22618 00:05 /opt/Open Code/opencode --session ses_1\n',
@@ -185,7 +157,6 @@ describe('sweepProcessIdentities', () => {
 
   it('degrades to argv[0] matching when the comm sweep fails', async () => {
     const rows = await sweepProcessIdentities({
-      platform: 'darwin',
       nowMs: NOW,
       run: psRunner({
         args: '23487 22618 00:05 opencode --session ses_1\n',
@@ -194,22 +165,5 @@ describe('sweepProcessIdentities', () => {
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ pid: 23487, executable: '' })
-  })
-
-  it('reads the Windows table through the injected reader', async () => {
-    const rows = await sweepProcessIdentities({
-      platform: 'win32',
-      readWindowsTable: async () => [
-        {
-          pid: 23487,
-          ppid: 22618,
-          name: 'opencode.exe',
-          creationTimeMs: NOW - 60_000,
-          command: '"C:\\Program Files\\OpenCode\\opencode.exe"'
-        }
-      ]
-    })
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ pid: 23487, ppid: 22618, startedAtMs: NOW - 60_000 })
   })
 })

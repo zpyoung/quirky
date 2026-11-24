@@ -9,7 +9,6 @@ import { deleteSkills, previewSkillDeletion, type SkillDeleteServiceInput } from
 import type { ResolvedSkillDiscoveryTarget } from '../skill-discovery-target'
 import { nativeSkillInstallFilesystem } from '../skill-install-filesystem'
 import type { SkillProviderRootOverrides } from '../skill-provider-destinations'
-import { WslSkillInstallFilesystem } from '../skill-wsl-install-filesystem'
 
 /** Assembly shared by the local IPC channel and the runtime RPC method, so both
  *  transports resolve the same host, roots, and filesystem. */
@@ -36,12 +35,9 @@ async function serviceInput(
     // The allow-list starts empty on purpose: the plan authorizes the rebuilt
     // discovery root set, which is wider than the installable-provider roots the
     // factory would seed.
-    filesystem:
-      target.kind === 'wsl'
-        ? new WslSkillInstallFilesystem(target.distro, [])
-        : nativeSkillInstallFilesystem,
+    filesystem: nativeSkillInstallFilesystem,
     stateDirectory: join(dependencies.userDataPath, 'skill-installs'),
-    wslDistro: target.kind === 'wsl' ? target.distro : null
+    wslDistro: null
   }
 }
 

@@ -6,7 +6,6 @@ import { zcodeDiscoveries } from './session-scanner-zcode-sources'
 import { antigravityDiscoveries } from './session-scanner-antigravity-sources'
 import { AI_VAULT_AGENT_SOURCES, type AiVaultAgentSource } from './session-scanner-agent-sources'
 import { normalizedWslHomeDirs } from './session-scanner-roots'
-import { configureOpenCodeWslReaders } from './session-scanner-opencode-wsl-client'
 import { scopeWalksAgentFiles } from './session-scope-cwd'
 import type { AiVaultScanOptions, SessionFileDiscovery } from './session-scanner-types'
 
@@ -18,9 +17,6 @@ export async function discoverAiVaultSessionSources(args: {
   issues: AiVaultScanIssue[]
 }): Promise<SessionFileDiscovery[]> {
   const { options, limitPerAgent, issues } = args
-  if (options.wslOpenCodeReaders) {
-    configureOpenCodeWslReaders(options.wslOpenCodeReaders)
-  }
   const wslHomeDirs = normalizedWslHomeDirs(options.wslHomeDirs)
 
   // The Cursor chat-meta scan scope is owned by scanAiVaultSessions: it has to

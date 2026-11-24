@@ -1,25 +1,11 @@
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { SKILL_INSTALL_PROVIDERS } from '../../shared/skill-install-providers'
 import {
   resolveDefaultHermesSkillsRoot,
   resolveEnvironmentHermesSkillsRoot,
   resolveEnvironmentSkillProviderRoots,
-  resolveWslSkillProviderRoots,
   withClaudeSkillProviderRoot
 } from './skill-provider-runtime-roots'
-
-// The probe prints `$HOME` then each table `homeEnv` in table order, each NUL-terminated.
-function wslHomes(values: Record<string, string>, home = '/home/dev'): string {
-  return [
-    home,
-    ...SKILL_INSTALL_PROVIDERS.flatMap((provider) =>
-      provider.homeEnv ? [values[provider.homeEnv] ?? ''] : []
-    )
-  ]
-    .map((value) => `${value}\0`)
-    .join('')
-}
 
 describe('skill provider runtime roots', () => {
   it('maps Claude and Grok config homes to their global skill roots', () => {
@@ -131,51 +117,5 @@ describe('skill provider runtime roots', () => {
     expect(resolved).toBe(join('/users', 'alice', '.hermes', 'skills'))
     // A rejected LOCALAPPDATA must not cost a stat: there is nothing to compare.
     expect(seen).toEqual([])
-  })
-
-  it('maps a WSL login shell home var to a host-readable skill root', async () => {
-    await expect(
-      resolveWslSkillProviderRoots('Ubuntu-24.04', async () =>
-        wslHomes({ GROK_HOME: '/srv/grok\n' })
-      )
-    ).resolves.toEqual({ grok: '\\\\wsl.localhost\\Ubuntu-24.04\\srv\\grok\\skills' })
-  })
-
-  it('ignores unsafe, unusable, incomplete or missing WSL home values', async () => {
-    for (const value of ['../grok', '/srv/a\tb', '/', '/home', '/home/dev', '/home/dev/']) {
-      await expect(
-        resolveWslSkillProviderRoots('Ubuntu', async () => wslHomes({ GROK_HOME: value })),
-        value
-      ).resolves.toEqual({})
-    }
-    await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () =>
-        wslHomes({ GROK_HOME: '/home/dev/profiles/grok' })
-      )
-    ).resolves.toEqual({
-      grok: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\profiles\\grok\\skills'
-    })
-    // No final terminator: the payload is incomplete, so nothing in it is trusted.
-    await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () =>
-        wslHomes({ GROK_HOME: '/srv/grok' }).slice(0, -1)
-      )
-    ).resolves.toEqual({})
-    // An empty or relative guest $HOME disables the home guard, so nothing is trusted.
-    for (const home of ['', 'home/dev']) {
-      await expect(
-        resolveWslSkillProviderRoots('Ubuntu', async () =>
-          wslHomes({ GROK_HOME: '/srv/grok' }, home)
-        ),
-        home
-      ).resolves.toEqual({})
-    }
-    // A lost fence.
-    await expect(resolveWslSkillProviderRoots('Ubuntu', async () => null)).resolves.toEqual({})
-    await expect(
-      resolveWslSkillProviderRoots('Ubuntu', async () => {
-        throw new Error('probe failed')
-      })
-    ).resolves.toEqual({})
   })
 })

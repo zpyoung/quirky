@@ -1,7 +1,6 @@
 import { normalizeGhAccountBinding } from '../../../shared/github/account-binding'
 import type { GhExecOptions } from './gh-exec-file'
 import { collectGhArgvHostSignals } from './gh-host-args'
-import type { ResolvedCommand } from './wsl-command-resolution'
 import type { GhCaptureLifetimeHooks } from './gh-capture-lifetime'
 
 const GH_BOUND_ACCOUNT_ERROR_CODES = new Set([
@@ -27,7 +26,6 @@ export function isGhBoundAccountError(error: unknown): boolean {
  */
 export async function resolveBoundGhExecEnv(
   options: GhExecOptions,
-  resolved: ResolvedCommand,
   args: readonly string[],
   hooks?: GhCaptureLifetimeHooks
 ): Promise<NodeJS.ProcessEnv | undefined> {
@@ -55,7 +53,7 @@ export async function resolveBoundGhExecEnv(
       throw createGhBoundAccountHostMismatchError(normalized, host)
     }
   }
-  const target = { cwd: options.cwd, wslDistro: resolved.wsl?.distro ?? options.wslDistro }
+  const target = { cwd: options.cwd, wslDistro: options.wslDistro }
   const token = hooks
     ? await resolveGhAccountToken(normalized, target, undefined, hooks)
     : await resolveGhAccountToken(normalized, target)
@@ -63,6 +61,6 @@ export async function resolveBoundGhExecEnv(
     baseEnv: options.env ?? process.env,
     binding: normalized,
     token,
-    forWsl: resolved.wsl !== null
+    forWsl: false
   })
 }

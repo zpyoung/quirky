@@ -8,13 +8,9 @@ import { applyTerminalGitCredentialPromptGuard } from '../../../../shared/termin
 import { ensureOpenCodeStartupPromptForLaunch } from '../../../opencode/opencode-startup-prompt-installer'
 import { mimoCodeHookService } from '../../../mimo/hook-service'
 import { agentHookServer } from '../../../agent-hooks/server'
-import { wslHookRelayManager } from '../../../agent-hooks/wsl-hook-relay-manager'
-import { wslInteropHealthMonitor } from '../../../wsl/wsl-interop-health'
 import { piTitlebarExtensionService } from '../../../pi/titlebar-extension-service'
 import { prependOrcaCliDirToChildPath } from '../../../cli/orca-cli-child-path'
-import { getManagedWslCliDir, getWslCliCommandName } from '../../../cli/wsl-managed-cli'
 import { stripLegacyTerminalShimEnv } from '../../../pty/legacy-terminal-shim-dir'
-import { mergePersistedWindowsPath } from '../../../pty/windows-environment-path'
 import { resolveCodexShellLaunchPreflightCommand } from '../../../pty/codex-shell-launch-preflight'
 import { scheduleCodexHookReconcile } from '../../../codex/codex-hook-reconcile'
 import { buildConfiguredProxyEnv } from '../../../../shared/network-proxy'
@@ -46,7 +42,6 @@ export function buildPtyHostEnv(
   baseEnv: Record<string, string>,
   opts: BuildPtyHostEnvOptions
 ): Record<string, string> {
-  mergePersistedWindowsPath(baseEnv)
   Object.assign(baseEnv, buildConfiguredProxyEnv(opts.networkProxySettings))
 
   // Claude currently recognizes image support only in a short terminal allowlist.
@@ -96,13 +91,7 @@ export function buildPtyHostEnv(
       ? resolvePiAgentSourceDir(baseEnv, 'prime-agent')
       : resolveScopedPiAgentSourceDir(baseEnv, 'prime-agent')
 
-  const openCodeAgent = applyOpenCodeStatusPluginEnv(
-    id,
-    baseEnv,
-    openCodeConfig,
-    opts,
-    launchCommandHint
-  )
+  applyOpenCodeStatusPluginEnv(id, baseEnv, openCodeConfig, opts, launchCommandHint)
   if (opts.agentStatusHooksEnabled) {
     if (isMimoLaunchCommand(launchCommandHint)) {
       const preexistingMimocodeHome = resolveMimocodeSourceHome(baseEnv)
@@ -130,33 +119,6 @@ export function buildPtyHostEnv(
   }
   if (opts.agentStatusHooksEnabled) {
     Object.assign(baseEnv, agentHookServer.buildPtyEnv())
-    if (opts.isWsl === true) {
-      // Why: hook POSTs to 127.0.0.1 die inside WSL's NAT namespace; use the guest-resident relay's endpoint instead of the Windows one.
-      const distro = opts.wslDistro ?? null
-      const wslLaunchKind =
-        explicitPiAgentKind === 'pi' || explicitPiAgentKind === 'omp'
-          ? explicitPiAgentKind
-          : undefined
-      wslHookRelayManager.ensureForDistro(distro, opts.selectedCodexHomePath, wslLaunchKind)
-      const guestEndpoint = wslHookRelayManager.getGuestEndpointFilePath(distro)
-      if (guestEndpoint) {
-        baseEnv.ORCA_AGENT_HOOK_ENDPOINT = guestEndpoint
-      }
-      // Why: OpenCode loads its status plugin from a guest config overlay, so point OPENCODE_CONFIG_DIR at the guest dir the relay materialized.
-      const opencodeOverlayDir = openCodeAgent
-        ? wslHookRelayManager.getOpenCodeOverlayDir(distro, openCodeAgent)
-        : null
-      if (opencodeOverlayDir) {
-        baseEnv.OPENCODE_CONFIG_DIR = opencodeOverlayDir
-        baseEnv.ORCA_OPENCODE_CONFIG_DIR = opencodeOverlayDir
-        delete baseEnv.ORCA_OPENCODE_SOURCE_CONFIG_DIR
-      } else {
-        // Only guest overlays belong in WSL; otherwise let OpenCode use its guest config.
-        delete baseEnv.OPENCODE_CONFIG_DIR
-        delete baseEnv.ORCA_OPENCODE_CONFIG_DIR
-        delete baseEnv.ORCA_OPENCODE_SOURCE_CONFIG_DIR
-      }
-    }
   }
 
   // Why: PI_CODING_AGENT_DIR is the user's config/session root; install only Orca-owned extension files, don't override it.
@@ -180,12 +142,7 @@ export function buildPtyHostEnv(
     if (shouldInstallOmpExtensions && shouldPrepareOmpShadow) {
       const ompEnv = piTitlebarExtensionService.buildPtyEnv(id, preexistingOmpAgentDir, 'omp', {
         materializeDefaultHome: explicitPiAgentKind === 'omp',
-        // WSL loads the host-rooted managed extension through drvfs; guest storage stays separate.
-        ...(opts.isWsl
-          ? { configDirName: '.omp' }
-          : baseEnv.PI_CONFIG_DIR !== undefined
-            ? { configDirName: baseEnv.PI_CONFIG_DIR }
-            : {})
+        ...(baseEnv.PI_CONFIG_DIR !== undefined ? { configDirName: baseEnv.PI_CONFIG_DIR } : {})
       })
       Object.assign(baseEnv, ompEnv)
       exposePiManagedExtensionEnv(baseEnv, 'omp', ompEnv)
@@ -195,7 +152,7 @@ export function buildPtyHostEnv(
       Object.assign(baseEnv, piTitlebarExtensionService.buildFreshOmpEnv())
     }
 
-    if (shouldInstallPrimeAgentExtensions && piAgentKind === 'prime-agent' && !opts.isWsl) {
+    if (shouldInstallPrimeAgentExtensions && piAgentKind === 'prime-agent') {
       const primeEnv = piTitlebarExtensionService.buildPtyEnv(
         id,
         preexistingPrimeAgentDir,
@@ -225,21 +182,6 @@ export function buildPtyHostEnv(
     delete baseEnv.ORCA_PRIME_AGENT_STATUS_EXTENSION
   }
 
-  if (opts.isWsl && opts.agentStatusHooksEnabled) {
-    const distro = opts.wslDistro ?? null
-    if (explicitPiAgentKind === 'pi') {
-      const guestPiDir = wslHookRelayManager.getGuestAgentPath(distro, 'pi')
-      if (guestPiDir) {
-        baseEnv.ORCA_PI_SOURCE_AGENT_DIR = guestPiDir
-      }
-    } else if (explicitPiAgentKind === 'omp') {
-      const guestOmpExtension = wslHookRelayManager.getGuestAgentPath(distro, 'omp')
-      if (guestOmpExtension) {
-        baseEnv.ORCA_OMP_STATUS_EXTENSION = guestOmpExtension
-      }
-    }
-  }
-
   // Why: keep the Codex home override PTY-scoped so dev/prod Orcas don't share hooks through ~/.codex.
   if (opts.skipCodexHomeEnv) {
     delete baseEnv.CODEX_HOME
@@ -253,7 +195,6 @@ export function buildPtyHostEnv(
       hooksEnabled:
         opts.agentStatusHooksEnabled && isTuiAgentEnabled('codex', opts.disabledTuiAgents),
       isPackaged: opts.isPackaged,
-      isWsl: opts.isWsl,
       managedHomePath: opts.selectedCodexHomePath,
       resourcesPath: opts.resourcesPath
     })
@@ -269,29 +210,14 @@ export function buildPtyHostEnv(
     delete baseEnv.ORCA_CODEX_LAUNCH_PREFLIGHT
   }
 
-  if (!opts.isWsl) {
-    // Why each native spawn: a codex typed in the pane reads ~/.codex, and Codex may have updated since.
-    scheduleCodexHookReconcile()
-  }
+  // Why each native spawn: a codex typed in the pane reads ~/.codex, and Codex may have updated since.
+  scheduleCodexHookReconcile()
 
-  // Why: an inherited copy (e.g. Orca launched from a WSL pane) names another launch's CLI.
-  delete baseEnv.ORCA_WSL_CLI_DIR
-  // Why: WSL shells need the managed userData root for shell-ready wrappers; dev-mode terminals need the same export so `orca` targets the live dev instance.
-  if (opts.isWsl) {
-    wslInteropHealthMonitor.noteActivity(opts.wslDistro ?? null)
-    baseEnv.ORCA_USER_DATA_PATH = opts.userDataPath
-    // Why: managed WSL registration uses `orca-ide`; exposing that literal scopes agent guidance to WSL without a bare-orca shim.
-    baseEnv.ORCA_CLI_COMMAND = getWslCliCommandName(opts.isPackaged)
-    const managedCliDir = getManagedWslCliDir(opts)
-    if (managedCliDir) {
-      baseEnv.ORCA_WSL_CLI_DIR = managedCliDir
-    }
-  } else {
-    if (!opts.isPackaged) {
-      baseEnv.ORCA_USER_DATA_PATH ??= opts.userDataPath
-    }
-    delete baseEnv.ORCA_CLI_COMMAND
+  if (!opts.isPackaged) {
+    baseEnv.ORCA_USER_DATA_PATH ??= opts.userDataPath
   }
+  delete baseEnv.ORCA_CLI_COMMAND
+  delete baseEnv.ORCA_WSL_CLI_DIR
   prependOrcaCliDirToChildPath(baseEnv, {
     isPackaged: opts.isPackaged,
     userDataPath: opts.userDataPath,
@@ -303,8 +229,7 @@ export function buildPtyHostEnv(
     baseEnv.BROWSER === undefined &&
     process.env.BROWSER === undefined
   ) {
-    const cliCommand = opts.isWsl ? getWslCliCommandName(opts.isPackaged) : 'orca'
-    baseEnv.BROWSER = `${cliCommand} open-url --url %s`
+    baseEnv.BROWSER = 'orca open-url --url %s'
   }
   // Why the browser-relay flag: both mean a headless runtime whose viewer is another machine.
   applyCodexRemoteViewerClipboardEnv(baseEnv, {
@@ -316,8 +241,6 @@ export function buildPtyHostEnv(
   // process.env when baseEnv carries none, which is the daemon path's normal shape.
   stripLegacyTerminalShimEnv(baseEnv, process.platform)
 
-  if (!opts.isWsl) {
-    ensureOpenCodeStartupPromptForLaunch(baseEnv)
-  }
+  ensureOpenCodeStartupPromptForLaunch(baseEnv)
   return baseEnv
 }

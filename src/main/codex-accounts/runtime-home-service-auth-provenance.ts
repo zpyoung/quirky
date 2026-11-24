@@ -1,6 +1,14 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { join } from 'node:path'
+import type { CodexManagedAccount } from '../../shared/managed-account-types'
+import {
+  codexAuthCouldBelongToManagedAccount,
+  codexAuthMatchesManagedAccount,
+  codexAuthMatchesSystemDefaultIdentity
+} from './codex-auth-identity'
 import { writeFileAtomically } from './fs-utils'
 import type {
+  CodexReadBackMatch,
   CodexSharedRuntimeAuthPendingProvenance,
   CodexSharedRuntimeAuthProvenance,
   CodexSharedRuntimeAuthProvenanceFile,
@@ -10,6 +18,69 @@ import type {
 import { CodexRuntimeHomeAuthCore } from './runtime-home-service-auth-core'
 
 export abstract class CodexRuntimeHomeAuthProvenance extends CodexRuntimeHomeAuthCore {
+  protected getActiveAccount(
+    accounts: CodexManagedAccount[],
+    activeAccountId: string | null
+  ): CodexManagedAccount | null {
+    if (!activeAccountId) {
+      return null
+    }
+    return accounts.find((account) => account.id === activeAccountId) ?? null
+  }
+
+  protected findManagedAccountForRuntimeAuth(
+    runtimeAuthContents: string,
+    expectedAccountId?: string
+  ): CodexReadBackMatch {
+    const matches: {
+      account: CodexManagedAccount
+      managedAuthPath: string
+      managedAuthContents: string
+    }[] = []
+    let unreadableHomeCouldOwnRuntimeAuth = false
+    for (const account of this.store.getSettings().codexManagedAccounts) {
+      if (expectedAccountId && account.id !== expectedAccountId) {
+        continue
+      }
+      const managedAuthPath = join(account.managedHomePath, 'auth.json')
+      if (!existsSync(managedAuthPath)) {
+        continue
+      }
+      let managedAuthContents: string
+      try {
+        managedAuthContents = readFileSync(managedAuthPath, 'utf-8')
+      } catch {
+        // Why: an unreadable home can never be compared, but letting the read throw abandons the
+        // scan for every other account; only its record can rule it out as the owner.
+        if (
+          !expectedAccountId &&
+          codexAuthCouldBelongToManagedAccount(runtimeAuthContents, account)
+        ) {
+          unreadableHomeCouldOwnRuntimeAuth = true
+        }
+        continue
+      }
+      if (codexAuthMatchesManagedAccount(runtimeAuthContents, account, managedAuthContents)) {
+        matches.push({ account, managedAuthPath, managedAuthContents })
+      }
+    }
+
+    if (unreadableHomeCouldOwnRuntimeAuth) {
+      return { kind: 'ambiguous' }
+    }
+    if (matches.length === 1) {
+      return { kind: 'matched', ...matches[0] }
+    }
+    return { kind: matches.length === 0 ? 'none' : 'ambiguous' }
+  }
+
+  protected runtimeAuthMatchesSystemDefaultIdentity(
+    runtimeAuthContents: string,
+    systemDefaultAuthContents: string
+  ): boolean {
+    return codexAuthMatchesSystemDefaultIdentity(runtimeAuthContents, systemDefaultAuthContents)
+  }
+
   protected persistSharedRuntimeAuthProvenance(
     provenance: CodexSharedRuntimeAuthProvenanceFile
   ): void {

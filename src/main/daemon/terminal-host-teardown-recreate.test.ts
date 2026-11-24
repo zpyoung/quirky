@@ -31,7 +31,6 @@ function spawnSubprocessWithSlowExit(exitDelayMs: number): {
       kill: vi.fn(() => {
         setTimeout(() => onExit?.(0), exitDelayMs).unref?.()
       }),
-      terminateOwnedTree: () => 'unavailable' as const,
       forceKill: vi.fn(() => {
         setTimeout(() => onExit?.(137), exitDelayMs).unref?.()
       }),

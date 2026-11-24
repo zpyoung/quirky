@@ -10,7 +10,6 @@ function mockSubprocess(): SubprocessHandle {
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(),
-    terminateOwnedTree: () => 'unavailable' as const,
     forceKill: vi.fn(),
     signal: vi.fn(),
     onData: () => {},

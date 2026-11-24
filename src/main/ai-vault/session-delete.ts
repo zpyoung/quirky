@@ -9,7 +9,6 @@ import {
   validateAiVaultSessionDeleteTarget,
   type ValidateAiVaultSessionDeleteTargetArgs
 } from './session-delete-target'
-import { tryDeleteWslUncPath, WslDeleteValidationError } from '../wsl-unc-delete'
 import { isENOENT } from '../ipc/filesystem-path-containment'
 
 // Trashes a validated session's paths, companions first so a part-way failure
@@ -48,24 +47,6 @@ export async function deleteAiVaultSessionFile(
 async function removeOne(
   removal: AiVaultSessionDeleteRemoval
 ): Promise<'unexpected-target-kind' | 'path-outside-known-roots' | null> {
-  // WSL validates and removes inside the distro because 9P stat is unreliable
-  // and its virtual volume has no Recycle Bin for trashItem.
-  try {
-    if (
-      await tryDeleteWslUncPath(removal.path, {
-        recursive: removal.kind === 'directory',
-        approvedRoots: removal.roots
-      })
-    ) {
-      return null
-    }
-  } catch (error) {
-    if (error instanceof WslDeleteValidationError) {
-      return error.reason
-    }
-    throw error
-  }
-
   let stats
   try {
     stats = await lstat(removal.path)

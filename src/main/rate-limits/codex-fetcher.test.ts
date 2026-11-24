@@ -44,9 +44,6 @@ vi.mock('../codex-cli/command', () => ({
   resolveCodexCommand: resolveCodexCommandMock
 }))
 
-vi.mock('../wsl-interop-spawn-directory', () => ({
-  resolveWslInteropSpawnCwd: () => 'C:\\Windows'
-}))
 vi.mock('node-pty', () => ({
   spawn: ptySpawnMock
 }))
@@ -614,83 +611,6 @@ describe('fetchCodexRateLimits', () => {
     })
     expect(readFileMock).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
-  })
-
-  it('runs rate-limit RPC through WSL when the Codex home is a WSL managed account', async () => {
-    const originalPlatform = process.platform
-    Object.defineProperty(process, 'platform', {
-      configurable: true,
-      value: 'win32'
-    })
-    const rpcChild = makeRpcChild()
-    childSpawnMock.mockReturnValue(rpcChild)
-    rpcChild.stdin.write.mockImplementation((line: string) => {
-      const msg = JSON.parse(line) as { id?: number; method?: string }
-      if (msg.method === 'initialize') {
-        setTimeout(() => {
-          rpcChild.stdout.emit(
-            'data',
-            Buffer.from(`${JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: {} })}\n`)
-          )
-        }, 0)
-      }
-      if (msg.method === 'account/rateLimits/read') {
-        setTimeout(() => {
-          rpcChild.stdout.emit(
-            'data',
-            Buffer.from(
-              `${JSON.stringify({
-                jsonrpc: '2.0',
-                id: msg.id,
-                result: { rateLimits: { primary: { usedPercent: 11 } } }
-              })}\n`
-            )
-          )
-        }, 0)
-      }
-    })
-
-    try {
-      const resultPromise = fetchCodexRateLimits({
-        codexHomePath: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\orca\\account\\home'
-      })
-      await vi.advanceTimersByTimeAsync(1)
-      await vi.advanceTimersByTimeAsync(1)
-      await resultPromise
-
-      const [spawnFile, spawnArgs, spawnOptions] = childSpawnMock.mock.calls[0]
-      expect(spawnFile).toBe('wsl.exe')
-      expect(spawnArgs.slice(0, 5)).toEqual(['-d', 'Ubuntu', '--exec', 'sh', '-c'])
-      const shellCommand = spawnArgs.at(-1) as string
-      expect(shellCommand).toContain('_orca_wsl_shell=$(getent passwd')
-      expect(shellCommand).toContain('bash|zsh|ksh|mksh|ash) exec "$_orca_wsl_shell" -ilc')
-      expect(shellCommand).toContain(
-        'exec 3<&0\nexec 4>&1\nexec </dev/null\nexec >/dev/null\n_orca_wsl_shell='
-      )
-      expect(shellCommand).toContain('mkdir -p "$orca_rate_limit_cwd"')
-      expect(shellCommand).toContain('cd "$orca_rate_limit_cwd"')
-      expect(shellCommand).toContain(
-        "export CODEX_HOME='\\''/home/alice/.local/share/orca/account/home'\\''"
-      )
-      expect(shellCommand).toContain(
-        "exec codex '\\''-c'\\'' '\\''approval_policy=never'\\'' '\\''-c'\\'' '\\''features.plugins=false'\\'' '\\''-s'\\'' '\\''read-only'\\'' '\\''-a'\\'' '\\''never'\\'' '\\''app-server'\\'' <&3 >&4 3<&- 4>&-"
-      )
-      expect(shellCommand.match(/<&3 >&4 3<&- 4>&-/g)).toHaveLength(3)
-      expect(shellCommand.match(/exec codex [^\n]+<&3 >&4 3<&- 4>&-/g)).toHaveLength(3)
-      expect(shellCommand).not.toContain('_orca_codex')
-      expect(shellCommand).not.toContain('wsl-codex-path')
-      expect(spawnOptions).toEqual(
-        expect.objectContaining({
-          cwd: 'C:\\Windows',
-          env: expect.not.objectContaining({ CODEX_HOME: expect.anything() })
-        })
-      )
-    } finally {
-      Object.defineProperty(process, 'platform', {
-        configurable: true,
-        value: originalPlatform
-      })
-    }
   })
 
   it('routes Windows host Codex homes through the host RPC path', async () => {

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -11,7 +11,6 @@ const REPO_ROOT = join(import.meta.dirname, '..', '..')
 const require = createRequire(import.meta.url)
 const electronBuilderConfig = require('../electron-builder.config.cjs')
 const { copyFiles, FileMatcher } = require('app-builder-lib/out/fileMatcher')
-const FpmTarget = require('app-builder-lib/out/targets/FpmTarget').default
 const electronBuilderNativeRebuild = require('./electron-builder-native-rebuild.cjs')
 
 describe('electron-builder config', () => {
@@ -201,14 +200,12 @@ describe('electron-builder config', () => {
 
     for (const relayPath of [
       'out/relay/linux-x64/relay.js',
-      'out/relay/win32-x64/relay.js',
-      'out/relay/darwin-arm64/relay-watcher.js',
-      'out/relay/wsl/wsl-agent-hook-relay.js'
+      'out/relay/darwin-arm64/relay-watcher.js'
     ]) {
       expect(packs(relayPath)).toBe(false)
     }
 
-    for (const platform of ['mac', 'linux', 'win']) {
+    for (const platform of ['mac']) {
       expect(electronBuilderConfig[platform].extraResources).toContainEqual({
         from: 'out/relay',
         to: 'relay'
@@ -221,7 +218,7 @@ describe('electron-builder config', () => {
       from: 'resources/plugins/launch',
       to: 'plugins/launch'
     })
-    for (const platform of ['mac', 'linux', 'win']) {
+    for (const platform of ['mac']) {
       expect(electronBuilderConfig[platform].extraResources).toContainEqual({
         from: 'resources/skills',
         to: 'skills'
@@ -238,30 +235,6 @@ describe('electron-builder config', () => {
         })
       ])
     )
-    expect(electronBuilderConfig.linux.extraResources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          from: 'native/computer-use-linux/runtime.py',
-          to: 'computer-use-linux/runtime.py'
-        })
-      ])
-    )
-    expect(electronBuilderConfig.win.extraResources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          from: 'native/computer-use-windows/runtime.ps1',
-          to: 'computer-use-windows/runtime.ps1'
-        }),
-        expect.objectContaining({
-          from: 'native/windows-cli-launcher/.build/orca.exe',
-          to: 'bin/orca.exe'
-        }),
-        expect.objectContaining({
-          from: 'native/windows-cli-launcher/.build/orca-administrator-restart.exe',
-          to: 'bin/orca-administrator-restart.exe'
-        })
-      ])
-    )
   })
 
   it('ships one macOS serve-sim package through the runtime closure', () => {
@@ -274,72 +247,32 @@ describe('electron-builder config', () => {
     ])
   })
 
-  it.each(['mac', 'linux'])(
-    'loads Codex TOML parsing after %s runtime pruning',
-    async (platform) => {
-      const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-packaged-codex-toml-'))
-      try {
-        const resource = electronBuilderConfig[platform].extraResources.find(
-          (entry) => entry.to === join('node_modules', 'smol-toml')
-        )
-        expect(resource).toBeDefined()
-        await copyFiles([
-          new FileMatcher(resource.from, join(resourcesDir, resource.to), (value) => value)
-        ])
-        require('../packaged-runtime-node-modules.cjs').prunePackagedRuntimeNodeModules(
-          resourcesDir,
-          platform === 'mac' ? 'darwin' : 'linux',
-          process.arch
-        )
-        const stagedRequire = createRequire(join(resourcesDir, 'out', 'main', 'codex', 'trust.cjs'))
-        expect(await realpath(stagedRequire.resolve('smol-toml'))).toBe(
-          await realpath(join(resourcesDir, resource.to, 'dist', 'index.cjs'))
-        )
-        const { parse } = stagedRequire('smol-toml')
-        expect(parse('[projects."/workspace"]\ntrust_level = "trusted"\n')).toEqual({
-          projects: { '/workspace': { trust_level: 'trusted' } }
-        })
-      } finally {
-        await rm(resourcesDir, { recursive: true, force: true })
-      }
-    }
-  )
-
-  // Why: serve-sim's addon is a Mach-O, and Windows signing rejects every *.node that is not PE.
-  it('keeps serve-sim out of the Windows and Linux runtime closures', () => {
-    const {
-      PACKAGED_RUNTIME_PACKAGE_ROOTS,
-      createPackagedRuntimeNodeModuleResources
-    } = require('../packaged-runtime-node-modules.cjs')
-    expect(PACKAGED_RUNTIME_PACKAGE_ROOTS).not.toContain('serve-sim')
-    const serveSimTarget = join('node_modules', 'serve-sim')
-    expect(createPackagedRuntimeNodeModuleResources('linux').map((r) => r.to)).not.toContain(
-      serveSimTarget
-    )
-    expect(electronBuilderConfig.linux.extraResources.map((r) => r.to)).not.toContain(
-      serveSimTarget
-    )
-    expect(electronBuilderConfig.win.extraResources.map((r) => r.to)).not.toContain(serveSimTarget)
-  })
-
-  // Why: the Windows CLI shim is delivered only via extraResources to
-  // resources/bin/orca.cmd (beside the native resources/bin/orca.exe). If the
-  // source tree is also packed into app.asar it gets extracted by
-  // asarUnpack:['resources/**'] to app.asar.unpacked/resources/win32/bin/orca.cmd,
-  // a duplicate with no adjacent orca.exe that fails to launch (#7351).
-  it('keeps the Windows CLI shim source tree out of app.asar', () => {
-    expect(electronBuilderConfig.files).toEqual(
-      expect.arrayContaining(['!resources/win32{,/**/*}'])
-    )
-    // Regression guard: the working shim must still ship via extraResources.
-    expect(electronBuilderConfig.win.extraResources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          from: 'resources/win32/bin/orca.cmd',
-          to: 'bin/orca.cmd'
-        })
+  it.each(['mac'])('loads Codex TOML parsing after %s runtime pruning', async (platform) => {
+    const resourcesDir = await mkdtemp(join(tmpdir(), 'orca-packaged-codex-toml-'))
+    try {
+      const resource = electronBuilderConfig[platform].extraResources.find(
+        (entry) => entry.to === join('node_modules', 'smol-toml')
+      )
+      expect(resource).toBeDefined()
+      await copyFiles([
+        new FileMatcher(resource.from, join(resourcesDir, resource.to), (value) => value)
       ])
-    )
+      require('../packaged-runtime-node-modules.cjs').prunePackagedRuntimeNodeModules(
+        resourcesDir,
+        platform === 'mac' ? 'darwin' : 'linux',
+        process.arch
+      )
+      const stagedRequire = createRequire(join(resourcesDir, 'out', 'main', 'codex', 'trust.cjs'))
+      expect(await realpath(stagedRequire.resolve('smol-toml'))).toBe(
+        await realpath(join(resourcesDir, resource.to, 'dist', 'index.cjs'))
+      )
+      const { parse } = stagedRequire('smol-toml')
+      expect(parse('[projects."/workspace"]\ntrust_level = "trusted"\n')).toEqual({
+        projects: { '/workspace': { trust_level: 'trusted' } }
+      })
+    } finally {
+      await rm(resourcesDir, { recursive: true, force: true })
+    }
   })
 
   // Why: on macOS 26 UNUserNotificationCenter aborts for executables launched
@@ -384,11 +317,6 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.asarUnpack).toEqual(
       expect.arrayContaining(['out/main/parcel-watcher-process-entry.js'])
     )
-  })
-
-  it('unpacks the replaceable WSL transcript filesystem process entry', async () => {
-    const entryFilename = 'wsl-transcript-fs-process-entry.js'
-    expect(electronBuilderConfig.asarUnpack).toContain(`out/main/${entryFilename}`)
   })
 
   // Why: the CLI runs this entry under ELECTRON_RUN_AS_NODE, which cannot read
@@ -438,72 +366,6 @@ describe('electron-builder config', () => {
     expect(electronBuilderConfig.asarUnpack).not.toContain(
       'out/main/main-thread-hang-watchdog-entry.js'
     )
-  })
-
-  it('uses the multi-size icon source for Linux packages', () => {
-    expect(electronBuilderConfig.linux.icon).toBe('resources/build/icon.icns')
-  })
-
-  it('matches the Linux desktop entry to Electron window class', () => {
-    expect(electronBuilderConfig.linux.desktop.entry.StartupWMClass).toBe('orca')
-  })
-
-  it('uses the release artifact set as local Linux targets without changing existing names', () => {
-    expect(electronBuilderConfig.linux.target).toEqual(['AppImage', 'deb', 'rpm'])
-    expect(electronBuilderConfig.toolsets).toEqual({ appimage: '1.0.3' })
-    expect(electronBuilderConfig.appImage.artifactName).toBe('orca-linux.${ext}')
-    expect(electronBuilderConfig.deb.artifactName).toBe('orca-ide_${version}_${arch}.${ext}')
-    expect(electronBuilderConfig.rpm).toMatchObject({
-      packageName: 'orca-ide',
-      artifactName: 'orca-ide-${version}.${arch}.${ext}'
-    })
-  })
-
-  it('retains electron-builder runtime dependencies in deb and rpm packages', () => {
-    for (const target of ['deb', 'rpm']) {
-      const dependencies = electronBuilderConfig[target].depends
-      expect(dependencies).toEqual(
-        expect.arrayContaining(FpmTarget.prototype.getDefaultDepends(target))
-      )
-      expect(new Set(dependencies).size).toBe(dependencies.length)
-    }
-  })
-
-  it('validates each AppImage before electron-builder publishes it', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'orca-electron-builder-appimage-'))
-    try {
-      const appImage = join(root, 'orca-linux.AppImage')
-      await writeFile(appImage, 'not an ELF')
-      await chmod(appImage, 0o755)
-
-      expect(() =>
-        electronBuilderConfig.artifactBuildCompleted({ file: appImage, arch: 1 })
-      ).toThrow(/ELF header is outside/)
-      expect(() =>
-        electronBuilderConfig.artifactBuildCompleted({ file: join(root, 'orca-ide.deb') })
-      ).not.toThrow()
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-  it('uses a distinct AppImage name for Linux arm64 release uploads', () => {
-    const configPath = require.resolve('../electron-builder.config.cjs')
-    const original = process.env.ORCA_LINUX_ARM64_RELEASE
-    try {
-      delete require.cache[configPath]
-      process.env.ORCA_LINUX_ARM64_RELEASE = '1'
-      expect(require('../electron-builder.config.cjs').appImage.artifactName).toBe(
-        'orca-linux-arm64.${ext}'
-      )
-    } finally {
-      if (original === undefined) {
-        delete process.env.ORCA_LINUX_ARM64_RELEASE
-      } else {
-        process.env.ORCA_LINUX_ARM64_RELEASE = original
-      }
-      delete require.cache[configPath]
-      require('../electron-builder.config.cjs')
-    }
   })
 
   it('overrides packaged semver only for local macOS builds', () => {
@@ -587,11 +449,7 @@ describe('arch-aware packaging guard', () => {
   })
 
   const packHost = (arch) =>
-    electronBuilderConfig.beforePack(
-      { electronPlatformName: process.platform, arch },
-      bundleDir,
-      () => undefined
-    )
+    electronBuilderConfig.beforePack({ electronPlatformName: process.platform, arch }, bundleDir)
 
   it('allows packaging the host platform and architecture', () => {
     expect(() => packHost(HOST_ARCH)).not.toThrow()
@@ -620,7 +478,6 @@ describe('arch-aware packaging guard', () => {
         electronBuilderConfig.beforePack(
           { electronPlatformName: process.platform, arch: HOST_ARCH },
           bundleDir,
-          () => undefined,
           templateDir
         )
       ).toThrow(`${templateDir} holds an ORCA_LAYOUT_OWNER=main build`)
@@ -642,32 +499,6 @@ describe('arch-aware packaging guard', () => {
       expect(() => packHost(OTHER_ARCH)).toThrow('pnpm install:release')
     } else if (process.platform !== 'win32') {
       expect(() => packHost(OTHER_ARCH)).not.toThrow()
-    }
-  })
-
-  // The host's own build is the foreign-arch case: a Windows checkout compiles these for its CPU only.
-  it.runIf(process.platform === 'win32')(
-    'refuses a Windows workspace addon built for another architecture',
-    () => {
-      for (const binary of ['orca_windows_registry.node', 'orca_windows_security.node']) {
-        expect(() => packHost(OTHER_ARCH)).toThrow(`${binary} for ${OTHER_ARCH_NAME}`)
-      }
-    }
-  )
-
-  it('requires installed Windows addons for Windows packaging', () => {
-    const windowsAddon = electronBuilderConfig.win.extraResources.some(
-      (resource) => resource.to === join('node_modules', '@vscode', 'windows-process-tree')
-    )
-    const packWindows = () =>
-      electronBuilderConfig.beforePack({ electronPlatformName: 'win32', arch: 1 }, bundleDir)
-    if (process.platform === 'win32' || windowsAddon) {
-      expect(packWindows).not.toThrow()
-    } else {
-      expect(packWindows).toThrow('@vscode/windows-process-tree')
-      expect(packWindows).toThrow('Windows packaging requires a Windows host')
-      // A workspace link exists everywhere; only its compiled binary proves the addon will load.
-      expect(packWindows).toThrow('@orca/windows-security')
     }
   })
 })

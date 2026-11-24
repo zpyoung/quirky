@@ -35,7 +35,7 @@ describe('terminateCodexProbeChild', () => {
 
   it('requests shutdown and never hard-kills a child that drains in time', async () => {
     const child = makeFakeChild()
-    const done = terminateCodexProbeChild(child, { platform: 'darwin' })
+    const done = terminateCodexProbeChild(child)
 
     expect(child.stdin.end).toHaveBeenCalledTimes(1)
     expect(child.kill).toHaveBeenCalledWith('SIGTERM')
@@ -50,7 +50,7 @@ describe('terminateCodexProbeChild', () => {
 
   it('escalates to SIGKILL only after the drain window elapses', async () => {
     const child = makeFakeChild()
-    const done = terminateCodexProbeChild(child, { platform: 'linux' })
+    const done = terminateCodexProbeChild(child)
 
     await vi.advanceTimersByTimeAsync(CODEX_PROBE_SHUTDOWN_DRAIN_MS)
     expect(child.kill).toHaveBeenCalledWith('SIGKILL')
@@ -63,7 +63,7 @@ describe('terminateCodexProbeChild', () => {
   it('resolves within the hard-kill bound even if the child never reports exit', async () => {
     const child = makeFakeChild()
     let settled = false
-    const done = terminateCodexProbeChild(child, { platform: 'linux' }).then(() => {
+    const done = terminateCodexProbeChild(child).then(() => {
       settled = true
     })
 
@@ -75,7 +75,7 @@ describe('terminateCodexProbeChild', () => {
   it('does not treat a child error as proof that the process exited', async () => {
     const child = makeFakeChild()
     let settled = false
-    const done = terminateCodexProbeChild(child, { platform: 'linux' }).then(() => {
+    const done = terminateCodexProbeChild(child).then(() => {
       settled = true
     })
 
@@ -88,60 +88,11 @@ describe('terminateCodexProbeChild', () => {
     expect(settled).toBe(true)
   })
 
-  it('sends no signal during the drain window on Windows where kill is always forceful', async () => {
-    const child = makeFakeChild()
-    const killWindowsProcessTree = vi.fn(async () => {})
-    const done = terminateCodexProbeChild(child, { platform: 'win32', killWindowsProcessTree })
-
-    expect(child.stdin.end).toHaveBeenCalledTimes(1)
-    expect(child.kill).not.toHaveBeenCalled()
-
-    await vi.advanceTimersByTimeAsync(CODEX_PROBE_SHUTDOWN_DRAIN_MS)
-    expect(killWindowsProcessTree).toHaveBeenCalledWith(child.pid, {
-      site: 'codex-rate-limit-probe'
-    })
-    expect(child.kill).toHaveBeenCalledTimes(1)
-    expect(child.kill).toHaveBeenCalledWith()
-
-    child.exit()
-    await done
-  })
-
-  it('waits for the Windows descendant tree kill before releasing the probe', async () => {
-    const child = makeFakeChild()
-    let finishTreeKill!: () => void
-    const treeKill = new Promise<void>((resolve) => {
-      finishTreeKill = resolve
-    })
-    const killWindowsProcessTree = vi.fn(() => treeKill)
-    let settled = false
-    const done = terminateCodexProbeChild(child, {
-      platform: 'win32',
-      drainMs: 0,
-      killWindowsProcessTree
-    }).then(() => {
-      settled = true
-    })
-
-    await vi.advanceTimersByTimeAsync(0)
-    expect(killWindowsProcessTree).toHaveBeenCalledWith(child.pid, {
-      site: 'codex-rate-limit-probe'
-    })
-    child.exit()
-    await Promise.resolve()
-    expect(settled).toBe(false)
-
-    finishTreeKill()
-    await done
-    expect(settled).toBe(true)
-    expect(child.kill).not.toHaveBeenCalled()
-  })
-
   it('does nothing for a child that already exited', async () => {
     const child = makeFakeChild()
     child.exit()
 
-    await terminateCodexProbeChild(child, { platform: 'darwin' })
+    await terminateCodexProbeChild(child)
 
     expect(child.stdin.end).not.toHaveBeenCalled()
     expect(child.kill).not.toHaveBeenCalled()

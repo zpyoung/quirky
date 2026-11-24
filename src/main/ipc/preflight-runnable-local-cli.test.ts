@@ -6,7 +6,6 @@ import { removeTree } from '../../shared/windows-transient-lock-removal'
 import {
   execLocalPreflightCommandOrThrow,
   findRunnableLocalCommand,
-  isCommandAvailable,
   isCommandOnPath
 } from './preflight-command-exec'
 import { quotePosixShell } from '../../shared/shell-argument-quoting'
@@ -62,7 +61,6 @@ describe.skipIf(process.platform === 'win32')(
       await expect(
         execLocalPreflightCommandOrThrow(path.join(good, COMMAND), ['--version'])
       ).resolves.toMatchObject({ stdout: 'gh-version-fixture\n' })
-      await expect(isCommandAvailable(COMMAND)).resolves.toBe(true)
       await expect(findRunnableLocalCommand(COMMAND)).resolves.toEqual({
         status: 'available',
         binary: path.join(good, COMMAND)

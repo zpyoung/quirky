@@ -1,9 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { RelayAgentHookServer } from '../../wsl-guest/agent-hook-server'
 import { seedLegacyAgentStatusForTests } from '../../shared/agent-hook-listener/listener-state'
 import { seedClaudeSubagentRosterFromSnapshots } from '../../shared/agent-hook-listener/providers/claude-roster-state'
 import type { AgentHookEventPayload } from '../../shared/agent-hook-listener/listener-event'
@@ -91,14 +87,10 @@ function seedHydratedStuckPane(server: AgentHookServer, receivedAt: number) {
 
 describe('manual Claude compact hook stream', () => {
   const servers: { stop: () => void }[] = []
-  const temporaryPaths: string[] = []
 
   afterEach(() => {
     for (const server of servers.splice(0)) {
       server.stop()
-    }
-    for (const path of temporaryPaths.splice(0)) {
-      rmSync(path, { recursive: true, force: true })
     }
   })
 
@@ -202,105 +194,6 @@ describe('manual Claude compact hook stream', () => {
     expect(emitted).toEqual([])
     expect(server.getStatusSnapshot()[0]).toEqual(before)
     unsubscribe()
-  })
-
-  it('forwards the completion over the relay and preserves its cached compact identity', async () => {
-    const main = new AgentHookServer()
-    const forwarded: AgentHookRelayEnvelope[] = []
-    const emitted: string[] = []
-    const endpointDir = mkdtempSync(join(tmpdir(), 'orca-compact-relay-'))
-    temporaryPaths.push(endpointDir)
-    const relay = new RelayAgentHookServer({
-      endpointDir,
-      token: 'manual-compact-token',
-      forward: (envelope) => {
-        forwarded.push(envelope)
-        main.ingestRemote(envelope, 'conn-a')
-      }
-    })
-    servers.push(main, relay)
-    const unsubscribe = main.subscribeEnrichedStatus((event) => {
-      emitted.push(`${event.hookEventName}:${event.payload.state}`)
-    })
-    await relay.start({ publishEndpoint: false })
-    const { port, token } = relay.getCoordinates()
-
-    await postHook(port, token, claudeHook('UserPromptSubmit', TURN_PROMPT_ID, { prompt: 'work' }))
-    await postHook(port, token, claudeHook('PostCompact', COMPACT_PROMPT_ID, { trigger: 'manual' }))
-
-    expect(forwarded.at(-1)).toMatchObject({
-      source: 'claude',
-      hookEventName: 'PostCompact',
-      compactTrigger: 'manual',
-      providerPromptId: COMPACT_PROMPT_ID
-    })
-    expect(emitted.at(-1)).toBe('PostCompact:done')
-    expect(main.getStatusSnapshot()[0]).toMatchObject({ state: 'done', sessionBoundary: true })
-
-    // Why: a client that was offline during the compact receives the row as a reconnect replay of
-    // this cache. Retaining the compact identity lets the client re-run ownership instead of
-    // treating an unowned completion as an ordinary status row.
-    const replayed = relay.replayCachedPayloadsForPanes()
-    expect(replayed).toBeGreaterThan(0)
-    expect(forwarded.at(-1)).toMatchObject({ isReplay: true, payload: { state: 'done' } })
-    expect(forwarded.at(-1)).toMatchObject({
-      hookEventName: 'PostCompact',
-      compactTrigger: 'manual'
-    })
-    unsubscribe()
-  })
-
-  it('forwards the completion from a relay whose cache is cold, and the client still guards it', async () => {
-    const main = new AgentHookServer()
-    const forwarded: AgentHookRelayEnvelope[] = []
-    const endpointDir = mkdtempSync(join(tmpdir(), 'orca-compact-cold-'))
-    temporaryPaths.push(endpointDir)
-    // A relay that restarted while the agent session kept running: hooks resolve the endpoint file
-    // per invocation, so they reconnect — but the relay's per-process cache is empty, and the
-    // compact completion may be the first event it ever sees for this pane.
-    const relay = new RelayAgentHookServer({
-      endpointDir,
-      token: 'cold-cache-token',
-      forward: (envelope) => {
-        forwarded.push(envelope)
-        main.ingestRemote(envelope, 'conn-a')
-      }
-    })
-    servers.push(main, relay)
-    await relay.start({ publishEndpoint: false })
-    const { port, token } = relay.getCoordinates()
-
-    await postHook(port, token, claudeHook('PostCompact', COMPACT_PROMPT_ID, { trigger: 'manual' }))
-
-    // Why: the relay is a forwarder, not the authority on pane identity. Dropping the event here
-    // is how the one signal that can clear a remote pane goes missing after a restart.
-    expect(forwarded.map((envelope) => envelope.hookEventName)).toEqual(['PostCompact'])
-    expect(forwarded[0]).toMatchObject({
-      compactTrigger: 'manual',
-      providerPromptId: COMPACT_PROMPT_ID
-    })
-    // ...and the client, which DOES own pane identity, still refuses to mint a row it never had.
-    expect(main.getStatusSnapshot()).toEqual([])
-  })
-
-  it('does not resurrect a retired pane when the cold relay replays its completion', async () => {
-    const main = new AgentHookServer()
-    const endpointDir = mkdtempSync(join(tmpdir(), 'orca-compact-cold-replay-'))
-    temporaryPaths.push(endpointDir)
-    const relay = new RelayAgentHookServer({
-      endpointDir,
-      token: 'cold-replay-token',
-      forward: (envelope) => main.ingestRemote(envelope, 'conn-a')
-    })
-    servers.push(main, relay)
-    await relay.start({ publishEndpoint: false })
-    const { port, token } = relay.getCoordinates()
-
-    await postHook(port, token, claudeHook('PostCompact', COMPACT_PROMPT_ID, { trigger: 'manual' }))
-    expect(main.getStatusSnapshot()).toEqual([])
-
-    expect(relay.replayCachedPayloadsForPanes()).toBe(1)
-    expect(main.getStatusSnapshot()).toEqual([])
   })
 
   it('stamps the silent boundary on a manual completion from a relay that predates it', () => {

@@ -16,8 +16,6 @@ import type {
 } from './runtime-home-service-types'
 import type { CodexSessionBackfillDate } from '../codex/codex-session-backfill-types'
 import type { CodexAccountSelectionTarget } from './runtime-selection'
-import type { LegacyWslRuntimeAuthDestination } from './legacy-wsl-runtime-auth-drain'
-import type { WslCodexAuthRead } from './wsl-codex-auth-batch-reader'
 
 /** Shared state and method contracts for the focused runtime-home layers. */
 export abstract class CodexRuntimeHomeState {
@@ -80,10 +78,6 @@ export abstract class CodexRuntimeHomeState {
   protected abstract invalidateBackfillAfterManagedSystemDefaultLaunch(
     launchEnv?: NodeJS.ProcessEnv
   ): boolean | null
-  protected abstract startWslSessionBridgeForLaunch(
-    target: CodexAccountSelectionTarget,
-    runtimeHomePath: string | null
-  ): void
 
   abstract getHostCodexHomePathsForSessionDiscovery(): string[]
   abstract getSelectedHostAccountCodexHomePath(): string | null
@@ -94,17 +88,7 @@ export abstract class CodexRuntimeHomeState {
   abstract getRetainedHostCodexHookHomePaths(ptyIds: readonly string[]): string[]
   abstract isHostSystemDefaultRealHomeSelected(launchEnv?: NodeJS.ProcessEnv): boolean
   abstract reconcileLegacySharedHomeForRetainedPanes(): void
-  abstract syncActiveWslSelectionsBeforeRestart(): Promise<void>
 
-  protected abstract getWslSystemCodexHomePath(target: CodexAccountSelectionTarget): string | null
-  protected abstract finishWslLaunchPreparation(
-    target: CodexAccountSelectionTarget,
-    homePath: string | null
-  ): void
-  protected abstract syncWslConfigAndGlobalInstructionsForLaunch(
-    target: CodexAccountSelectionTarget,
-    runtimeHomePath: string | null
-  ): void
   abstract prepareForRateLimitFetch(
     target?: CodexAccountSelectionTarget
   ): CodexRateLimitHomeResolution
@@ -124,39 +108,9 @@ export abstract class CodexRuntimeHomeState {
     accounts: CodexManagedAccount[],
     activeAccountId: string | null
   ): CodexManagedAccount | null
-  protected abstract getWslManagedHomePath(account: CodexManagedAccount | null): string | null
-  protected abstract getWslManagedHomeIdentity(
-    account: CodexManagedAccount | null
-  ): { distro: string; linuxHomePath: string } | null
-  protected abstract getPreparedWslRateLimitHomePath(
-    target: CodexAccountSelectionTarget
-  ): string | null
-  protected abstract getWslCodexHomePathForSelection(
-    target: CodexAccountSelectionTarget
-  ): string | null
-  protected abstract getWslLaunchCodexHomePath(
-    account: CodexManagedAccount,
-    targetDistro: string | undefined
-  ): string | null
-  protected abstract startLegacyWslAuthDrain(
-    target: CodexAccountSelectionTarget,
-    options?: { throwOnFailure?: boolean }
-  ): Promise<void>
-  protected abstract resolveLegacyWslAuthDestination(
-    distro: string,
-    runtimeAuthContents: string
-  ): Promise<LegacyWslRuntimeAuthDestination | null>
-  protected abstract joinWslPath(basePath: string, ...segments: string[]): string
-  protected abstract resolveWslDefaultTarget(
-    target: CodexAccountSelectionTarget
-  ): CodexAccountSelectionTarget
   protected abstract findManagedAccountForRuntimeAuth(
     runtimeAuthContents: string,
-    expectedAccountId?: string,
-    options?: {
-      accounts: readonly CodexManagedAccount[]
-      authReads: ReadonlyMap<string, WslCodexAuthRead>
-    }
+    expectedAccountId?: string
   ): CodexReadBackMatch
   protected abstract runtimeAuthMatchesSystemDefaultIdentity(
     runtimeAuthContents: string,

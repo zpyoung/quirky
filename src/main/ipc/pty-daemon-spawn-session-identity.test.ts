@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openCodeClearPtyMock, piBuildPtyEnvMock, piClearPtyMock } from './pty-ipc-mock-registry'
-import { awaitExplicitPiOmpGuestReadiness } from '../agent-hooks/wsl-pi-omp-guest-readiness'
 import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { createDaemonActiveProviderFixtures } from './pty-ipc-daemon-provider-fixtures'
 import { registerPtyHandlers } from './pty/register-handlers'
@@ -48,10 +47,6 @@ vi.mock('../codex/codex-pane-account-registry', () =>
 vi.mock('../codex/codex-state-db-backfill-recovery', () =>
   import('./pty-ipc-mock-registry').then((m) => m.codexBackfillRecoveryModuleMock())
 )
-vi.mock('../agent-hooks/wsl-pi-omp-guest-readiness', () => ({
-  awaitExplicitPiOmpGuestReadiness: vi.fn(async () => true)
-}))
-
 describe('registerPtyHandlers', () => {
   const { handlers, mainWindow, recoveredAgentClaim, recoveredAgentSurface } = setupPtyIpcSuite()
 
@@ -391,15 +386,6 @@ describe('registerPtyHandlers', () => {
       await lanes.spawn('host', { env: {}, sessionId: '' })
       expect(lanes.daemonSpawn.mock.calls.at(-1)![0].env.ORCA_AGENT_HOOK_PORT).toBeUndefined()
       expect(piBuildPtyEnvMock).not.toHaveBeenCalled()
-    })
-
-    it('both daemon lanes run the WSL Pi/OMP guest readiness wait once', async () => {
-      const lanes = startLanes()
-      vi.mocked(awaitExplicitPiOmpGuestReadiness).mockClear()
-      await lanes.spawn('window', { env: {}, command: 'pi' })
-      expect(vi.mocked(awaitExplicitPiOmpGuestReadiness)).toHaveBeenCalledOnce()
-      await lanes.spawn('host', { env: {}, command: 'pi' })
-      expect(vi.mocked(awaitExplicitPiOmpGuestReadiness)).toHaveBeenCalledTimes(2)
     })
 
     it('both daemon lanes stamp the pane identity and jcode dir from the spawn ids', async () => {

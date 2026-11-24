@@ -1,8 +1,6 @@
 import { posix, win32 } from 'node:path'
 import { isWindowsAbsolutePathLike } from '../../shared/cross-platform-path'
 import { foldWslUncPathCaseInsensitiveParts } from '../../shared/wsl-paths'
-import type { GitWorktreeExecOptions } from './worktree-operation-options'
-import { translateWslOutputPaths } from './runner'
 
 /**
  * Normalize a worktree path for cross-platform comparison/keying: resolved, and case-folded on
@@ -147,14 +145,4 @@ export function resolveRevParsePath(repoPath: string, value: string): string {
   return looksLikeWindowsPath(repoPath)
     ? win32.resolve(repoPath, value)
     : posix.resolve(repoPath, value)
-}
-
-export function translateWorktreePath(
-  worktreePath: string,
-  repoPath: string,
-  options: GitWorktreeExecOptions = {}
-): string {
-  const prefix = 'worktree '
-  const translated = translateWslOutputPaths(`${prefix}${worktreePath}`, repoPath, options)
-  return translated.startsWith(prefix) ? translated.slice(prefix.length) : worktreePath
 }

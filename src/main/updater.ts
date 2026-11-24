@@ -1,9 +1,5 @@
 import type { BrowserWindow } from 'electron'
-import type {
-  LinuxPackageInstallInstructions,
-  UpdateCheckOptions,
-  UpdateStatus
-} from '../shared/update-status-types'
+import type { UpdateCheckOptions, UpdateStatus } from '../shared/update-status-types'
 import type {
   RemoteServerUpdateInstallResult,
   RemoteServerUpdaterSnapshot,
@@ -68,14 +64,6 @@ export function quitAndInstall(): void {
 
 export function isQuittingForUpdate(): boolean {
   return updater.isQuittingForUpdate()
-}
-
-export async function getLinuxPackageInstallInstructions(): Promise<LinuxPackageInstallInstructions> {
-  return updater.getLinuxPackageInstallInstructions()
-}
-
-export async function showLinuxPackage(): Promise<void> {
-  return updater.showLinuxPackage()
 }
 
 export async function listAvailableReleaseBuilds(

@@ -17392,17 +17392,6 @@
         "description": "远程跟踪引用“{{value0}}”不可用，因此 Orca 使用本地“{{value1}}”代替。此工作区可能不包含最新的远程更改。",
         "dismiss": "知道了"
       },
-      "LinuxPackageInstallRecoveryCard": {
-        "e3de29c86a": "显示套餐",
-        "55c86654b7": "复制安装命令",
-        "53e1559f99": "需要手动安装",
-        "a7ac6ec78b": "Orca 下载了系统包。从终端完成更新之前退出 Orca。",
-        "82c6dbea00": "复制命令，退出 Orca，然后在安装 Orca 的计算机上的系统终端中运行它。完成后重新打开 Orca。",
-        "53c4b8e148": "没有可用的身份验证智能体响应特权安装请求。",
-        "c732bcbf8f": "检查包裹...",
-        "aa57fa4f80": "命令已复制。退出 Orca，在系统终端中运行它以安装 {{value0}}，然后重新打开 Orca。",
-        "b7e7c5bc95": "Orca 在构建此命令时根据发布元数据检查下载的文件。系统包本身没有经过签名检查，之后 Orca 无法为该文件提供担保。"
-      },
       "BrowserPane": {
         "streamConnectionLost": "与远程服务器的连接丢失。",
         "streamConnectionUnreachable": "无法到达远程服务器。",

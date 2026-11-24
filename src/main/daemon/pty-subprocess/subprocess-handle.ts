@@ -4,13 +4,11 @@ import { readPtySlavePath } from '../../../shared/pty-slave-line-discipline-echo
 import { forceKillPosixPtyProcessGroups } from '../../pty/posix-pty-process-groups'
 import { signalPosixPtyForegroundGroup } from '../../pty/posix-pty-foreground-group'
 import { readPtsName } from '../../pty/node-pty-pts-name'
-import { terminatePtyJob } from '../../windows/windows-pty-job'
 import { isValidPtySize } from '../daemon-pty-size'
 import type { SubprocessHandle } from '../session-subprocess-handle'
 import { createPtyForegroundProcessTracker } from './foreground-process-tracker'
 import { PtyPreListenerEvents } from './pre-listener-events'
 import { ptyProcessNameIsSpawnFile } from './spawn-file-foreground-process'
-import { inspectSpawnFileWindowsChildProcesses } from './spawn-file-child-processes'
 
 type DisposableNativePty = pty.IPty & {
   destroy?: () => void
@@ -29,7 +27,6 @@ export function createDaemonPtySubprocessHandle(args: {
   startupAgentRecognition: RecognizedAgentProcess | null
 }): SubprocessHandle {
   const reportsChildExitStatus = args.reportsChildExitStatus
-  const shellPath = args.shellPath
   const proc = args.process
   // node-pty exposes destroy at runtime but omits it from IPty.
   const nativeProc: DisposableNativePty = proc
@@ -38,7 +35,6 @@ export function createDaemonPtySubprocessHandle(args: {
   // I/O failure is not exit evidence; keep termination and producer flow control available.
   let ioFailed = false
   let disposed = false
-  let nodePtyKillIssued = false
   const foreground = createPtyForegroundProcessTracker({
     process: proc,
     shellPath: args.shellPath,
@@ -49,7 +45,6 @@ export function createDaemonPtySubprocessHandle(args: {
   })
 
   proc.onData((data) => {
-    foreground.recordOutput(data)
     events.acceptData(data)
   })
   proc.onExit(({ exitCode, signal }) => {
@@ -57,9 +52,7 @@ export function createDaemonPtySubprocessHandle(args: {
     dead = true
     foreground.markDead()
     // Why: neutralize kill synchronously so a later async socket-close SIGHUP cannot hit a recycled pid.
-    if (process.platform !== 'win32') {
-      nativeProc.kill = () => {}
-    }
+    nativeProc.kill = () => {}
     events.acceptExit({
       exitCode,
       signal,
@@ -71,12 +64,6 @@ export function createDaemonPtySubprocessHandle(args: {
   return {
     pid: proc.pid,
     processNameIsSpawnFile: ptyProcessNameIsSpawnFile(proc),
-    ...(process.platform === 'win32'
-      ? {
-          inspectChildProcesses: (fresh?: boolean, ignoreDetached?: boolean) =>
-            inspectSpawnFileWindowsChildProcesses(proc, shellPath, fresh, ignoreDetached)
-        }
-      : {}),
     shellPath: args.shellPath,
     shellCwd: args.spawnCwd,
     shellPathEnv: args.env.PATH,
@@ -107,7 +94,6 @@ export function createDaemonPtySubprocessHandle(args: {
         ioFailed = true
       }
     },
-    // WindowsTerminal also wires _socket to the ConPTY conout pipe, so pausing backpressures the child.
     pause: () => {
       if (dead) {
         return
@@ -142,23 +128,11 @@ export function createDaemonPtySubprocessHandle(args: {
       if (dead) {
         return
       }
-      nodePtyKillIssued = true
-      try {
-        proc.kill()
-      } catch (error) {
-        // A rejected native kill is not proof of exit; keep the wrapper live for a retry.
-        nodePtyKillIssued = false
-        throw error
-      }
+      // A rejected native kill is not proof of exit; the wrapper stays live for a retry.
+      proc.kill()
     },
-    terminateOwnedTree: () => terminatePtyJob(proc),
     forceKill: () => {
       if (dead) {
-        return
-      }
-      // Escalate a ConPTY kill through the job without double-closing node-pty's shell handle.
-      if (process.platform === 'win32' && nodePtyKillIssued) {
-        terminatePtyJob(proc)
         return
       }
       try {
@@ -168,9 +142,7 @@ export function createDaemonPtySubprocessHandle(args: {
       } catch (signalError) {
         try {
           proc.kill()
-          nodePtyKillIssued = true
         } catch {
-          nodePtyKillIssued = false
           throw signalError
         }
       }
@@ -210,12 +182,8 @@ export function createDaemonPtySubprocessHandle(args: {
       disposed = true
       dead = true
       events.clear()
-      // POSIX destroy() can asynchronously signal a recycled pid; Windows needs kill() to close ConPTY.
-      if (process.platform !== 'win32') {
-        nativeProc.kill = () => {}
-      } else if (nodePtyKillIssued) {
-        return
-      }
+      // destroy() can asynchronously signal a recycled pid.
+      nativeProc.kill = () => {}
       try {
         nativeProc.destroy?.()
       } catch {

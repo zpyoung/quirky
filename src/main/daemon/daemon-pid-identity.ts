@@ -1,22 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { getDaemonPidPath } from './daemon-spawner'
 import { parseDaemonPidFile, type ParsedDaemonPid } from './daemon-pid-file-parse'
-import { getPsProcessIdentityAsync, type ProcessIdentity } from './daemon-process-identity-query'
-import { queryWindowsProcess } from './daemon-process-inspection'
+import { getPsProcessIdentityAsync } from './daemon-process-identity-query'
 import {
   START_TIME_TOLERANCE_MS,
   startTimeMatches,
   startTimesWithinTolerance
 } from './daemon-process-start-time'
 import { PROTOCOL_VERSION } from './types'
-import { isStartupDiagnosticsEnabled, logStartupDiagnostic } from '../startup/startup-diagnostics'
-
-// Why: on Windows the pid file's startedAtMs is the daemon's self-reported
-// Node start time, while verification reads the OS process creation time —
-// the gap between them is the exe bootstrap, which AV/disk pressure can
-// stretch to seconds. Pid recycling differs by minutes-to-days, so a wide
-// tolerance keeps the guard effective without false mismatches.
-const WIN32_START_TIME_TOLERANCE_MS = 10_000
 
 export function commandLineMatchesDaemon(
   commandLine: string,
@@ -36,32 +27,11 @@ export function isNoSuchProcessError(error: unknown): boolean {
 
 /**
  * 'unknown' is load-bearing: a failed inspection is not evidence that the recorded PID is
- * someone else's. `ps` runs under a 2s budget and the Windows process table under 3s, and a
- * loaded machine blows both — reading that as "not our daemon" is what authorized reclaiming a
+ * someone else's. `ps` runs under a 2s budget , and a
+ * loaded machine blows it — reading that as "not our daemon" is what authorized reclaiming a
  * live daemon's ownership in the first place.
  */
 export type DaemonProcessIdentity = 'match' | 'mismatch' | 'unknown'
-
-// Timed under ORCA_STARTUP_DIAGNOSTICS so the cold-start benchmark can attribute startup cost.
-async function queryWindowsProcessIdentity(pid: number): Promise<ProcessIdentity | null> {
-  const startedAt = performance.now()
-  try {
-    const evidence = await queryWindowsProcess(pid)
-    // Why: a row missing after kill(pid, 0) succeeded, or a denied command line, is a failed
-    // inspection, not proof the PID belongs to someone else.
-    return evidence.status === 'present' && evidence.commandLine
-      ? { commandLine: evidence.commandLine, startedAtMs: evidence.startedAtMs }
-      : null
-  } finally {
-    if (isStartupDiagnosticsEnabled()) {
-      logStartupDiagnostic('daemon-pid-check', {
-        t: Math.round(performance.now()),
-        pid,
-        ms: Math.round(performance.now() - startedAt)
-      })
-    }
-  }
-}
 
 export async function inspectDaemonProcessIdentity(
   pid: number,
@@ -78,20 +48,6 @@ export async function inspectDaemonProcessIdentity(
   }
 
   const verdict = (matches: boolean): DaemonProcessIdentity => (matches ? 'match' : 'mismatch')
-
-  if (process.platform === 'win32') {
-    const identity = await queryWindowsProcessIdentity(pid)
-    if (identity === null) {
-      return 'unknown'
-    }
-    // Why: image names are too broad after PID reuse. Match the daemon entry
-    // plus the exact socket/token args so we only kill the daemon for this
-    // userData protocol endpoint.
-    return verdict(
-      commandLineMatchesDaemon(identity.commandLine, socketPath, tokenPath) &&
-        startTimesWithinTolerance(identity.startedAtMs, startedAtMs, WIN32_START_TIME_TOLERANCE_MS)
-    )
-  }
 
   try {
     const cmdline = readFileSync(`/proc/${pid}/cmdline`, 'utf8')
@@ -111,10 +67,6 @@ export async function inspectDaemonProcessIdentity(
 }
 
 async function getDaemonCommandLine(pid: number): Promise<string | null> {
-  if (process.platform === 'win32') {
-    return (await queryWindowsProcessIdentity(pid))?.commandLine ?? null
-  }
-
   try {
     return readFileSync(`/proc/${pid}/cmdline`, 'utf8')
   } catch {

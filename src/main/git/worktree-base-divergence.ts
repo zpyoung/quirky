@@ -1,4 +1,3 @@
-import { WSL_GIT_READ_ENVIRONMENT_WAIT_MS } from './wsl-git-read-environment'
 import { gitExecFileAsync } from './runner'
 import { abortSignalWithTimeout } from '../lib/abort-signal-with-timeout'
 import type { GitAdmissionTier } from './command-runner/git-exec-options'
@@ -43,22 +42,14 @@ const RETARGET_DIVERGENCE_WALK_HEADROOM_MS = 500
 /**
  * End-to-end deadline for the whole check, not per probe.
  *
- * Derived from the WSL read-environment wait rather than picked: `git-exec-file` awaits that probe
- * before a command timeout even exists, so a budget merely equal to it would guarantee `unknown`
- * on the first WSL-routed create of a session and make the WSL numbers meaningless. Deriving it
- * keeps that relationship explicit instead of coincidental.
- *
  * Sized against what it competes with: this exists only to decide whether to skip a ~4.1s p50 cold
- * `worktree add`, so when it expires the create pays the budget and then does that add anyway. The
- * total stays under that add even on Windows, where a killed probe also awaits `taskkill /t`.
+ * `worktree add`, so when it expires the create pays the budget and then does that add anyway.
  *
  * It must be a signal, not just a per-command timeout, because a per-command timeout starts only
- * after `git-exec-file` has awaited admission and the WSL read-environment probe, and because the
- * counts and `merge-base` are staged — two per-probe budgets in sequence would be twice the number
- * written here.
+ * after `git-exec-file` has awaited admission, and because the counts and `merge-base` are staged
+ * — two per-probe budgets in sequence would be twice the number written here.
  */
-export const RETARGET_DIVERGENCE_BUDGET_MS =
-  WSL_GIT_READ_ENVIRONMENT_WAIT_MS + RETARGET_DIVERGENCE_WALK_HEADROOM_MS
+export const RETARGET_DIVERGENCE_BUDGET_MS = 1_500 + RETARGET_DIVERGENCE_WALK_HEADROOM_MS
 
 function probeOptions(
   repoPath: string,

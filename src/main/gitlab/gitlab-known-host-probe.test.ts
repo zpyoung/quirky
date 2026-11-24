@@ -14,8 +14,7 @@ import {
 } from './gitlab-known-host-probe'
 
 describe('getGlabKnownHosts', () => {
-  // A locally-keyed probe must never answer from the default WSL distro.
-  const LOCAL_PROBE_OPTIONS = { timeout: 10_000, allowDefaultWslFallback: false }
+  const LOCAL_PROBE_OPTIONS = { timeout: 10_000 }
 
   beforeEach(() => {
     glabExecFileAsyncMock.mockReset()

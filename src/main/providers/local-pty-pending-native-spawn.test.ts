@@ -18,13 +18,11 @@ vi.mock('./local-pty-spawn-environment', () => ({
   enforceLocalPtySpawnEnvironmentOverrides() {}
 }))
 vi.mock('./local-pty-launch-plan', () => ({
-  DeferredLocalPtyLaunchPlan: class {},
   createLocalPtyLaunchPlan: () => ({
     shellPath: '/bin/sh',
     shellArgs: [],
     effectiveCwd: '/tmp',
-    cwd: '/tmp',
-    windowsFallbackAttempts: []
+    cwd: '/tmp'
   })
 }))
 vi.mock('./local-pty-session-activation', () => ({ activateLocalPtySession: activate }))

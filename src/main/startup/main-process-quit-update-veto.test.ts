@@ -9,7 +9,6 @@ const dependencyExports: [string, string[]][] = [
   ['../daemon/daemon-provider-state', ['disconnectDaemon', 'shutdownDaemon']],
   ['../ipc/ssh-shutdown-drain', ['beginSshShutdown']],
   ['../agent-hooks/server', ['agentHookServer']],
-  ['../agent-hooks/wsl-hook-relay-manager', ['wslHookRelayManager']],
   ['../agent-hooks/managed-agent-hook-controls', ['removeManagedAgentHooksAsync']],
   ['../runtime/structured-agent-session-runtime', ['stopStructuredAgentSessionRuntime']],
   [

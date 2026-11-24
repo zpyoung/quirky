@@ -2,12 +2,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { spawnProcess } from '@orca/process-host'
 import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
-import {
-  buildProcessTableIndex,
-  collectDescendantsFromIndex
-} from '../../shared/process-table-index'
 import { parseDaemonPidFile } from '../daemon/daemon-pid-file-parse'
-import type { WindowsProcessRow } from '../windows/windows-process-table'
 import { ORCAD_LOCK_FILE_NAME, readOrcadInstanceLockRecord } from './orcad-instance-lock'
 
 const ROW_LIMIT = 128
@@ -51,7 +46,6 @@ function errorDetails(error: unknown): Record<string, unknown> {
 export class ServeCleanupDiagnostics {
   private readonly events: Record<string, unknown>[] = []
   private readonly snapshots: Record<string, unknown>[] = []
-  private readonly known = new Map<number, WindowsProcessRow>()
   private readonly daemonIdentities = new Map<number, number | null>()
   private readonly removed = new Set<string>()
   private readonly listeners: (() => void)[] = []
@@ -136,88 +130,7 @@ export class ServeCleanupDiagnostics {
       ) {
         this.serveStartedAtMs ??= lock.startedAtMs
       }
-      if (process.platform !== 'win32') {
-        snapshot.processEvidence = 'unverifiable: Windows native capture only'
-        return
-      }
-      const table = await import('../windows/windows-process-table')
-      // The public reader falls back to CIM when the native binding is absent.
-      if (!table.isWindowsProcessTableAvailable()) {
-        snapshot.processEvidence = 'unverifiable: native process table unavailable'
-        return
-      }
-      snapshot.nativeReaderAvailable = true
-      snapshot.ancestryIsDiagnosticOnly = true
-      snapshot.creationTimesAvailable = table.isWindowsProcessStartTimeAvailable()
-      const rows = await table.readWindowsProcessTableFresh()
-      const index = buildProcessTableIndex(rows)
-      const selected = new Map<number, WindowsProcessRow>()
-      const verifiedRoots: number[] = []
-      for (const pid of [this.child?.pid, ...this.daemonIdentities.keys()]) {
-        if (pid === undefined) {
-          continue
-        }
-        const row = index.byPid.get(pid)
-        if (!row) {
-          continue
-        }
-        selected.set(pid, row)
-        const expected =
-          pid === this.child?.pid ? this.serveStartedAtMs : this.daemonIdentities.get(pid)
-        if (expected === undefined || expected === null || row.creationTimeMs !== expected) {
-          continue
-        }
-        verifiedRoots.push(pid)
-        for (const descendant of collectDescendantsFromIndex(index, pid)) {
-          if (selected.size >= ROW_LIMIT) {
-            break
-          }
-          selected.set(descendant.pid, descendant)
-        }
-      }
-      snapshot.verifiedAncestryRoots = verifiedRoots
-      for (const row of rows) {
-        if (selected.size >= ROW_LIMIT) {
-          break
-        }
-        if (
-          this.known.has(row.pid) ||
-          row.command.includes(this.userData) ||
-          row.command.includes(this.projectRoot)
-        ) {
-          selected.set(row.pid, row)
-        }
-      }
-      snapshot.processes = [...selected.values()].slice(0, ROW_LIMIT).map((row) => ({
-        pid: row.pid,
-        ppid: row.ppid,
-        name: row.name,
-        creationTimeMs: row.creationTimeMs,
-        command: boundedText(row.command)
-      }))
-      snapshot.knownIdentities = [...this.known.values()].map((known) => {
-        const current = index.byPid.get(known.pid)
-        const verdict =
-          known.creationTimeMs === undefined
-            ? 'unverifiable'
-            : !current
-              ? 'exited'
-              : current.creationTimeMs === undefined
-                ? 'unverifiable'
-                : current.creationTimeMs === known.creationTimeMs
-                  ? 'live'
-                  : 'exited'
-        return { pid: known.pid, creationTimeMs: known.creationTimeMs, verdict }
-      })
-      snapshot.rowsAtLimit = selected.size >= ROW_LIMIT
-      for (const row of selected.values()) {
-        if (this.known.size >= ROW_LIMIT) {
-          break
-        }
-        if (!this.known.has(row.pid)) {
-          this.known.set(row.pid, row)
-        }
-      }
+      snapshot.processEvidence = 'unverifiable: Windows native capture only'
     } catch (error) {
       snapshot.diagnosticsUnavailable = errorDetails(error)
     } finally {

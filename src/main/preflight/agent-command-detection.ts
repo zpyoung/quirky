@@ -1,10 +1,6 @@
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
-import { detectWslCommandsOnPath } from '../ipc/preflight-wsl-agent-detection'
 import { detectCommandsInInstallDirs } from '../../shared/local-agent-install-dir-detection'
-import {
-  getPreflightWslTarget,
-  type PreflightRuntimeContext
-} from '../ipc/preflight-runtime-target'
+import type { PreflightRuntimeContext } from '../ipc/preflight-runtime-target'
 import { isCommandOnPath } from '../ipc/preflight-command-exec'
 import { buildLocalPreflightEnv } from '../ipc/preflight-local-env'
 import { readGuestWindowsDriveMounts } from '../ipc/wsl-guest-windows-drive-path'
@@ -15,11 +11,6 @@ export async function detectAgentCommandsOnHost(
 ): Promise<Set<string>> {
   if (options.connectionId) {
     throw new SshHostNotServedError(options.connectionId)
-  }
-  const context = options.context
-  const wslTarget = getPreflightWslTarget(context)
-  if (wslTarget) {
-    return detectWslCommandsOnPath(wslTarget, commands)
   }
   const pathChecks = await Promise.all(
     commands.map(async (cmd) => ({

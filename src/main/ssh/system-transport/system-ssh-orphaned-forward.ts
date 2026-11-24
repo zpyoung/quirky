@@ -7,7 +7,6 @@
  */
 import { parseWindowsCommandLine } from '@orca/process-host/windows-command-line'
 import { getFreshShellForegroundSnapshot } from '../../../shared/process-table-snapshot-reader'
-import { readWindowsProcessTableFresh } from '../../windows/windows-process-table'
 import {
   PROCESS_START_TIME_TOLERANCE_MS,
   readProcessStartTimeMs
@@ -30,10 +29,7 @@ type OrphanedForwardDeps = {
 }
 
 const DEFAULT_DEPS: OrphanedForwardDeps = {
-  listProcesses: () =>
-    process.platform === 'win32'
-      ? readWindowsProcessTableFresh()
-      : getFreshShellForegroundSnapshot(),
+  listProcesses: () => getFreshShellForegroundSnapshot(),
   kill: (pid, signal) => {
     process.kill(pid, signal)
   },

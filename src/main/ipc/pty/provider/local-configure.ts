@@ -3,12 +3,7 @@ import { getAppEnvironment } from '../../../../shared/app-environment'
 import type { OrcaRuntimeService } from '../../../runtime/orca-runtime'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { isAgentStatusHooksEnabled } from '../../../agent-hooks/managed-agent-hook-controls'
-import { isPwshAvailableAsync } from '../../../pwsh'
 import { LocalPtyProvider } from '../../../providers/local-pty-provider'
-import {
-  addOrcaWslInteropEnv,
-  stampWslOrchestrationCompatibilityHost
-} from '../../../pty/wsl-orca-env'
 import type { CodexAccountSelectionTarget } from '../../../codex-accounts/runtime-selection'
 import { buildPtyHostEnv } from '../host-env/assembly'
 import { stampRuntimeSourceEnv } from '../../../../shared/runtime-source-env'
@@ -23,7 +18,6 @@ import { localProvider } from './registry'
 import { clearProviderPtyState } from './state-cleanup'
 import { visibleRendererPtys } from '../delivery/visibility-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { awaitExplicitPiOmpGuestReadiness } from '../../../agent-hooks/wsl-pi-omp-guest-readiness'
 import { prepareAntigravityAccountForLaunch } from '../../../antigravity/native-account-launch'
 
 export function configureLocalPtyProvider(args: {
@@ -43,7 +37,6 @@ export function configureLocalPtyProvider(args: {
     getDefaultShell: () => getSettings?.()?.terminalDefaultShell,
     getWindowsPowerShellImplementation: () =>
       getSettings ? (getSettings()?.terminalWindowsPowerShellImplementation ?? 'auto') : undefined,
-    pwshAvailable: () => isPwshAvailableAsync(),
     buildSpawnEnv: async (id, baseEnv, ctx) => {
       await prepareAntigravityAccountForLaunch({
         launchAgent: ctx?.launchAgent,
@@ -68,13 +61,6 @@ export function configureLocalPtyProvider(args: {
         shellPath: ctx?.shellPath,
         explicitEnv: ctx?.explicitEnv,
         isWsl: ctx?.isWsl,
-        launchAgent: ctx?.launchAgent,
-        launchCommand: ctx?.command
-      })
-      await awaitExplicitPiOmpGuestReadiness({
-        isWsl: ctx?.isWsl === true,
-        distro: ctx?.wslDistro,
-        codexHomePath: selectedCodexHomePath,
         launchAgent: ctx?.launchAgent,
         launchCommand: ctx?.command
       })
@@ -113,18 +99,10 @@ export function configureLocalPtyProvider(args: {
       if (preAllocatedHandle) {
         env.ORCA_TERMINAL_HANDLE = preAllocatedHandle
       }
-      stampWslOrchestrationCompatibilityHost(
-        env,
-        runtime?.getOrchestrationCompatibilityHostId?.(),
-        ctx?.isWsl === true ? ctx.wslDistro : null
-      )
       stampRuntimeSourceEnv(
         env,
         getRuntimeSourceStamp(runtime, getAppEnvironment().getPath('userData'))
       )
-      if (ctx?.isWsl === true) {
-        addOrcaWslInteropEnv(env)
-      }
       return env
     },
     onSpawned: (id, incarnationId) => runtime?.onPtySpawned(id, incarnationId),

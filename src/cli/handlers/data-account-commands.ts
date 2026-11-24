@@ -14,7 +14,6 @@ import {
   withInteractiveLoginCleanup,
   type InteractiveLoginSession
 } from './interactive-login-interruption'
-import { getWslAccountTarget } from './account-wsl-location'
 import { formatDataAccounts } from './account-list-format'
 
 export async function assertDataAccountsSupported(ctx: HandlerContext): Promise<void> {
@@ -38,12 +37,6 @@ export async function addDataAccount(
     session: InteractiveLoginSession
   ) => Promise<void>
 ): Promise<void> {
-  if (getWslAccountTarget(ctx.cwd)?.runtime === 'wsl') {
-    throw new RuntimeClientError(
-      'invalid_argument',
-      'Run this command inside the WSL host runtime; Windows-hosted WSL account import is not supported.'
-    )
-  }
   const label = ctx.flags.get('label') ?? provider
   if (typeof label !== 'string' || !label.trim() || label.trim().length > 120) {
     throw new RuntimeClientError('invalid_argument', '--label must contain 1–120 characters.')

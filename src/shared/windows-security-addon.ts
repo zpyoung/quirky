@@ -1,11 +1,33 @@
-import { realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { basename, isAbsolute, join, relative, toNamespacedPath } from 'node:path'
-import type * as WindowsSecurityModule from '@orca/windows-security'
+import { join, toNamespacedPath } from 'node:path'
 import { ORCAD_WINDOWS_SECURITY_FILENAME } from './orcad-artifacts'
 
-export type { GrantAccessOptions, WindowsAce, WindowsDacl } from '@orca/windows-security'
-export type WindowsSecurityAddon = typeof WindowsSecurityModule
+export type GrantAccessOptions = {
+  inheritable: boolean
+  replace: boolean
+}
+
+/** `type` and `flags` are the raw ACE_HEADER bytes; `sid` is null for every ACE type but allow and deny. */
+export type WindowsAce = { type: number; flags: number; mask: number; sid: string | null }
+
+/** `protected` is SE_DACL_PROTECTED. */
+export type WindowsDacl = { protected: boolean; aces: WindowsAce[] }
+
+/** Every call throws an Error whose message names the Win32 call and its error code. */
+export type WindowsSecurityAddon = {
+  currentUserSid(): string
+  getDaclAces(path: string): WindowsDacl | null
+  setDaclSddl(path: string, sddl: string): void
+  setDaclSddlAsync(path: string, sddl: string): Promise<void>
+  createFileWithDacl(path: string, sddl: string, data: Uint8Array): void
+  grantAccess(path: string, sid: string, accessMask: number, options: GrantAccessOptions): void
+  grantAccessAsync(
+    path: string,
+    sid: string,
+    accessMask: number,
+    options: GrantAccessOptions
+  ): Promise<void>
+}
 
 /** The addon (every path namespaced, async writes ordered per path) and the token's user SID. */
 export type WindowsSecurity = {
@@ -24,9 +46,7 @@ let loaded: WindowsSecurity | { error: string } | null = null
 
 /**
  * The addon, or why it cannot load on this host. orcad ships the bare binary at its slot root,
- * beside its server bundles and two levels above its CLI bundle (`out/cli/index.js`). Desktop and
- * the CLI load the workspace package, but only from inside the app: a bare specifier otherwise
- * walks every parent up to `C:\node_modules`, which any local user may create.
+ * beside its server bundles and two levels above its CLI bundle (`out/cli/index.js`).
  */
 export function loadWindowsSecurity(): WindowsSecurity | { error: string } {
   loaded ??= loadOnce()
@@ -40,46 +60,17 @@ function loadOnce(): WindowsSecurity | { error: string } {
   const failures: string[] = []
   const candidates = [
     () => join(__dirname, ORCAD_WINDOWS_SECURITY_FILENAME),
-    () => join(__dirname, '..', '..', ORCAD_WINDOWS_SECURITY_FILENAME),
-    () => trustedPackagePath(requireFromHere.resolve('@orca/windows-security'), appRoots())
+    () => join(__dirname, '..', '..', ORCAD_WINDOWS_SECURITY_FILENAME)
   ]
   for (const candidate of candidates) {
     try {
-      // Reading the SID is also what makes the package load its deferred .node binary.
+      // Reading the SID is also what makes the addon load its deferred .node binary.
       return prepare(requireFromHere(candidate()))
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error))
     }
   }
   return { error: failures.join('; ') }
-}
-
-/**
- * Where the app's own node_modules live: the packaged resources directory, or this checkout
- * (electron-vite puts shared code one level deeper, in `out/main/chunks`).
- */
-function appRoots(): string[] {
-  const checkout =
-    basename(__dirname) === 'chunks'
-      ? join(__dirname, '..', '..', '..')
-      : join(__dirname, '..', '..')
-  // Electron only, so not on Node's Process type; the CLI runs under Electron as Node too.
-  return 'resourcesPath' in process && typeof process.resourcesPath === 'string'
-    ? [process.resourcesPath, checkout]
-    : [checkout]
-}
-
-/** `resolved` when its real location is inside one of `roots`; throws otherwise. */
-export function trustedPackagePath(resolved: string, roots: readonly string[]): string {
-  const real = realpathSync(resolved)
-  const inside = roots.some((root) => {
-    const fromRoot = relative(realpathSync(root), real)
-    return fromRoot !== '' && !fromRoot.startsWith('..') && !isAbsolute(fromRoot)
-  })
-  if (!inside) {
-    throw new Error(`refusing @orca/windows-security outside the app: ${real}`)
-  }
-  return real
 }
 
 /**

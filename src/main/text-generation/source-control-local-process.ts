@@ -2,7 +2,6 @@ import { WindowsCmdLineBreakError } from '@orca/process-host'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { supervisedProviderSpawnFailure } from '../provider-process/provider-spawn-failure-report'
 import { stopSupervisedChildProcess } from '../provider-process/supervised-child-process-stop'
-import { terminateWindowsProcessTree } from '../windows-process-tree-kill'
 import {
   finalizeFromAgentOutput,
   userFacingUnsafeWindowsBatchArgs
@@ -36,13 +35,6 @@ export async function killSourceControlAgentProcess(
   if (child.supervised) {
     await stopSupervisedChildProcess(child, { site: SOURCE_CONTROL_KILL_SITE })
     return
-  }
-  if (process.platform === 'win32') {
-    // taskkill owns the tree, but the own-Chromium gate can refuse the
-    // pid-addressed walk; the handle-addressed root kill below cannot reach the
-    // recycled pid it refused, and callers release the managed-home lock on this
-    // promise, so it must not resolve having killed nothing.
-    await terminateWindowsProcessTree(pid, { site: SOURCE_CONTROL_KILL_SITE })
   }
   try {
     child.kill('SIGKILL')

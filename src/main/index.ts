@@ -26,7 +26,6 @@ import {
   readProfileStateCopySavedTimes
 } from './persistence/profile-state/profile-state-startup-recovery-dialog'
 import { profileStateDesktopRecoveryArgs } from './startup/profile-state-recovery-preflight'
-import { leaseAppImageGenerationForCurrentProcess } from './cli/appimage-generation-lease'
 
 function openMainWindow(options: { revealOnDidFinishLoad?: boolean } = {}): BrowserWindow {
   return openMainWindowController(options)
@@ -101,7 +100,6 @@ const preflightReady = runMainProcessPreflight({
 
 // Why: when another process holds the lock we've already exited; skip file-writing side effects so this transient process never touches userData.
 if (preflightReady) {
-  void leaseAppImageGenerationForCurrentProcess()
   // Why: macOS delivers "Open With" as open-file, often before `ready`, and only to a handler
   // that claims the event. Unsupported paths stay unclaimed.
   app.on('open-file', (event, filePath) => {

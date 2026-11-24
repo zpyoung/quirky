@@ -75,44 +75,4 @@ describe('VS Code Remote-SSH launch through @orca/process-host', () => {
       )
     }
   )
-
-  // Why spaces on both sides: a plain `cmd /c` strips the outer quotes once a spaced code.cmd
-  // path meets a spaced argument, so the launch dies with "path not found" (seen on Windows 11).
-  it('keeps a spaced code.cmd path and a spaced remote path intact on Windows', async () => {
-    setPlatform('win32')
-    const codeCmd = 'C:\\Program Files\\Microsoft VS Code\\bin\\code.cmd'
-    await launchExternalEditor(remoteSpec(codeCmd, '/home/ada/my project', 'win32'))
-    expect(spawnMock).toHaveBeenCalledWith(
-      expect.stringMatching(/cmd(\.exe)?$/i),
-      [`/d /v:off /s /c ""${codeCmd}" "--remote" "ssh-remote+builder" "/home/ada/my project""`],
-      expect.objectContaining({ ...HIDDEN_FIELDS, windowsVerbatimArguments: true })
-    )
-  })
-
-  it('quotes cmd metacharacters in a remote path instead of letting cmd run them', async () => {
-    setPlatform('win32')
-    await launchExternalEditor(remoteSpec('C:\\Tools\\code.cmd', '/srv/a&whoami %OS%', 'win32'))
-    expect(spawnMock).toHaveBeenCalledWith(
-      expect.any(String),
-      [
-        String.raw`/d /v:off /s /c ""C:\Tools\code.cmd" "--remote" "ssh-remote+builder" "/srv/a&whoami "^%"OS"^%"""`
-      ],
-      expect.objectContaining({ ...HIDDEN_FIELDS, windowsVerbatimArguments: true })
-    )
-  })
-
-  it('keeps the console of a Windows terminal editor visible', async () => {
-    setPlatform('win32')
-    await launchExternalEditor({
-      kind: 'executable',
-      hideWindowsConsole: false,
-      spawnCmd: 'C:\\Tools\\nvim.exe',
-      spawnArgs: ['C:\\work']
-    })
-    expect(spawnMock).toHaveBeenCalledWith('C:\\Tools\\nvim.exe', ['C:\\work'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: false
-    })
-  })
 })

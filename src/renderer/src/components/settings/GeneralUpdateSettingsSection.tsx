@@ -250,19 +250,17 @@ export function GeneralUpdateSettingsSection(): React.JSX.Element {
           {updateStatus.state === 'error' &&
             (updateStatus.installBlock
               ? getUpdateInstallBlockGuidance(updateStatus.installBlock).explainer
-              : updateStatus.recovery?.kind === 'linux-package-install'
-                ? updateStatus.message
-                : updateVersionRef.current
-                  ? translate(
-                      'auto.components.settings.GeneralUpdateSettingsSection.b9ad70c30d',
-                      'Update error. {{value0}}',
-                      { value0: updateStatus.message }
-                    )
-                  : translate(
-                      'auto.components.settings.GeneralUpdateSettingsSection.bd79d412f0',
-                      'Update check failed. {{value0}}',
-                      { value0: updateStatus.message }
-                    ))}
+              : updateVersionRef.current
+                ? translate(
+                    'auto.components.settings.GeneralUpdateSettingsSection.b9ad70c30d',
+                    'Update error. {{value0}}',
+                    { value0: updateStatus.message }
+                  )
+                : translate(
+                    'auto.components.settings.GeneralUpdateSettingsSection.bd79d412f0',
+                    'Update check failed. {{value0}}',
+                    { value0: updateStatus.message }
+                  ))}
         </p>
       </SearchableSetting>
       {channelSwitcherRevealed ? <ReleaseChannelSection /> : null}

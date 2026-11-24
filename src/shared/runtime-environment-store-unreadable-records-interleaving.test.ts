@@ -70,7 +70,7 @@ function persisted(id: string, now: number): PersistedRuntimeEnvironment {
 
 function unreadableRecord(rand: () => number, id: string): unknown {
   const unreadableRecordForms: unknown[] = [
-    { ...persisted(id, 1), kind: 'wsl-distro', distro: { name: 'Ubuntu' } },
+    { ...persisted(id, 1), kind: 'future-host', distro: { name: 'Ubuntu' } },
     { id, name: 'Broken', endpoints: 'not-an-array' },
     { name: 'no id', kind: 'future' },
     'not-an-object',
@@ -183,7 +183,7 @@ describe('runtime environment store under interleaved writers and unreadable rec
           if (entry !== undefined && !(target.id in unreadableEntries)) {
             foreignEntries[target.id] = entry
           }
-          appendRaw({ ...target, kind: 'wsl-distro' })
+          appendRaw({ ...target, kind: 'future-host' })
         }
       } else if (op === 5) {
         const id = pick([...readable.keys(), `orphan-${nextId++}`])!

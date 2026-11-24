@@ -8,7 +8,6 @@ import { MobilePairingConnectionOptions } from '../settings/MobilePairingConnect
 import { MobileRelayBetaNotice } from '../settings/MobileRelayBetaNotice'
 import { MachineNameField } from '../settings/MachineNameField'
 import { MobileRelayMintFailureNotice } from './mobile-relay-mint-failure-notice'
-import { WindowsFirewallNotice } from './WindowsFirewallNotice'
 import type { MobilePairingConnectionMode } from '../../../../shared/mobile-pairing-connection-mode'
 import type { MobileRelayMintFailure } from '../../../../shared/mobile-relay-mint-failure'
 import { translate } from '@/i18n/i18n'
@@ -332,12 +331,6 @@ export function MobileHeroPairingStep({
             {translate('auto.components.mobile.MobileHero.010dddcf27', 'Copy pairing code')}
           </button>
         </div>
-        <WindowsFirewallNotice
-          pairingReady={pairQrDataUrl != null}
-          address={selectedAddress}
-          usingRelay={usingRelay}
-          className="mt-3"
-        />
       </div>
     </div>
   )

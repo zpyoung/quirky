@@ -26,26 +26,6 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock
 }))
 
-vi.mock('../pwsh', () => ({
-  isPwshAvailable: isPwshAvailableMock
-}))
-
-// Resolve PowerShell family names to deterministic absolute paths so these
-// tests run on non-Windows CI. The real resolver (which skips the Store App
-// Execution Alias stub) is exercised in windows-powershell-executable.test.ts.
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('../providers/windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('../providers/local-pty-utils', async (importOriginal) => {
   const actual = await importOriginal<typeof LocalPtyUtils>()
   return {
@@ -66,18 +46,8 @@ vi.mock('../providers/agent-foreground-process', () => ({
   }
 }))
 
-// Console-membership reads run a real node-pty fork that never settles under
-// fake timers; default to "shell-only" so the degraded-scan guard falls through
-// to its existing retirement logic (the degraded-scan behavior itself is
-// covered in pty-subprocess-foreground-degraded-scan.test.ts).
-vi.mock('../providers/windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: () => new Set([12345]),
-  isWindowsPtyJobReadable: () => true
-}))
-
 import { createPtySubprocess } from './pty-subprocess'
 import { mockPtyProcess, useDaemonPtySubprocessEnv } from './pty-subprocess-test-harness'
-import { __setConptyJobNativeForTests } from '../windows/windows-pty-job'
 
 describe('createPtySubprocess', () => {
   useDaemonPtySubprocessEnv({
@@ -317,21 +287,6 @@ describe('createPtySubprocess', () => {
       }
     })
 
-    it('DOES NOT neutralize proc.kill on Windows (WindowsTerminal.destroy needs kill)', async () => {
-      const proc = mockPtyProcess()
-      spawnMock.mockReturnValue(proc)
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      const originalKill = proc.kill
-      try {
-        await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        proc._simulateExit(0)
-        expect(proc.kill).toBe(originalKill)
-      } finally {
-        restorePlatform(origPlatform)
-      }
-    })
-
     it('dispose() neutralizes proc.kill on POSIX before calling destroy()', async () => {
       const proc = mockPtyProcess() as ReturnType<typeof mockPtyProcess> & {
         destroy: ReturnType<typeof vi.fn>
@@ -347,124 +302,6 @@ describe('createPtySubprocess', () => {
         expect(proc.kill).not.toBe(originalKill)
         expect(proc.destroy).toHaveBeenCalledOnce()
       } finally {
-        restorePlatform(origPlatform)
-      }
-    })
-
-    it('dispose() on Windows calls destroy() without neutralizing kill', async () => {
-      const proc = mockPtyProcess() as ReturnType<typeof mockPtyProcess> & {
-        destroy: ReturnType<typeof vi.fn>
-      }
-      proc.destroy = vi.fn()
-      spawnMock.mockReturnValue(proc)
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      const originalKill = proc.kill
-      try {
-        const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        handle.dispose()
-        expect(proc.kill).toBe(originalKill)
-        expect(proc.destroy).toHaveBeenCalledOnce()
-      } finally {
-        restorePlatform(origPlatform)
-      }
-    })
-
-    it('dispose() on Windows skips destroy after node-pty kill()', async () => {
-      const proc = mockPtyProcess() as ReturnType<typeof mockPtyProcess> & {
-        destroy: ReturnType<typeof vi.fn>
-      }
-      proc.destroy = vi.fn(() => proc.kill())
-      spawnMock.mockReturnValue(proc)
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      try {
-        const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        handle.kill()
-        handle.dispose()
-        expect(proc.kill).toHaveBeenCalledOnce()
-        expect(proc.destroy).not.toHaveBeenCalled()
-      } finally {
-        restorePlatform(origPlatform)
-      }
-    })
-
-    it('does not issue a second Windows ConPTY kill when force follows graceful kill', async () => {
-      const proc = mockPtyProcess(123456) as ReturnType<typeof mockPtyProcess> & {
-        destroy: ReturnType<typeof vi.fn>
-      }
-      proc.destroy = vi.fn(() => proc.kill())
-      spawnMock.mockReturnValue(proc)
-      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
-        throw new Error('already gone')
-      })
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      try {
-        const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        handle.kill()
-        handle.forceKill()
-        handle.dispose()
-
-        expect(proc.kill).toHaveBeenCalledOnce()
-        expect(killSpy).not.toHaveBeenCalled()
-        expect(proc.destroy).not.toHaveBeenCalled()
-      } finally {
-        killSpy.mockRestore()
-        restorePlatform(origPlatform)
-      }
-    })
-
-    it('forceKill after a Windows kill() escalates to the job instead of giving up', async () => {
-      // Why: skipping the second native kill is right (it double-closes ConPTY),
-      // but it made forceKill a permanent no-op, so a wedged ConPTY -- which
-      // never fires onExit -- could not be escalated at all (#9854). The job
-      // terminates the tree without touching the handle node-pty owns.
-      const terminateJob = vi.fn().mockReturnValue(true)
-      __setConptyJobNativeForTests(() => ({
-        terminateJob,
-        listJobProcessIds: vi.fn(),
-        assignCurrentProcessToJob: vi.fn().mockReturnValue(true)
-      }))
-      const proc = mockPtyProcess(123456) as ReturnType<typeof mockPtyProcess> & { _pty: number }
-      proc._pty = 11
-      spawnMock.mockReturnValue(proc)
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      try {
-        const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        handle.kill()
-        handle.forceKill()
-
-        expect(terminateJob).toHaveBeenCalledWith(11, 123456)
-        // Still exactly one native kill: the escalation must not double-close.
-        expect(proc.kill).toHaveBeenCalledOnce()
-      } finally {
-        __setConptyJobNativeForTests()
-        restorePlatform(origPlatform)
-      }
-    })
-
-    it('dispose() on Windows skips destroy after forceKill falls back to node-pty kill()', async () => {
-      const proc = mockPtyProcess(123456) as ReturnType<typeof mockPtyProcess> & {
-        destroy: ReturnType<typeof vi.fn>
-      }
-      proc.destroy = vi.fn(() => proc.kill())
-      spawnMock.mockReturnValue(proc)
-      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
-        throw new Error('already gone')
-      })
-      const origPlatform = Object.getOwnPropertyDescriptor(process, 'platform')
-      Object.defineProperty(process, 'platform', { value: 'win32' })
-      try {
-        const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
-        handle.forceKill()
-        handle.dispose()
-        expect(killSpy).toHaveBeenCalledWith(123456, 'SIGKILL')
-        expect(proc.kill).toHaveBeenCalledOnce()
-        expect(proc.destroy).not.toHaveBeenCalled()
-      } finally {
-        killSpy.mockRestore()
         restorePlatform(origPlatform)
       }
     })

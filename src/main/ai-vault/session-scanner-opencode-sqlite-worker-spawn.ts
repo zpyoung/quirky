@@ -1,4 +1,3 @@
-import { aiVaultScopePathsForWslDistro } from '../../shared/ai-vault-scope-cwd-match'
 import { recordSessionScanIssue } from './session-scan-issues'
 import { existsSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
@@ -7,18 +6,9 @@ import { throwIfSignalAborted } from '../../shared/abort-signal-reason'
 import { openCodeTranscriptPageLimit } from '../../shared/opencode-transcript-page-limit'
 import type { SessionFileCandidate } from './session-scanner-types'
 import type { OpenCodeSqliteCaptureValue } from './session-scanner-opencode-sqlite-worker-protocol'
+import { splitOpenCodeSqliteCandidate } from './session-scanner-opencode-sqlite-paths'
 import { OpenCodeSqliteWorkerClient } from './session-scanner-opencode-sqlite-worker-client'
-import {
-  buildOpenCodeSqliteCandidatePath,
-  splitOpenCodeSqliteCandidate
-} from './session-scanner-opencode-sqlite-paths'
-import {
-  mapOpenCodeWslSession,
-  openCodeWslClient,
-  openCodeWslPath
-} from './session-scanner-opencode-wsl-client'
 import { findForeignSqliteReaderEntry } from '../foreign-sqlite-readers/foreign-sqlite-reader-entry-path'
-import { runOpenCodeSqliteScanRequest } from './session-scanner-opencode-sqlite-scan-scope'
 import { noteAiVaultScanDatabases, openAiVaultScanSource } from './ai-vault-scan-progress'
 
 // Why: resolve the built worker entry + own the process-wide shared client so
@@ -176,133 +166,21 @@ async function listCandidatesForHost(
   args: Parameters<OpenCodeSqliteWorkerClient['list']>[0]
 ): Promise<SessionFileCandidate[]> {
   throwIfSignalAborted(args.signal)
-  const native: string[] = []
-  const groups = new Map<string, { distro: string; paths: Map<string, string> }>()
-  for (const path of args.dbPaths) {
-    const wsl = openCodeWslPath(path)
-    if (!wsl) {
-      native.push(path)
-      continue
-    }
-    const key = wsl.distro.toLowerCase()
-    const group = groups.get(key) ?? {
-      distro: wsl.distro,
-      paths: new Map<string, string>()
-    }
-    group.paths.set(wsl.linuxPath, path)
-    groups.set(key, group)
-  }
-  const candidates = await Promise.all([
-    native.length ? getSharedClient().list({ ...args, dbPaths: native }) : Promise.resolve([]),
-    ...[...groups.values()].map(async ({ distro, paths }) => {
-      const scopePaths = args.scopePaths?.length
-        ? aiVaultScopePathsForWslDistro(args.scopePaths, distro)
-        : args.scopePaths
-      if (args.scopePaths?.length && scopePaths?.length === 0) {
-        return []
-      }
-      const first = paths.values().next().value!
-      const issues: AiVaultScanIssue[] = []
-      try {
-        const result = await runOpenCodeSqliteScanRequest(
-          args.signal,
-          async (signal) => {
-            const client = await openCodeWslClient(distro, first, signal)
-            return client.list({
-              ...args,
-              signal,
-              dbPaths: [...paths.keys()],
-              scopePaths,
-              issues
-            })
-          },
-          args.agent
-        )
-        return result.flatMap((candidate) => {
-          const parsed = splitOpenCodeSqliteCandidate(candidate.file.path, args.agent)
-          const original = parsed && paths.get(parsed.dbPath)
-          return parsed && original
-            ? [
-                {
-                  ...candidate,
-                  file: {
-                    ...candidate.file,
-                    path: buildOpenCodeSqliteCandidatePath(original, parsed.sessionId)
-                  }
-                }
-              ]
-            : []
-        })
-      } catch (error) {
-        throwIfSignalAborted(args.signal)
-        issues.push({
-          agent: args.agent ?? 'opencode',
-          kind: 'scope',
-          path: first,
-          message: error instanceof Error ? error.message : String(error)
-        })
-        return []
-      } finally {
-        args.issues.push(
-          ...issues.map((issue) => ({
-            ...issue,
-            path: paths.get(issue.path) ?? issue.path
-          }))
-        )
-      }
-    })
-  ])
+  const candidates = await getSharedClient().list(args)
   throwIfSignalAborted(args.signal)
-  return candidates.flat().sort((a, b) => b.file.mtimeMs - a.file.mtimeMs)
+  return candidates.sort((a, b) => b.file.mtimeMs - a.file.mtimeMs)
 }
 
 async function parseForHost(
   args: Parameters<OpenCodeSqliteWorkerClient['parse']>[0]
 ): Promise<AiVaultSession | null> {
-  const wsl = openCodeWslPath(args.dbPath)
-  if (!wsl) {
-    return getSharedClient().parse(args)
-  }
-  const session = await runOpenCodeSqliteScanRequest(
-    args.signal,
-    async (signal) => {
-      const client = await openCodeWslClient(wsl.distro, args.dbPath, signal)
-      return client.parse({
-        ...args,
-        signal,
-        dbPath: wsl.linuxPath,
-        platform: 'linux'
-      })
-    },
-    args.agent
-  )
-  return mapOpenCodeWslSession(session, args.dbPath)
+  return getSharedClient().parse(args)
 }
 
 async function captureForHost(
   args: Parameters<OpenCodeSqliteWorkerClient['capture']>[0]
 ): Promise<OpenCodeSqliteCaptureValue> {
-  const wsl = openCodeWslPath(args.dbPath)
-  if (!wsl) {
-    return getSharedClient().capture(args)
-  }
-  const capture = await runOpenCodeSqliteScanRequest(
-    args.signal,
-    async (signal) => {
-      const client = await openCodeWslClient(wsl.distro, args.dbPath, signal)
-      return client.capture({
-        ...args,
-        signal,
-        dbPath: wsl.linuxPath,
-        platform: 'linux'
-      })
-    },
-    args.agent
-  )
-  return {
-    ...capture,
-    session: mapOpenCodeWslSession(capture.session, args.dbPath)
-  }
+  return getSharedClient().capture(args)
 }
 
 export async function readOpenCodeTranscriptPageViaWorker(
@@ -315,13 +193,12 @@ export async function readOpenCodeTranscriptPageViaWorker(
   },
   signal?: AbortSignal
 ) {
-  const wsl = openCodeWslPath(args.dbPath)
-  const client = wsl ? await openCodeWslClient(wsl.distro, args.dbPath, signal) : getSharedClient()
+  const client = getSharedClient()
   const value = await client.readNativeChat(
     {
       ...args,
       limit: openCodeTranscriptPageLimit(args.limit),
-      dbPath: wsl?.linuxPath ?? args.dbPath,
+      dbPath: args.dbPath,
       kind: 'native-page'
     },
     signal
@@ -340,10 +217,9 @@ export async function readOpenCodeTranscriptSignalViaWorker(
   },
   signal?: AbortSignal
 ) {
-  const wsl = openCodeWslPath(args.dbPath)
-  const client = wsl ? await openCodeWslClient(wsl.distro, args.dbPath, signal) : getSharedClient()
+  const client = getSharedClient()
   const value = await client.readNativeChat(
-    { ...args, dbPath: wsl?.linuxPath ?? args.dbPath, kind: 'native-signal' },
+    { ...args, dbPath: args.dbPath, kind: 'native-signal' },
     signal
   )
   if (value !== null && !('messageCount' in value)) {

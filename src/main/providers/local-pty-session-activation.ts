@@ -33,7 +33,6 @@ import {
   ptyTerminalHandle,
   ptyTerminationMode,
   ptyWorktreeId,
-  ptyWslDistroById,
   startupIngressByPty
 } from './local-pty-provider-state'
 import { createLocalPtyShellReadinessSession } from './local-pty-shell-readiness-session'
@@ -50,16 +49,12 @@ export function activateLocalPtySession(args: {
   env: Record<string, string>
   proc: pty.IPty
   reportsChildExitStatus: boolean
-  spawnedWslDistro: string | null | undefined
 }): PtySpawnResult {
-  const { id, incarnationId, spawn, getOptions, plan, env, proc, spawnedWslDistro } = args
+  const { id, incarnationId, spawn, getOptions, plan, env, proc } = args
   createPtyPhysicalExit(id)
   ptyReportsChildExitStatus.set(id, args.reportsChildExitStatus)
   ptyProcesses.set(id, proc)
   ptyInitialCwd.set(id, plan.cwd)
-  if (spawnedWslDistro !== undefined) {
-    ptyWslDistroById.set(id, spawnedWslDistro)
-  }
   // Why both: launchAgent is explicit intent that survives command rewrites; recognition catches bare agent command lines.
   if (spawn.launchAgent || plan.startupAgentRecognition) {
     ptyAgentSessionIds.add(id)
@@ -104,8 +99,7 @@ export function activateLocalPtySession(args: {
     ...(spawn.startupIngress ? { intent: spawn.startupIngress } : {}),
     ownerBackend: resolvePtyOwnerBackend({
       platform: process.platform,
-      shellPath: plan.shellPath,
-      wslDistro: spawnedWslDistro
+      shellPath: plan.shellPath
     }),
     write: (data) => proc.write(data),
     onEmission: emitIngressData
@@ -218,7 +212,6 @@ export function activateLocalPtySession(args: {
     id,
     incarnationId,
     pid,
-    ...(exitedBeforeSpawnReply ? { exitedBeforeSpawnReply: true } : {}),
-    ...(spawnedWslDistro !== undefined ? { wslDistro: spawnedWslDistro } : {})
+    ...(exitedBeforeSpawnReply ? { exitedBeforeSpawnReply: true } : {})
   }
 }

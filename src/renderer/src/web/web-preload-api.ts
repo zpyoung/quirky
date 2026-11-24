@@ -137,15 +137,6 @@ function createWebPreloadApi(): Partial<PreloadApi> {
     skills: createSkillsApi(),
     pty: createPtyApi(),
     ssh: createSshApi(),
-    wsl: {
-      isAvailable: () => callRuntimeResult<boolean>('host.wsl.isAvailable').catch(() => false),
-      listDistros: () => callRuntimeResult<string[]>('host.wsl.listDistros').catch(() => [])
-    },
-    // Desktop-only: a web client never owns a WSL move's desktop stores.
-    wslMove: {
-      listPendingRendererRewrites: () => Promise.resolve([]),
-      recordStoreRewritten: () => Promise.resolve({ recorded: false, reason: 'gated-off' })
-    },
     pwsh: {
       isAvailable: () => callRuntimeResult<boolean>('host.pwsh.isAvailable').catch(() => false)
     },

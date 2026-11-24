@@ -62,7 +62,6 @@ import { STRUCTURED_AGENT_SESSION_VISUAL_METHODS } from './structured-agent-sess
 import { STRUCTURED_AGENT_SESSION_AGENTS_METHODS } from './structured-agent-session-agents'
 import { MANAGED_RUNTIME_INSTALL_METHODS } from './managed-runtime-install'
 import { LEDGER_METHODS } from './ledger'
-import { AGENT_HOOK_METHODS } from './agent-hooks'
 import { AGENT_LAUNCH_METHODS } from './agent-launch'
 import { ASK_METHODS } from './fork-ask-question-tool/ask'
 import { HEIMDALL_METHODS } from './fork-heimdall/heimdall'
@@ -82,7 +81,6 @@ export const ALL_RPC_METHODS = [
   ...STATUS_METHODS,
   ...ORCAD_TERMINAL_CENSUS_METHODS,
   ...ORCAD_MIGRATION_METHODS,
-  ...AGENT_HOOK_METHODS,
   ...AI_VAULT_METHODS,
   ...LEDGER_METHODS,
   ...ASK_METHODS,

@@ -31,7 +31,6 @@ import {
   openCodeTuiPluginDirName,
   writeOpenCodeTuiPlugin
 } from '../../shared/opencode-tui-plugin-install'
-import { writeLegacyOpenCodePluginWithAclRetry } from './legacy-plugin-acl-retry'
 import {
   OPENCODE_OVERLAY_DIR,
   ORCA_OPENCODE_PLUGIN_FILE,
@@ -176,14 +175,9 @@ export class OpenCodeHookService {
       const source = this.pluginSource()
       const installed = readFileSync(pluginPath, 'utf8')
       // Why: a TUI or service still loading this dir needs the TUI copy too, or the service keeps reporting under its starter pane.
-      writeLegacyOpenCodePluginWithAclRetry(
-        join(pluginsDir, openCodeTuiPluginDirName(this.pluginFileName), 'tui.js'),
-        () => this.writeTuiPlugin(pluginsDir, source)
-      )
+      this.writeTuiPlugin(pluginsDir, source)
       if (installed !== source) {
-        writeLegacyOpenCodePluginWithAclRetry(pluginPath, () =>
-          writeCanonicalOpenCodePluginAtomically(pluginPath, source)
-        )
+        writeCanonicalOpenCodePluginAtomically(pluginPath, source)
       }
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {

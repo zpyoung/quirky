@@ -8,7 +8,6 @@ import { beginSshShutdown } from '../ipc/ssh/ssh-shutdown-drain'
 import { beginHeimdallShutdown } from '../fork-heimdall/kernel-shutdown'
 import { beginLoopsShutdown } from '../fork-loops/loops-shutdown'
 import { agentHookServer } from '../agent-hooks/server'
-import { wslHookRelayManager } from '../agent-hooks/wsl-hook-relay-manager'
 import { removeManagedAgentHooksAsync } from '../agent-hooks/managed-agent-hook-controls'
 import { stopStructuredAgentSessionRuntime } from '../runtime/structured-agent-session-runtime'
 import { setStructuredAgentSessionTeardownTrigger } from '../runtime/structured-agent-session-runtime-teardown'
@@ -187,8 +186,6 @@ function installWillQuitHandler(): void {
             }
           })
         : Promise.resolve()
-    // Why: cancels relay restart/reinstall timers and kills wsl.exe children deterministically, not via stdio-pipe teardown.
-    wslHookRelayManager.disposeAll()
     const statsFlush = state.stats?.flushAsync() ?? Promise.resolve()
     // Why: agent-browser daemon processes would otherwise linger after quit, holding ports and stale session state on disk.
     // Why the barrier below: each session's close is its own agent-browser child taking hundreds of ms,

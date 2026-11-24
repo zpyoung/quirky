@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   probeDaemonProcessIdentity,
-  WINDOWS_CREATION_TIME_TOLERANCE_MS,
   type DaemonProcessProbeDependencies,
   type ExactDaemonIncarnation
 } from './daemon-incarnation-evidence'
@@ -139,92 +138,6 @@ describe('daemon process identity evidence', () => {
     await expect(
       probeDaemonProcessIdentity(null, endpoint, linuxDependencies())
     ).resolves.toMatchObject({ state: 'unknown', reason: 'exact_identity_unavailable' })
-  })
-
-  it('uses Windows CreationDate as the primary identity regardless of command line', async () => {
-    const base = {
-      platform: 'win32' as const,
-      signalProcess: () => 'occupied' as const
-    }
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        ...base,
-        queryWindowsProcess: async () => ({
-          status: 'present',
-          commandLine: 'unreadable',
-          startedAtMs:
-            exactIncarnation.identity.startedAtMs + WINDOWS_CREATION_TIME_TOLERANCE_MS + 1
-        })
-      })
-    ).resolves.toMatchObject({
-      state: 'gone',
-      reason: 'windows_creation_time_mismatch'
-    })
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        ...base,
-        queryWindowsProcess: async () => ({
-          status: 'present',
-          commandLine: null,
-          startedAtMs: exactIncarnation.identity.startedAtMs
-        })
-      })
-    ).resolves.toMatchObject({
-      state: 'present',
-      reason: 'windows_identity_match'
-    })
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        ...base,
-        queryWindowsProcess: async () => ({
-          status: 'present',
-          commandLine: 'unrelated process',
-          startedAtMs: exactIncarnation.identity.startedAtMs
-        })
-      })
-    ).resolves.toMatchObject({
-      state: 'present',
-      reason: 'windows_identity_match'
-    })
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        ...base,
-        queryWindowsProcess: async () => ({
-          status: 'present',
-          commandLine: 'node daemon-entry',
-          startedAtMs: null
-        })
-      })
-    ).resolves.toMatchObject({
-      state: 'unknown',
-      reason: 'windows_process_start_time_unavailable'
-    })
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        ...base,
-        queryWindowsProcess: async () => ({ status: 'missing' })
-      })
-    ).resolves.toMatchObject({
-      state: 'gone',
-      reason: 'windows_process_missing'
-    })
-  })
-
-  it('requires Windows CIM evidence even when signal-zero reports a missing pid', async () => {
-    await expect(
-      probeDaemonProcessIdentity(exactIncarnation, endpoint, {
-        platform: 'win32',
-        signalProcess: () => 'missing',
-        queryWindowsProcess: async () => ({
-          status: 'present',
-          commandLine: null,
-          startedAtMs: exactIncarnation.identity.startedAtMs
-        })
-      })
-    ).resolves.toMatchObject({
-      state: 'present',
-      reason: 'windows_identity_match'
-    })
   })
 
   it('keeps a macOS lstart mismatch unknown', async () => {

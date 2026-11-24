@@ -1,11 +1,6 @@
 import { tmpdir } from 'node:os'
 import { basename, join, win32 as pathWin32 } from 'node:path'
 import { statSync } from 'node:fs'
-import {
-  encodePowerShellCommand,
-  getPowerShellOsc133Bootstrap,
-  isPowerShellExecutableName
-} from '../powershell-osc133-bootstrap'
 import { getFishCodexShellLaunchPreflight } from '../../shared/codex-shell-function'
 import { getFishClaudeShellFunction } from '../../shared/claude-shell-function'
 import { getFishXdgDataDirsLaunchEnv } from '../fish-xdg-data-dirs-handoff'
@@ -97,9 +92,6 @@ function ensureShellReadyWrappers(): boolean {
 }
 
 export function resolvePtyShellPath(env: Record<string, string>): string {
-  if (process.platform === 'win32') {
-    return env.ORCA_TERMINAL_WINDOWS_SHELL || 'powershell.exe'
-  }
   return env.SHELL || process.env.SHELL || '/bin/zsh'
 }
 
@@ -179,20 +171,6 @@ export function getShellLaunchConfig(
         [SHELL_STARTUP_FEATURE_ENV]: encodeShellStartupFeatures(features)
       },
       supportsReadyMarker: features.includes('ready')
-    }
-  }
-
-  if (isPowerShellExecutableName(shellName)) {
-    return {
-      args: [
-        '-NoLogo',
-        '-NoExit',
-        // Why base64 and not -Command: see powershell-osc133-bootstrap.ts (MDE review).
-        '-EncodedCommand',
-        encodePowerShellCommand(getPowerShellOsc133Bootstrap())
-      ],
-      env: {},
-      supportsReadyMarker: false
     }
   }
 

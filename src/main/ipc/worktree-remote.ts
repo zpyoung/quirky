@@ -1042,7 +1042,7 @@ async function performLocalWorktreeCreate(
   )
   const localGitExecOptions = getLocalProjectGitExecOptions(store, repo)
   const localWorktreeGitOptions = getLocalProjectWorktreeGitOptions(store, repo)
-  timing.recordExecutionHost(localWorktreeCreateExecutionHost(localGitExecOptions))
+  timing.recordExecutionHost(localWorktreeCreateExecutionHost())
   const hasLocalWorktreeGitOptions = Object.keys(localWorktreeGitOptions).length > 0
   const localWorktreeGitOptionArgs: [] | [{ wslDistro?: string }] = hasLocalWorktreeGitOptions
     ? [localWorktreeGitOptions]

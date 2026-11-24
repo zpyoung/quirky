@@ -6,7 +6,6 @@ import { existsSync, statSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { release } from 'node:os'
 import { isWslUncPath, uncRouteKey } from '../../shared/wsl-paths'
-import { wslUncDirectoryExistsAsync } from '../wsl'
 import { PrioritySemaphore } from '../../shared/priority-semaphore'
 
 const pendingWorkingDirectoryValidations = new Map<string, Promise<void>>()
@@ -148,19 +147,6 @@ function validateWorkingDirectoryUncached(cwd: string): Promise<void> {
 }
 
 async function probeWorkingDirectory(cwd: string): Promise<void> {
-  // Why: Win32 stat against the WSL 9P share (\\wsl.localhost\...) can falsely
-  // report ENOENT for directories that exist on the Linux side. Ask the distro
-  // itself; only fall back to the fs check when wsl.exe is inconclusive.
-  if (isWslUncPath(cwd)) {
-    const existsInDistro = await wslUncDirectoryExistsAsync(cwd)
-    if (existsInDistro === false) {
-      throwMissingWorkingDirectory(cwd)
-    }
-    if (existsInDistro === true) {
-      return
-    }
-  }
-
   let stats: Awaited<ReturnType<typeof stat>>
   try {
     stats = await stat(cwd)

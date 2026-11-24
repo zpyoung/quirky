@@ -179,13 +179,8 @@ async function subscribeWhileRemovalAllowed(
     addInFlightLocalInstallListener(cancelToken, listener)
   }
   addInFlightLocalInstallListener(cancelToken, sender)
-  const installPromise = installLocalWatcher(
-    rootKey,
-    rootPath,
-    worktreePath,
-    cancelToken,
-    (listeners) =>
-      scheduleLocalCapacityRetry(rootKey, worktreePath, listeners, subscribeLocalWatcher)
+  const installPromise = installLocalWatcher(rootKey, rootPath, cancelToken, (listeners) =>
+    scheduleLocalCapacityRetry(rootKey, worktreePath, listeners, subscribeLocalWatcher)
   )
   watcherLifecycleState.pendingLocalInstallPromises.set(rootKey, installPromise)
   try {

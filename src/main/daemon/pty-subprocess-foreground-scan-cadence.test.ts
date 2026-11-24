@@ -21,25 +21,6 @@ vi.mock('node-pty', () => ({
   spawn: spawnMock
 }))
 
-vi.mock('../pwsh', () => ({
-  isPwshAvailable: isPwshAvailableMock
-}))
-
-// Resolve PowerShell family names to deterministic absolute paths so these
-// tests run on non-Windows CI (mirrors pty-subprocess.test.ts).
-const PWSH7_ABS = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe'
-const WINDOWS_POWERSHELL_ABS = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-const CMD_ABS = 'C:\\Windows\\System32\\cmd.exe'
-vi.mock('../providers/windows-powershell-executable', () => ({
-  resolveWindowsPowerShellExecutablePath: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe' ? PWSH7_ABS : WINDOWS_POWERSHELL_ABS,
-  resolveWindowsPowerShellSpawnChain: (family: 'pwsh.exe' | 'powershell.exe') =>
-    family === 'pwsh.exe'
-      ? [PWSH7_ABS, WINDOWS_POWERSHELL_ABS, CMD_ABS]
-      : [WINDOWS_POWERSHELL_ABS, CMD_ABS],
-  getWindowsCmdPath: () => CMD_ABS
-}))
-
 vi.mock('../providers/local-pty-utils', async (importOriginal) => {
   const actual = await importOriginal<typeof LocalPtyUtils>()
   return {
@@ -138,41 +119,6 @@ describe('daemon pty foreground scan cadence', () => {
     const handle = await createPtySubprocess({ sessionId: 'test', cols: 80, rows: 24 })
     return { proc, handle }
   }
-
-  it('bounds scans for an idle Windows shell polled every 2s to the 15s retry tier', async () => {
-    resolveAgentForegroundProcessMock.mockResolvedValue('powershell.exe')
-    const { handle } = await spawnShellSubprocess('powershell.exe', 'win32')
-
-    for (let atMs = 0; atMs <= 60_000; atMs += 2_000) {
-      expect(await readForegroundAt(handle, atMs)).toBe('powershell.exe')
-    }
-
-    // Scans at t=0s, 16s, 32s, 48s. Pre-fix (5s retry) the same 31 reads drove
-    // 11 whole-table scans; the 2s read cadence itself would drive 31.
-    expect(resolveAgentForegroundProcessMock).toHaveBeenCalledTimes(4)
-  })
-
-  it('re-arms the fast retry when PTY output appears on an idle Windows shell', async () => {
-    resolveAgentForegroundProcessMock.mockResolvedValueOnce('powershell.exe')
-    const { proc, handle } = await spawnShellSubprocess('powershell.exe', 'win32')
-
-    await readForegroundAt(handle, 0)
-    await readForegroundAt(handle, 2_000)
-    await readForegroundAt(handle, 4_000)
-    await readForegroundAt(handle, 6_000)
-    // Idle: only the t=0 scan ran (6s is within the relaxed 15s retry).
-    expect(resolveAgentForegroundProcessMock).toHaveBeenCalledTimes(1)
-
-    // The user launches an agent; its startup output re-arms the 5s retry.
-    resolveAgentForegroundProcessMock.mockResolvedValue('claude')
-    vi.setSystemTime(BASE_TIME_MS + 6_500)
-    proc._simulateData('claude\r\n')
-
-    await readForegroundAt(handle, 8_000)
-    expect(resolveAgentForegroundProcessMock).toHaveBeenCalledTimes(2)
-    // The resolved identity is served from the cache on the next read.
-    expect(await readForegroundAt(handle, 8_500)).toBe('claude')
-  })
 
   it('keeps the fast identity refresh for a Windows session with a cached agent', async () => {
     resolveAgentForegroundProcessMock.mockResolvedValue('codex')

@@ -1,7 +1,6 @@
 import { writeMainThreadDiagnosticMarker } from '../diagnostics/main-thread-churn-probe'
 import { isWindowsSignatureCheckUnavailableFailure } from '../../shared/updater-windows-signature-check'
 import { recordUpdaterLifecycle } from '../updater-lifecycle-diagnostics'
-import { getRetainedLinuxPackageManualInstallStatus } from '../linux-package-downloaded-status'
 import type { UpdateCheckOptions, UpdateStatus } from '../../shared/update-status-types'
 import type { UpdateCheckVariant } from './updater-types'
 import { UpdaterStatus } from './updater-status'
@@ -278,15 +277,8 @@ export abstract class UpdaterCheckState extends UpdaterStatus {
     this.sendStatus({ state: 'error', message, userInitiated })
   }
 
-  /**
-   * Settles a check without discarding a retained manual-install card. A distro-managed host has a
-   * downloaded package it can still be told about, and the ordinary settle status would erase it.
-   */
   protected sendSettledCheckStatus(status: UpdateStatus): void {
-    const retainedStatus = getRetainedLinuxPackageManualInstallStatus()
-    if (retainedStatus) {
-      this.sendStatus(retainedStatus)
-    } else if (status.state === 'error') {
+    if (status.state === 'error') {
       this.sendErrorStatus(status.message, status.userInitiated)
     } else {
       this.sendStatus(status)

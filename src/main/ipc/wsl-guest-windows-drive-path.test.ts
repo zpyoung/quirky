@@ -7,7 +7,6 @@ import {
   withoutWindowsDriveMountDirs
 } from './wsl-guest-windows-drive-path'
 import { buildLocalPreflightEnv } from './preflight-local-env'
-import { getPreflightWslTarget } from './preflight-runtime-target'
 
 // Captured from Ubuntu 24.04 on WSL 2.7.10 (trimmed).
 const WSL2_PROC_MOUNTS = [
@@ -78,9 +77,4 @@ describe('Windows drive dirs on a WSL guest PATH', () => {
       }
     }
   )
-
-  it('never treats orcad inside the guest as a WSL preflight context', () => {
-    expect(getPreflightWslTarget({ wslDistro: 'Ubuntu' }, 'linux')).toBeNull()
-    expect(getPreflightWslTarget({ wslDefault: true }, 'linux')).toBeNull()
-  })
 })

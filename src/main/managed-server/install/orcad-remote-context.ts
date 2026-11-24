@@ -5,11 +5,7 @@ import type { OrcadActivationRecord } from '../activation/orcad-activation-recor
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
 import { resolveOrcadRuntimeTarget } from '../lifecycle/orcad-runtime-target'
 import { prepareWindowsOrcadHost } from '../host-state/orcad-windows-host-preparation'
-import {
-  isWslOrcadHostTarget,
-  type OrcadHostTarget,
-  type OrcadHostTransport
-} from '../../ssh/orcad-host-transport'
+import type { OrcadHostTarget, OrcadHostTransport } from '../../ssh/orcad-host-transport'
 import {
   decideOrcadMachineHome,
   orcadMachineDataRoot,
@@ -63,18 +59,13 @@ export async function resolveOrcadRemoteContext<Target extends OrcadHostTarget =
     throw new OrcadHostUnsupportedError('Orca’s server doesn’t support this SSH host’s platform.')
   }
   const remote = { conn: connection, host, signal }
-  const { orcadHome: remoteHome, userDataDir } = await resolveOrcadMachineHome(
-    remote,
-    !isWslOrcadHostTarget(target)
-  )
+  const { orcadHome: remoteHome, userDataDir } = await resolveOrcadMachineHome(remote, true)
   const serverTarget = await resolveOrcadRuntimeTarget({
     conn: connection,
     host,
     signal
   })
-  if (!isWslOrcadHostTarget(target)) {
-    rememberSshHostPlatform(target.id, host, serverTarget)
-  }
+  rememberSshHostPlatform(target.id, host, serverTarget)
   if (isWindowsRemoteHost(host)) {
     // Every Windows host op, the activation record read included, runs on the pinned node.exe.
     await prepareWindowsOrcadHost({

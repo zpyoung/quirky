@@ -13,10 +13,6 @@ const getLocalGitOptionsForRegisteredWorktreeMock = vi.hoisted(() => vi.fn())
 vi.mock('electron', async () => (await import('./filesystem-test-harness')).electronMock)
 vi.mock('fs/promises', async () => (await import('./filesystem-test-harness')).fsPromisesMock)
 vi.mock(
-  '../wsl-unc-delete',
-  async () => (await import('./filesystem-test-harness')).wslUncDeleteMock
-)
-vi.mock(
   '../crash-reporting/crash-breadcrumb-store',
   async () => (await import('./filesystem-test-harness')).crashBreadcrumbMock
 )

@@ -1,5 +1,4 @@
 import type {
-  LinuxPackageInstallInstructions,
   ReleaseBuildListResult,
   UpdateCheckOptions,
   UpdateStatus
@@ -13,10 +12,6 @@ export type UpdaterApi = {
   download: () => Promise<void>
   quitAndInstall: () => Promise<void>
   dismissAvailableUpdate: () => Promise<void>
-  /** Desktop-only. Rejects unless the current status carries `linux-package-install` recovery. */
-  getLinuxPackageInstallInstructions: () => Promise<LinuxPackageInstallInstructions>
-  /** Desktop-only. Reveals the revalidated cached package in the native file manager. */
-  showLinuxPackage: () => Promise<void>
   /** `force` bypasses the main-process list cache — the refresh button, not mount or channel switches. */
   listBuilds: (
     channel: ReleaseChannel,

@@ -48,6 +48,17 @@ function recordId(raw: unknown): string | undefined {
   return typeof raw.id === 'string' && raw.id.length > 0 ? raw.id : undefined
 }
 
+/** WSL host records carried over from builds that supported WSL are dropped, not preserved. */
+function isDroppedWslRecord(raw: unknown): boolean {
+  return (
+    typeof raw === 'object' &&
+    raw !== null &&
+    'kind' in raw &&
+    typeof raw.kind === 'string' &&
+    (raw.kind === 'wsl' || raw.kind.startsWith('wsl-'))
+  )
+}
+
 function parseRecord(raw: unknown): PersistedRuntimeEnvironment | undefined {
   // Why: a `kind` marks a record type this build predates; reading it as a plain pairing would
   // strip the kind and rewrite it as one.
@@ -85,6 +96,9 @@ export function readEnvironmentStoreRecords(
   }
   const result: EnvironmentStoreRecords = { environments: [], unreadable: [] }
   for (const raw of records) {
+    if (isDroppedWslRecord(raw)) {
+      continue
+    }
     const environment = parseRecord(raw)
     if (environment) {
       result.environments.push(environment)

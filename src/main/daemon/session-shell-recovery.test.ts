@@ -20,7 +20,6 @@ function createSubprocess() {
     kill: () => {},
     forceKill: () => {},
     signal: () => {},
-    terminateOwnedTree: () => 'unavailable' as const,
     onData(cb: (data: string) => void) {
       onData = cb
     },

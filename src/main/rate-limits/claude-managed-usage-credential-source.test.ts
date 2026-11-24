@@ -8,15 +8,13 @@ type CredentialSourceFixture = {
   readCredentials: ReturnType<typeof vi.fn>
   fetchUsage: ReturnType<typeof vi.fn>
   hostPreparation: ReturnType<typeof vi.fn>
-  wslPreparation: ReturnType<typeof vi.fn>
 }
 
 const fixture = vi.hoisted((): CredentialSourceFixture => ({
   source: 'credentials-file',
   readCredentials: vi.fn(),
   fetchUsage: vi.fn(),
-  hostPreparation: vi.fn(),
-  wslPreparation: vi.fn()
+  hostPreparation: vi.fn()
 }))
 
 vi.mock('./claude-oauth-credentials', async (importOriginal) => ({
@@ -24,11 +22,7 @@ vi.mock('./claude-oauth-credentials', async (importOriginal) => ({
   readClaudeOAuthCredentials: fixture.readCredentials
 }))
 vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
-  getClaudeProfileRouter: () => ({ accountUsagePreparation: fixture.hostPreparation }),
-  getClaudeWslProfileRouter: () => ({ accountUsagePreparation: fixture.wslPreparation })
-}))
-vi.mock('../wsl-running-path-filter', () => ({
-  filterPathsToRunningWslDistrosAsync: async (paths: readonly string[]) => [...paths]
+  getClaudeProfileRouter: () => ({ accountUsagePreparation: fixture.hostPreparation })
 }))
 vi.mock('./claude-oauth-usage-request', () => ({ fetchClaudeOAuthUsage: fixture.fetchUsage }))
 
@@ -53,22 +47,19 @@ afterEach(() => vi.restoreAllMocks())
 
 it.each([
   ['host', 'scoped-keychain'],
-  ['host', 'credentials-file'],
-  ['wsl', 'credentials-file']
+  ['host', 'credentials-file']
 ] as const)('keeps %s profile 429 metadata from %s', async (runtime, source) => {
   fixture.source = source
-  const provenance = runtime === 'wsl' ? 'wsl:SyntheticDistro:profile:A' : 'profile:A'
+  const provenance = 'profile:A'
   const preparation = {
     configDir,
     envPatch: { CLAUDE_CONFIG_DIR: configDir },
     provenance
   }
   fixture.hostPreparation.mockReturnValue(preparation)
-  fixture.wslPreparation.mockResolvedValue(preparation)
   const result = await fetchInactiveClaudeAccountUsage({
     id: 'A',
-    managedAuthRuntime: runtime,
-    wslDistro: runtime === 'wsl' ? 'SyntheticDistro' : null
+    managedAuthRuntime: runtime
   })
 
   expect(result.usageMetadata).toMatchObject({
@@ -83,11 +74,5 @@ it.each([
     unsuffixedKeychainFallback: false
   })
   expect(fixture.fetchUsage).toHaveBeenCalledWith('synthetic-token', undefined)
-  if (runtime === 'wsl') {
-    expect(fixture.wslPreparation).toHaveBeenCalledWith('SyntheticDistro', 'A')
-    expect(fixture.hostPreparation).not.toHaveBeenCalled()
-  } else {
-    expect(fixture.hostPreparation).toHaveBeenCalledWith('A')
-    expect(fixture.wslPreparation).not.toHaveBeenCalled()
-  }
+  expect(fixture.hostPreparation).toHaveBeenCalledWith('A')
 })

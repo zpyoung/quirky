@@ -27,10 +27,6 @@ vi.mock('./runtime-environment-request-connections', async (importOriginal) => (
   getRuntimeEnvironmentStatusOwner: () => ({ activate: vi.fn() }),
   closeRemoteRuntimeRequestConnection: vi.fn()
 }))
-vi.mock('./runtime-environment-host-service-ops', () => ({
-  connectThroughOwningService: vi.fn(async () => {}),
-  removeThroughOwningService: vi.fn()
-}))
 vi.mock('./runtime-environment-transport-routing', () => ({ callRuntimeEnvironment: vi.fn() }))
 vi.mock('./runtime-environment-status-probe', () => ({
   getRuntimeEnvironmentStatus: vi.fn(async () => ({ ok: true }))

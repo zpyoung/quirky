@@ -1,4 +1,3 @@
-import { addWslEnvKeys } from '../../wsl-env'
 import {
   buildGitSshPolicyEnv,
   GIT_SSH_CONFIG_ARGS,
@@ -15,8 +14,6 @@ import { acquireGitAdmission } from './git-subprocess-admission'
 export type { GitSshPolicyMode } from '../../../shared/git-ssh-policy-env'
 
 const CORE_SSH_COMMAND_PROBE_TIMEOUT_MS = 2500
-// Cold WSL starts and login rc files need the environment probe's startup budget.
-const WSL_CORE_SSH_COMMAND_PROBE_TIMEOUT_MS = 10_000
 
 export async function buildNetworkSshPolicyEnv(
   options: GitExecOptions,
@@ -30,10 +27,9 @@ export async function buildNetworkSshPolicyEnv(
     return { env: promptEnv, mode: 'explicit-env' }
   }
 
-  // A login-shell banner must not become a configured SSH command.
   const subcommandIndex = findGitSubcommandIndex(args)
   const probeArgs = [...args.slice(0, Math.max(0, subcommandIndex)), ...GIT_SSH_CONFIG_ARGS]
-  const resolved = resolveGitCommand(probeArgs, options, true, true)
+  const resolved = resolveGitCommand(probeArgs, options)
   const grant = await acquireGitAdmission({
     args: probeArgs,
     cwd: options.cwd,
@@ -53,14 +49,13 @@ export async function buildNetworkSshPolicyEnv(
       maxBuffer: DEFAULT_GIT_MAX_BUFFER,
       timeout: Math.min(
         options.timeout && options.timeout > 0 ? options.timeout : Infinity,
-        resolved.wsl ? WSL_CORE_SSH_COMMAND_PROBE_TIMEOUT_MS : CORE_SSH_COMMAND_PROBE_TIMEOUT_MS
+        CORE_SSH_COMMAND_PROBE_TIMEOUT_MS
       ),
       env: promptEnv,
       signal: options.signal,
       onChildTerminated: reportTerminated
     })
-    const payload = resolved.captured?.readStdout(String(stdout)) ?? String(stdout)
-    configured = parseGitSshConfig(payload)
+    configured = parseGitSshConfig(String(stdout))
   } catch (error) {
     if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 1) {
       throw error
@@ -69,9 +64,5 @@ export async function buildNetworkSshPolicyEnv(
     void terminated.then(grant.release)
   }
 
-  const policy = buildGitSshPolicyEnv(promptEnv, configured.command, configured.variant)
-  if (resolved.wsl && policy.env.GIT_SSH_COMMAND && policy.env !== promptEnv) {
-    addWslEnvKeys(policy.env, ['GIT_SSH_COMMAND'])
-  }
-  return policy
+  return buildGitSshPolicyEnv(promptEnv, configured.command, configured.variant)
 }

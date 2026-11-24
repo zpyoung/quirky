@@ -9,8 +9,6 @@
 import { readFileSync } from 'node:fs'
 import { startDaemon, type DaemonHandle } from './daemon-main'
 import { createPtySubprocess } from './pty-subprocess'
-import { warmWindowsConptyOnce } from './windows-conpty-warmup'
-import { warmPwshAvailabilityCache } from '../pwsh'
 import { createDaemonFileLog, createNoopDaemonFileLog } from './daemon-file-log'
 import { PROTOCOL_VERSION } from './types'
 import { detectOwnCgroupScopeUnit, ownFreshDaemonScope } from './daemon-cgroup-scope'
@@ -29,8 +27,6 @@ import { publishDaemonPidFile } from './daemon-spawner'
 import { initializeTerminalScopes } from './terminal-scopes-runtime'
 import { isNativePtyException } from './daemon-native-pty-exception'
 import { startDaemonScopeDeathWatch } from './daemon-scope-death-watch'
-import { isWindowsProcessTableAvailable } from '../windows/windows-process-table'
-import { leaseAppImageGenerationForCurrentProcess } from '../cli/appimage-generation-lease'
 import { createDaemonShutdownDeadline } from './daemon-shutdown-deadline'
 
 export type ParsedDaemonArgs = {
@@ -134,8 +130,6 @@ async function main(): Promise<void> {
     logFilePath
   } = parseArgs(process.argv.slice(2))
   const startedAtMs = Date.now() - process.uptime() * 1000
-  // Why: a daemon forked from an extracted AppImage copy outlives the process that launched it.
-  void leaseAppImageGenerationForCurrentProcess()
   const readyIdentity = await readCurrentDaemonReadyIdentity(startedAtMs)
   // Fail-open: a broken log path must never block daemon startup.
   const daemonLog = logFilePath ? createDaemonFileLog(logFilePath) : createNoopDaemonFileLog()
@@ -145,7 +139,6 @@ async function main(): Promise<void> {
     daemonLog.log(event, details)
   const processCeiling = initializeTerminalScopes(daemonScope, log)
   startDaemonScopeDeathWatch({ daemonScope, log })
-  void warmPwshAvailabilityCache()
 
   // Why: detached daemons destroy stderr, so the preflight's console.warn is lost;
   // surface a degraded TCC attribution here where it's diagnosable (F2).
@@ -341,15 +334,6 @@ async function main(): Promise<void> {
     process.send({ type: 'ready', ...readyIdentity })
   }
   daemonLog.log('ready')
-
-  warmWindowsConptyOnce()
-  // Whether the addon loads is fixed for this process, and a detached daemon has
-  // no stderr, so the module's own warn cannot report it here. Both answers, so a
-  // bundle can tell "native" from "never asked" (#16905). Loading it now also pays
-  // the dlopen off the first teardown.
-  if (process.platform === 'win32') {
-    daemonLog.log('windows-process-table', { native: isWindowsProcessTableAvailable() })
-  }
 }
 
 // Only auto-run when executed directly (not imported for testing, or for the build guard's

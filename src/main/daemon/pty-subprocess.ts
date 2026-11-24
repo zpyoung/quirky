@@ -5,7 +5,6 @@ import { createDaemonPtyEnvironment } from './pty-subprocess/spawn-environment'
 import { createPtyShellLaunchPlan } from './pty-subprocess/shell-launch-plan'
 import { spawnNativeDaemonPty, type SpawnedDaemonPty } from './pty-subprocess/native-pty-spawn'
 import {
-  formatPtySpawnError,
   preflightPtySpawn,
   preflightPtySpawnHealth,
   runPtySpawnHealthProbe
@@ -82,32 +81,22 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
     throw new TerminalAttachCanceledError(opts.sessionId)
   }
 
-  let spawned: SpawnedDaemonPty
-  try {
-    spawned = await spawnNativeDaemonPty({
-      shellPath: launch.shellPath,
-      shellArgs: launch.shellArgs,
-      spawnCwd: launch.spawnCwd,
-      env,
-      cols: size.cols,
-      rows: size.rows,
-      windowsFallbackAttempts: launch.windowsFallbackAttempts,
-      onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy
-    })
-  } catch (error) {
-    if (process.platform === 'win32') {
-      throw formatPtySpawnError(error, launch.shellPath, launch.spawnCwd)
-    }
-    throw error
-  }
+  const spawned: SpawnedDaemonPty = await spawnNativeDaemonPty({
+    shellPath: launch.shellPath,
+    shellArgs: launch.shellArgs,
+    spawnCwd: launch.spawnCwd,
+    env,
+    cols: size.cols,
+    rows: size.rows,
+    onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy
+  })
 
   return createDaemonPtySubprocessHandle({
     process: spawned.process,
     shellPath: spawned.shellPath,
     spawnCwd: spawned.spawnCwd,
     env,
-    startupCommandDeliveredInShellArgs:
-      spawned.startupCommandDeliveredInShellArgs ?? launch.startupCommandDeliveredInShellArgs,
+    startupCommandDeliveredInShellArgs: launch.startupCommandDeliveredInShellArgs,
     reportsChildExitStatus: spawned.reportsChildExitStatus,
     requestedCwd: opts.cwd,
     sessionId: opts.sessionId,

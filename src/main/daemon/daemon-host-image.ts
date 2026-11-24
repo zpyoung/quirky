@@ -9,7 +9,6 @@
 import { lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import type { ParsedDaemonPid } from './daemon-pid-file-parse'
 import { parseLinuxStartTicks } from '../agent-hooks/managed-hook-owner-identity'
-import { isFuseMountPoint } from './daemon-appimage-launch'
 
 export type DaemonHostImageVerdict = 'intact' | 'severed' | 'unknown' | 'not-ephemeral'
 
@@ -41,6 +40,24 @@ const linuxProc: DaemonHostImageProc = {
       throw error
     }
   }
+}
+
+function decodeMountInfoPath(value: string): string {
+  return value.replace(/\\([0-7]{3})/g, (_, octal: string) =>
+    String.fromCharCode(Number.parseInt(octal, 8))
+  )
+}
+
+function isFuseMountPoint(mountInfo: string, mountPoint: string): boolean {
+  return mountInfo.split('\n').some((line) => {
+    const [mountFields, fsFields] = line.split(' - ')
+    const point = mountFields?.split(' ')[4]
+    return (
+      point !== undefined &&
+      decodeMountInfoPath(point) === mountPoint &&
+      fsFields?.startsWith('fuse') === true
+    )
+  })
 }
 
 const DELETED_SUFFIX = ' (deleted)'

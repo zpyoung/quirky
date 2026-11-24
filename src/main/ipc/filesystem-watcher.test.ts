@@ -30,10 +30,6 @@ vi.mock('@parcel/watcher', () => ({
   subscribe: vi.fn()
 }))
 
-vi.mock('./filesystem-watcher-wsl', () => ({
-  createWslWatcher: vi.fn()
-}))
-
 vi.mock('../providers/ssh-filesystem-dispatch', () => ({
   getSshFilesystemProvider: getSshFilesystemProviderMock,
   onSshFilesystemProviderRegistered: (listener: (connectionId: string) => void) => {
@@ -51,7 +47,6 @@ import {
 import { registerFilesystemWatcherHandlers } from './filesystem-watcher-handlers'
 import { stat } from 'node:fs/promises'
 import { subscribe as subscribeParcelWatcher } from '@parcel/watcher'
-import { createWslWatcher } from './filesystem-watcher-wsl'
 import { resetWatcherChildRegistryForTest } from './parcel-watcher-child-registry'
 import { acquireWatcherRemovalGate } from './watcher-removal-gate'
 import { WATCH_BATCH_INTERVAL_MS } from '../../shared/filesystem-watch-batch-window'
@@ -76,7 +71,6 @@ describe('registerFilesystemWatcherHandlers', () => {
     getSshFilesystemProviderMock.mockReset()
     vi.mocked(stat).mockReset()
     vi.mocked(subscribeParcelWatcher).mockReset()
-    vi.mocked(createWslWatcher).mockReset()
     resetWatcherChildRegistryForTest()
     Object.defineProperty(process, 'platform', {
       configurable: true,

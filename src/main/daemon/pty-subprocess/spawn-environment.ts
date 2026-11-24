@@ -10,7 +10,7 @@ import { stripPiProcessOwnerEnv } from '../../pty/pi-process-owner-env'
 import { dropIncoherentCondaActivationEnv } from '../../pty/conda-activation-env'
 import { stripLegacyTerminalShimEnv } from '../../pty/legacy-terminal-shim-dir'
 import { removeInheritedNoColor } from '../../pty/terminal-color-env'
-import { resolvePathEnvKey } from '../../pty/windows-environment-path'
+import { resolvePathEnvKey } from '../../pty/windows-path-segment-merge'
 import { dropInheritedOrcaHistFile } from '../../worktree-history-file-path'
 import {
   gitCredentialPromptGuardEnv,

@@ -199,10 +199,6 @@ describe('desktop startup activation', () => {
     state.runtime = {
       noteAgentLaunchStartupSettled: startupSettled
     } as unknown as NonNullable<typeof state.runtime>
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch only calls whenReady().
-    state.windowsShellPathHydration = {
-      whenReady: () => Promise.resolve()
-    } as unknown as NonNullable<typeof state.windowsShellPathHydration>
     state.initialProxyApplicationReady = Promise.resolve()
     // Built the way preflight builds it for a desktop launch.
     state.desktopActivationGate = createServeDesktopActivationGate({
@@ -344,8 +340,7 @@ describe('desktop startup activation', () => {
     const codexRuntimeHome = {
       syncForCurrentSelection: vi.fn(() => {
         order.push('codex-auth')
-      }),
-      syncActiveWslSelectionsBeforeRestart: vi.fn(async () => {})
+      })
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the update restart hook only flushes the store.
     state.store = store as unknown as NonNullable<typeof state.store>
@@ -366,7 +361,6 @@ describe('desktop startup activation', () => {
       expect(hooks.onBeforeUpdateQuitFailure).toBe('abort')
       await hooks.onBeforeUpdateQuit()
       expect(codexRuntimeHome.syncForCurrentSelection).toHaveBeenCalledTimes(1)
-      expect(codexRuntimeHome.syncActiveWslSelectionsBeforeRestart).toHaveBeenCalledTimes(1)
       expect(order.at(0)).toBe('codex-auth')
       expect(order.at(-1)).toBe('store-checkpoint')
     } finally {

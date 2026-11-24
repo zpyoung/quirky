@@ -154,7 +154,6 @@ function createSubprocess(confirmed: boolean) {
     kill: () => {},
     forceKill: () => {},
     signal: () => {},
-    terminateOwnedTree: () => 'unavailable',
     onData(cb) {
       onData = cb
     },

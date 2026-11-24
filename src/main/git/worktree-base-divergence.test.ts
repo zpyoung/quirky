@@ -7,7 +7,6 @@ vi.mock('./runner', () => ({ gitExecFileAsync: mocks.gitExecFileAsync }))
 import { GIT_READ_TIMEOUT_MS } from './command-runner/git-command-timeout'
 import { GitAdmissionScheduler } from './command-runner/git-subprocess-admission'
 import type { GitAdmissionTier } from './command-runner/git-exec-options'
-import { WSL_GIT_READ_ENVIRONMENT_WAIT_MS } from './wsl-git-read-environment'
 import {
   measureRetargetDivergence,
   RETARGET_DIVERGENCE_BUDGET_MS
@@ -126,10 +125,7 @@ describe('measureRetargetDivergence deadlines', () => {
     ).resolves.toBe('unknown')
   })
 
-  it('clears the WSL read-environment wait, which starts before any command timeout', () => {
-    // Equal to it would make the first WSL-routed create of a session `unknown` by construction,
-    // and the WSL numbers meaningless.
-    expect(RETARGET_DIVERGENCE_BUDGET_MS).toBeGreaterThan(WSL_GIT_READ_ENVIRONMENT_WAIT_MS)
+  it('stays under the git read timeout', () => {
     expect(RETARGET_DIVERGENCE_BUDGET_MS).toBeLessThan(GIT_READ_TIMEOUT_MS)
   })
 

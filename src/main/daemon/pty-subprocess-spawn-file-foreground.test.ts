@@ -6,33 +6,16 @@ import { createDaemonPtySubprocessHandle } from './pty-subprocess/subprocess-han
 import { resolveSpawnFileForegroundFromRows } from './pty-subprocess/spawn-file-foreground-process'
 import { inspectTerminalHostProcess } from './terminal-host-process-inspection'
 import { Session } from './session'
-const { readSnapshot, readFresh, readStrict, members, readWindows, resolveWindows } = vi.hoisted(
-  () => ({
-    readSnapshot: vi.fn(),
-    readFresh: vi.fn(),
-    readStrict: vi.fn(),
-    members: vi.fn(),
-    readWindows: vi.fn(),
-    resolveWindows: vi.fn()
-  })
-)
+const { readSnapshot, readFresh, readStrict } = vi.hoisted(() => ({
+  readSnapshot: vi.fn(),
+  readFresh: vi.fn(),
+  readStrict: vi.fn()
+}))
 vi.mock('../../shared/process-table-snapshot-reader', async (importOriginal) => ({
   ...(await importOriginal<typeof SnapshotReader>()),
   getProcessTableSnapshot: readSnapshot,
   getFreshProcessTableSnapshot: readFresh,
   getStrictProcessTableSnapshotWithAge: readStrict
-}))
-vi.mock('../providers/windows-pty-job-membership', () => ({
-  readWindowsPtyJobProcessIds: members,
-  isWindowsPtyJobReadable: () => true
-}))
-vi.mock('../windows/windows-process-table', () => ({
-  readWindowsProcessIdentityTable: readWindows,
-  readWindowsProcessIdentityTableFresh: readWindows
-}))
-vi.mock('../providers/windows-agent-foreground-process', () => ({
-  shouldInspectWindowsAgentForeground: () => true,
-  resolveWindowsAgentForegroundProcessWithAvailability: resolveWindows
 }))
 
 function table(command: string | null, loginWrapper = false): ProcessTableRow[] {
@@ -224,76 +207,4 @@ it('ignores stopped/background children and another terminal beneath the same ro
     available: false,
     processName: null
   })
-})
-
-it('uses Windows job membership and the native process table for ordinary children', async () => {
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-  resolveWindows.mockResolvedValue({ available: true, processName: null })
-  members.mockReturnValue(new Set([100, 102]))
-  readWindows.mockResolvedValue([
-    { pid: 100, ppid: 1, name: 'pwsh.exe' },
-    { pid: 102, ppid: 100, name: 'vim.exe' }
-  ])
-  const handle = createHandle()
-  expect(await handle.confirmForegroundProcess?.()).toBe('vim.exe')
-  expect(await inspect(handle)).toMatchObject({
-    foregroundProcess: 'vim.exe',
-    hasChildProcesses: true
-  })
-  expect(readStrict).not.toHaveBeenCalled()
-})
-
-it('keeps missing Windows job membership unverifiable', async () => {
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-  resolveWindows.mockResolvedValue({ available: true, processName: null })
-  members.mockReturnValue(null)
-  expect(await inspect(createHandle())).toMatchObject({
-    foregroundProcess: null,
-    hasChildProcesses: true,
-    childProcessEvidence: 'unverifiable'
-  })
-})
-
-it('reports an idle Windows shell only when the owned job contains the shell alone', async () => {
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-  resolveWindows.mockResolvedValue({ available: true, processName: null })
-  members.mockReturnValue(new Set([100]))
-  expect(await inspect(createHandle())).toMatchObject({ hasChildProcesses: false })
-  expect(readWindows).not.toHaveBeenCalled()
-})
-
-it('accepts only a complete actual-shell Git Bash launch chain', async () => {
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-  const shellPath = 'C:\\Program Files\\Git\\bin\\bash.exe'
-  const handle = createHandle(false, shellPath)
-  members.mockReturnValue(new Set([100, 102]))
-  readWindows.mockResolvedValue([
-    { pid: 100, ppid: 1, name: 'bash.exe', creationTimeMs: 1 },
-    { pid: 102, ppid: 100, name: 'bash.exe', creationTimeMs: 2 }
-  ])
-  expect(await handle.inspectChildProcesses?.()).toBe('no-children')
-  readWindows.mockResolvedValue([{ pid: 100, ppid: 1, name: 'bash.exe' }])
-  expect(await handle.inspectChildProcesses?.()).toBe('unverifiable')
-  readWindows.mockResolvedValue([
-    { pid: 100, ppid: 1, name: 'bash.exe' },
-    { pid: 102, ppid: 100, name: 'agent.exe' }
-  ])
-  expect(await handle.inspectChildProcesses?.()).toBe('children')
-  members.mockReturnValue(new Set([102]))
-  expect(await handle.inspectChildProcesses?.()).toBe('unverifiable')
-  handle.dispose()
-})
-
-it('keeps the Windows close guard live when a shell descendant is selected above another job', async () => {
-  vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-  resolveWindows.mockResolvedValue({ available: true, processName: null })
-  members.mockReturnValue(new Set([100, 102, 103, 104]))
-  readWindows.mockResolvedValue([
-    { pid: 100, ppid: 1, name: 'pwsh.exe' },
-    { pid: 102, ppid: 100, name: 'vim.exe' },
-    { pid: 103, ppid: 100, name: 'cmd.exe' },
-    { pid: 104, ppid: 103, name: 'pwsh.exe' }
-  ])
-  const inspection = await inspect(createHandle())
-  expect(inspection).toMatchObject({ hasChildProcesses: true, childProcessEvidence: 'children' })
 })

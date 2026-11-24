@@ -28,33 +28,6 @@ export type UpdateCheckOptions = {
 /** Non-release origins for an update. */
 export type UpdateSource = 'local'
 
-/** Root-package Linux install formats whose update installs need privilege escalation. */
-export type LinuxRootPackageType = 'deb' | 'rpm'
-
-export type LinuxPackageInstallFailureReason =
-  | 'authentication-agent-unavailable'
-  | 'authentication-denied'
-  | 'package-install-failed'
-
-export type LinuxPackageInstallRecoveryReason =
-  | 'manual-install-required'
-  | LinuxPackageInstallFailureReason
-
-// Older paired hosts can still publish classified install failures; the manual reason is additive.
-export type LinuxPackageInstallRecovery = {
-  kind: 'linux-package-install'
-  packageType: LinuxRootPackageType
-  reason: LinuxPackageInstallRecoveryReason
-  version: string
-}
-
-/** Why: only these two mean no safe command exists here; every other failure clears recovery entirely. */
-export type LinuxPackageCommandUnavailableReason = 'no-sudo' | 'no-package-manager'
-
-export type LinuxPackageInstallInstructions =
-  | { ok: true; command: string; packageFileName: string }
-  | { ok: false; reason: LinuxPackageCommandUnavailableReason; message: string }
-
 export type UpdateInstallBlocker = {
   pid: number
   kind: 'window' | 'server' | 'browser' | 'unknown'
@@ -105,7 +78,6 @@ export type UpdateStatus = (
       /** A staged update can retry installation without downloading again; older hosts omit this. */
       retryAction?: 'install'
       userInitiated?: boolean
-      recovery?: LinuxPackageInstallRecovery
       /** Optional so older paired clients retain the diagnostic and install retry. */
       installBlock?: UpdateInstallBlock
     }

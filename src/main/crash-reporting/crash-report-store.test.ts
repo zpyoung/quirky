@@ -3,15 +3,6 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const { grantDirAclAsyncMock } = vi.hoisted(() => ({
-  grantDirAclAsyncMock: vi.fn().mockResolvedValue(undefined)
-}))
-
-vi.mock('../win32-utils', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
-  return { ...actual, grantDirAclAsync: grantDirAclAsyncMock }
-})
-
 import { CrashReportStore } from './crash-report-store'
 import type { CrashReportCreateInput } from '../../shared/crash-reporting'
 
@@ -50,8 +41,6 @@ function input(reason = 'crashed'): CrashReportCreateInput {
 
 afterEach(async () => {
   vi.restoreAllMocks()
-  grantDirAclAsyncMock.mockReset()
-  grantDirAclAsyncMock.mockResolvedValue(undefined)
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })))
 })
 
@@ -159,19 +148,6 @@ describe('CrashReportStore', () => {
     await expect(pendingPromise).resolves.toMatchObject({ id: report.id, status: 'pending' })
   })
 
-  it('repairs the Windows userData ACL and retries a denied crash write', async () => {
-    const { store, filePath } = await createStore()
-    vi.spyOn(process, 'platform', 'get').mockReturnValue('win32')
-    const permissionError = Object.assign(new Error('permission denied'), { code: 'EPERM' })
-    const writeFileSpy = vi.spyOn(fs, 'writeFile').mockRejectedValueOnce(permissionError)
-
-    const report = await store.record(input())
-
-    expect(grantDirAclAsyncMock).toHaveBeenCalledWith(path.dirname(filePath))
-    expect(writeFileSpy).toHaveBeenCalledTimes(2)
-    await expect(store.getLatestPending()).resolves.toMatchObject({ id: report.id })
-  })
-
   it.each(['EPERM', 'EACCES', 'EBUSY'] as const)(
     'recovers a pending report after a transient Windows %s read failure',
     async (code) => {
@@ -185,12 +161,6 @@ describe('CrashReportStore', () => {
       await expect(reloaded.getLatestPending()).resolves.toMatchObject({ id: report.id })
 
       expect(readFileSpy).toHaveBeenCalledTimes(2)
-      if (code === 'EBUSY') {
-        expect(grantDirAclAsyncMock).not.toHaveBeenCalled()
-      } else {
-        expect(grantDirAclAsyncMock).toHaveBeenCalledOnce()
-        expect(grantDirAclAsyncMock).toHaveBeenCalledWith(path.dirname(filePath))
-      }
     }
   )
 
@@ -203,7 +173,6 @@ describe('CrashReportStore', () => {
     await expect(store.record(input())).resolves.toMatchObject({ status: 'pending' })
 
     expect(renameSpy).toHaveBeenCalledTimes(2)
-    expect(grantDirAclAsyncMock).not.toHaveBeenCalled()
   })
 
   it('removes its temp file after a terminal write failure', async () => {

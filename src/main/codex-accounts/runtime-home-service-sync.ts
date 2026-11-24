@@ -6,18 +6,13 @@ import {
 import { recoverInterruptedGuardedFileOperation } from './fs-utils'
 import type { CodexSharedRuntimeAuthProvenanceStatus } from './runtime-home-service-types'
 import { codexAuthIsMonotonicallyFresher } from './runtime-home-service-auth-sync-identity'
-import { CodexRuntimeHomeWsl } from './runtime-home-service-wsl'
+import { CodexRuntimeHomeAuthProvenance } from './runtime-home-service-auth-provenance'
 
-export abstract class CodexRuntimeHomeSync extends CodexRuntimeHomeWsl {
+export abstract class CodexRuntimeHomeSync extends CodexRuntimeHomeAuthProvenance {
   syncForCurrentSelection(
-    target?: CodexAccountSelectionTarget,
+    _target?: CodexAccountSelectionTarget,
     launchEnv?: NodeJS.ProcessEnv
   ): void {
-    if (target?.runtime === 'wsl') {
-      this.startLegacyWslAuthDrain(this.resolveWslDefaultTarget(target))
-      return
-    }
-
     const selfContainedAccount = this.getSelfContainedManagedHostAccount()
     if (selfContainedAccount) {
       // Why: self-contained managed homes hold their own auth, so the shared

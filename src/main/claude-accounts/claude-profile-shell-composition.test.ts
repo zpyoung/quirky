@@ -20,7 +20,6 @@ function fishInit({ args }: { args: string[] | null }): string {
 async function composed() {
   const local = await import('../providers/local-pty-shell-ready')
   const daemon = await import('../daemon/shell-ready')
-  const powershell = await import('../powershell-osc133-bootstrap')
   const localBash = await import('../providers/local-pty-shell-ready-bash-rcfile')
   const daemonBash = await import('../daemon/daemon-bash-shell-ready-rcfile')
   const zsh = await import('../zsh-startup-wrapper-builder')
@@ -38,8 +37,7 @@ async function composed() {
     fish: [
       fishInit(local.getShellLaunchConfig(FISH, ['ready'])),
       fishInit(daemon.getShellLaunchConfig(FISH, ['ready']))
-    ],
-    powershell: powershell.getPowerShellOsc133Bootstrap()
+    ]
   }
 }
 
@@ -52,13 +50,6 @@ it('gives every composed shell startup and the plain fish vendor snippet the cla
   const { getFishClaudeShellFunction } = await import('../../shared/claude-shell-function')
   expect(getFishClaudeShellFunction()).toContain('function claude')
   expect(getFishVendorConfSnippet()).toContain(getFishClaudeShellFunction())
-})
-
-it('starts the PowerShell claude function on its own line after the codex fragment', async () => {
-  const on = await composed()
-  expect(on.powershell).toContain(
-    'Remove-Variable orcaCodexCommand -ErrorAction SilentlyContinue\n$orcaClaudeCommand'
-  )
 })
 
 it.skipIf(!existsSync(FISH))(

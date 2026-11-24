@@ -1,7 +1,6 @@
 import { glabExecFileAsync } from '../git/runner'
 import type { GitAdmissionTier } from '../git/command-runner/git-exec-options'
 import { shouldProbeGitRemote } from '../git/remote-name-listing'
-import { addWslEnvKeys } from '../wsl-env'
 import { isTransientGitProbeError, readRemoteUrl } from '../git/remote-url-probe'
 import { NEGATIVE_ENTRY_TTL_MS } from '../git/remote-ref-probe-cache'
 import type { IssueSourcePreference } from '../../shared/repo-types'
@@ -279,12 +278,7 @@ export function glabHostEnvOptions(
   if (!connectionId || !projectRef?.host) {
     return {}
   }
-  const env: NodeJS.ProcessEnv = { ...process.env, GITLAB_HOST: projectRef.host }
-  if (process.platform === 'win32') {
-    // Why: spawn env stops at the wsl.exe boundary unless WSLENV names the var.
-    addWslEnvKeys(env, ['GITLAB_HOST'])
-  }
-  return { env }
+  return { env: { ...process.env, GITLAB_HOST: projectRef.host } }
 }
 
 async function isGlabConfiguredForRemoteHost(

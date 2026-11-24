@@ -1,26 +1,14 @@
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import type { ChildProcess, SpawnOptions } from 'node:child_process'
 import { StringDecoder } from 'node:string_decoder'
 import { withGitSpan } from '../../observability/instrumentation'
-import { recordSubprocessSpawn } from '../../diagnostics/main-thread-churn-probe'
 import { createAbortError } from './abort-error'
 import { killSpawnedCommandTree } from './spawned-command-tree-kill'
-import { pendingWslDriveCheckoutGitRouting } from '../wsl-drive-checkout-git-routing'
-import type { ResolvedCommand } from './wsl-command-resolution'
 import {
   DEFAULT_GIT_MAX_BUFFER,
   type GitAdmissionTier,
   type GitExecOptions
 } from './git-exec-options'
-import {
-  pendingWslDirectGitReadEnvironment,
-  directWslGitExitCode,
-  disableDirectWslGitAfterSuccessfulFallback,
-  invalidateMissingDirectWslGit,
-  resolveGitCommand,
-  resolveGitCommandWithoutProbe
-} from './git-command-resolution'
-import { prepareWindowsHostGitEnvironment } from './windows-host-git-environment'
-import { nonInteractiveGitEnv, untranslatedGitOutputEnv } from './git-process-env'
+import { nonInteractiveGitEnv } from './git-process-env'
 import { gitSpawn } from './git-spawn'
 import { acquireGitAdmission } from './git-subprocess-admission'
 import { GitCommandTimeoutError, gitCommandTimeoutMs } from './git-command-timeout'
@@ -53,7 +41,7 @@ export type GitStreamOptions = {
  *
  * Why: output larger than V8's max string (e.g. status on a repo with a huge
  * un-ignored folder) crashes the process when buffered; streaming keeps memory
- * bounded and lets the parser stop git early. Built on gitSpawn for WSL routing.
+ * bounded and lets the parser stop git early.
  */
 export async function gitStreamStdout(
   args: string[],
@@ -62,10 +50,6 @@ export async function gitStreamStdout(
   const maxBuffer = options.maxBuffer ?? DEFAULT_GIT_MAX_BUFFER
   const timeoutMs = gitCommandTimeoutMs(args, options.timeoutMs, options.timeoutMsForTest)
   return withGitSpan({ args, cwd: options.cwd }, async (span) => {
-    const checkoutRoutingReady = pendingWslDriveCheckoutGitRouting(args, options)
-    if (checkoutRoutingReady) {
-      await checkoutRoutingReady
-    }
     const gitOptions: GitExecOptions = {
       cwd: options.cwd,
       ...(options.env ? { env: options.env } : {}),
@@ -74,20 +58,6 @@ export async function gitStreamStdout(
       ...(options.signal ? { signal: options.signal } : {}),
       ...(options.admissionTier ? { admissionTier: options.admissionTier } : {})
     }
-    const readEnvironmentReady = pendingWslDirectGitReadEnvironment(args, gitOptions)
-    if (readEnvironmentReady) {
-      await readEnvironmentReady
-    }
-    let resolved = resolveGitCommand(args, gitOptions)
-    const environmentReady = prepareWindowsHostGitEnvironment(
-      resolved,
-      gitOptions.env,
-      options.signal
-    )
-    if (environmentReady) {
-      gitOptions.env = await environmentReady
-    }
-    resolved = resolveGitCommand(args, gitOptions)
     const grant = await acquireGitAdmission({
       args,
       cwd: options.cwd,
@@ -97,7 +67,7 @@ export async function gitStreamStdout(
     })
     span?.setAttribute('git.queue_wait_ms', grant.queueWaitMs)
     const terminationState: { current: Promise<void> | null } = { current: null }
-    const stream = (command: ResolvedCommand): Promise<GitStreamResult> =>
+    const stream = (): Promise<GitStreamResult> =>
       new Promise<GitStreamResult>((resolve, reject) => {
         if (options.signal?.aborted) {
           reject(createAbortError())
@@ -111,19 +81,7 @@ export async function gitStreamStdout(
           wslDistro: options.wslDistro,
           windowsHide: true
         }
-        let child: ChildProcess
-        if (command.wslMode === 'direct-git') {
-          const spawnStartedAt = performance.now()
-          child = spawn(command.binary, command.args, {
-            cwd: command.cwd,
-            env: untranslatedGitOutputEnv(spawnOptions.env),
-            stdio: spawnOptions.stdio,
-            windowsHide: true
-          })
-          recordSubprocessSpawn(command.binary, command.args, performance.now() - spawnStartedAt)
-        } else {
-          child = gitSpawn(args, spawnOptions)
-        }
+        const child: ChildProcess = gitSpawn(args, spawnOptions)
         let terminationReported = false
         terminationState.current = new Promise<void>((resolveTermination) => {
           const reportTermination = (): void => {
@@ -251,27 +209,7 @@ export async function gitStreamStdout(
         }
       })
     try {
-      try {
-        return await stream(resolved)
-      } catch (error) {
-        const stdoutBytes =
-          error && typeof error === 'object'
-            ? (error as { stdoutBytes?: unknown }).stdoutBytes
-            : null
-        if (
-          stdoutBytes === 0 &&
-          directWslGitExitCode(error, resolved) !== null &&
-          !options.signal?.aborted
-        ) {
-          await terminationState.current
-          const wasMissing = invalidateMissingDirectWslGit(error, resolved)
-          resolved = resolveGitCommandWithoutProbe(args, gitOptions)
-          const result = await stream(resolved)
-          disableDirectWslGitAfterSuccessfulFallback(wasMissing, resolved)
-          return result
-        }
-        throw error
-      }
+      return await stream()
     } finally {
       const termination = terminationState.current
       if (termination) {

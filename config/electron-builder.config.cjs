@@ -23,14 +23,6 @@ const {
   prunePackagedRuntimeNodeModules,
   verifyPackagedMainRuntimeDeps
 } = require('./packaged-runtime-node-modules.cjs')
-const { verifyLinuxGlibcFloor } = require('./scripts/verify-linux-glibc-floor.cjs')
-const {
-  verifyPackagedWindowsAgentHook
-} = require('./scripts/verify-packaged-windows-agent-hook.cjs')
-const {
-  ensureBundledWaylandClipboard,
-  finalizePackagedWaylandClipboard
-} = require('./wayland-clipboard-resources.cjs')
 const { writeMacBuildCompatibility } = require('./scripts/mac-build-compatibility.cjs')
 const {
   MOBILE_WEB_BUNDLE_DIR,
@@ -48,9 +40,6 @@ const {
   finalizePackagedRipgrep
 } = require('./bundled-ripgrep-resources.cjs')
 const {
-  verifyPackagedWindowsNodePty
-} = require('./scripts/verify-packaged-node-pty-job-ownership.cjs')
-const {
   assertOrcadTemplateBuilt,
   finalizePackagedOrcadTemplate,
   orcadTemplateExtraResource,
@@ -59,17 +48,9 @@ const {
 } = require('./scripts/packaged-orcad-template.cjs')
 const { verifySkillsCliRuntime } = require('./scripts/verify-skills-cli-runtime.cjs')
 const { assertNotDarkBuild } = require('./dark-build-switches.cjs')
-const { verifyStaticAppImagePackage } = require('./scripts/static-appimage-package-contract.cjs')
-const {
-  appImageNodeRuntimeFpmArgs,
-  placeAppImageNodeRuntime,
-  verifyAppImageNodeRuntimeServesPty
-} = require('./scripts/appimage-node-runtime.cjs')
-const { signWindowsUninstallerViaSignPath } = require('./scripts/windows-uninstaller-signing.cjs')
 const { buildMacShipItScheduling } = require('./scripts/macos-shipit-scheduling.cjs')
 
 const isMacRelease = process.env.ORCA_MAC_RELEASE === '1'
-const isLinuxArm64Release = process.env.ORCA_LINUX_ARM64_RELEASE === '1'
 const localBuildVersion = isMacRelease ? undefined : process.env.ORCA_LOCAL_BUILD_VERSION
 const appId = 'com.zpyoung.orca'
 const featureWallResources = {
@@ -128,53 +109,10 @@ const macSpeechNativeResource = {
   from: 'node_modules/sherpa-onnx-darwin-${arch}',
   to: 'node_modules/sherpa-onnx-darwin-${arch}'
 }
-const linuxSpeechNativeResource = {
-  from: 'node_modules/sherpa-onnx-linux-${arch}',
-  to: 'node_modules/sherpa-onnx-linux-${arch}'
-}
-const winSpeechNativeResource = {
-  from: 'node_modules/sherpa-onnx-win-x64',
-  to: 'node_modules/sherpa-onnx-win-x64'
-}
-// electron-builder replaces these defaults when `depends` is configured; retain
-// Electron's loader requirements alongside Orca's headless-host dependencies.
-const debElectronRuntimeDependencies = [
-  'libgtk-3-0',
-  'libnotify4',
-  'libnss3',
-  'libxss1',
-  'libxtst6',
-  'xdg-utils',
-  'libatspi2.0-0',
-  'libuuid1',
-  'libsecret-1-0'
-]
-const rpmElectronRuntimeDependencies = [
-  'gtk3',
-  'libnotify',
-  'nss',
-  'libXScrnSaver',
-  '(libXtst or libXtst6)',
-  'xdg-utils',
-  'at-spi2-core',
-  '(libuuid or libuuid1)'
-]
-
 // Why mirrored, not imported: this config is CJS loaded by electron-builder outside the TS build.
-// Keep in sync with isOsOpenedDocumentName() in src/main/startup/os-opened-documents.ts and with
-// config/nsis/orca-installer-hooks.nsh, which registers the same set on Windows.
+// Keep in sync with isOsOpenedDocumentName() in src/main/startup/os-opened-documents.ts.
 const MARKDOWN_FILE_EXTENSIONS = ['md', 'markdown', 'mdx']
 const TABULAR_FILE_EXTENSIONS = ['csv', 'tsv']
-
-// Why: the config must load on a host-only install without resolving unused Windows addons.
-// This is load-time tolerance only; beforePack enforces that the target's natives are installed.
-// Why one package: @vscode/windows-process-tree is the only os: win32 npm addon;
-// the @orca/windows-* addons are workspace links present on every host, so their presence proves nothing.
-const windowsRuntimeResources = existsSync(
-  join(__dirname, '..', 'node_modules', '@vscode', 'windows-process-tree', 'package.json')
-)
-  ? createPackagedRuntimeNodeModuleResources('win32')
-  : []
 
 // Shared with the terminal host helper so its purpose strings cannot drift from the app's.
 const macUsageDescriptions = {
@@ -209,7 +147,6 @@ module.exports = {
   appId,
   productName: 'Orca Dev',
   protocols: [{ name: 'Orca', schemes: ['orca'] }],
-  toolsets: { appimage: '1.0.3' },
   ...(localBuildVersion ? { extraMetadata: { version: localBuildVersion } } : {}),
   directories: {
     buildResources: 'resources/build'
@@ -290,13 +227,7 @@ module.exports = {
     // Why: speech packages are copied selectively through the platform
     // extraResources entry below; keeping them in app.asar would ship every
     // native variant (and duplicate the selected one).
-    '!node_modules/sherpa-onnx*{,/**/*}',
-    // Why: the Windows CLI shim ships via extraResources to resources/bin/orca.cmd
-    // (beside the native resources/bin/orca.exe). Packing the source tree into
-    // app.asar too lets asarUnpack:['resources/**'] extract a second copy at
-    // app.asar.unpacked/resources/win32/bin/orca.cmd with no adjacent orca.exe,
-    // which fails to launch the CLI (#7351).
-    '!resources/win32{,/**/*}'
+    '!node_modules/sherpa-onnx*{,/**/*}'
   ],
   // Why: the CLI entry-point lives in out/cli/ but imports shared modules
   // from out/shared/ and local hook mutators from out/main/. These paths must be
@@ -345,7 +276,6 @@ module.exports = {
     'out/main/startup/http1-compatibility-marker.js',
     'out/main/daemon-entry.js',
     'out/main/session-scanner-service-entry.js',
-    'out/main/wsl-transcript-fs-process-entry.js',
     'out/main/foreign-sqlite-reader-entry.js',
     'out/main/plugin-host-entry.js',
     'out/main/computer-sidecar.js',
@@ -360,17 +290,11 @@ module.exports = {
     'node_modules/zod/**',
     'node_modules/yaml/**'
   ],
-  artifactBuildCompleted: ({ file, arch }) => {
-    if (file.endsWith('.AppImage')) {
-      verifyStaticAppImagePackage(file, arch)
-    }
-  },
   // electron-builder calls this with the context alone. The second parameter is the bundle root,
   // so a test can point the guard at a scratch bundle instead of needing the repo's out/ built.
   beforePack: (
     context,
     mobileWebBundleDir = MOBILE_WEB_BUNDLE_DIR,
-    ensureWaylandClipboard = ensureBundledWaylandClipboard,
     orcadTemplateDir = join(__dirname, '..', orcadTemplateExtraResource.from)
   ) => {
     // The template is the server every SSH host gets, so a dark test template must never ship.
@@ -380,9 +304,6 @@ module.exports = {
     assertProcessHostOutputBuilt()
     assertOrcadTemplateBuilt()
     assertMobileWebBundleBuilt(mobileWebBundleDir)
-    if (context.electronPlatformName === 'linux') {
-      ensureWaylandClipboard(context.arch)
-    }
   },
   afterPack: async (context) => {
     const resourcesDir =
@@ -396,10 +317,6 @@ module.exports = {
         : join(context.appOutDir, 'resources')
     if (!existsSync(resourcesDir)) {
       throw new Error(`Missing packaged resources directory: ${resourcesDir}`)
-    }
-    // FpmTarget replaces this with deb/rpm while building those artifacts from the shared app tree.
-    if (context.electronPlatformName === 'linux') {
-      writeFileSync(join(resourcesDir, 'package-type'), 'AppImage')
     }
     if (context.electronPlatformName === 'darwin') {
       applyMacHelperFolderUsageDescriptions(
@@ -424,22 +341,6 @@ module.exports = {
     }
     stampPackagedCliVersion(resourcesDir, context.packager.appInfo.version)
     prunePackagedRuntimeNodeModules(resourcesDir, context.electronPlatformName, context.arch)
-    // Why: a Linux runner-image glibc bump silently shipped a node-pty pty.node
-    // requiring GLIBC_2.34, crashing the app on startup on Ubuntu 20.04 (#9902).
-    // Fail packaging if any bundled native binary exceeds the supported floor.
-    // Why after the prune: `pnpm install:release` widens the CPU set for cross-builds,
-    // so an arm64 slice can still carry the x64 @parcel/watcher until
-    // prunePackagedRuntimeNodeModules drops it.
-    let appImageNodeRuntime = null
-    if (context.electronPlatformName === 'linux') {
-      const targetArch = { 1: 'x64', 3: 'arm64' }[context.arch]
-      // Before the floor gate, so the bundled Node is held to the same glibc floor.
-      appImageNodeRuntime = await placeAppImageNodeRuntime(resourcesDir, targetArch)
-      // Why the arch is passed: symbol-version checks pass happily on a wrong-architecture binary,
-      // so a cross-built slice could ship the host's pty.node and only fail at runtime.
-      finalizePackagedWaylandClipboard(resourcesDir)
-      verifyLinuxGlibcFloor(context.appOutDir, { targetArch })
-    }
     verifyPackagedMainRuntimeDeps(resourcesDir)
     // Why: boot the packaged daemon-entry under plain Node, but only for the
     // slice matching the packaging host's arch — daemon-entry.js is JS, yet it
@@ -449,10 +350,6 @@ module.exports = {
     const archEnumByNodeArch = { ia32: 0, x64: 1, armv7l: 2, arm64: 3 }
     const hostArchEnum = archEnumByNodeArch[process.arch]
     const canExecuteTargetArch = context.arch === hostArchEnum || context.arch === 4
-    if (context.electronPlatformName === 'win32') {
-      verifyPackagedWindowsNodePty(resourcesDir, context.arch, { canExecuteTargetArch })
-      verifyPackagedWindowsAgentHook(resourcesDir, context.arch)
-    }
     verifySkillsCliRuntime(join(resourcesDir, 'app.asar.unpacked', 'out'), resourcesDir, {
       executeCommands: canExecuteTargetArch
     })
@@ -463,9 +360,6 @@ module.exports = {
     }
     if (canExecuteTargetArch) {
       verifyPackagedDaemonEntryBoots(resourcesDir)
-      if (appImageNodeRuntime) {
-        await verifyAppImageNodeRuntimeServesPty(resourcesDir, appImageNodeRuntime)
-      }
     } else {
       // Why: a cross-arch slice can't be booted by the host Node, but the
       // unpacked entry must still exist — its absence is a layout regression
@@ -486,7 +380,7 @@ module.exports = {
       signMacBinary: (path) =>
         signMacStandaloneHelper(path, 'orcad template binary', context.packager)
     })
-    chmodUnixCliLaunchers(resourcesDir, context.electronPlatformName)
+    chmodUnixCliLaunchers(resourcesDir)
     for (const filename of readdirSync(resourcesDir)) {
       if (!filename.startsWith('agent-browser-')) {
         continue
@@ -510,64 +404,6 @@ module.exports = {
       )
       await packageMacTerminalHost(join(resourcesDir, '..', '..'), context)
     }
-  },
-  win: {
-    executableName: 'Orca',
-    // Why: Windows installers are signed after electron-builder packaging by
-    // SignPath, so the packager cannot infer the updater publisherName.
-    // Why a sign hook on a build that does not sign: it is the only moment
-    // electron-builder exposes the NSIS uninstaller (built in its own makensis
-    // pass, embedded, then deleted). The hook signs nothing — it relays the file
-    // to and from the CI SignPath request, and is inert when the relay env vars
-    // are unset, so local and dev builds are unaffected.
-    signtoolOptions: {
-      sign: signWindowsUninstallerViaSignPath,
-      publisherName: 'SignPath Foundation'
-    },
-    extraResources: [
-      ...commonExtraResources,
-      ...windowsRuntimeResources,
-      winSpeechNativeResource,
-      {
-        from: 'resources/win32/bin/orca.cmd',
-        to: 'bin/orca.cmd'
-      },
-      {
-        from: 'native/windows-cli-launcher/.build/orca.exe',
-        to: 'bin/orca.exe'
-      },
-      {
-        from: 'native/windows-cli-launcher/.build/orca-administrator-restart.exe',
-        to: 'bin/orca-administrator-restart.exe'
-      },
-      // Why resources/bin: SignPath signs every unsigned PE under win-unpacked, and the hook
-      // installer copies this signed file into ~/.orca/agent-hooks (#20913).
-      {
-        from: 'native/windows-agent-hook/.build/orca-agent-hook.exe',
-        to: 'bin/orca-agent-hook.exe'
-      },
-      {
-        from: 'node_modules/agent-browser/bin/agent-browser-win32-x64.exe',
-        to: 'agent-browser-win32-x64.exe'
-      },
-      {
-        from: 'native/computer-use-windows/runtime.ps1',
-        to: 'computer-use-windows/runtime.ps1'
-      },
-      featureWallResources
-    ]
-  },
-  nsis: {
-    artifactName: 'orca-windows-setup.${ext}',
-    shortcutName: '${productName}',
-    uninstallDisplayName: '${productName}',
-    createDesktopShortcut: 'always',
-    // Why: electron-builder allows one include, so both Windows installer hooks live in it -
-    // the relocated-daemon uninstall sweep (guarded by ${isUpdated} so it never runs during an
-    // update's uninstallOldVersion) and the additive markdown "Open with" registration.
-    // Windows markdown association is deliberately NOT done via `fileAssociations`; see the
-    // header comment in that file for why that would steal the user's default .md handler.
-    include: resolve(__dirname, 'nsis', 'orca-installer-hooks.nsh')
   },
   mac: {
     // Why rank Alternate: Orca joins Finder's "Open With" list without claiming
@@ -657,100 +493,6 @@ module.exports = {
   dmg: {
     artifactName: 'orca-macos-${arch}.${ext}'
   },
-  linux: {
-    // Why mimeTypes and not fileAssociations: shared-mime-info already maps *.md/*.markdown to
-    // text/markdown, so reusing that type puts Orca in the Open With list without shipping a glob
-    // override. A desktop entry's MimeType only adds a handler - mimeapps.list still owns the
-    // default. .mdx is deliberately absent: Ubuntu 24.04's mime database maps it to
-    // application/x-genesis-32x-rom, so claiming it here would need a glob override.
-    mimeTypes: ['text/markdown', 'text/csv', 'text/tab-separated-values'],
-    // Why: Ubuntu desktop ships GNOME Orca as the `orca` package and /usr/bin/orca.
-    // The Linux installer should not claim those system package/file names.
-    executableName: 'orca-ide',
-    // Why: the icns source lets electron-builder emit standard hicolor PNG
-    // sizes; a single 1024px PNG is ignored by some Linux docks/launchers.
-    icon: 'resources/build/icon.icns',
-    desktop: {
-      entry: {
-        // Why: Electron reports WM_CLASS=orca for the visible Linux window;
-        // GNOME docks need an exact match to group it with orca-ide.desktop.
-        StartupWMClass: 'orca'
-      }
-    },
-    extraResources: [
-      ...commonExtraResources,
-      ...createPackagedRuntimeNodeModuleResources('linux'),
-      linuxSpeechNativeResource,
-      {
-        from: 'native/wayland-clipboard/.build/${arch}/orca-wayland-clipboard',
-        to: 'bin/orca-wayland-clipboard'
-      },
-      {
-        from: 'resources/linux/bin/orca-ide',
-        to: 'bin/orca-ide'
-      },
-      {
-        from: 'node_modules/agent-browser/bin/agent-browser-linux-${arch}',
-        to: 'agent-browser-linux-${arch}'
-      },
-      {
-        from: 'native/computer-use-linux/runtime.py',
-        to: 'computer-use-linux/runtime.py'
-      },
-      featureWallResources
-    ],
-    // Keep local artifacts aligned with the release pipeline.
-    target: ['AppImage', 'deb', 'rpm'],
-    maintainer: 'stablyai',
-    category: 'Utility'
-  },
-  appImage: {
-    artifactName: isLinuxArm64Release ? 'orca-linux-arm64.${ext}' : 'orca-linux.${ext}'
-  },
-  deb: {
-    packageName: 'orca-ide',
-    artifactName: 'orca-ide_${version}_${arch}.${ext}',
-    // Why: xvfb lets the bundled `orca serve` CLI run browser panes on a headless
-    // Linux host — Chromium needs a display server even for offscreen rendering,
-    // and serve starts Xvfb itself when present (see ensure-virtual-display.ts).
-    depends: [
-      ...debElectronRuntimeDependencies,
-      'python3',
-      'python3-gi',
-      'gir1.2-atspi-2.0',
-      'at-spi2-core',
-      'xdotool',
-      'xclip',
-      'xvfb'
-    ],
-    // Why: symlink the bundled CLI onto PATH at install time so `orca-ide serve`
-    // works on a headless host. The in-app CLI registration (CliInstaller) is
-    // GUI-triggered and can never run on a server, so without this the CLI is
-    // unreachable from the shell on exactly the hosts that need it.
-    afterInstall: 'resources/linux/packaging/after-install.sh',
-    afterRemove: 'resources/linux/packaging/after-remove.sh',
-    // Why: only an AppImage's files can vanish under a running daemon (see appimage-node-runtime.cjs).
-    fpm: appImageNodeRuntimeFpmArgs
-  },
-  rpm: {
-    packageName: 'orca-ide',
-    artifactName: 'orca-ide-${version}.${arch}.${ext}',
-    // Why: see deb depends. RPM distros ship Xvfb as xorg-x11-server-Xvfb (there
-    // is no `xvfb` package), so the name differs from the deb here.
-    depends: [
-      ...rpmElectronRuntimeDependencies,
-      'python3',
-      'python3-gobject',
-      'xdotool',
-      'xclip',
-      'xorg-x11-server-Xvfb'
-    ],
-    // Why: same headless CLI-on-PATH registration as deb; rpm runs these via fpm.
-    afterInstall: 'resources/linux/packaging/after-install.sh',
-    afterRemove: 'resources/linux/packaging/after-remove.sh',
-    // Why: only an AppImage's files can vanish under a running daemon (see appimage-node-runtime.cjs).
-    fpm: appImageNodeRuntimeFpmArgs
-  },
   beforeBuild: electronBuilderNativeRebuild,
   // Why: must be true so that electron-builder rebuilds native modules
   // (node-pty) for each target architecture when producing dual-arch macOS
@@ -765,7 +507,7 @@ module.exports = {
     repo: 'quirky',
     // Why draft on the main repo: `--publish always` otherwise creates a
     // public GitHub release as soon as the first platform uploads, and
-    // /releases/latest serves a missing Windows exe. release-cut undrafts
+    // /releases/latest serves a missing asset. release-cut undrafts
     // only after every required asset exists.
     releaseType: 'draft'
   }
@@ -781,10 +523,7 @@ function stampPackagedCliVersion(resourcesDir, version) {
   writeFileSync(packageJsonPath, `${JSON.stringify({ ...packageJson, version }, null, 2)}\n`)
 }
 
-function chmodUnixCliLaunchers(resourcesDir, electronPlatformName) {
-  if (electronPlatformName === 'win32') {
-    return
-  }
+function chmodUnixCliLaunchers(resourcesDir) {
   for (const launcherName of ['orca', 'orca-ide']) {
     const launcherPath = join(resourcesDir, 'bin', launcherName)
     if (!existsSync(launcherPath)) {

@@ -12,7 +12,7 @@ import {
   type LocalBaseBranchFastForwardOutcome,
   type LocalBaseBranchGit
 } from '../../shared/worktree/local-base-branch-fast-forward'
-import { gitExecFileAsync, translateWslOutputPaths } from './runner'
+import { gitExecFileAsync } from './runner'
 import { runWithGitReadCacheInvalidation } from './status'
 import type { AddWorktreeOptions, GitWorktreeExecOptions } from './worktree-operation-options'
 
@@ -122,7 +122,7 @@ function localBaseBranchGit(options: GitWorktreeExecOptions): LocalBaseBranchGit
         ['worktree', 'list', '--porcelain'],
         execOptions(repoPath)
       )
-      return parseWorktreeList(translateWslOutputPaths(stdout, repoPath, options))
+      return parseWorktreeList(stdout)
     }
   }
 }

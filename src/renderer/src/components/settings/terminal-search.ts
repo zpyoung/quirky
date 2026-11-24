@@ -21,12 +21,7 @@ import {
   getTerminalRenderingSearchEntries,
   getTerminalTypographySearchEntries
 } from './terminal-typography-search'
-import {
-  getTerminalRightClickToPasteSearchEntry,
-  getTerminalWindowsPowershellImplementationSearchEntry,
-  getTerminalWindowsShellSearchEntry,
-  getTerminalWindowsAdministratorSearchEntry
-} from './terminal-windows-search'
+import { getTerminalRightClickToPasteSearchEntry } from './terminal-windows-search'
 import {
   getManageSessionsSearchEntries,
   getTerminalWindowSearchEntries
@@ -109,7 +104,6 @@ export function getTerminalPaneSearchEntries(platform: {
   return [
     ...getTerminalRenderingSearchEntries(),
     ...getTerminalPaneInteractionSearchEntries(),
-    ...(platform.isWindows ? getTerminalWindowsAdministratorSearchEntry() : []),
     ...(!isWindowsTerminalHost
       ? [
           {
@@ -168,12 +162,6 @@ export function getTerminalPaneSearchEntries(platform: {
               )
             ]
           }
-        ]
-      : []),
-    ...(isWindowsTerminalHost
-      ? [
-          ...getTerminalWindowsShellSearchEntry(),
-          ...getTerminalWindowsPowershellImplementationSearchEntry()
         ]
       : []),
     ...getTerminalRightClickToPasteSearchEntry(),

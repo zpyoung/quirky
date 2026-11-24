@@ -88,7 +88,6 @@ async function launchStub(stub: keyof typeof STUBS, readyTimeoutMs: number) {
     isDead: () => dead
   })
   proc.onData((data) => {
-    tracker.recordOutput(data)
     output += data
     for (const listener of listeners) {
       listener(data)

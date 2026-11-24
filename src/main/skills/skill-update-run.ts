@@ -12,7 +12,10 @@ import { detectSkillsCliUpdateAgentKeys } from '../../shared/skills-cli-agent-de
 import { resolveCliCommand } from '../codex-cli/command'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { killWithDescendantSweep } from '../pty-descendant-termination'
-import { getSpawnArgsForWindows, WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL } from '../win32-utils'
+import {
+  getSpawnArgsForWindows,
+  WINDOWS_BATCH_UNSAFE_CHARACTERS_LABEL
+} from '../../shared/windows-batch-spawn'
 
 // Why: `skills add` prints ANSI colour and \r + erase-line progress. We show
 // this log verbatim to the user but never parse it — `add` has no --json, so

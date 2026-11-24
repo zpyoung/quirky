@@ -68,7 +68,6 @@ describe('desktop restore admission', () => {
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(() => exits.get(pid)?.(0)),
-        terminateOwnedTree: () => 'unavailable' as const,
         forceKill: vi.fn(() => exits.get(pid)?.(137)),
         signal: vi.fn(),
         onData: vi.fn(),

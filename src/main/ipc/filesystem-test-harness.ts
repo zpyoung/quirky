@@ -54,7 +54,6 @@ export const getPullRequestDraftContextMock: IpcMock = vi.fn()
 export const resolveHostedReviewBodyForGenerationMock: IpcMock = vi.fn()
 export const loadPullRequestLinkedIssueMock: IpcMock = vi.fn()
 export const getSshFilesystemProviderMock: IpcMock = vi.fn()
-export const tryDeleteWslUncPathMock: IpcMock = vi.fn()
 export const recordCrashBreadcrumbMock: IpcMock = vi.fn()
 
 export const electronMock = {
@@ -76,8 +75,6 @@ export const fsPromisesMock = {
   realpath: realpathMock,
   lstat: lstatMock
 }
-
-export const wslUncDeleteMock = { tryDeleteWslUncPath: tryDeleteWslUncPathMock }
 
 export const crashBreadcrumbMock = { recordCrashBreadcrumb: recordCrashBreadcrumbMock }
 
@@ -202,7 +199,6 @@ function collectMocks(moduleMock: Record<string, unknown>): IpcMock[] {
 const ALL_MOCKS = [
   electronMock,
   fsPromisesMock,
-  wslUncDeleteMock,
   crashBreadcrumbMock,
   gitStatusModuleMock,
   gitIgnoredPathsMock,
@@ -270,7 +266,6 @@ export function resetFilesystemIpcMocks(): void {
   ])
   trashItemMock.mockResolvedValue(undefined)
   // Default: not a WSL UNC path, so deletePath falls through to shell.trashItem.
-  tryDeleteWslUncPathMock.mockResolvedValue(false)
   showSaveDialogMock.mockResolvedValue({ canceled: true })
   showOpenDialogMock.mockResolvedValue({ canceled: true, filePaths: [] })
   fromWebContentsMock.mockReturnValue(null)

@@ -17434,17 +17434,6 @@
         "description": "La referencia de seguimiento remoto \"{{value0}}\" no estaba disponible, así que Orca usó la local \"{{value1}}\" en su lugar. Es posible que este espacio de trabajo no incluya los últimos cambios remotos.",
         "dismiss": "Entendido"
       },
-      "LinuxPackageInstallRecoveryCard": {
-        "e3de29c86a": "Mostrar paquete",
-        "55c86654b7": "Copiar comando de instalación",
-        "53e1559f99": "Se requiere instalación manual",
-        "a7ac6ec78b": "Orca descargó el paquete del sistema. Cierra Orca antes de finalizar la actualización desde un terminal.",
-        "82c6dbea00": "Copia el comando, cierra Orca y ejecútalo en un terminal del sistema en el equipo donde está instalado Orca. Vuelve a abrir Orca cuando termine.",
-        "53c4b8e148": "Ningún agente de autenticación utilizable respondió a la solicitud de instalación con privilegios.",
-        "c732bcbf8f": "Comprobando el paquete...",
-        "aa57fa4f80": "Comando copiado. Cierra Orca, ejecútalo en un terminal del sistema para instalar {{value0}} y vuelve a abrir Orca.",
-        "b7e7c5bc95": "Orca comprueba el archivo descargado con los metadatos de la versión en el momento en que crea este comando. El paquete del sistema en sí no tiene verificación de firma, y Orca no puede responder por el archivo después de ese punto."
-      },
       "BrowserPane": {
         "streamConnectionLost": "Se perdió la conexión con el servidor remoto.",
         "streamConnectionUnreachable": "No se puede acceder al servidor remoto.",

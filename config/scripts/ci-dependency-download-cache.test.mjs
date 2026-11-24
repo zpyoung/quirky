@@ -270,40 +270,13 @@ describe('CI dependency download caches', () => {
     }
   )
 
-  it('opts Windows preparation out of download stores while retaining native caches', () => {
-    const installer = './.github/actions/install-node-dependencies'
-    const persistence = workflow('node-server-tests').jobs.persistence.steps.find(
-      (step) => step.uses === installer
-    )
-    const ssh = workflow('ssh-windows-hosts').jobs.hosts.steps.find(
-      (step) => step.uses === installer
-    )
-    const platformJobs = read(
-      workflow('ci-cache-warmup-platforms').jobs['warm-platforms'].uses
-    ).jobs
-    const warmer = platformJobs['warm-windows'].steps.find((step) => step.uses === installer)
-    expect(action.inputs['cache-pnpm-store'].default).toBe('true')
-    expect(persistence.with['cache-pnpm-store']).toBe(
-      "${{ !inputs.build_template && runner.os != 'Windows' }}"
-    )
-    expect(ssh.with['cache-pnpm-store']).toBe('false')
-    expect(warmer.with['cache-pnpm-store']).toBe('false')
-    expect(warmer.with['native-runtime']).toBe('node')
-    expect(persistence.with['cache-pnpm-store-lookup-only']).toBe('true')
-    for (const job of [workflow('ci-cache-warmup').jobs.warm, platformJobs['warm-linux-runtime']]) {
-      const install = job.steps.find((step) => step.uses?.includes('install-node-dependencies'))
-      expect(install.with['cache-pnpm-store-lookup-only']).toBe('true')
-    }
-  })
-
   it('keeps PR warmer validation within the workflow family that runs it', () => {
     const shared = workflow('ci-cache-warmup')
     const platforms = workflow('ci-cache-warmup-platforms')
     expect(shared.on.pull_request.paths).toEqual([
       '.github/workflows/ci-cache-warmup.yml',
       '.github/actions/prepare-headless-compiler/**',
-      'config/scripts/headless-detector-compiler-cache.mjs',
-      '.github/actions/prepare-wayland-clipboard/**'
+      'config/scripts/headless-detector-compiler-cache.mjs'
     ])
     expect(platforms.on.pull_request.paths).toEqual([
       '.github/workflows/ci-cache-warmup-platforms.yml',
@@ -325,7 +298,6 @@ describe('CI dependency download caches', () => {
           '.github/workflows/ci-cache-warmup-platform-jobs.yml',
           '.github/actions/install-node-dependencies/**',
           '.github/actions/prepare-native-runtime/**',
-          'native/windows-security/**',
           'pnpm-lock.yaml'
         ])
       )
@@ -339,7 +311,7 @@ describe('CI dependency download caches', () => {
     ['schedule', false, true, true, true],
     ['workflow_dispatch', false, true, true, true]
   ])(
-    'retains eligible cache producers and Windows validation on %s (draft %s)',
+    'retains eligible cache producers on %s (draft %s)',
     (event, draft, admitted, armRuns, sharedPlatforms) => {
       const shared = workflow('ci-cache-warmup')
       const platformWorkflow = workflow('ci-cache-warmup-platforms')
@@ -357,11 +329,6 @@ describe('CI dependency download caches', () => {
         expect(runInNewContext(guard, context)).toBe(admitted)
         expect(runInNewContext(guard, contextFor(!draft))).toBe(event !== 'pull_request' || draft)
       }
-      expect(platforms.jobs['warm-windows'].if).toBeUndefined()
-      expect(platforms.jobs['warm-windows'].strategy.matrix.os).toEqual([
-        'windows-2022',
-        'windows-11-arm'
-      ])
     }
   )
 
@@ -451,7 +418,7 @@ describe('release install targets', () => {
       .filter((step) => installCommand(step)?.includes('pnpm install '))
   const installCommands = (name) => installSteps(name).map(installCommand)
 
-  it.each(['adhoc-mac-build', 'daily-mac-build', 'hourly-mac-build', 'release-mac-build'])(
+  it.each(['release-mac-build'])(
     '%s installs both mac CPU variants for the x64+arm64 package config',
     (name) => {
       const installs = installCommands(name)
@@ -460,8 +427,8 @@ describe('release install targets', () => {
     }
   )
 
-  // A transient `read ECONNRESET` fetching this Node version's headers for
-  // native/windows-registry's node-gyp rebuild failed a blocking golden gate and the cut.
+  // A transient `read ECONNRESET` fetching this Node version's headers failed a blocking golden
+  // gate and the cut.
   it('retries every release-cut install so one transient download cannot fail a cut', () => {
     const installs = installSteps('release-cut')
     expect(installs.length).toBeGreaterThan(0)
@@ -471,17 +438,14 @@ describe('release install targets', () => {
     }
   })
 
-  it.each(['release-cut', 'dev-channel-win-build', 'windows-signing-rehearsal'])(
-    '%s keeps installs scoped to the runner host',
-    (name) => {
-      const installs = installCommands(name)
-      expect(installs.length).toBeGreaterThan(0)
-      for (const command of installs) {
-        expect(command).not.toContain('--os=')
-        expect(command).not.toContain('--cpu=')
-      }
+  it.each(['release-cut'])('%s keeps installs scoped to the runner host', (name) => {
+    const installs = installCommands(name)
+    expect(installs.length).toBeGreaterThan(0)
+    for (const command of installs) {
+      expect(command).not.toContain('--os=')
+      expect(command).not.toContain('--cpu=')
     }
-  )
+  })
 
   it('offers the mac CPU targets for local packaging without touching the lockfile', () => {
     const script = JSON.parse(readFileSync('package.json', 'utf8')).scripts['install:release']

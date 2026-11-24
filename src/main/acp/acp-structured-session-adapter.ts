@@ -57,11 +57,9 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   copyConversation: NonNullable<StructuredAgentSessionAdapter['copyConversation']> = (input) =>
     this.copies.copy(input)
 
-  // The child runs on this runtime's own machine; Windows needs process start-time proof.
-  supportsLocation = (location: AgentSessionExecutionLocation): boolean => {
-    const { spec, isWindowsProcessStartTimeAvailable } = this.deps
-    return supportsAcpStructuredLocation(spec, location, isWindowsProcessStartTimeAvailable)
-  }
+  // The child runs on this runtime's own machine.
+  supportsLocation = (location: AgentSessionExecutionLocation): boolean =>
+    supportsAcpStructuredLocation(this.deps.spec, location)
 
   async acquire(input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> {
     const sessionId = input.identity.sessionId

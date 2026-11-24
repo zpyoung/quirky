@@ -102,44 +102,6 @@ describe('macOS build workflow policy', () => {
     }
   })
 
-  it.each(['adhoc', 'daily', 'hourly'])(
-    '%s uses the guarded builder, preserving the serial fallback for older source refs',
-    (channel) => {
-      const job = Object.values(workflow(channel).jobs).find((job) =>
-        job.steps?.some((step) => step.with?.command?.includes('electron-builder --config'))
-      )
-      expect(job['runs-on']).toBe('macos-15')
-      const step = job.steps.find((step) =>
-        step.with?.command?.includes('electron-builder --config')
-      )
-      const command = step.with.command
-      if (channel === 'adhoc') {
-        expect(job.strategy).toEqual({ 'fail-fast': false, matrix: { arch: ['x64', 'arm64'] } })
-        expect(command).toContain('--mac dmg zip --${{ matrix.arch }} --publish never')
-        expect(command).toContain('ORCA_MAC_ADHOC=1 pnpm exec electron-builder')
-        expect(command).not.toContain('build-mac-notarization-overlap.mjs')
-      } else {
-        expect(command).toContain('if [ -f config/scripts/build-mac-notarization-overlap.mjs ]')
-        expect(command).toContain(
-          `ORCA_MAC_${channel.toUpperCase()}=1 node config/scripts/build-mac-notarization-overlap.mjs`
-        )
-        expect(command).toContain(
-          `else ORCA_MAC_${channel.toUpperCase()}=1 pnpm exec electron-builder`
-        )
-      }
-      expect(step.with.max_attempts).toBeGreaterThan(1)
-      for (const key of [
-        'CSC_LINK',
-        'CSC_KEY_PASSWORD',
-        'APPLE_ID',
-        'APPLE_APP_SPECIFIC_PASSWORD',
-        'APPLE_TEAM_ID'
-      ]) {
-        expect(step.env[key]).toContain('secrets.')
-      }
-    }
-  )
-
   it('qualification signs the workflow commit, gates its complete template, and cannot publish', () => {
     const source = workflow('release')
     expect(source.on.workflow_dispatch.inputs.qualification_only.default).toBe(false)

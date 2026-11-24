@@ -41,7 +41,6 @@ describe('TerminalSpawnGate', () => {
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(() => exits.get(pid)?.(0)),
-        terminateOwnedTree: () => 'unavailable' as const,
         forceKill: vi.fn(() => exits.get(pid)?.(137)),
         signal: vi.fn(),
         onData: vi.fn(),
@@ -172,7 +171,6 @@ describe('TerminalSpawnGate', () => {
         write: vi.fn(),
         resize: vi.fn(),
         kill: vi.fn(),
-        terminateOwnedTree: () => 'unavailable' as const,
         forceKill: vi.fn(() => {
           release = () => exits.get(pid)?.(137)
         }),

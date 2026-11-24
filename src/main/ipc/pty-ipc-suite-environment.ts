@@ -53,7 +53,6 @@ import {
 import { setLocalPtyProvider } from './pty/provider/registry'
 import { _resetHiddenRendererPtyDeliveryGateForTest } from './pty-hidden-delivery-gate'
 import { __resetShellStartupEnvCache } from '../pty/shell-startup-env'
-import { _resetWslCachesForTests } from '../wsl'
 
 /** The mocked webContents each suite asserts sends against. */
 export type PtyIpcTestWebContents = {
@@ -287,7 +286,6 @@ export function createPtyIpcSuiteEnvironment(): PtyIpcSuiteEnvironment {
 
   afterEach(() => {
     _resetLocalPtyProviderStateForTest()
-    _resetWslCachesForTests()
     vi.useRealTimers()
     setLocalPtyProvider(new LocalPtyProvider())
     envScope.restoreProcessEnv()
